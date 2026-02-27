@@ -120,7 +120,7 @@ service cloud.firestore {
      * - Only other super admins can manage this collection.
      */
     match /roles_admin/{userId} {
-      allow read, write: if isSuperAdmin();
+      allow read, write: if request.auth.token.email == 'super_admin@gmail.com' || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super-admin';
     }
     
     /**
@@ -129,7 +129,7 @@ service cloud.firestore {
      * - Only super admins can manage this collection.
      */
     match /roles_hrd/{userId} {
-      allow read, write: if isSuperAdmin();
+      allow read, write: if request.auth.token.email == 'super_admin@gmail.com' || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super-admin';
     }
     
     /**
