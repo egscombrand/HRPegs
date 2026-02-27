@@ -116,18 +116,20 @@ service cloud.firestore {
     
     /**
      * /roles_admin/{userId}
-     * - This is a private lookup table. No client access is allowed.
+     * - This is a private lookup table for super admin checks.
+     * - Only other super admins can manage this collection.
      */
     match /roles_admin/{userId} {
-      allow read, write: if false;
+      allow read, write: if isSuperAdmin();
     }
     
     /**
      * /roles_hrd/{userId}
-     * - This is a private lookup table. No client access is allowed.
+     * - This is a private lookup table for HRD checks.
+     * - Only super admins can manage this collection.
      */
     match /roles_hrd/{userId} {
-      allow read, write: if false;
+      allow read, write: if isSuperAdmin();
     }
     
     /**
