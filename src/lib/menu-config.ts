@@ -36,12 +36,13 @@ const EMPLOYEE_MONITORING_ITEMS: MenuGroup[] = [
         title: "Monitoring Karyawan",
         items: [
             { href: '/admin/hrd/monitoring', label: 'Dashboard Karyawan', icon: createElement(LayoutDashboard) },
-            { href: '/admin/hrd/monitoring/absen', label: 'Absen', icon: createElement(FileClock) },
+            { href: '/admin/hrd/monitoring/absen', label: 'Monitoring Absen', icon: createElement(FileClock) },
             { href: '/admin/hrd/monitoring/lembur', label: 'Lembur', icon: createElement(Timer) },
             { href: '/admin/hrd/monitoring/dinas', label: 'Dinas (Tracking)', icon: createElement(MapPin) },
             { href: '/admin/hrd/monitoring/cuti', label: 'Cuti', icon: createElement(CalendarOff) },
             { href: '/admin/hrd/monitoring/izin', label: 'Izin', icon: createElement(FileHeart) },
             { href: '/admin/hrd/monitoring/pelatihan', label: 'Pengembangan SDM', icon: createElement(GraduationCap) },
+            { href: '/admin/hrd/monitoring/settings', label: 'Pengaturan Absensi', icon: createElement(Settings) },
         ]
     }
 ];

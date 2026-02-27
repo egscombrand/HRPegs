@@ -5,9 +5,9 @@ import { useAuth } from '@/providers/auth-provider';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { MENU_CONFIG } from '@/lib/menu-config';
-import { AttendanceMonitoringClient } from '@/components/dashboard/AttendanceMonitoringClient';
+import { AttendanceSettingsClient } from '@/components/dashboard/AttendanceSettingsClient';
 
-export default function AbsenPage() {
+export default function AbsenSettingsPage() {
   const { userProfile } = useAuth();
   const hasAccess = useRoleGuard(['hrd', 'super-admin']);
 
@@ -20,8 +20,8 @@ export default function AbsenPage() {
   if (!hasAccess) return null;
 
   return (
-    <DashboardLayout pageTitle="Monitoring Absensi" menuConfig={menuConfig}>
-      <AttendanceMonitoringClient />
+    <DashboardLayout pageTitle="Pengaturan Absensi" menuConfig={menuConfig}>
+      <AttendanceSettingsClient />
     </DashboardLayout>
   );
 }
