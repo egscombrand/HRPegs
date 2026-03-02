@@ -7,7 +7,8 @@ import * as z from 'zod';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Loader2, Save, LocateFixed, Link as LinkIcon, AlertCircle, Search, MapPin } from 'lucide-react';
+import { Label } from '@/components/ui/label';
+import { Loader2, Save, LocateFixed, Search, MapPin } from 'lucide-react';
 import type { AttendanceSite, Brand } from '@/lib/types';
 import { useFirestore, setDocumentNonBlocking } from '@/firebase';
 import { doc, serverTimestamp, Timestamp, collection } from 'firebase/firestore';
@@ -19,17 +20,6 @@ import { Switch } from '../ui/switch';
 import { Checkbox } from '../ui/checkbox';
 import L from 'leaflet';
 import { Slider } from '../ui/slider';
-import dynamic from 'next/dynamic';
-
-// Fix Leaflet's default icon path issue with Webpack
-if (typeof window !== 'undefined') {
-  delete (L.Icon.Default.prototype as any)._getIconUrl;
-  L.Icon.Default.mergeOptions({
-    iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-  });
-}
 
 const formSchema = z.object({
   name: z.string().min(3, "Nama site minimal 3 karakter."),
@@ -108,7 +98,7 @@ export function AttendanceSiteFormDialog({ open, onOpenChange, site, brands }: A
 
   useEffect(() => {
     if (open) {
-      setTimeout(() => { // Defer map initialization
+      setTimeout(() => {
           initializeMap();
       }, 100);
     } else if (mapRef.current) {
@@ -125,7 +115,7 @@ export function AttendanceSiteFormDialog({ open, onOpenChange, site, brands }: A
 
   useEffect(() => {
     if (mapRef.current) {
-        setTimeout(() => mapRef.current?.invalidateSize(), 150);
+        setTimeout(() => mapRef.current?.invalidateSize(), 200);
     }
   }, [open, form.formState.isSubmitting]);
 
