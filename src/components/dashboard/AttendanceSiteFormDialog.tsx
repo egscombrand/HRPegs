@@ -1,7 +1,8 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -18,17 +19,17 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '..
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Switch } from '../ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Checkbox } from '../ui/checkbox';
 
 const formSchema = z.object({
   name: z.string().min(3, "Nama site minimal 3 karakter."),
-  brandId: z.string({ required_error: "Brand harus dipilih."}),
+  brandIds: z.array(z.string()).min(1, "Minimal pilih satu brand."),
   isActive: z.boolean().default(true),
   office: z.object({
     lat: z.coerce.number().min(-90, "Latitude tidak valid.").max(90, "Latitude tidak valid."),
     lng: z.coerce.number().min(-180, "Longitude tidak valid.").max(180, "Longitude tidak valid."),
   }),
-  radiusM: z.coerce.number().int().min(10, 'Radius minimal 10 meter.').max(300, 'Radius maksimal 300 meter.'),
+  radiusM: z.coerce.number().int().min(10, 'Radius minimal 10 meter.').max(500, 'Radius maksimal 500 meter.'),
   shift: z.object({
     startTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Format waktu harus HH:MM."),
     endTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Format waktu harus HH:MM."),
@@ -68,7 +69,7 @@ export function AttendanceSiteFormDialog({ open, onOpenChange, site, brands }: A
     resolver: zodResolver(formSchema),
     defaultValues: {
         name: '',
-        brandId: '',
+        brandIds: [],
         isActive: true,
         office: { lat: 0, lng: 0},
         radiusM: 150,
@@ -93,12 +94,12 @@ export function AttendanceSiteFormDialog({ open, onOpenChange, site, brands }: A
   useEffect(() => {
     if (open) {
       if (site) {
-        form.reset({ ...site, radiusM: site.radiusM || 150 });
+        form.reset({ ...site, radiusM: site.radiusM || 150, brandIds: site.brandIds || [] });
         setCurrentLocation(site.office);
         reverseGeocode(site.office.lat, site.office.lng);
       } else {
         form.reset({
-            name: '', brandId: '', isActive: true,
+            name: '', brandIds: [], isActive: true,
             office: { lat: 0, lng: 0}, radiusM: 150,
             shift: { startTime: '09:00', endTime: '17:00', graceLateMinutes: 15 }
         });
@@ -124,6 +125,9 @@ export function AttendanceSiteFormDialog({ open, onOpenChange, site, brands }: A
     
     navigator.geolocation.getCurrentPosition(
         (position) => {
+            if (position.coords.accuracy > 100) {
+              toast({ variant: 'destructive', title: 'Akurasi GPS Rendah', description: 'Pindah ke area terbuka atau nyalakan High Accuracy Mode di perangkat Anda.'});
+            }
             const newLocation = { lat: position.coords.latitude, lng: position.coords.longitude, accuracy: position.coords.accuracy };
             setDraftLocation(newLocation);
             reverseGeocode(newLocation.lat, newLocation.lng);
@@ -189,11 +193,46 @@ export function AttendanceSiteFormDialog({ open, onOpenChange, site, brands }: A
           <Form {...form}>
             <form id="site-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-4">
               <FormField control={form.control} name="name" render={({ field }) => (<FormItem><FormLabel>Nama Site</FormLabel><FormControl><Input placeholder="Kantor Pusat Yogyakarta" {...field} /></FormControl><FormMessage /></FormItem>)} />
-              <FormField control={form.control} name="brandId" render={({ field }) => (<FormItem><FormLabel>Brand</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Pilih Brand" /></SelectTrigger></FormControl><SelectContent>{brands.map(brand => <SelectItem key={brand.id!} value={brand.id!}>{brand.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
+              
+              <FormField
+                control={form.control}
+                name="brandIds"
+                render={() => (
+                  <FormItem>
+                    <FormLabel>Brand Terkait</FormLabel>
+                    <div className="h-24 w-full rounded-md border p-4 overflow-y-auto">
+                    {brands.length > 0 ? brands.map((brand) => (
+                      <FormField
+                        key={brand.id}
+                        control={form.control}
+                        name="brandIds"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-start space-x-3 space-y-0 mb-2">
+                            <FormControl>
+                              <Checkbox
+                                checked={field.value?.includes(brand.id!)}
+                                onCheckedChange={(checked) => {
+                                  return checked
+                                    ? field.onChange([...(field.value || []), brand.id!])
+                                    : field.onChange((field.value || []).filter((value) => value !== brand.id!))
+                                }}
+                              />
+                            </FormControl>
+                            <FormLabel className="font-normal">{brand.name}</FormLabel>
+                          </FormItem>
+                        )}
+                      />
+                    )) : <p className="text-sm text-muted-foreground">Tidak ada brand.</p>}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <FormField control={form.control} name="isActive" render={({ field }) => (<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm"><FormLabel>Aktifkan Site Ini</FormLabel><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl></FormItem>)} />
               
               <div className="space-y-4 p-4 border rounded-lg">
-                <h3 className="font-semibold">Lokasi Kantor</h3>
+                <h3 className="font-semibold">Titik Lokasi Kantor</h3>
                 <div className="flex flex-wrap gap-2">
                     <Button type="button" onClick={getCurrentLocation} disabled={isFetchingLocation}>
                         {isFetchingLocation ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LocateFixed className="mr-2 h-4 w-4" />}
@@ -203,7 +242,7 @@ export function AttendanceSiteFormDialog({ open, onOpenChange, site, brands }: A
                 </div>
                  {currentLocation && (
                     <div className="p-3 bg-muted/50 rounded-md">
-                        <p className="text-sm font-semibold">Pengaturan Lokasi Saat Ini:</p>
+                        <p className="text-sm font-semibold">Alamat Tersimpan:</p>
                         <p className="text-xs text-muted-foreground">{geocodeResult || `Lat: ${currentLocation.lat.toFixed(6)}, Lng: ${currentLocation.lng.toFixed(6)}`}</p>
                     </div>
                  )}
@@ -219,7 +258,7 @@ export function AttendanceSiteFormDialog({ open, onOpenChange, site, brands }: A
                         </div>
                     </div>
                 )}
-                <FormField control={form.control} name="radiusM" render={({ field }) => (<FormItem><FormLabel>Radius Toleransi (meter)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormDescription>Jarak maksimal dari titik kantor yang masih dianggap "Onsite".</FormDescription><FormMessage /></FormItem>)} />
+                <FormField control={form.control} name="radiusM" render={({ field }) => (<FormItem><FormLabel>Radius Area Absensi (meter)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormDescription>Jarak maksimal dari titik kantor yang masih dianggap "Onsite".</FormDescription><FormMessage /></FormItem>)} />
                 <Accordion type="single" collapsible><AccordionItem value="advanced-location"><AccordionTrigger>Pengaturan Lanjutan (Koordinat Manual)</AccordionTrigger><AccordionContent className="pt-4 space-y-4"><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><FormField control={form.control} name="office.lat" render={({ field }) => (<FormItem><FormLabel>Latitude</FormLabel><FormControl><Input type="number" step="any" {...field} /></FormControl><FormMessage /></FormItem>)} /><FormField control={form.control} name="office.lng" render={({ field }) => (<FormItem><FormLabel>Longitude</FormLabel><FormControl><Input type="number" step="any" {...field} /></FormControl><FormMessage /></FormItem>)} /></div></AccordionContent></AccordionItem></Accordion>
               </div>
 
@@ -228,6 +267,7 @@ export function AttendanceSiteFormDialog({ open, onOpenChange, site, brands }: A
                  <div className="text-xs text-muted-foreground space-y-1">
                     <p>&#8226; Terlambat jika Tap In &gt; Jam Masuk + Batas Telat.</p>
                     <p>&#8226; Pulang Cepat jika Tap Out &lt; Jam Pulang.</p>
+                    <p>&#8226; Lembur jika Tap Out &gt; Jam Pulang.</p>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <FormField control={form.control} name="shift.startTime" render={({ field }) => (<FormItem><FormLabel>Jam Masuk</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>)} />

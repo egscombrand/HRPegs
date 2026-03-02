@@ -539,7 +539,7 @@ export interface InterviewAssignment {
 export type AttendanceSite = {
     id?: string;
     name: string;
-    brandId: string;
+    brandIds: string[]; // Changed from brandId to brandIds
     isActive: boolean;
     office: {
         lat: number;

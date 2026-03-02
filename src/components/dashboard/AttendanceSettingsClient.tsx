@@ -82,21 +82,25 @@ export function AttendanceSettingsClient() {
                     <TableHeader>
                         <TableRow>
                             <TableHead>Nama Site</TableHead>
-                            <TableHead>Brand</TableHead>
-                            <TableHead>Lokasi</TableHead>
+                            <TableHead>Brand Terkait</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {isLoadingSites || isLoadingBrands ? (
-                            <TableRow><TableCell colSpan={5} className="h-24 text-center">Loading sites...</TableCell></TableRow>
+                            <TableRow><TableCell colSpan={4} className="h-24 text-center">Loading sites...</TableCell></TableRow>
                         ) : sites && sites.length > 0 ? (
                             sites.map(site => (
                                 <TableRow key={site.id}>
                                     <TableCell className="font-medium">{site.name}</TableCell>
-                                    <TableCell>{brandMap.get(site.brandId) || site.brandId}</TableCell>
-                                    <TableCell className="text-xs font-mono">{site.office.lat.toFixed(4)}, {site.office.lng.toFixed(4)}</TableCell>
+                                    <TableCell>
+                                        <div className="flex flex-wrap gap-1">
+                                            {site.brandIds.map(id => (
+                                                <Badge key={id} variant="secondary">{brandMap.get(id) || id}</Badge>
+                                            ))}
+                                        </div>
+                                    </TableCell>
                                     <TableCell><Badge variant={site.isActive ? 'default' : 'outline'}>{site.isActive ? 'Aktif' : 'Non-Aktif'}</Badge></TableCell>
                                     <TableCell className="text-right">
                                         <Button variant="ghost" size="icon" onClick={() => handleEdit(site)}>
@@ -110,7 +114,7 @@ export function AttendanceSettingsClient() {
                             ))
                         ) : (
                              <TableRow>
-                                <TableCell colSpan={5} className="h-24 text-center">
+                                <TableCell colSpan={4} className="h-24 text-center">
                                     Belum ada situs yang dikonfigurasi.
                                 </TableCell>
                             </TableRow>
@@ -138,5 +142,3 @@ export function AttendanceSettingsClient() {
     </>
   );
 }
-
-    
