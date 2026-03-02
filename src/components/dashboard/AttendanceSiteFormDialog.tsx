@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -26,8 +25,8 @@ const formSchema = z.object({
   brandId: z.string({ required_error: "Brand harus dipilih."}),
   isActive: z.boolean().default(true),
   office: z.object({
-    lat: z.coerce.number().min(-90).max(90),
-    lng: z.coerce.number().min(-180).max(180),
+    lat: z.coerce.number().min(-90, "Latitude tidak valid.").max(90, "Latitude tidak valid."),
+    lng: z.coerce.number().min(-180, "Longitude tidak valid.").max(180, "Longitude tidak valid."),
   }),
   radiusM: z.coerce.number().int().min(10, 'Radius minimal 10 meter.').max(300, 'Radius maksimal 300 meter.'),
   shift: z.object({
@@ -43,11 +42,6 @@ type DraftLocation = {
     lat: number;
     lng: number;
     accuracy: number;
-};
-
-const DEFAULT_OFFICE = {
-    lat: -7.761699086851509,
-    lng: 110.36713435984919,
 };
 
 interface AttendanceSiteFormDialogProps {
@@ -66,6 +60,7 @@ export function AttendanceSiteFormDialog({ open, onOpenChange, site, brands }: A
   const [draftLocation, setDraftLocation] = useState<DraftLocation | null>(null);
   const [geocodeResult, setGeocodeResult] = useState<string | null>(null);
   const [geocodeError, setGeocodeError] = useState<string | null>(null);
+  const [currentLocation, setCurrentLocation] = useState<{lat: number, lng: number} | null>(null);
   
   const mode = site ? 'Edit' : 'Create';
 
@@ -75,32 +70,47 @@ export function AttendanceSiteFormDialog({ open, onOpenChange, site, brands }: A
         name: '',
         brandId: '',
         isActive: true,
-        office: DEFAULT_OFFICE,
+        office: { lat: 0, lng: 0},
         radiusM: 150,
         shift: { startTime: '09:00', endTime: '17:00', graceLateMinutes: 15 }
     }
   });
+  
+  const reverseGeocode = async (lat: number, lng: number) => {
+    setGeocodeResult('Mencari alamat...');
+    setGeocodeError(null);
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`);
+      if (!response.ok) throw new Error('Gagal melakukan reverse geocode.');
+      const data = await response.json();
+      setGeocodeResult(data.display_name || 'Alamat tidak ditemukan.');
+    } catch (error) {
+      setGeocodeError('Tidak dapat mengambil nama alamat.');
+    }
+  };
+
 
   useEffect(() => {
     if (open) {
       if (site) {
         form.reset({ ...site, radiusM: site.radiusM || 150 });
+        setCurrentLocation(site.office);
+        reverseGeocode(site.office.lat, site.office.lng);
       } else {
         form.reset({
             name: '', brandId: '', isActive: true,
-            office: DEFAULT_OFFICE, radiusM: 150,
+            office: { lat: 0, lng: 0}, radiusM: 150,
             shift: { startTime: '09:00', endTime: '17:00', graceLateMinutes: 15 }
         });
+        setCurrentLocation(null);
       }
       setDraftLocation(null);
-      setGeocodeResult(null);
+      if(!site) {
+        setGeocodeResult(null);
+      }
       setGeocodeError(null);
     }
   }, [open, site, form]);
-
-  const reverseGeocode = async (lat: number, lng: number) => {
-    // ... (implementation is the same as before)
-  };
 
   const getCurrentLocation = () => {
     if (!navigator.geolocation) {
@@ -125,11 +135,21 @@ export function AttendanceSiteFormDialog({ open, onOpenChange, site, brands }: A
         }
     );
   };
+  
+  const handleUseDefaultLocation = () => {
+    const defaultLocation = { lat: -7.761699086851509, lng: 110.36713435984919 };
+    form.setValue('office', defaultLocation, { shouldValidate: true });
+    form.setValue('radiusM', 150);
+    setCurrentLocation(defaultLocation);
+    reverseGeocode(defaultLocation.lat, defaultLocation.lng);
+    toast({ title: 'Lokasi Default Digunakan', description: 'Koordinat kantor pusat Environesia telah diisi.'});
+  };
 
   const handleUseLocation = () => {
     if (!draftLocation) return;
     form.setValue('office.lat', draftLocation.lat, { shouldValidate: true });
     form.setValue('office.lng', draftLocation.lng, { shouldValidate: true });
+    setCurrentLocation({ lat: draftLocation.lat, lng: draftLocation.lng });
     toast({ title: 'Lokasi Diterapkan', description: 'Koordinat kantor telah diisi pada formulir.'});
     setDraftLocation(null);
   };
@@ -174,10 +194,19 @@ export function AttendanceSiteFormDialog({ open, onOpenChange, site, brands }: A
               
               <div className="space-y-4 p-4 border rounded-lg">
                 <h3 className="font-semibold">Lokasi Kantor</h3>
-                <Button type="button" onClick={getCurrentLocation} disabled={isFetchingLocation}>
-                    {isFetchingLocation ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LocateFixed className="mr-2 h-4 w-4" />}
-                    Ambil Lokasi Saya Sekarang
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                    <Button type="button" onClick={getCurrentLocation} disabled={isFetchingLocation}>
+                        {isFetchingLocation ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LocateFixed className="mr-2 h-4 w-4" />}
+                        Ambil Lokasi Saya Sekarang
+                    </Button>
+                    <Button type="button" variant="secondary" onClick={handleUseDefaultLocation}>Gunakan Lokasi Default</Button>
+                </div>
+                 {currentLocation && (
+                    <div className="p-3 bg-muted/50 rounded-md">
+                        <p className="text-sm font-semibold">Pengaturan Lokasi Saat Ini:</p>
+                        <p className="text-xs text-muted-foreground">{geocodeResult || `Lat: ${currentLocation.lat.toFixed(6)}, Lng: ${currentLocation.lng.toFixed(6)}`}</p>
+                    </div>
+                 )}
                 {draftLocation && (
                     <div className="p-4 border-2 border-dashed rounded-lg space-y-4">
                         <div className="flex justify-between items-start"><h4 className="font-semibold text-lg">Pratinjau Lokasi</h4><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setDraftLocation(null)}><X className="h-4 w-4" /></Button></div>
@@ -196,6 +225,10 @@ export function AttendanceSiteFormDialog({ open, onOpenChange, site, brands }: A
 
               <div className="space-y-4 p-4 border rounded-lg">
                 <h3 className="font-semibold">Jam Kerja</h3>
+                 <div className="text-xs text-muted-foreground space-y-1">
+                    <p>&#8226; Terlambat jika Tap In &gt; Jam Masuk + Batas Telat.</p>
+                    <p>&#8226; Pulang Cepat jika Tap Out &lt; Jam Pulang.</p>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <FormField control={form.control} name="shift.startTime" render={({ field }) => (<FormItem><FormLabel>Jam Masuk</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>)} />
                   <FormField control={form.control} name="shift.endTime" render={({ field }) => (<FormItem><FormLabel>Jam Pulang</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>)} />
@@ -216,5 +249,3 @@ export function AttendanceSiteFormDialog({ open, onOpenChange, site, brands }: A
     </Dialog>
   );
 }
-
-    
