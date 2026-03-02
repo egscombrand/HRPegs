@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { useCollection, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
 import { collection, query, where, doc } from 'firebase/firestore';
 import type { Brand, UserProfile, AttendanceEvent, AttendanceConfig } from '@/lib/types';
+import { ROLES_INTERNAL } from '@/lib/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { GoogleDatePicker } from '@/components/ui/google-date-picker';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -57,7 +58,7 @@ export function AttendanceMonitoringClient() {
         useMemoFirebase(() => doc(firestore, 'attendance_config', 'default'), [firestore])
     );
     const { data: users, isLoading: isLoadingUsers } = useCollection<UserProfile>(
-        useMemoFirebase(() => query(collection(firestore, 'users'), where('role', 'in', ['karyawan', 'manager'])), [firestore])
+        useMemoFirebase(() => query(collection(firestore, 'users'), where('role', 'in', ROLES_INTERNAL)), [firestore])
     );
     const { data: brands, isLoading: isLoadingBrands } = useCollection<Brand>(
         useMemoFirebase(() => collection(firestore, 'brands'), [firestore])
