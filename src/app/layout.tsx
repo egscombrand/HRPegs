@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { RootProviders } from './providers';
 import './globals.css';
 import type { ReactNode } from 'react';
+import 'leaflet/dist/leaflet.css';
 
 export const metadata: Metadata = {
   title: 'HRP Starter Kit',

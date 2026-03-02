@@ -1,25 +1,35 @@
-
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Loader2, Save, MapPin, LocateFixed, Link as LinkIcon, AlertCircle, X, Check } from 'lucide-react';
+import { Loader2, Save, LocateFixed, Link as LinkIcon, AlertCircle, Search, MapPin } from 'lucide-react';
 import type { AttendanceSite, Brand } from '@/lib/types';
 import { useFirestore, setDocumentNonBlocking } from '@/firebase';
 import { doc, serverTimestamp, Timestamp, collection } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/providers/auth-provider';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion';
-import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Switch } from '../ui/switch';
 import { Checkbox } from '../ui/checkbox';
+import L from 'leaflet';
+import { Slider } from '../ui/slider';
+import dynamic from 'next/dynamic';
+
+// Fix Leaflet's default icon path issue with Webpack
+if (typeof window !== 'undefined') {
+  delete (L.Icon.Default.prototype as any)._getIconUrl;
+  L.Icon.Default.mergeOptions({
+    iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  });
+}
 
 const formSchema = z.object({
   name: z.string().min(3, "Nama site minimal 3 karakter."),
@@ -39,12 +49,6 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
-type DraftLocation = {
-    lat: number;
-    lng: number;
-    accuracy: number;
-};
-
 interface AttendanceSiteFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -58,58 +62,102 @@ export function AttendanceSiteFormDialog({ open, onOpenChange, site, brands }: A
   const { userProfile } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
-  const [draftLocation, setDraftLocation] = useState<DraftLocation | null>(null);
-  const [geocodeResult, setGeocodeResult] = useState<string | null>(null);
-  const [geocodeError, setGeocodeError] = useState<string | null>(null);
-  const [currentLocation, setCurrentLocation] = useState<{lat: number, lng: number} | null>(null);
-  
+  const [addressSearch, setAddressSearch] = useState('');
   const mode = site ? 'Edit' : 'Create';
 
+  const mapRef = useRef<L.Map | null>(null);
+  const markerRef = useRef<L.Marker | null>(null);
+  const circleRef = useRef<L.Circle | null>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-        name: '',
-        brandIds: [],
-        isActive: true,
-        office: { lat: 0, lng: 0},
-        radiusM: 150,
+        name: '', brandIds: [], isActive: true,
+        office: { lat: -7.7956, lng: 110.3695 }, radiusM: 100,
         shift: { startTime: '09:00', endTime: '17:00', graceLateMinutes: 15 }
     }
   });
   
-  const reverseGeocode = async (lat: number, lng: number) => {
-    setGeocodeResult('Mencari alamat...');
-    setGeocodeError(null);
-    try {
-      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`);
-      if (!response.ok) throw new Error('Gagal melakukan reverse geocode.');
-      const data = await response.json();
-      setGeocodeResult(data.display_name || 'Alamat tidak ditemukan.');
-    } catch (error) {
-      setGeocodeError('Tidak dapat mengambil nama alamat.');
-    }
-  };
+  const watchedLat = form.watch('office.lat');
+  const watchedLng = form.watch('office.lng');
+  const watchedRadius = form.watch('radiusM');
 
+  const initializeMap = useCallback(() => {
+    if (mapContainerRef.current && !mapRef.current) {
+        const initialCoords: [number, number] = [watchedLat, watchedLng];
+        const map = L.map(mapContainerRef.current).setView(initialCoords, 16);
+        mapRef.current = map;
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        const marker = L.marker(initialCoords, { draggable: true }).addTo(map);
+        markerRef.current = marker;
+
+        const circle = L.circle(initialCoords, { radius: watchedRadius }).addTo(map);
+        circleRef.current = circle;
+
+        marker.on('dragend', (e) => {
+            const { lat, lng } = e.target.getLatLng();
+            form.setValue('office', { lat, lng }, { shouldValidate: true });
+        });
+    }
+  }, [watchedLat, watchedLng, watchedRadius, form]);
 
   useEffect(() => {
     if (open) {
-      if (site) {
-        form.reset({ ...site, radiusM: site.radiusM || 150, brandIds: site.brandIds || [] });
-        setCurrentLocation(site.office);
-        reverseGeocode(site.office.lat, site.office.lng);
-      } else {
-        form.reset({
-            name: '', brandIds: [], isActive: true,
-            office: { lat: 0, lng: 0}, radiusM: 150,
-            shift: { startTime: '09:00', endTime: '17:00', graceLateMinutes: 15 }
-        });
-        setCurrentLocation(null);
+      setTimeout(() => { // Defer map initialization
+          initializeMap();
+      }, 100);
+    } else if (mapRef.current) {
+      mapRef.current.remove();
+      mapRef.current = null;
+    }
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
       }
-      setDraftLocation(null);
-      if(!site) {
-        setGeocodeResult(null);
+    };
+  }, [open, initializeMap]);
+
+  useEffect(() => {
+    if (mapRef.current) {
+        setTimeout(() => mapRef.current?.invalidateSize(), 150);
+    }
+  }, [open, form.formState.isSubmitting]);
+
+  useEffect(() => {
+      if (mapRef.current && markerRef.current) {
+          const newLatLng: [number, number] = [watchedLat, watchedLng];
+          mapRef.current.setView(newLatLng, mapRef.current.getZoom());
+          markerRef.current.setLatLng(newLatLng);
       }
-      setGeocodeError(null);
+      if(circleRef.current) {
+          circleRef.current.setLatLng([watchedLat, watchedLng]);
+      }
+  }, [watchedLat, watchedLng]);
+
+  useEffect(() => {
+      if(circleRef.current) {
+          circleRef.current.setRadius(watchedRadius);
+      }
+  }, [watchedRadius]);
+
+  useEffect(() => {
+    if (open) {
+      const initialValues = site ? { 
+        ...site, 
+        radiusM: site.radiusM || 100, 
+        brandIds: site.brandIds || [] 
+      } : {
+        name: '', brandIds: [], isActive: true,
+        office: { lat: -7.7956, lng: 110.3695 }, radiusM: 100,
+        shift: { startTime: '09:00', endTime: '17:00', graceLateMinutes: 15 }
+      };
+      form.reset(initialValues);
     }
   }, [open, site, form]);
 
@@ -119,43 +167,40 @@ export function AttendanceSiteFormDialog({ open, onOpenChange, site, brands }: A
         return;
     }
     setIsFetchingLocation(true);
-    setDraftLocation(null);
-    setGeocodeResult(null);
-    setGeocodeError(null);
-    
     navigator.geolocation.getCurrentPosition(
         (position) => {
-            if (position.coords.accuracy > 100) {
-              toast({ variant: 'destructive', title: 'Akurasi GPS Rendah', description: 'Pindah ke area terbuka atau nyalakan High Accuracy Mode di perangkat Anda.'});
-            }
-            const newLocation = { lat: position.coords.latitude, lng: position.coords.longitude, accuracy: position.coords.accuracy };
-            setDraftLocation(newLocation);
-            reverseGeocode(newLocation.lat, newLocation.lng);
+            const { latitude, longitude } = position.coords;
+            form.setValue('office', { lat: latitude, lng: longitude }, { shouldValidate: true });
             setIsFetchingLocation(false);
+            toast({ title: 'Lokasi Ditemukan', description: 'Titik lokasi telah diperbarui.'});
         },
         () => {
-            toast({ variant: 'destructive', title: 'Izin Lokasi Ditolak', description: 'Aktifkan izin lokasi di browser Anda untuk menggunakan fitur ini.' });
+            toast({ variant: 'destructive', title: 'Izin Lokasi Ditolak', description: 'Aktifkan izin lokasi di browser Anda.' });
             setIsFetchingLocation(false);
         }
     );
   };
   
-  const handleUseDefaultLocation = () => {
-    const defaultLocation = { lat: -7.761699086851509, lng: 110.36713435984919 };
-    form.setValue('office', defaultLocation, { shouldValidate: true });
-    form.setValue('radiusM', 150);
-    setCurrentLocation(defaultLocation);
-    reverseGeocode(defaultLocation.lat, defaultLocation.lng);
-    toast({ title: 'Lokasi Default Digunakan', description: 'Koordinat kantor pusat Environesia telah diisi.'});
+  const handleAddressSearch = async () => {
+    if (!addressSearch) return;
+    try {
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressSearch)}&limit=1`);
+        const data = await response.json();
+        if (data && data.length > 0) {
+            const { lat, lon } = data[0];
+            form.setValue('office', { lat: parseFloat(lat), lng: parseFloat(lon) }, { shouldValidate: true });
+        } else {
+            toast({ variant: 'destructive', title: 'Alamat Tidak Ditemukan' });
+        }
+    } catch (error) {
+        toast({ variant: 'destructive', title: 'Gagal mencari alamat' });
+    }
   };
-
-  const handleUseLocation = () => {
-    if (!draftLocation) return;
-    form.setValue('office.lat', draftLocation.lat, { shouldValidate: true });
-    form.setValue('office.lng', draftLocation.lng, { shouldValidate: true });
-    setCurrentLocation({ lat: draftLocation.lat, lng: draftLocation.lng });
-    toast({ title: 'Lokasi Diterapkan', description: 'Koordinat kantor telah diisi pada formulir.'});
-    setDraftLocation(null);
+  
+  const handleUseDefaultLocation = () => {
+    const defaultLocation = { lat: -7.761699, lng: 110.367134 };
+    form.setValue('office', defaultLocation, { shouldValidate: true });
+    toast({ title: 'Lokasi Default Digunakan'});
   };
 
   const onSubmit = async (values: FormValues) => {
@@ -171,7 +216,7 @@ export function AttendanceSiteFormDialog({ open, onOpenChange, site, brands }: A
         updatedBy: userProfile.uid,
       };
       await setDocumentNonBlocking(docRef, payload, { merge: true });
-      toast({ title: 'Pengaturan Disimpan', description: `Aturan untuk site "${values.name}" telah disimpan.` });
+      toast({ title: 'Pengaturan Disimpan'});
       onOpenChange(false);
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'Gagal Menyimpan', description: error.message });
@@ -182,18 +227,19 @@ export function AttendanceSiteFormDialog({ open, onOpenChange, site, brands }: A
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[95vh] flex flex-col p-0">
+      <DialogContent className="max-w-4xl h-[95vh] flex flex-col p-0">
         <DialogHeader className="p-6 pb-4 border-b">
           <DialogTitle>{mode} Site Absensi</DialogTitle>
           <DialogDescription>
             Isi detail untuk lokasi kantor dan aturan absensinya.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex-grow overflow-y-auto px-6">
-          <Form {...form}>
-            <form id="site-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-4">
+        <div className="flex-grow overflow-y-auto">
+         <Form {...form}>
+          <form id="site-form" onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
+            <div className="p-6 space-y-6 overflow-y-auto">
+              {/* Form Fields */}
               <FormField control={form.control} name="name" render={({ field }) => (<FormItem><FormLabel>Nama Site</FormLabel><FormControl><Input placeholder="Kantor Pusat Yogyakarta" {...field} /></FormControl><FormMessage /></FormItem>)} />
-              
               <FormField
                 control={form.control}
                 name="brandIds"
@@ -201,81 +247,56 @@ export function AttendanceSiteFormDialog({ open, onOpenChange, site, brands }: A
                   <FormItem>
                     <FormLabel>Brand Terkait</FormLabel>
                     <div className="h-24 w-full rounded-md border p-4 overflow-y-auto">
-                    {brands.length > 0 ? brands.map((brand) => (
-                      <FormField
-                        key={brand.id}
-                        control={form.control}
-                        name="brandIds"
-                        render={({ field }) => (
-                          <FormItem className="flex flex-row items-start space-x-3 space-y-0 mb-2">
-                            <FormControl>
-                              <Checkbox
-                                checked={field.value?.includes(brand.id!)}
-                                onCheckedChange={(checked) => {
-                                  return checked
-                                    ? field.onChange([...(field.value || []), brand.id!])
-                                    : field.onChange((field.value || []).filter((value) => value !== brand.id!))
-                                }}
-                              />
-                            </FormControl>
-                            <FormLabel className="font-normal">{brand.name}</FormLabel>
-                          </FormItem>
-                        )}
-                      />
-                    )) : <p className="text-sm text-muted-foreground">Tidak ada brand.</p>}
+                    {brands.map((brand) => (
+                      <FormField key={brand.id} control={form.control} name="brandIds" render={({ field }) => (
+                          <FormItem className="flex flex-row items-start space-x-3 space-y-0 mb-2"><FormControl><Checkbox checked={field.value?.includes(brand.id!)} onCheckedChange={(checked) => {return checked ? field.onChange([...(field.value || []), brand.id!]) : field.onChange((field.value || []).filter((value) => value !== brand.id!))}} /></FormControl><FormLabel className="font-normal">{brand.name}</FormLabel></FormItem>
+                      )}/>
+                    ))}
                     </div>
+                    <FormDescription>Satu site bisa untuk beberapa brand. Karyawan akan diarahkan ke site berdasarkan brandId mereka.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-
               <FormField control={form.control} name="isActive" render={({ field }) => (<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm"><FormLabel>Aktifkan Site Ini</FormLabel><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl></FormItem>)} />
-              
-              <div className="space-y-4 p-4 border rounded-lg">
-                <h3 className="font-semibold">Titik Lokasi Kantor</h3>
-                <div className="flex flex-wrap gap-2">
-                    <Button type="button" onClick={getCurrentLocation} disabled={isFetchingLocation}>
-                        {isFetchingLocation ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LocateFixed className="mr-2 h-4 w-4" />}
-                        Ambil Lokasi Saya Sekarang
-                    </Button>
-                    <Button type="button" variant="secondary" onClick={handleUseDefaultLocation}>Gunakan Lokasi Default</Button>
-                </div>
-                 {currentLocation && (
-                    <div className="p-3 bg-muted/50 rounded-md">
-                        <p className="text-sm font-semibold">Alamat Tersimpan:</p>
-                        <p className="text-xs text-muted-foreground">{geocodeResult || `Lat: ${currentLocation.lat.toFixed(6)}, Lng: ${currentLocation.lng.toFixed(6)}`}</p>
-                    </div>
-                 )}
-                {draftLocation && (
-                    <div className="p-4 border-2 border-dashed rounded-lg space-y-4">
-                        <div className="flex justify-between items-start"><h4 className="font-semibold text-lg">Pratinjau Lokasi</h4><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setDraftLocation(null)}><X className="h-4 w-4" /></Button></div>
-                        <iframe width="100%" height="250" loading="lazy" className="rounded-md border" src={`https://www.openstreetmap.org/export/embed.html?bbox=${draftLocation.lng - 0.005},${draftLocation.lat - 0.005},${draftLocation.lng + 0.005},${draftLocation.lat + 0.005}&layer=mapnik&marker=${draftLocation.lat},${draftLocation.lng}`} />
-                        {geocodeResult && <Alert><AlertCircle className="h-4 w-4" /><AlertTitle>Perkiraan Alamat</AlertTitle><AlertDescription>{geocodeResult}</AlertDescription></Alert>}
-                        <div className="text-xs text-muted-foreground"><p>Koordinat: {draftLocation.lat.toFixed(6)}, {draftLocation.lng.toFixed(6)}</p><p>Akurasi: &plusmn;{draftLocation.accuracy.toFixed(0)} meter</p></div>
-                        <div className="flex flex-wrap items-center gap-2 pt-2">
-                          <Button type="button" onClick={handleUseLocation}><Check className="mr-2 h-4 w-4" /> Gunakan Lokasi Ini</Button>
-                          <Button asChild variant="outline"><a href={`https://www.google.com/maps?q=${draftLocation.lat},${draftLocation.lng}`} target="_blank" rel="noopener noreferrer"><LinkIcon className="mr-2 h-4 w-4" /> Buka di Google Maps</a></Button>
-                        </div>
-                    </div>
-                )}
-                <FormField control={form.control} name="radiusM" render={({ field }) => (<FormItem><FormLabel>Radius Area Absensi (meter)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormDescription>Jarak maksimal dari titik kantor yang masih dianggap "Onsite".</FormDescription><FormMessage /></FormItem>)} />
-                <Accordion type="single" collapsible><AccordionItem value="advanced-location"><AccordionTrigger>Pengaturan Lanjutan (Koordinat Manual)</AccordionTrigger><AccordionContent className="pt-4 space-y-4"><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><FormField control={form.control} name="office.lat" render={({ field }) => (<FormItem><FormLabel>Latitude</FormLabel><FormControl><Input type="number" step="any" {...field} /></FormControl><FormMessage /></FormItem>)} /><FormField control={form.control} name="office.lng" render={({ field }) => (<FormItem><FormLabel>Longitude</FormLabel><FormControl><Input type="number" step="any" {...field} /></FormControl><FormMessage /></FormItem>)} /></div></AccordionContent></AccordionItem></Accordion>
-              </div>
-
               <div className="space-y-4 p-4 border rounded-lg">
                 <h3 className="font-semibold">Jam Kerja</h3>
-                 <div className="text-xs text-muted-foreground space-y-1">
-                    <p>&#8226; Terlambat jika Tap In &gt; Jam Masuk + Batas Telat.</p>
-                    <p>&#8226; Pulang Cepat jika Tap Out &lt; Jam Pulang.</p>
-                    <p>&#8226; Lembur jika Tap Out &gt; Jam Pulang.</p>
-                </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <FormField control={form.control} name="shift.startTime" render={({ field }) => (<FormItem><FormLabel>Jam Masuk</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>)} />
                   <FormField control={form.control} name="shift.endTime" render={({ field }) => (<FormItem><FormLabel>Jam Pulang</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>)} />
                   <FormField control={form.control} name="shift.graceLateMinutes" render={({ field }) => (<FormItem><FormLabel>Batas Telat (menit)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>)} />
                 </div>
               </div>
-            </form>
+            </div>
+            <div className="p-6 lg:border-l flex flex-col gap-4">
+               <h3 className="font-semibold">Titik Lokasi & Radius</h3>
+               <div ref={mapContainerRef} className="w-full h-[320px] rounded-xl overflow-hidden z-0" />
+               <FormField control={form.control} name="radiusM" render={({ field }) => (
+                <FormItem>
+                    <FormLabel>Radius Area Absensi: {field.value} meter</FormLabel>
+                    <div className="flex items-center gap-4">
+                      <Slider min={10} max={500} step={5} value={[field.value]} onValueChange={(vals) => field.onChange(vals[0])} className="flex-1" />
+                    </div>
+                    <FormMessage />
+                </FormItem>
+              )} />
+               <div className="space-y-2">
+                <Label>Cari Alamat</Label>
+                <div className="flex gap-2">
+                    <Input placeholder='Cari nama jalan/tempat...' value={addressSearch} onChange={(e) => setAddressSearch(e.target.value)} />
+                    <Button type="button" onClick={handleAddressSearch}><Search className="h-4 w-4" /></Button>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="sm" onClick={getCurrentLocation} disabled={isFetchingLocation}>
+                      {isFetchingLocation ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LocateFixed className="mr-2 h-4 w-4" />}
+                      Ambil Lokasi Saya
+                  </Button>
+                  <Button type="button" size="sm" variant="secondary" onClick={handleUseDefaultLocation}>Gunakan Lokasi Default</Button>
+              </div>
+               <Accordion type="single" collapsible><AccordionItem value="advanced-location"><AccordionTrigger>Pengaturan Lanjutan (Koordinat Manual)</AccordionTrigger><AccordionContent className="pt-4 space-y-4"><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><FormField control={form.control} name="office.lat" render={({ field }) => (<FormItem><FormLabel>Latitude</FormLabel><FormControl><Input type="number" step="any" {...field} /></FormControl><FormMessage /></FormItem>)} /><FormField control={form.control} name="office.lng" render={({ field }) => (<FormItem><FormLabel>Longitude</FormLabel><FormControl><Input type="number" step="any" {...field} /></FormControl><FormMessage /></FormItem>)} /></div></AccordionContent></AccordionItem></Accordion>
+            </div>
+          </form>
           </Form>
         </div>
         <DialogFooter className="flex-shrink-0 p-6 pt-4 border-t">
