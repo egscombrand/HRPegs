@@ -93,6 +93,9 @@ export function AttendanceSiteFormDialog({ open, onOpenChange, site, brands }: A
             const { lat, lng } = e.target.getLatLng();
             form.setValue('office', { lat, lng }, { shouldValidate: true });
         });
+
+        // Add a small delay for invalidateSize to ensure the container is fully rendered.
+        setTimeout(() => map.invalidateSize(), 200);
     }
   }, [watchedLat, watchedLng, watchedRadius, form]);
 
@@ -113,16 +116,14 @@ export function AttendanceSiteFormDialog({ open, onOpenChange, site, brands }: A
     };
   }, [open, initializeMap]);
 
-  useEffect(() => {
-    if (mapRef.current) {
-        setTimeout(() => mapRef.current?.invalidateSize(), 200);
-    }
-  }, [open, form.formState.isSubmitting]);
 
   useEffect(() => {
       if (mapRef.current && markerRef.current) {
           const newLatLng: [number, number] = [watchedLat, watchedLng];
-          mapRef.current.setView(newLatLng, mapRef.current.getZoom());
+          // Check if map view is already close to the target, to avoid jarring jumps
+          if (mapRef.current.distance(mapRef.current.getCenter(), newLatLng) > 10) {
+            mapRef.current.setView(newLatLng, mapRef.current.getZoom());
+          }
           markerRef.current.setLatLng(newLatLng);
       }
       if(circleRef.current) {
@@ -141,13 +142,13 @@ export function AttendanceSiteFormDialog({ open, onOpenChange, site, brands }: A
       const initialValues = site ? { 
         ...site, 
         radiusM: site.radiusM || 100, 
-        brandIds: site.brandIds || [] 
+        brandIds: Array.isArray(site.brandIds) ? site.brandIds : (site.brandId ? [site.brandId] : [])
       } : {
         name: '', brandIds: [], isActive: true,
         office: { lat: -7.7956, lng: 110.3695 }, radiusM: 100,
         shift: { startTime: '09:00', endTime: '17:00', graceLateMinutes: 15 }
       };
-      form.reset(initialValues);
+      form.reset(initialValues as any);
     }
   }, [open, site, form]);
 
@@ -177,8 +178,9 @@ export function AttendanceSiteFormDialog({ open, onOpenChange, site, brands }: A
         const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressSearch)}&limit=1`);
         const data = await response.json();
         if (data && data.length > 0) {
-            const { lat, lon } = data[0];
+            const { lat, lon, display_name } = data[0];
             form.setValue('office', { lat: parseFloat(lat), lng: parseFloat(lon) }, { shouldValidate: true });
+            toast({ title: 'Alamat Ditemukan', description: display_name });
         } else {
             toast({ variant: 'destructive', title: 'Alamat Tidak Ditemukan' });
         }
@@ -188,7 +190,7 @@ export function AttendanceSiteFormDialog({ open, onOpenChange, site, brands }: A
   };
   
   const handleUseDefaultLocation = () => {
-    const defaultLocation = { lat: -7.761699, lng: 110.367134 };
+    const defaultLocation = { lat: -7.761699, lng: 110.367134 }; // Default to a known location (e.g., company HQ)
     form.setValue('office', defaultLocation, { shouldValidate: true });
     toast({ title: 'Lokasi Default Digunakan'});
   };
@@ -284,7 +286,31 @@ export function AttendanceSiteFormDialog({ open, onOpenChange, site, brands }: A
                   </Button>
                   <Button type="button" size="sm" variant="secondary" onClick={handleUseDefaultLocation}>Gunakan Lokasi Default</Button>
               </div>
-               <Accordion type="single" collapsible><AccordionItem value="advanced-location"><AccordionTrigger>Pengaturan Lanjutan (Koordinat Manual)</AccordionTrigger><AccordionContent className="pt-4 space-y-4"><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><FormField control={form.control} name="office.lat" render={({ field }) => (<FormItem><FormLabel>Latitude</FormLabel><FormControl><Input type="number" step="any" {...field} /></FormControl><FormMessage /></FormItem>)} /><FormField control={form.control} name="office.lng" render={({ field }) => (<FormItem><FormLabel>Longitude</FormLabel><FormControl><Input type="number" step="any" {...field} /></FormControl><FormMessage /></FormItem>)} /></div></AccordionContent></AccordionItem></Accordion>
+               <Accordion type="single" collapsible><AccordionItem value="advanced-location"><AccordionTrigger>Pengaturan Lanjutan (Koordinat Manual)</AccordionTrigger><AccordionContent className="pt-4 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField control={form.control} name="office.lat" render={({ field }) => (<FormItem><FormLabel>Latitude</FormLabel><FormControl><Input type="number" step="any" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                        <FormField control={form.control} name="office.lng" render={({ field }) => (<FormItem><FormLabel>Longitude</FormLabel><FormControl><Input type="number" step="any" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                    </div>
+                     <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                            const lat = form.getValues('office.lat');
+                            const lng = form.getValues('office.lng');
+                            if (mapRef.current && typeof lat === 'number' && typeof lng === 'number') {
+                                const newLatLng: [number, number] = [lat, lng];
+                                mapRef.current.setView(newLatLng, 17); // Zoom in closer when manually setting
+                                if (markerRef.current) {
+                                    markerRef.current.setLatLng(newLatLng);
+                                }
+                            }
+                        }}
+                    >
+                        <MapPin className="mr-2 h-4 w-4" />
+                        Pusatkan Peta ke Koordinat
+                    </Button>
+                </AccordionContent></AccordionItem></Accordion>
             </div>
           </form>
           </Form>
