@@ -88,6 +88,7 @@ export function AttendanceSettingsClient() {
   const [draftLocation, setDraftLocation] = useState<DraftLocation | null>(null);
   const [geocodeResult, setGeocodeResult] = useState<string | null>(null);
   const [geocodeError, setGeocodeError] = useState<string | null>(null);
+  const [savedLocationAddress, setSavedLocationAddress] = useState<string | null>(null);
 
   const configRef = useMemoFirebase(() => doc(firestore, 'attendance_config', 'default'), [firestore]);
   const { data: config, isLoading } = useDoc<AttendanceConfig>(configRef);
@@ -97,6 +98,26 @@ export function AttendanceSettingsClient() {
     defaultValues: DEFAULT_VALUES,
   });
   
+  useEffect(() => {
+    if (config?.office) {
+        setSavedLocationAddress('Mencari alamat...');
+        fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${config.office.lat}&lon=${config.office.lng}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data?.display_name) {
+                    setSavedLocationAddress(data.display_name);
+                } else {
+                    setSavedLocationAddress('Alamat tidak ditemukan.');
+                }
+            })
+            .catch(err => {
+                console.error("Failed to reverse geocode saved location:", err);
+                setSavedLocationAddress('Gagal memuat alamat.');
+            });
+    }
+  }, [config]);
+
+
   useEffect(() => {
     if (config) {
         form.reset({
@@ -208,14 +229,18 @@ export function AttendanceSettingsClient() {
                         <h3 className="font-semibold">Lokasi Kantor</h3>
                         <div className="p-3 bg-muted rounded-md text-sm">
                           <p className="font-semibold text-muted-foreground">Pengaturan Lokasi Saat Ini:</p>
-                          {config ? (
+                           {config ? (
                             <>
-                              <p className="font-mono">{`${config.office.lat.toFixed(6)}, ${config.office.lng.toFixed(6)}`}</p>
-                              <p className="text-xs text-muted-foreground">Radius: {config.radiusM} meter</p>
+                                {savedLocationAddress ? (
+                                    <p className="font-semibold">{savedLocationAddress}</p>
+                                ) : (
+                                    <p className="font-mono">{`${config.office.lat.toFixed(6)}, ${config.office.lng.toFixed(6)}`}</p>
+                                )}
+                                <p className="text-xs text-muted-foreground">Radius: {config.radiusM} meter</p>
                             </>
-                          ) : (
-                            <p className="text-muted-foreground italic">Belum diatur</p>
-                          )}
+                            ) : (
+                                <p className="text-muted-foreground italic">Belum diatur</p>
+                            )}
                         </div>
                          <div className="space-y-2">
                              <Button type="button" onClick={getCurrentLocation} disabled={isFetchingLocation}>
