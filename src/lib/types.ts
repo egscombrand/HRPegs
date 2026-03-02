@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { Timestamp } from 'firebase/firestore';
@@ -535,8 +536,11 @@ export interface InterviewAssignment {
 }
 
 // --- EMPLOYEE MONITORING TYPES ---
-export type AttendanceConfig = {
+export type AttendanceSite = {
     id?: string;
+    name: string;
+    brandId: string;
+    isActive: boolean;
     office: {
         lat: number;
         lng: number;
@@ -548,10 +552,6 @@ export type AttendanceConfig = {
         startTime: string; // HH:mm
         endTime: string; // HH:mm
         graceLateMinutes: number;
-    };
-    rules?: {
-        requireSelfieOffsite?: boolean;
-        requireSelfieOnAnomaly?: boolean;
     };
     updatedAt?: Timestamp;
     updatedBy?: string;
@@ -573,3 +573,5 @@ export type AttendanceEvent = {
     displayName?: string;
     flags?: string[];
 };
+
+    

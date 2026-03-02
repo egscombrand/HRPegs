@@ -240,7 +240,7 @@ service cloud.firestore {
     }
     
     // --- Monitoring & Attendance Rules ---
-    match /attendance_config/{configId} {
+    match /attendance_sites/{siteId} {
       allow read: if isInternal();
       allow write: if isHrd() || isSuperAdmin();
     }

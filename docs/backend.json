@@ -639,11 +639,14 @@
       },
       "required": ["summary", "score", "strengths", "weaknesses"]
     },
-    "AttendanceConfig": {
-        "title": "Attendance Configuration",
-        "description": "Stores global or brand-specific attendance rules.",
+    "AttendanceSite": {
+        "title": "Attendance Site",
+        "description": "Stores site-specific attendance rules.",
         "type": "object",
         "properties": {
+            "name": { "type": "string", "description": "Human-readable name for the site (e.g., 'Kantor Pusat Yogyakarta')." },
+            "brandId": { "type": "string", "description": "The brand this site belongs to." },
+            "isActive": { "type": "boolean", "description": "Whether this site configuration is currently active." },
             "office": {
                 "type": "object",
                 "properties": {
@@ -673,17 +676,10 @@
                 },
                 "required": ["startTime", "endTime", "graceLateMinutes"]
             },
-            "rules": {
-                "type": "object",
-                "properties": {
-                    "requireSelfieOffsite": { "type": "boolean" },
-                    "requireSelfieOnAnomaly": { "type": "boolean" }
-                }
-            },
             "updatedAt": { "type": "string", "format": "date-time" },
             "updatedBy": { "type": "string" }
         },
-        "required": ["office", "radiusM", "shift"]
+        "required": ["name", "brandId", "isActive", "office", "radiusM", "shift"]
     },
     "AttendanceEvent": {
         "title": "Attendance Event",
@@ -995,8 +991,8 @@
         }
       },
       {
-        "path": "/attendance_config/{configId}",
-        "definition": { "schema": { "$ref": "#/backend/entities/AttendanceConfig" }, "description": "Global or per-brand attendance rules." }
+        "path": "/attendance_sites/{siteId}",
+        "definition": { "schema": { "$ref": "#/backend/entities/AttendanceSite" }, "description": "Stores attendance rules for a specific office site/location." }
       },
       {
         "path": "/attendance_events/{eventId}",
