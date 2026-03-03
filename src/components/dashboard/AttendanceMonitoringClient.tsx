@@ -4,7 +4,7 @@
 
 import { useState, useMemo } from 'react';
 import { useCollection, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
-import { collection, query, where, doc, type Timestamp } from 'firebase/firestore';
+import { collection, query, where, doc, type Timestamp, startOfDay, endOfDay } from 'firebase/firestore';
 import type { Brand, UserProfile, AttendanceEvent } from '@/lib/types';
 import { ROLES_INTERNAL } from '@/lib/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -12,7 +12,7 @@ import { GoogleDatePicker } from '@/components/ui/google-date-picker';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '../ui/skeleton';
 import { KpiCard } from '@/components/recruitment/KpiCard';
-import { startOfDay, endOfDay, format } from 'date-fns';
+import { format } from 'date-fns';
 import { Badge } from '../ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { getInitials } from '@/lib/utils';
@@ -94,8 +94,10 @@ export function AttendanceMonitoringClient() {
 
         const processedData = users.map(user => {
             const userEvents = attendanceEvents.filter(e => e.uid === user.uid || e.userId === user.uid);
-            const tapIn = userEvents.find(e => e.type === 'tap_in');
-            const tapOut = userEvents.find(e => e.type === 'tap_out');
+            
+            // FIX: Handle both 'tap_in'/'IN' and 'tap_out'/'OUT'
+            const tapIn = userEvents.find(e => e.type === 'tap_in' || e.type === 'IN');
+            const tapOut = userEvents.find(e => e.type === 'tap_out' || e.type === 'OUT');
             
             const tapInTimestamp = tapIn ? getTimestamp(tapIn) : null;
             const tapOutTimestamp = tapOut ? getTimestamp(tapOut) : null;
