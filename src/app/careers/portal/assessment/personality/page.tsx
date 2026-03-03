@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, Suspense } from 'react';
@@ -53,6 +54,24 @@ function StartTestForApplication({ applicationId }: { applicationId: string }) {
         }
 
         const handleStart = async () => {
+            const deadline = application.personalityTestAssignedAt ? new Date(application.personalityTestAssignedAt.toDate().getTime() + 24 * 60 * 60 * 1000) : null;
+            const isExpired = deadline ? new Date() > deadline : false;
+            
+            const sessionsQuery = query(
+                collection(firestore, 'assessment_sessions'),
+                where('applicationId', '==', applicationId),
+                limit(1)
+            );
+            const existingSessionsSnap = await getDocs(sessionsQuery);
+            const existingSessionDoc = existingSessionsSnap.docs[0];
+            const existingSessionData = existingSessionDoc?.data() as AssessmentSession;
+            
+            if (isExpired && existingSessionData?.status !== 'submitted') {
+                toast({ variant: 'destructive', title: 'Waktu Habis', description: 'Waktu pengerjaan tes untuk lamaran ini telah berakhir.' });
+                router.push('/careers/portal/applications');
+                return;
+            }
+
             const questionsCollection = collection(firestore, 'assessment_questions');
             
             // Helper function to shuffle an array
@@ -90,17 +109,7 @@ function StartTestForApplication({ applicationId }: { applicationId: string }) {
                 return;
             }
 
-            const sessionsQuery = query(
-                collection(firestore, 'assessment_sessions'),
-                where('applicationId', '==', applicationId),
-                limit(1)
-            );
-            const existingSessionsSnap = await getDocs(sessionsQuery);
-
-            if (!existingSessionsSnap.empty) {
-                const existingSessionDoc = existingSessionsSnap.docs[0];
-                const existingSessionData = existingSessionDoc.data() as AssessmentSession;
-                
+            if (existingSessionDoc) {
                 const isOldSession = !existingSessionData.selectedQuestionIds?.forcedChoice || existingSessionData.selectedQuestionIds.forcedChoice.length === 0;
 
                 if (isOldSession || isRetry) {
@@ -111,7 +120,7 @@ function StartTestForApplication({ applicationId }: { applicationId: string }) {
                         forcedChoice: shuffle(forcedChoiceIds).slice(0, forcedChoiceCount),
                     };
 
-                    const deadline = new Date((application.personalityTestAssignedAt || Timestamp.now()).toDate().getTime() + 24 * 60 * 60 * 1000);
+                    const deadlineToSet = deadline ? Timestamp.fromDate(deadline) : null;
 
                     await setDocumentNonBlocking(existingSessionDoc.ref, {
                         selectedQuestionIds: newSelectedQuestionIds,
@@ -121,7 +130,7 @@ function StartTestForApplication({ applicationId }: { applicationId: string }) {
                         part2GuideAck: false,
                         status: 'draft',
                         updatedAt: serverTimestamp(),
-                        deadlineAt: Timestamp.fromDate(deadline),
+                        deadlineAt: deadlineToSet,
                     }, { merge: true });
 
                     router.push(`/careers/portal/assessment/personality/${existingSessionDoc.id}`);
@@ -140,7 +149,6 @@ function StartTestForApplication({ applicationId }: { applicationId: string }) {
             }
 
             // If no existing session, create a new one
-            const deadline = new Date((application.personalityTestAssignedAt || Timestamp.now()).toDate().getTime() + 24 * 60 * 60 * 1000);
             const sessionData: Omit<AssessmentSession, 'id'> = {
                 assessmentId: activeAssessment.id!,
                 candidateUid: userProfile.uid,
@@ -150,7 +158,7 @@ function StartTestForApplication({ applicationId }: { applicationId: string }) {
                 jobPosition: application.jobPosition,
                 brandName: application.brandName,
                 status: 'draft',
-                deadlineAt: Timestamp.fromDate(deadline),
+                deadlineAt: deadline ? Timestamp.fromDate(deadline) : undefined,
                 part1GuideAck: false,
                 part2GuideAck: false,
                 currentTestPart: 'likert',
@@ -208,12 +216,22 @@ function StartGeneralTest() {
             );
             const existingSessionsSnap = await getDocs(existingSessionQuery);
             if (!existingSessionsSnap.empty) {
-                const session = existingSessionsSnap.docs[0];
+                const sessionDoc = existingSessionsSnap.docs[0];
+                const session = sessionDoc.data() as AssessmentSession;
+                
+                // If it's expired and not submitted, block it.
+                if (session.deadlineAt && new Date() > session.deadlineAt.toDate() && session.status !== 'submitted') {
+                     toast({ variant: 'destructive', title: 'Waktu Habis', description: 'Waktu pengerjaan tes untuk lamaran ini telah berakhir.' });
+                     router.push('/careers/portal/applications');
+                     setIsStarting(false);
+                     return;
+                }
+
                 toast({ title: "Sesi Ditemukan", description: "Anda akan diarahkan ke sesi tes yang sudah ada." });
-                if (session.data().status === 'submitted') {
-                    router.push(`/careers/portal/assessment/personality/result/${session.id}`);
+                if (session.status === 'submitted') {
+                    router.push(`/careers/portal/assessment/personality/result/${sessionDoc.id}`);
                 } else {
-                    router.push(`/careers/portal/assessment/personality/${session.id}`);
+                    router.push(`/careers/portal/assessment/personality/${sessionDoc.id}`);
                 }
                 return;
             }

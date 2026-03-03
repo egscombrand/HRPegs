@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { ReactNode } from 'react';
@@ -113,14 +114,24 @@ export function CandidatePortalLayout({ children }: { children: ReactNode }) {
     highestStatus,
     assessmentStatus,
     upcomingInterviewCount,
+    activeTestSession,
   } = useMemo(() => {
     const defaultResult = {
         highestStatus: null as JobApplicationStatus | null,
         assessmentStatus: 'Belum',
-        upcomingInterviewCount: 0
+        upcomingInterviewCount: 0,
+        activeTestSession: null as AssessmentSession | null,
     };
 
-    if (!applications) return defaultResult;
+    if (!applications || !sessions) return defaultResult;
+    
+    const activeSession = sessions.find(s => s.status === 'draft');
+    if (activeSession) {
+        const deadline = activeSession.deadlineAt?.toDate();
+        if (!deadline || new Date() < deadline) {
+            defaultResult.activeTestSession = activeSession;
+        }
+    }
     
     // Determine highest application status
     const nonRejectedApps = applications.filter(app => app.status !== 'rejected');
@@ -138,13 +149,12 @@ export function CandidatePortalLayout({ children }: { children: ReactNode }) {
     defaultResult.highestStatus = highestStage;
     
     // Determine assessment status
-    if (sessions && sessions.length > 0) {
-        const appSessions = sessions.filter(s => s.applicationId); // Filter for sessions linked to an application
-        const submitted = appSessions.find(s => s.status === 'submitted');
-        const draft = appSessions.find(s => s.status === 'draft');
-        if (submitted) defaultResult.assessmentStatus = 'Selesai';
-        else if (draft) defaultResult.assessmentStatus = 'Proses';
-    }
+    const appSessions = sessions.filter(s => s.applicationId); // Filter for sessions linked to an application
+    const submitted = appSessions.find(s => s.status === 'submitted');
+    const draft = appSessions.find(s => s.status === 'draft');
+    if (submitted) defaultResult.assessmentStatus = 'Selesai';
+    else if (draft) defaultResult.assessmentStatus = 'Proses';
+    
 
     // Determine upcoming interview count
     const upcomingInterviews = applications.flatMap(app => app.interviews || [])
@@ -226,8 +236,20 @@ export function CandidatePortalLayout({ children }: { children: ReactNode }) {
                 <SidebarMenu>
                     {group.title && <h2 className="px-2 py-1 text-xs font-semibold text-muted-foreground tracking-wider group-data-[state=collapsed]:hidden">{group.title}</h2>}
                     {group.items.map(item => {
+                        const isCurrentPageTest = pathname.startsWith('/careers/portal/assessment/personality');
+                        const isTestInProgress = !!activeTestSession;
+
+                        const { locked: isGated, reason: gateReason } = getGatingInfo(item.label);
+                        
+                        let locked = isGated;
+                        let reason = gateReason;
+
+                        if (isTestInProgress && !item.href.includes('/assessment/personality')) {
+                            locked = true;
+                            reason = "Selesaikan tes Anda yang sedang berjalan.";
+                        }
+                        
                         const isActive = pathname === item.href || (item.href !== '/careers/portal' && pathname.startsWith(item.href));
-                        const { locked, reason } = getGatingInfo(item.label);
                         
                         let badgeContent = null;
                         if (item.label === 'Tes Kepribadian' && assessmentStatus) {

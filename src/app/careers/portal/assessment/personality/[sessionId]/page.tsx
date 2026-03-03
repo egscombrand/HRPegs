@@ -1,12 +1,14 @@
+
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/providers/auth-provider';
 import { useDoc, useFirestore, useMemoFirebase, updateDocumentNonBlocking } from '@/firebase';
 import { collection, doc, query, where, getDocs } from 'firebase/firestore';
-import type { Assessment, AssessmentQuestion, AssessmentSession, AssessmentTemplate, ForcedChoice } from '@/lib/types';
+import type { JobApplication, Assessment, AssessmentQuestion, AssessmentSession, AssessmentTemplate, ForcedChoice } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -160,21 +162,38 @@ function TakeAssessmentPage() {
   const { data: session, isLoading: sessionLoading } = useDoc<AssessmentSession>(sessionRef);
   const applicationId = session?.applicationId;
   
-  // 2. Fetch the assessment document using the ID from the session
+  const appRef = useMemoFirebase(() => {
+    if (!applicationId) return null;
+    return doc(firestore, 'applications', applicationId);
+  }, [firestore, applicationId]);
+  const { data: application, isLoading: appLoading } = useDoc<JobApplication>(appRef);
+
   const assessmentRef = useMemoFirebase(() => {
     if (!session) return null;
     return doc(firestore, 'assessments', session.assessmentId);
   }, [firestore, session]);
   const { data: assessment, isLoading: assessmentLoading } = useDoc<Assessment>(assessmentRef);
 
-  // 3. Fetch the template using the ID from the assessment
   const templateRef = useMemoFirebase(() => {
     if (!assessment) return null;
     return doc(firestore, 'assessment_templates', assessment.templateId);
   }, [firestore, assessment]);
   const { data: template, isLoading: templateLoading } = useDoc<AssessmentTemplate>(templateRef);
   
-  // 4. Fetch questions using chunking
+  const deadline = useMemo(() => {
+    if (session?.deadlineAt) return session.deadlineAt.toDate();
+    if (application?.personalityTestAssignedAt) {
+      return new Date(application.personalityTestAssignedAt.toDate().getTime() + 24 * 60 * 60 * 1000);
+    }
+    return null;
+  }, [application, session]);
+
+  const isExpired = useMemo(() => {
+    if (!deadline) return false; // If no deadline, not expired
+    return new Date() > deadline;
+  }, [deadline]);
+
+  // Fetch questions using chunking
   useEffect(() => {
     const fetchQuestions = async () => {
       if (sessionLoading) return;
@@ -228,7 +247,7 @@ function TakeAssessmentPage() {
     }
   }, [session, sessionLoading, firestore, applicationId, router, toast]);
   
-  // 5. Reconstruct the question order based on the session's ID list
+  // Reconstruct the question order based on the session's ID list
   const sortedQuestions = useMemo(() => {
       if (questions.length === 0 || !session?.selectedQuestionIds) return [];
       const questionMap = new Map(questions.map(q => [q.id, q]));
@@ -269,6 +288,23 @@ function TakeAssessmentPage() {
             setGuideState('assessment');
         }
     }, [session, sessionLoading, questionsLoading, currentPart]);
+    
+    // Add beforeunload listener for focus mode
+    useEffect(() => {
+        const isTestInProgress = session?.status === 'draft' && !isExpired;
+
+        if (isTestInProgress) {
+            const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+                e.preventDefault();
+                e.returnValue = 'Apakah Anda yakin ingin meninggalkan halaman ini? Progres yang belum disimpan mungkin akan hilang.';
+            };
+            window.addEventListener('beforeunload', handleBeforeUnload);
+            return () => {
+                window.removeEventListener('beforeunload', handleBeforeUnload);
+            };
+        }
+    }, [session, isExpired]);
+
 
     const handleConfirmPart1 = async () => {
         setIsConfirmingGuide(true);
@@ -300,15 +336,23 @@ function TakeAssessmentPage() {
       return partQuestions;
   }, [sortedQuestions, currentPart]);
   
-  const isLoading = authLoading || sessionLoading || assessmentLoading || templateLoading || questionsLoading;
+  const isLoading = authLoading || sessionLoading || assessmentLoading || templateLoading || questionsLoading || appLoading;
 
   const handleAnswerChange = (questionId: string, value: string | { most: string, least: string }) => {
+    if (isExpired) {
+      toast({ variant: 'destructive', title: 'Waktu Habis', description: 'Tidak dapat mengubah jawaban setelah waktu habis.' });
+      return;
+    }
     const numericValue = typeof value === 'string' ? parseInt(value, 10) : value;
     const newAnswers = { ...answers, [questionId]: numericValue };
     setAnswers(newAnswers);
   };
 
   const handleNext = async () => {
+    if (isExpired) {
+        toast({ variant: 'destructive', title: 'Waktu Habis', description: 'Waktu pengerjaan tes telah berakhir.' });
+        return;
+    }
     updateDocumentNonBlocking(sessionRef, { answers: answers }).catch(error => {
         console.error("Autosave on next failed:", error);
     });
@@ -324,6 +368,10 @@ function TakeAssessmentPage() {
   };
 
   const moveToNextPart = async () => {
+    if (isExpired) {
+        toast({ variant: 'destructive', title: 'Waktu Habis', description: 'Waktu pengerjaan tes telah berakhir.' });
+        return;
+    }
     setIsTransitioning(true);
     try {
         await updateDocumentNonBlocking(sessionRef, { 
@@ -341,6 +389,10 @@ function TakeAssessmentPage() {
   };
 
   const handleFinish = async () => {
+    if (isExpired) {
+        toast({ variant: 'destructive', title: 'Waktu Habis', description: 'Waktu pengerjaan tes telah berakhir.' });
+        return;
+    }
     setIsFinishing(true);
     try {
         await updateDocumentNonBlocking(sessionRef, { answers: answers });
@@ -367,6 +419,23 @@ function TakeAssessmentPage() {
   
   if (isLoading || guideState === 'loading') return <AssessmentSkeleton />;
   
+   if (isExpired && session?.status !== 'submitted') {
+    return (
+        <Card className="max-w-2xl mx-auto text-center">
+            <CardHeader>
+                <CardTitle>Waktu Pengerjaan Habis</CardTitle>
+                <CardDescription>Batas waktu 24 jam untuk pengerjaan tes ini telah berakhir.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <p className="text-muted-foreground mb-4">Silakan hubungi tim HRD jika Anda merasa ini adalah sebuah kesalahan.</p>
+                <Button asChild>
+                    <Link href="/careers/portal/applications">Kembali ke Lamaran Saya</Link>
+                </Button>
+            </CardContent>
+        </Card>
+    );
+  }
+
    if (guideState === 'part1') {
     return (
       <AssessmentGuide
