@@ -27,6 +27,7 @@ interface AttendanceRecord {
   mode: 'onsite' | 'offsite' | '-';
   flags: string[];
   photoUrl?: string | null;
+  address: string;
 }
 
 const kpiCardsData = [
@@ -92,9 +93,8 @@ export function AttendanceMonitoringClient() {
         const activeSite = sites.find(s => s.isActive);
 
         const processedData = users.map(user => {
-            const userEvents = attendanceEvents.filter(e => e.uid === user.uid || e.userId === user.uid);
+            const userEvents = attendanceEvents.filter(e => (e.uid === user.uid || e.userId === user.uid));
             
-            // FIX: Handle both 'tap_in'/'IN' and 'tap_out'/'OUT'
             const tapIn = userEvents.find(e => e.type === 'tap_in' || e.type === 'IN');
             const tapOut = userEvents.find(e => e.type === 'tap_out' || e.type === 'OUT');
             
@@ -146,6 +146,7 @@ export function AttendanceMonitoringClient() {
                 mode: (tapIn?.mode as string)?.toLowerCase() || '-',
                 flags: flags,
                 photoUrl: tapIn?.photoUrl,
+                address: tapIn?.address || '-',
             };
         });
 
@@ -217,6 +218,7 @@ export function AttendanceMonitoringClient() {
                                     <TableHead>Nama</TableHead>
                                     <TableHead>Brand</TableHead>
                                     <TableHead>Foto</TableHead>
+                                    <TableHead>Lokasi</TableHead>
                                     <TableHead>Tap In</TableHead>
                                     <TableHead>Tap Out</TableHead>
                                     <TableHead>Status</TableHead>
@@ -243,6 +245,7 @@ export function AttendanceMonitoringClient() {
                                                 </Avatar>
                                             )}
                                         </TableCell>
+                                        <TableCell className="text-xs max-w-[150px] truncate" title={row.address}>{row.address}</TableCell>
                                         <TableCell>{row.tapIn}</TableCell>
                                         <TableCell>{row.tapOut}</TableCell>
                                         <TableCell>
@@ -259,7 +262,7 @@ export function AttendanceMonitoringClient() {
                                     </TableRow>
                                 )) : (
                                     <TableRow>
-                                        <TableCell colSpan={8} className="h-24 text-center">
+                                        <TableCell colSpan={9} className="h-24 text-center">
                                             Data absensi untuk tanggal yang dipilih belum tersedia.
                                         </TableCell>
                                     </TableRow>

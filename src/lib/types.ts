@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { Timestamp } from 'firebase/firestore';
@@ -561,14 +562,14 @@ export type AttendanceEvent = {
     id?: string;
     uid: string;
     userId?: string; // Alias for uid
-    type: 'tap_in' | 'tap_out';
+    type: 'tap_in' | 'tap_out' | 'IN' | 'OUT';
     timestamp?: Timestamp; // Original HRP field
     ts?: Timestamp; // Alias for timestamp
     createdAt?: Timestamp; // Alias for timestamp
     tsServer?: Timestamp; // From AbsenHRP
     tsClient?: Timestamp; // From AbsenHRP
     dateKey?: string; // YYYY-MM-DD
-    mode: 'ONSITE' | 'OFFSITE';
+    mode: 'ONSITE' | 'OFFSITE' | 'onsite' | 'offsite';
     location: {
         lat: number;
         lng: number;
@@ -577,4 +578,5 @@ export type AttendanceEvent = {
     brandId?: string;
     displayName?: string;
     flags?: string[];
+    address?: string;
 };
