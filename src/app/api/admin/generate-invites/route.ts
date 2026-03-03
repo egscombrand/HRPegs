@@ -14,32 +14,20 @@ const generateSchema = z.object({
   quantity: z.coerce.number().int().min(1).max(100),
 });
 
-// Helper function to verify user role
-async function verifyUserRole(req: NextRequest) {
+export async function POST(req: NextRequest) {
+  try {
     const authorization = req.headers.get('Authorization');
     if (!authorization?.startsWith('Bearer ')) {
-        return { error: 'Unauthorized', status: 401 };
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     const idToken = authorization.split('Bearer ')[1];
-    try {
-        const decodedToken = await admin.auth().verifyIdToken(idToken);
-        const userDoc = await admin.firestore().collection('users').doc(decodedToken.uid).get();
-        if (!userDoc.exists() || !['super-admin', 'hrd'].includes(userDoc.data()?.role)) {
-            return { error: 'Forbidden', status: 403 };
-        }
-        return { user: { uid: decodedToken.uid } };
-    } catch (error) {
-        return { error: 'Invalid token or authentication error.', status: 401 };
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    const userDoc = await admin.firestore().collection('users').doc(decodedToken.uid).get();
+
+    if (!userDoc.exists() || !['super-admin', 'hrd'].includes(userDoc.data()?.role)) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
-}
 
-export async function POST(req: NextRequest) {
-  const roleCheck = await verifyUserRole(req);
-  if (roleCheck.error || !roleCheck.user) {
-    return NextResponse.json({ error: roleCheck.error }, { status: roleCheck.status });
-  }
-
-  try {
     const body = await req.json();
     const parseResult = generateSchema.safeParse(body);
 
@@ -61,7 +49,7 @@ export async function POST(req: NextRequest) {
             code,
             brandId,
             employmentType,
-            createdBy: roleCheck.user.uid,
+            createdBy: decodedToken.uid,
             createdAt: now,
             expiresAt,
             usedAt: null,
@@ -77,7 +65,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: 'Invites generated successfully.', count: quantity }, { status: 201 });
 
   } catch (error: any) {
-    console.error('Error generating invites:', error);
-    return NextResponse.json({ error: error.message || 'An unexpected error occurred.' }, { status: 500 });
+    return NextResponse.json({ error: 'Invalid token or authentication error.' }, { status: 401 });
   }
 }
