@@ -22,9 +22,12 @@ export async function POST(req: NextRequest) {
     }
     const idToken = authorization.split('Bearer ')[1];
     const decodedToken = await admin.auth().verifyIdToken(idToken);
-    const userDoc = await admin.firestore().collection('users').doc(decodedToken.uid).get();
+    
+    const db = admin.firestore();
+    const adminRoleDoc = await db.collection('roles_admin').doc(decodedToken.uid).get();
+    const hrdRoleDoc = await db.collection('roles_hrd').doc(decodedToken.uid).get();
 
-    if (!userDoc.exists() || !['super-admin', 'hrd'].includes(userDoc.data()?.role)) {
+    if (!adminRoleDoc.exists && !hrdRoleDoc.exists) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -36,7 +39,6 @@ export async function POST(req: NextRequest) {
     }
     
     const { brandId, employmentType, quantity } = parseResult.data;
-    const db = admin.firestore();
     const batch = db.batch();
     const now = Timestamp.now();
     const expiresAt = Timestamp.fromMillis(now.toMillis() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
@@ -65,6 +67,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: 'Invites generated successfully.', count: quantity }, { status: 201 });
 
   } catch (error: any) {
-    return NextResponse.json({ error: 'Invalid token or authentication error.' }, { status: 401 });
+    console.error("Generate invites error:", error);
+    return NextResponse.json({ error: 'Invalid token or server error.' }, { status: 401 });
   }
 }
