@@ -27,6 +27,7 @@ const RECRUITMENT_MENU_ITEMS: MenuGroup[] = [
             { href: '/admin/jobs', label: 'Job Postings', icon: createElement(Briefcase) },
             { href: '/admin/recruitment', label: 'Recruitment', icon: createElement(Users) },
             { href: '/admin/hrd/assessments', label: 'Assessments', icon: createElement(ClipboardCheck) },
+            { href: '/admin/hrd/invites', label: 'Employee Invites', icon: createElement(UserPlus) },
         ]
     }
 ];
