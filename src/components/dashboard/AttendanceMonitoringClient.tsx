@@ -165,7 +165,7 @@ export function AttendanceMonitoringClient() {
                 { title: "Terlambat", value: summary.terlambat },
             ]
         };
-    }, [users, attendanceEvents, config, sites, brands, brandFilter, statusFilter, date]);
+    }, [users, attendanceEvents, sites, brands, brandFilter, statusFilter, date]);
 
     return (
         <div className="space-y-6">
