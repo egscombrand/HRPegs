@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { Timestamp } from 'firebase/firestore';
@@ -7,6 +6,8 @@ export const ROLES = ['super-admin', 'hrd', 'manager', 'kandidat', 'karyawan'] a
 export const ROLES_INTERNAL = ['super-admin', 'hrd', 'manager', 'karyawan'] as const;
 
 export type UserRole = (typeof ROLES)[number];
+export const EMPLOYMENT_TYPES = ['karyawan', 'magang', 'training'] as const;
+export type EmploymentType = (typeof EMPLOYMENT_TYPES)[number];
 
 export type UserProfile = {
   id?: string; // Same as uid
@@ -15,11 +16,13 @@ export type UserProfile = {
   fullName: string;
   nameLower?: string; // For searching
   role: UserRole;
+  employmentType?: EmploymentType;
   isActive: boolean;
   department?: string;
   jobTitle?: string;
   skills?: string[];
   createdAt: Timestamp | { seconds: number; nanoseconds: number };
+  createdBy?: string;
   brandId?: string | string[];
   isProfileComplete?: boolean;
   photoUrl?: string;

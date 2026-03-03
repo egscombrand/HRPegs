@@ -1,0 +1,1040 @@
+
+{
+  "entities": {
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user within the HRP Starter application.",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Unique identifier for the user entity, matches Firebase Auth UID."
+        },
+        "fullName": {
+          "type": "string",
+          "description": "The full name of the user."
+        },
+        "email": {
+          "type": "string",
+          "description": "The email address of the user.",
+          "format": "email"
+        },
+        "role": {
+          "type": "string",
+          "description": "The role of the user within the application (super-admin, hrd, manager, kandidat, karyawan)."
+        },
+        "employmentType": {
+            "type": "string",
+            "description": "The type of employment for the user.",
+            "enum": ["karyawan", "magang", "training"]
+        },
+        "isActive": {
+          "type": "boolean",
+          "description": "Indicates whether the user account is active."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "The timestamp indicating when the user account was created.",
+          "format": "date-time"
+        },
+        "createdBy": {
+            "type": "string",
+            "description": "UID of the user who created this user profile."
+        },
+        "brandId": {
+          "type": "string",
+          "description": "The ID of the brand the user belongs to."
+        },
+        "isProfileComplete": {
+          "type": "boolean",
+          "description": "Indicates whether the candidate's profile is complete."
+        }
+      },
+      "required": [
+        "uid",
+        "fullName",
+        "email",
+        "role",
+        "isActive",
+        "createdAt"
+      ]
+    },
+    "Brand": {
+      "title": "Brand",
+      "type": "object",
+      "description": "Represents a brand within the company.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the brand."
+        },
+        "description": {
+          "type": "string",
+          "description": "A short description of the brand."
+        }
+      },
+      "required": [
+        "name"
+      ]
+    },
+    "NavigationSetting": {
+      "title": "Navigation Setting",
+      "type": "object",
+      "description": "Stores the visible menu items for a specific user role.",
+      "properties": {
+        "role": {
+          "type": "string",
+          "description": "The role these settings apply to."
+        },
+        "visibleMenuItems": {
+          "type": "array",
+          "description": "An array of menu item labels that are visible for this role.",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "role",
+        "visibleMenuItems"
+      ]
+    },
+    "Job": {
+      "title": "Job Posting",
+      "type": "object",
+      "description": "Represents a job posting in the careers portal.",
+      "properties": {
+        "position": {
+          "type": "string",
+          "description": "The title of the job position."
+        },
+        "slug": {
+          "type": "string",
+          "description": "A unique, URL-friendly identifier for the job."
+        },
+        "statusJob": {
+          "type": "string",
+          "description": "The employment type.",
+          "enum": [
+            "fulltime",
+            "internship",
+            "contract"
+          ]
+        },
+        "division": {
+          "type": "string",
+          "description": "The division or department for the job."
+        },
+        "location": {
+          "type": "string",
+          "description": "The physical location of the job."
+        },
+        "workMode": {
+          "type": "string",
+          "description": "The work arrangement.",
+          "enum": [
+            "onsite",
+            "hybrid",
+            "remote"
+          ]
+        },
+        "brandId": {
+          "type": "string",
+          "description": "The ID of the brand this job belongs to."
+        },
+        "coverImageUrl": {
+          "type": "string",
+          "description": "URL of the cover image for the job posting.",
+          "format": "uri"
+        },
+        "generalRequirementsHtml": {
+          "type": "string",
+          "description": "General job requirements in HTML format."
+        },
+        "specialRequirementsHtml": {
+          "type": "string",
+          "description": "Special or specific job requirements in HTML format."
+        },
+        "publishStatus": {
+          "type": "string",
+          "description": "The visibility status of the job posting.",
+          "enum": [
+            "draft",
+            "published",
+            "closed"
+          ]
+        },
+        "applyDeadline": {
+          "type": "string",
+          "description": "The application deadline.",
+          "format": "date-time"
+        },
+        "numberOfOpenings": {
+          "type": "number",
+          "description": "The number of open positions for this job."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp of when the job was created.",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp of the last update.",
+          "format": "date-time"
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "UID of the user who created the job."
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "UID of the user who last updated the job."
+        }
+      },
+      "required": [
+        "position",
+        "slug",
+        "statusJob",
+        "division",
+        "location",
+        "brandId",
+        "generalRequirementsHtml",
+        "specialRequirementsHtml",
+        "publishStatus",
+        "createdAt",
+        "updatedAt",
+        "createdBy",
+        "updatedBy"
+      ]
+    },
+    "JobApplication": {
+      "title": "Job Application",
+      "type": "object",
+      "description": "Represents a candidate's application for a specific job.",
+      "properties": {
+        "candidateUid": {
+          "type": "string",
+          "description": "The UID of the candidate (user) applying."
+        },
+        "candidateName": {
+          "type": "string",
+          "description": "Denormalized full name of the candidate."
+        },
+        "candidateEmail": {
+          "type": "string",
+          "format": "email",
+          "description": "Denormalized email of the candidate."
+        },
+        "jobId": {
+          "type": "string",
+          "description": "The ID of the job being applied for."
+        },
+        "jobSlug": {
+          "type": "string",
+          "description": "Denormalized slug from the Job."
+        },
+        "jobPosition": {
+          "type": "string",
+          "description": "Denormalized position title from the Job."
+        },
+        "brandId": {
+          "type": "string",
+          "description": "Denormalized brand ID from the Job."
+        },
+        "brandName": {
+          "type": "string",
+          "description": "Denormalized brand name from the Job."
+        },
+        "jobType": {
+          "type": "string",
+          "description": "Denormalized job type (fulltime, etc.) from the Job."
+        },
+        "location": {
+          "type": "string",
+          "description": "Denormalized job location."
+        },
+        "status": {
+          "type": "string",
+          "description": "The current status of the application.",
+          "enum": [
+            "draft",
+            "submitted",
+            "psychotest",
+            "verification",
+            "document_submission",
+            "interview",
+            "rejected",
+            "hired"
+          ]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the application draft was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the application was last updated."
+        },
+        "submittedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the application was formally submitted."
+        },
+        "cvUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL to the candidate's CV for this application."
+        },
+        "ijazahUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL to the candidate's Ijazah/SKL for this application."
+        }
+      },
+      "required": [
+        "candidateUid",
+        "candidateName",
+        "candidateEmail",
+        "jobId",
+        "jobSlug",
+        "jobPosition",
+        "brandId",
+        "brandName",
+        "jobType",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SavedJob": {
+      "title": "Saved Job",
+      "type": "object",
+      "description": "Represents a job posting saved by a candidate.",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The UID of the user who saved the job."
+        },
+        "jobId": {
+          "type": "string",
+          "description": "The ID of the saved job."
+        },
+        "jobPosition": {
+          "type": "string",
+          "description": "Denormalized position from the Job."
+        },
+        "jobSlug": {
+          "type": "string",
+          "description": "Denormalized slug from the Job."
+        },
+        "brandName": {
+          "type": "string",
+          "description": "Denormalized brand name from the Job."
+        },
+        "savedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the job was saved."
+        }
+      },
+      "required": ["userId", "jobId", "savedAt"]
+    },
+    "Address": {
+        "title": "Address",
+        "type": "object",
+        "description": "Represents a detailed address in Indonesia.",
+        "properties": {
+          "street": { "type": "string", "description": "Street name and number." },
+          "rt": { "type": "string", "description": "RT number." },
+          "rw": { "type": "string", "description": "RW number." },
+          "village": { "type": "string", "description": "Kelurahan atau Desa." },
+          "district": { "type": "string", "description": "Kecamatan." },
+          "city": { "type": "string", "description": "Kota atau Kabupaten." },
+          "province": { "type": "string", "description": "Provinsi." },
+          "postalCode": { "type": "string", "description": "Postal code." }
+        },
+        "required": ["street", "rt", "rw", "village", "district", "city", "province", "postalCode"]
+    },
+    "OrganizationalExperience": {
+      "title": "Organizational Experience",
+      "type": "object",
+      "description": "Represents a candidate's organizational experience.",
+      "properties": {
+        "id": { "type": "string" },
+        "organization": { "type": "string" },
+        "position": { "type": "string" },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "isCurrent": { "type": "boolean" },
+        "description": { "type": "string" }
+      },
+      "required": ["id", "organization", "position", "startDate"]
+    },
+    "NikIndex": {
+      "title": "NIK Index",
+      "type": "object",
+      "description": "A private index to enforce NIK uniqueness across users. The document ID is the SHA-256 hash of the NIK.",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "The UID of the user associated with this NIK hash."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of when the index entry was created."
+        }
+      },
+      "required": ["uid", "createdAt"]
+    },
+    "Profile": {
+        "title": "Candidate Profile",
+        "type": "object",
+        "description": "Stores detailed profile information for a candidate.",
+        "properties": {
+            "fullName": { "type": "string", "description": "Candidate's full name." },
+            "nickname": { "type": "string", "description": "Candidate's nickname." },
+            "email": { "type": "string", "format": "email", "description": "Candidate's email." },
+            "phone": { "type": "string", "description": "Candidate's phone number." },
+            "eKtpNumber": { "type": "string", "description": "16-digit e-KTP number." },
+            "nikHash": {
+              "type": "string",
+              "description": "A server-side SHA-256 hash of the user's NIK, used for uniqueness checks."
+            },
+            "gender": { "type": "string", "description": "Candidate's gender.", "enum": ["Laki-laki", "Perempuan"] },
+            "birthPlace": { "type": "string", "description": "Candidate's place of birth." },
+            "birthDate": { "type": "string", "format": "date-time", "description": "Candidate's date of birth." },
+            "addressKtp": { "$ref": "#/backend/entities/Address", "description": "Candidate's address as per e-KTP." },
+            "addressDomicile": { "$ref": "#/backend/entities/Address", "description": "Candidate's current domicile address." },
+            "isDomicileSameAsKtp": { "type": "boolean", "description": "Whether domicile address is the same as KTP address." },
+            "hasNpwp": { "type": "boolean", "description": "Indicates if the candidate has an NPWP." },
+            "npwpNumber": { "type": "string", "description": "Candidate's NPWP number (if any)." },
+            "willingToWfo": { "type": "boolean", "description": "Indicates if the candidate is willing to work from the office." },
+            "linkedinUrl": { "type": "string", "format": "uri", "description": "URL to LinkedIn profile." },
+            "websiteUrl": { "type": "string", "format": "uri", "description": "URL to personal website/portfolio." },
+            "education": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": { "type": "string" },
+                        "institution": { "type": "string" },
+                        "level": {
+                          "type": "string",
+                          "description": "The level of education, e.g., S1, SMA/SMK.",
+                          "enum": ["SMA/SMK", "D3", "S1", "S2", "S3"]
+                        },
+                        "fieldOfStudy": { "type": "string" },
+                        "gpa": {
+                          "type": "string",
+                          "description": "Grade Point Average (IPK) or final average score."
+                        },
+                        "startDate": { "type": "string" },
+                        "endDate": { "type": "string" },
+                        "isCurrent": { "type": "boolean" }
+                    },
+                    "required": ["id", "institution", "level", "startDate"]
+                }
+            },
+            "workExperience": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": { "type": "string" },
+                        "company": { "type": "string" },
+                        "position": { "type": "string" },
+                        "jobType": {
+                            "type": "string",
+                            "description": "Tipe pekerjaan, misal: Internship, Kontrak, Tetap.",
+                            "enum": [
+                                "internship",
+                                "pkwt",
+                                "kwtt",
+                                "outsourcing",
+                                "freelance"
+                            ]
+                        },
+                        "startDate": { "type": "string" },
+                        "endDate": { "type": "string" },
+                        "isCurrent": { "type": "boolean" },
+                        "description": { "type": "string", "description": "Peran dan tanggung jawab selama bekerja." },
+                        "reasonForLeaving": { "type": "string", "description": "Alasan berhenti dari pekerjaan ini." }
+                    },
+                    "required": ["id", "company", "position", "startDate", "jobType"]
+                }
+            },
+            "organizationalExperience": {
+              "type": "array",
+              "items": {
+                "$ref": "#/backend/entities/OrganizationalExperience"
+              }
+            },
+            "skills": {
+                "type": "array",
+                "items": { "type": "string" }
+            },
+            "certifications": {
+                "type": "array",
+                "description": "A list of the candidate's professional certifications.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": { "type": "string" },
+                        "name": { "type": "string", "description": "The name of the certification." },
+                        "organization": { "type": "string", "description": "The issuing organization." },
+                        "issueDate": { "type": "string", "description": "The month and year the certification was issued (YYYY-MM)." },
+                        "expirationDate": { "type": "string", "description": "The month and year the certification expires (YYYY-MM), if applicable." }
+                    },
+                    "required": ["id", "name", "organization", "issueDate"]
+                }
+            },
+            "selfDescription": {
+              "type": "string",
+              "description": "A brief summary of the candidate's character, personality, work attitude, strengths, and weaknesses."
+            },
+            "salaryExpectation": {
+              "type": "string",
+              "description": "The candidate's expected salary range or value."
+            },
+            "motivation": {
+              "type": "string",
+              "description": "The candidate's motivation and reasons for choosing the desired position."
+            },
+            "declaration": {
+              "type": "boolean",
+              "description": "Confirmation that the provided data is true and accurate."
+            },
+            "profileStatus": {
+              "type": "string",
+              "description": "The completion status of the profile.",
+              "enum": ["draft", "completed"]
+            },
+            "profileStep": {
+              "type": "number",
+              "description": "The last completed step in the profile wizard."
+            },
+            "updatedAt": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Timestamp of the last profile update."
+            },
+            "completedAt": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Timestamp when the profile was marked as complete."
+            }
+        },
+        "required": ["fullName", "nickname", "email", "phone", "eKtpNumber", "gender", "birthPlace", "birthDate", "addressKtp", "willingToWfo", "education", "declaration"]
+    },
+    "Assessment": {
+      "title": "Assessment",
+      "type": "object",
+      "description": "Defines the structure and configuration of a personality assessment.",
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "scoringConfig": {
+          "type": "object",
+          "properties": {
+            "dimensions": { "type": "array", "items": { "type": "string" } },
+            "rules": { "type": "object" }
+          }
+        },
+        "resultTemplates": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "version", "isActive", "scoringConfig", "resultTemplates"]
+    },
+    "AssessmentQuestion": {
+      "title": "Assessment Question",
+      "type": "object",
+      "description": "A single question within an assessment.",
+      "properties": {
+        "assessmentId": { "type": "string" },
+        "order": { "type": "number" },
+        "text": { "type": "string" },
+        "choices": { 
+          "type": "array", 
+          "items": { 
+            "type": "object",
+            "properties": {
+              "text": { "type": "string" },
+              "value": { "type": "number" }
+            },
+            "required": ["text", "value"]
+          }
+        },
+        "dimensionKey": { "type": "string" },
+        "weight": { "type": "number" },
+        "reverse": { "type": "boolean" }
+      },
+      "required": ["assessmentId", "order", "text", "choices", "dimensionKey", "weight"]
+    },
+    "AssessmentSession": {
+      "title": "Assessment Session",
+      "type": "object",
+      "description": "Represents a candidate's attempt at an assessment.",
+      "properties": {
+        "assessmentId": { "type": "string" },
+        "candidateUid": { "type": "string" },
+        "applicationId": { "type": "string" },
+        "status": { "type": "string", "enum": ["draft", "submitted"] },
+        "answers": { "type": "object" },
+        "scores": { "type": "object" },
+        "result": {
+          "type": "object",
+          "properties": {
+            "discType": { "type": "string" },
+            "mbtiArchetype": {
+                "type": "object",
+                "properties": {
+                    "archetype": { "type": "string", "description": "The MBTI-like archetype name, e.g., Komandan." },
+                    "code": { "type": "string", "description": "The MBTI-like code, e.g., ENTJ-T." }
+                }
+            },
+            "report": { "type": "object" }
+          }
+        },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "hrdDecision": {
+            "type": "string",
+            "description": "The HRD's final decision on the assessment result.",
+            "enum": ["pending", "approved", "rejected"]
+        },
+        "hrdDecisionAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of when the HRD decision was made."
+        },
+        "hrdDecisionBy": {
+          "type": "string",
+          "description": "UID of the user who made the HRD decision."
+        }
+      },
+      "required": ["assessmentId", "candidateUid", "status", "startedAt"]
+    },
+    "CandidateFitAnalysis": {
+      "title": "Candidate Fit Analysis",
+      "type": "object",
+      "description": "AI-generated analysis of a candidate's suitability for a job.",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "A 2-3 sentence summary of the candidate's fit."
+        },
+        "score": {
+          "type": "number",
+          "description": "A numerical fit score from 1-100."
+        },
+        "strengths": {
+          "type": "array",
+          "description": "A list of key strengths matching the job requirements.",
+          "items": { "type": "string" }
+        },
+        "weaknesses": {
+          "type": "array",
+          "description": "A list of potential gaps or areas for development.",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["summary", "score", "strengths", "weaknesses"]
+    },
+    "AttendanceSite": {
+        "title": "Attendance Site",
+        "description": "Stores site-specific attendance rules.",
+        "type": "object",
+        "properties": {
+            "name": { "type": "string", "description": "Human-readable name for the site (e.g., 'Kantor Pusat Yogyakarta')." },
+            "brandId": { "type": "string", "description": "The brand this site belongs to." },
+            "isActive": { "type": "boolean", "description": "Whether this site configuration is currently active." },
+            "office": {
+                "type": "object",
+                "properties": {
+                    "lat": { "type": "number" },
+                    "lng": { "type": "number" }
+                },
+                "required": ["lat", "lng"]
+            },
+            "radiusM": {
+                "type": "number",
+                "description": "Office radius in meters for onsite validation."
+            },
+            "timezone": {
+                "type": "string",
+                "default": "Asia/Jakarta"
+            },
+            "workDays": {
+                "type": "array",
+                "items": { "type": "string" }
+            },
+            "shift": {
+                "type": "object",
+                "properties": {
+                    "startTime": { "type": "string", "format": "time" },
+                    "endTime": { "type": "string", "format": "time" },
+                    "graceLateMinutes": { "type": "number" }
+                },
+                "required": ["startTime", "endTime", "graceLateMinutes"]
+            },
+            "updatedAt": { "type": "string", "format": "date-time" },
+            "updatedBy": { "type": "string" }
+        },
+        "required": ["name", "brandId", "isActive", "office", "radiusM", "shift"]
+    },
+    "AttendanceEvent": {
+        "title": "Attendance Event",
+        "description": "Represents a single clock-in or clock-out event.",
+        "type": "object",
+        "properties": {
+            "uid": { "type": "string", "description": "User ID" },
+            "type": { "type": "string", "enum": ["tap_in", "tap_out"], "description": "Event type" },
+            "timestamp": { "type": "string", "format": "date-time" },
+            "workMode": { "type": "string", "enum": ["onsite", "offsite"], "description": "Work mode" },
+            "location": { "type": "object", "properties": { "lat": {"type": "number"}, "lng": {"type": "number"} } },
+            "photoUrl": { "type": "string", "format": "uri" }
+        },
+        "required": ["uid", "type", "timestamp", "workMode"]
+    },
+    "OvertimeLog": {
+        "title": "Overtime Log",
+        "description": "Represents a log of overtime work.",
+        "type": "object",
+        "properties": {
+            "uid": { "type": "string" },
+            "brandId": { "type": "string" },
+            "date": { "type": "string", "format": "date" },
+            "minutes": { "type": "number", "description": "Overtime duration in minutes" },
+            "source": { "type": "string", "enum": ["manual", "auto"] },
+            "note": { "type": "string" },
+            "createdAt": { "type": "string", "format": "date-time" }
+        },
+        "required": ["uid", "date", "minutes", "source", "createdAt"]
+    },
+    "FieldTrackingEntry": {
+        "title": "Field Tracking Entry",
+        "description": "Represents a location update from an employee on field duty.",
+        "type": "object",
+        "properties": {
+            "uid": { "type": "string" },
+            "lat": { "type": "number" },
+            "lng": { "type": "number" },
+            "accuracyM": { "type": "number" },
+            "address": { "type": "string", "description": "Reverse-geocoded address" },
+            "status": { "type": "string", "enum": ["dinas", "normal"] },
+            "updatedAt": { "type": "string", "format": "date-time" }
+        },
+        "required": ["uid", "lat", "lng", "status", "updatedAt"]
+    },
+    "LeaveRequest": {
+        "title": "Leave Request",
+        "description": "Represents an employee's request for leave.",
+        "type": "object",
+        "properties": {
+            "uid": { "type": "string" },
+            "brandId": { "type": "string" },
+            "type": { "type": "string", "enum": ["annual", "sick", "unpaid", "maternity", "paternity"] },
+            "startDate": { "type": "string", "format": "date" },
+            "endDate": { "type": "string", "format": "date" },
+            "days": { "type": "number" },
+            "reason": { "type": "string" },
+            "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+            "requestedAt": { "type": "string", "format": "date-time" },
+            "decidedAt": { "type": "string", "format": "date-time" },
+            "decidedBy": { "type": "string", "description": "UID of the decider" }
+        },
+        "required": ["uid", "type", "startDate", "endDate", "days", "reason", "status", "requestedAt"]
+    },
+    "PermissionRequest": {
+        "title": "Permission Request",
+        "description": "Represents an employee's request for a short permission (e.g., leaving early).",
+        "type": "object",
+        "properties": {
+            "uid": { "type": "string" },
+            "brandId": { "type": "string" },
+            "date": { "type": "string", "format": "date" },
+            "startTime": { "type": "string", "format": "time" },
+            "endTime": { "type": "string", "format": "time" },
+            "reason": { "type": "string" },
+            "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+            "requestedAt": { "type": "string", "format": "date-time" },
+            "decidedBy": { "type": "string", "description": "UID of the decider" }
+        },
+        "required": ["uid", "date", "startTime", "endTime", "reason", "status", "requestedAt"]
+    },
+    "TrainingVideo": {
+        "title": "Training Video",
+        "description": "Represents a training video in the library.",
+        "type": "object",
+        "properties": {
+            "title": { "type": "string" },
+            "description": { "type": "string" },
+            "url": { "type": "string", "format": "uri" },
+            "durationMin": { "type": "number" },
+            "category": { "type": "string" },
+            "isActive": { "type": "boolean" },
+            "createdAt": { "type": "string", "format": "date-time" }
+        },
+        "required": ["title", "url", "durationMin", "category", "isActive", "createdAt"]
+    },
+    "TrainingProgress": {
+        "title": "Training Progress",
+        "description": "Tracks an employee's progress on a training video.",
+        "type": "object",
+        "properties": {
+            "uid": { "type": "string" },
+            "videoId": { "type": "string" },
+            "progressPercent": { "type": "number" },
+            "completedAt": { "type": "string", "format": "date-time" },
+            "updatedAt": { "type": "string", "format": "date-time" }
+        },
+        "required": ["uid", "videoId", "progressPercent", "updatedAt"]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous",
+      "google.com"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user profile data. Includes 'role' for authorization. Path-based ownership.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The Firebase Auth UID of the user."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/saved_jobs/{jobId}",
+        "definition": {
+          "entityName": "SavedJob",
+          "schema": {
+            "$ref": "#/backend/entities/SavedJob"
+          },
+          "description": "Stores jobs saved by a candidate. Path-based ownership.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The Firebase Auth UID of the user."
+            },
+            {
+              "name": "jobId",
+              "description": "The ID of the saved job posting."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/profiles/{userId}",
+        "definition": {
+          "entityName": "Profile",
+          "schema": {
+            "$ref": "#/backend/entities/Profile"
+          },
+          "description": "Stores detailed candidate profile data, linked to a user.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The Firebase Auth UID of the user (candidate)."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/nik_index/{nikHash}",
+        "definition": {
+          "entityName": "NikIndex",
+          "schema": {
+            "$ref": "#/backend/entities/NikIndex"
+          },
+          "description": "Stores a mapping of a hashed NIK to a user UID to prevent duplicate registrations. This collection should only be accessible by server-side functions.",
+          "params": [
+            {
+              "name": "nikHash",
+              "description": "The SHA-256 hash of the user's NIK number."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/roles_admin/{userId}",
+        "definition": {
+          "entityName": "roles_admin",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Indicates super-admin role via document existence. The content of the document is not relevant.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The Firebase Auth UID of the super_admin user."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/roles_hrd/{userId}",
+        "definition": {
+          "entityName": "roles_hrd",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Indicates hrd role via document existence. The content of the document is not relevant.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The Firebase Auth UID of the hrd user."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/brands/{brandId}",
+        "definition": {
+          "entityName": "Brand",
+          "schema": {
+            "$ref": "#/backend/entities/Brand"
+          },
+          "description": "Stores company brand information. Managed by super_admin.",
+          "params": [
+            {
+              "name": "brandId",
+              "description": "The unique ID of the brand."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/navigation_settings/{roleId}",
+        "definition": {
+          "entityName": "NavigationSetting",
+          "schema": {
+            "$ref": "#/backend/entities/NavigationSetting"
+          },
+          "description": "Stores navigation menu visibility settings for each role. The document ID is the role name.",
+          "params": [
+            {
+              "name": "roleId",
+              "description": "The name of the role (e.g., 'hrd', 'manager')."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/jobs/{jobId}",
+        "definition": {
+          "entityName": "Job",
+          "schema": {
+            "$ref": "#/backend/entities/Job"
+          },
+          "description": "Stores all job postings for the careers portal.",
+          "params": [
+            {
+              "name": "jobId",
+              "description": "The unique ID of the job posting."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/applications/{applicationId}",
+        "definition": {
+          "entityName": "JobApplication",
+          "schema": {
+            "$ref": "#/backend/entities/JobApplication"
+          },
+          "description": "Stores job applications from all candidates. The document ID is a composite key: {jobId}_{candidateUid}.",
+          "params": [
+            {
+              "name": "applicationId",
+              "description": "Unique ID for the application."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/assessments/{assessmentId}",
+        "definition": {
+          "entityName": "Assessment",
+          "schema": { "$ref": "#/backend/entities/Assessment" },
+          "description": "Stores assessment configurations.",
+          "params": [{ "name": "assessmentId", "description": "The unique ID of the assessment." }]
+        }
+      },
+      {
+        "path": "/assessment_questions/{questionId}",
+        "definition": {
+          "entityName": "AssessmentQuestion",
+          "schema": { "$ref": "#/backend/entities/AssessmentQuestion" },
+          "description": "Stores questions for assessments.",
+          "params": [{ "name": "questionId", "description": "The unique ID for the question." }]
+        }
+      },
+      {
+        "path": "/assessment_sessions/{sessionId}",
+        "definition": {
+          "entityName": "AssessmentSession",
+          "schema": { "$ref": "#/backend/entities/AssessmentSession" },
+          "description": "Stores candidate assessment attempts and results.",
+          "params": [{ "name": "sessionId", "description": "The unique ID for the session." }]
+        }
+      },
+      {
+        "path": "/attendance_sites/{siteId}",
+        "definition": { "schema": { "$ref": "#/backend/entities/AttendanceSite" }, "description": "Stores attendance rules for a specific office site/location." }
+      },
+      {
+        "path": "/attendance_events/{eventId}",
+        "definition": { "schema": { "$ref": "#/backend/entities/AttendanceEvent" }, "description": "Employee attendance events (tap in/out)." }
+      },
+      {
+        "path": "/overtime_logs/{logId}",
+        "definition": { "schema": { "$ref": "#/backend/entities/OvertimeLog" }, "description": "Employee overtime logs." }
+      },
+      {
+        "path": "/field_tracking/{uid}/entries/{entryId}",
+        "definition": { "schema": { "$ref": "#/backend/entities/FieldTrackingEntry" }, "description": "Location entries for an employee on field duty." }
+      },
+      {
+        "path": "/leave_requests/{requestId}",
+        "definition": { "schema": { "$ref": "#/backend/entities/LeaveRequest" }, "description": "Employee leave requests." }
+      },
+      {
+        "path": "/permission_requests/{requestId}",
+        "definition": { "schema": { "$ref": "#/backend/entities/PermissionRequest" }, "description": "Employee permission requests (short leave)." }
+      },
+      {
+        "path": "/training_videos/{videoId}",
+        "definition": { "schema": { "$ref": "#/backend/entities/TrainingVideo" }, "description": "Training video library." }
+      },
+      {
+        "path": "/training_progress/{progressId}",
+        "definition": { "schema": { "$ref": "#/backend/entities/TrainingProgress" }, "description": "Employee progress on training videos. ID is {uid}_{videoId}." }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to provide a secure and scalable foundation for the HRP Starter Kit application. It emphasizes authorization independence, clarity, and adherence to Firestore best practices.\n\nThe design leverages path-based ownership for user profiles, ensuring that only the user (or a super_admin) can access their data.  This is achieved by placing user documents at `/users/{userId}`. This structure inherently provides authorization independence; security rules can validate `request.auth.uid` against the `{userId}` path segment without needing to perform costly and brittle `get()` operations to check ownership.\n\nThe application requirements include a seeding process that creates initial user accounts with specific roles.  The `users/{userId}` collection stores user profiles (fullName, email, role, isActive, createdAt) and facilitates role-based access control. The `super_admin` role has read/write access to all collections, which is achieved in security rules by checking for the existence of a document in a dedicated `/roles_admin/{userId}` collection.\n\nQAPs (Rules Are Not Filters): List operations are inherently safe due to the structure.  A regular user can only read their own document in `users/{userId}`, so listing the entire collection would return no documents (without super-admin privileges).  The super-admin role, indicated by membership in `/roles_admin/{userId}`, grants broad access and bypasses the filtering constraints imposed on other users.\n\nAuthorization Independence: Achieved by storing all necessary authorization information directly within the user document at `/users/{userId}` (specifically, the `role` field) and leveraging path-based ownership. The super admin role is checked for via existence of a document, avoiding document `get()` calls.\n\n"
+  }
+}
+    
+
+    

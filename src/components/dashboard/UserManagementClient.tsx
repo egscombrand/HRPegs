@@ -1,8 +1,8 @@
 'use client';
 
 import { useMemo, useState, useEffect } from 'react';
-import { collection } from 'firebase/firestore';
-import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import { collection, doc } from 'firebase/firestore';
+import { useCollection, useFirestore, useMemoFirebase, deleteDocumentNonBlocking } from '@/firebase';
 import { UserProfile, ROLES, UserRole, Brand } from '@/lib/types';
 import {
   Table,
@@ -51,7 +51,7 @@ const roleDisplayNames: Record<UserRole, string> = {
   karyawan: 'Karyawan',
 };
 
-export function UserManagementClient({ seedSecret }: { seedSecret: string }) {
+export function UserManagementClient() {
   const firestore = useFirestore();
   const { toast } = useToast();
   const [isFormDialogOpen, setIsFormDialogOpen] = useState(false);
@@ -98,21 +98,22 @@ export function UserManagementClient({ seedSecret }: { seedSecret: string }) {
   const confirmDelete = async () => {
     if (!userToDelete) return;
     try {
-        const response = await fetch(`/api/users/${userToDelete.uid}`, {
-            method: 'DELETE',
-            headers: {
-                'x-seed-secret': seedSecret,
-            },
-        });
-        const result = await response.json();
-        if (!response.ok) {
-            throw new Error(result.error || 'Failed to delete user.');
+        const docRef = doc(firestore, 'users', userToDelete.uid);
+        await deleteDocumentNonBlocking(docRef);
+
+        // Also clean up from roles collections for hygiene
+        if (userToDelete.role === 'super-admin') {
+            await deleteDocumentNonBlocking(doc(firestore, 'roles_admin', userToDelete.uid)).catch(() => {});
         }
-        toast({ title: 'User Deleted', description: `User ${userToDelete.fullName} has been deleted.` });
+        if (userToDelete.role === 'hrd') {
+            await deleteDocumentNonBlocking(doc(firestore, 'roles_hrd', userToDelete.uid)).catch(() => {});
+        }
+        
+        toast({ title: 'User Record Deleted', description: `Firestore record for ${userToDelete.fullName} has been deleted.` });
     } catch (error: any) {
         toast({
             variant: 'destructive',
-            title: 'Error deleting user',
+            title: 'Error deleting user record',
             description: error.message,
         });
     } finally {
@@ -250,7 +251,6 @@ export function UserManagementClient({ seedSecret }: { seedSecret: string }) {
         user={selectedUser}
         open={isFormDialogOpen}
         onOpenChange={setIsFormDialogOpen}
-        seedSecret={seedSecret}
       />
       <DeleteConfirmationDialog
         open={isDeleteDialogOpen}

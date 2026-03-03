@@ -32,18 +32,17 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { UserProfile, ROLES, UserRole, Brand } from '@/lib/types';
+import { UserProfile, ROLES, UserRole, Brand, EMPLOYMENT_TYPES, EmploymentType } from '@/lib/types';
 import { Loader2 } from 'lucide-react';
-import { doc, collection } from 'firebase/firestore';
-import { useFirestore, updateDocumentNonBlocking, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { doc, collection, serverTimestamp } from 'firebase/firestore';
+import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { useAuth } from '@/providers/auth-provider';
 import { Checkbox } from '../ui/checkbox';
-import { ScrollArea } from '../ui/scroll-area';
 
 interface UserFormDialogProps {
   user: UserProfile | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  seedSecret: string;
 }
 
 const brandSchema = z.union([z.string(), z.array(z.string())]).optional();
@@ -51,9 +50,8 @@ const brandSchema = z.union([z.string(), z.array(z.string())]).optional();
 const createSchema = z.object({
   fullName: z.string().min(2, { message: 'Full name is required.' }),
   email: z.string().email({ message: 'A valid email is required.' }),
-  role: z.enum(ROLES),
+  employmentType: z.enum(EMPLOYMENT_TYPES, { required_error: 'Jenis pekerja harus dipilih.' }),
   isActive: z.boolean().default(true),
-  password: z.string().min(8, { message: 'Password must be at least 8 characters.' }),
   brandId: brandSchema,
 });
 
@@ -61,15 +59,17 @@ const editSchema = z.object({
   fullName: z.string().min(2, { message: 'Full name is required.' }),
   email: z.string().email(), // Readonly
   role: z.enum(ROLES),
+  employmentType: z.enum(EMPLOYMENT_TYPES).optional(),
   isActive: z.boolean(),
   brandId: brandSchema,
 });
 
 type FormValues = z.infer<typeof createSchema> | z.infer<typeof editSchema>;
 
-export function UserFormDialog({ user, open, onOpenChange, seedSecret }: UserFormDialogProps) {
+export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps) {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const { userProfile: currentUserProfile } = useAuth();
   const firestore = useFirestore();
   const mode = user ? 'edit' : 'create';
 
@@ -81,9 +81,9 @@ export function UserFormDialog({ user, open, onOpenChange, seedSecret }: UserFor
     defaultValues: {
       fullName: '',
       email: '',
-      role: 'kandidat' as UserRole,
+      role: 'karyawan' as UserRole,
+      employmentType: 'karyawan' as EmploymentType,
       isActive: true,
-      password: '',
       brandId: '' as string | string[] | undefined,
     }
   });
@@ -98,18 +98,19 @@ export function UserFormDialog({ user, open, onOpenChange, seedSecret }: UserFor
               fullName: user.fullName,
               email: user.email,
               role: user.role,
+              employmentType: user.employmentType || 'karyawan',
               isActive: user.isActive,
               brandId: user.brandId || (user.role === 'hrd' ? [] : ''),
             }
           : {
               fullName: '',
               email: '',
-              role: 'kandidat' as UserRole,
+              role: 'karyawan' as UserRole,
+              employmentType: 'karyawan' as EmploymentType,
               isActive: true,
-              password: '',
               brandId: '',
             };
-      form.reset(defaultValues);
+      form.reset(defaultValues as any);
     }
   }, [user, open, mode, form]);
   
@@ -124,28 +125,31 @@ export function UserFormDialog({ user, open, onOpenChange, seedSecret }: UserFor
 
 
   async function onSubmit(values: FormValues) {
+    if (!currentUserProfile) {
+        toast({ variant: 'destructive', title: 'Error', description: 'Cannot identify current user. Please log in again.' });
+        return;
+    }
     setLoading(true);
     
-    const finalValues = { ...values };
+    const finalValues: any = { ...values };
 
     if (finalValues.role !== 'hrd' && (finalValues.brandId === '' || finalValues.brandId === 'unassigned')) {
-        (finalValues as any).brandId = null; // Use null for unassigned
+        finalValues.brandId = null;
     }
     
     if (finalValues.role === 'super-admin') {
-      (finalValues as any).brandId = null; // Use null for super-admin
+      finalValues.brandId = null;
     }
 
     try {
       if (mode === 'edit' && user) {
         const userDocRef = doc(firestore, 'users', user.uid);
-        const adminRoleDocRef = doc(firestore, 'roles_admin', user.uid);
-        const hrdRoleDocRef = doc(firestore, 'roles_hrd', user.uid);
         const editValues = finalValues as z.infer<typeof editSchema>;
         
-        const updateData: any = {
+        const updateData: Partial<UserProfile> = {
           fullName: editValues.fullName,
           role: editValues.role,
+          employmentType: editValues.employmentType,
           isActive: editValues.isActive,
           brandId: editValues.brandId ?? null,
         };
@@ -154,43 +158,44 @@ export function UserFormDialog({ user, open, onOpenChange, seedSecret }: UserFor
           updateData.brandId = null;
         }
 
-        // Update main user document first
-        await updateDocumentNonBlocking(userDocRef, updateData);
+        await setDocumentNonBlocking(userDocRef, updateData, { merge: true });
 
-        // Then, sync the role collections
+        // Sync role collections for consistency
+        const adminRoleDocRef = doc(firestore, 'roles_admin', user.uid);
+        const hrdRoleDocRef = doc(firestore, 'roles_hrd', user.uid);
         if (editValues.role === 'hrd') {
           await setDocumentNonBlocking(hrdRoleDocRef, { role: 'hrd' }, {});
         } else {
-          await deleteDocumentNonBlocking(hrdRoleDocRef).catch(() => {}); // Ignore if not found
+          await deleteDocumentNonBlocking(hrdRoleDocRef).catch(() => {});
         }
-        
         if (editValues.role === 'super-admin') {
           await setDocumentNonBlocking(adminRoleDocRef, { role: 'super-admin' }, {});
         } else {
-          await deleteDocumentNonBlocking(adminRoleDocRef).catch(() => {}); // Ignore if not found
+          await deleteDocumentNonBlocking(adminRoleDocRef).catch(() => {});
         }
 
         toast({ title: 'User Updated', description: `${editValues.fullName}'s profile has been updated.` });
-        onOpenChange(false);
-
+        
       } else {
         const createValues = finalValues as z.infer<typeof createSchema>;
-        
-        const response = await fetch('/api/users', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-seed-secret': seedSecret,
-          },
-          body: JSON.stringify(createValues),
-        });
-        const result = await response.json();
-        if (!response.ok) {
-          throw new Error(result.error || 'Failed to create user.');
-        }
-        toast({ title: 'User Created', description: `An account for ${createValues.fullName} has been created.` });
-        onOpenChange(false);
+        const newUserRef = doc(collection(firestore, 'users'));
+
+        const newUserData: Omit<UserProfile, 'id'> = {
+            uid: newUserRef.id,
+            fullName: createValues.fullName,
+            email: createValues.email,
+            role: 'karyawan',
+            employmentType: createValues.employmentType,
+            isActive: createValues.isActive,
+            brandId: createValues.brandId,
+            createdAt: serverTimestamp() as any,
+            createdBy: currentUserProfile.uid,
+        };
+        await setDocumentNonBlocking(newUserRef, newUserData);
+
+        toast({ title: 'User Created', description: `A record for ${createValues.fullName} has been created.` });
       }
+      onOpenChange(false);
     } catch (error: any) {
       toast({
         variant: 'destructive',
@@ -208,77 +213,25 @@ export function UserFormDialog({ user, open, onOpenChange, seedSecret }: UserFor
         <DialogHeader>
           <DialogTitle>{mode === 'edit' ? 'Edit User' : 'Create New User'}</DialogTitle>
           <DialogDescription>
-            {mode === 'edit' ? "Change the user's details below." : "Fill in the details for the new user."}
+            {mode === 'edit' ? "Change the user's details below." : "Fill in the details for the new user profile. This won't create a login."}
           </DialogDescription>
         </DialogHeader>
         <div className="flex-grow overflow-y-auto -mr-6 pr-6">
           <Form {...form}>
             <form id="user-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
-                  <FormField
-                    control={form.control}
-                    name="fullName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Full Name</FormLabel>
-                        <FormControl>
-                          <Input placeholder="John Doe" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Email</FormLabel>
-                        <FormControl>
-                          <Input placeholder="user@example.com" {...field} readOnly={mode === 'edit'} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  {mode === 'create' && (
-                    <FormField
-                      control={form.control}
-                      name="password"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Password</FormLabel>
-                          <FormControl>
-                            <Input type="password" placeholder="********" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                  <FormField control={form.control} name="fullName" render={({ field }) => ( <FormItem> <FormLabel>Full Name</FormLabel> <FormControl> <Input placeholder="John Doe" {...field} /> </FormControl> <FormMessage /> </FormItem> )}/>
+                  <FormField control={form.control} name="email" render={({ field }) => ( <FormItem> <FormLabel>Email</FormLabel> <FormControl> <Input placeholder="user@example.com" {...field} readOnly={mode === 'edit'} /> </FormControl> <FormMessage /> </FormItem> )}/>
+                  
+                  {mode === 'edit' ? (
+                      <FormField control={form.control} name="role" render={({ field }) => (<FormItem><FormLabel>Role</FormLabel><Select modal={false} onValueChange={field.onChange} value={(field as any).value}><FormControl><SelectTrigger><SelectValue placeholder="Select a role" /></SelectTrigger></FormControl><SelectContent>{ROLES.map((r) => (<SelectItem key={r} value={r}>{r.replace(/[-_]/g, ' ')}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)}/>
+                  ) : (
+                      <FormField control={form.control} name="employmentType" render={({ field }) => (<FormItem><FormLabel>Jenis Pekerja</FormLabel><Select modal={false} onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Pilih jenis pekerja" /></SelectTrigger></FormControl><SelectContent>{EMPLOYMENT_TYPES.map((r) => (<SelectItem key={r} value={r}>{r}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)}/>
                   )}
-                  <FormField
-                    control={form.control}
-                    name="role"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Role</FormLabel>
-                        <Select modal={false} onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select a role" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {ROLES.map((r) => (
-                              <SelectItem key={r} value={r}>
-                                {r.replace(/[-_]/g, ' ')}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  
+                  {mode === 'edit' && (
+                     <FormField control={form.control} name="employmentType" render={({ field }) => (<FormItem><FormLabel>Jenis Pekerja</FormLabel><Select modal={false} onValueChange={field.onChange} value={(field as any).value}><FormControl><SelectTrigger><SelectValue placeholder="Pilih jenis pekerja" /></SelectTrigger></FormControl><SelectContent>{EMPLOYMENT_TYPES.map((r) => (<SelectItem key={r} value={r}>{r}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)}/>
+                  )}
+
 
                   {role && role !== 'super-admin' && (
                     role === 'hrd' ? (
