@@ -1,0 +1,83 @@
+'use server';
+
+import { NextRequest, NextResponse } from 'next/server';
+import admin from '@/lib/firebase/admin';
+import { Timestamp } from 'firebase-admin/firestore';
+import { z } from 'zod';
+import { generateUniqueCode } from '@/lib/utils';
+import { EMPLOYMENT_TYPES, type Invite } from '@/lib/types';
+
+// Schema for request body validation
+const generateSchema = z.object({
+  brandId: z.string().min(1, 'Brand is required.'),
+  employmentType: z.enum(EMPLOYMENT_TYPES),
+  quantity: z.coerce.number().int().min(1).max(100),
+});
+
+// Helper function to verify user role
+async function verifyUserRole(req: NextRequest) {
+    const authorization = req.headers.get('Authorization');
+    if (!authorization?.startsWith('Bearer ')) {
+        return { error: 'Unauthorized', status: 401 };
+    }
+    const idToken = authorization.split('Bearer ')[1];
+    try {
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+        const userDoc = await admin.firestore().collection('users').doc(decodedToken.uid).get();
+        if (!userDoc.exists() || !['super-admin', 'hrd'].includes(userDoc.data()?.role)) {
+            return { error: 'Forbidden', status: 403 };
+        }
+        return { user: { uid: decodedToken.uid } };
+    } catch (error) {
+        return { error: 'Invalid token or authentication error.', status: 401 };
+    }
+}
+
+export async function POST(req: NextRequest) {
+  const roleCheck = await verifyUserRole(req);
+  if (roleCheck.error || !roleCheck.user) {
+    return NextResponse.json({ error: roleCheck.error }, { status: roleCheck.status });
+  }
+
+  try {
+    const body = await req.json();
+    const parseResult = generateSchema.safeParse(body);
+
+    if (!parseResult.success) {
+      return NextResponse.json({ error: 'Invalid request body.', details: parseResult.error.flatten() }, { status: 400 });
+    }
+    
+    const { brandId, employmentType, quantity } = parseResult.data;
+    const db = admin.firestore();
+    const batch = db.batch();
+    const now = Timestamp.now();
+    const expiresAt = Timestamp.fromMillis(now.toMillis() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
+
+    for (let i = 0; i < quantity; i++) {
+        const code = generateUniqueCode(8);
+        const inviteRef = db.collection('invites').doc(code);
+        
+        const inviteData: Omit<Invite, 'id'> = {
+            code,
+            brandId,
+            employmentType,
+            createdBy: roleCheck.user.uid,
+            createdAt: now,
+            expiresAt,
+            usedAt: null,
+            usedByUid: null,
+            isActive: true,
+        };
+
+        batch.set(inviteRef, inviteData);
+    }
+    
+    await batch.commit();
+
+    return NextResponse.json({ message: 'Invites generated successfully.', count: quantity }, { status: 201 });
+
+  } catch (error: any) {
+    console.error('Error generating invites:', error);
+    return NextResponse.json({ error: error.message || 'An unexpected error occurred.' }, { status: 500 });
+  }
+}
