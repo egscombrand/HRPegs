@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -66,12 +67,10 @@ export function AttendanceMonitoringClient() {
 
     const eventsQuery = useMemoFirebase(() => {
         if (!date) return null;
-        const start = startOfDay(date);
-        const end = endOfDay(date);
+        const key = format(date, 'yyyy-MM-dd');
         return query(
             collection(firestore, 'attendance_events'),
-            where('tsServer', '>=', start),
-            where('tsServer', '<=', end)
+            where('dateKey', '==', key)
         );
     }, [firestore, date]);
     const { data: attendanceEvents, isLoading: isLoadingEvents } = useCollection<AttendanceEvent>(eventsQuery);
@@ -88,7 +87,7 @@ export function AttendanceMonitoringClient() {
         
         const getTimestamp = (event: any): Timestamp | undefined => event.tsServer || event.timestamp || event.ts || event.createdAt;
         const brandMap = new Map(brands?.map(b => [b.id, b.name]));
-        const config = sites.find(s => s.isActive); // Find first active site config
+        const activeSite = sites.find(s => s.isActive);
 
         const processedData = users.map(user => {
             const userEvents = attendanceEvents.filter(e => e.uid === user.uid || e.userId === user.uid);
@@ -105,16 +104,16 @@ export function AttendanceMonitoringClient() {
             const flags: string[] = [];
             if (tapIn && tapInTimestamp) {
                 summary.hadir++;
-                if (tapIn.mode.toLowerCase() === 'offsite') {
+                if (tapIn.mode && tapIn.mode.toLowerCase() === 'offsite') {
                     flags.push('Offsite');
                     summary.offsite++;
                 }
 
-                if (config) {
+                if (activeSite) {
                     const tapInTime = tapInTimestamp.toDate();
                     const shiftStart = new Date(tapInTime);
-                    const [startHour, startMinute] = config.shift.startTime.split(':').map(Number);
-                    shiftStart.setHours(startHour, startMinute + config.shift.graceLateMinutes, 0, 0);
+                    const [startHour, startMinute] = activeSite.shift.startTime.split(':').map(Number);
+                    shiftStart.setHours(startHour, startMinute + activeSite.shift.graceLateMinutes, 0, 0);
 
                     if (tapInTime > shiftStart) {
                         flags.push('Terlambat');
@@ -123,10 +122,10 @@ export function AttendanceMonitoringClient() {
                 }
             }
 
-            if (tapOut && tapOutTimestamp && config) {
+            if (tapOut && tapOutTimestamp && activeSite) {
                 const tapOutTime = tapOutTimestamp.toDate();
                 const shiftEnd = new Date(tapOutTime);
-                const [endHour, endMinute] = config.shift.endTime.split(':').map(Number);
+                const [endHour, endMinute] = activeSite.shift.endTime.split(':').map(Number);
                 shiftEnd.setHours(endHour, endMinute, 0, 0);
                 if (tapOutTime < shiftEnd) flags.push('Pulang Cepat');
             }
@@ -139,7 +138,7 @@ export function AttendanceMonitoringClient() {
                 tapIn: tapInTimestamp ? format(tapInTimestamp.toDate(), 'HH:mm') : '-',
                 tapOut: tapOutTimestamp ? format(tapOutTimestamp.toDate(), 'HH:mm') : '-',
                 status: status,
-                mode: tapIn?.mode.toLowerCase() || '-',
+                mode: tapIn?.mode?.toLowerCase() || '-',
                 flags: flags,
                 photoUrl: tapIn?.photoUrl,
             };
