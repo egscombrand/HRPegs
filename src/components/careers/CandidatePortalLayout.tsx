@@ -1,8 +1,7 @@
-
 'use client';
 
 import type { ReactNode } from 'react';
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/providers/auth-provider';
@@ -110,6 +109,12 @@ export function CandidatePortalLayout({ children }: { children: ReactNode }) {
   }, [userProfile?.uid, firestore]);
   const { data: sessions, isLoading: isLoadingSessions } = useCollection<AssessmentSession>(sessionsQuery);
 
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const timerId = setInterval(() => setNow(new Date()), 30000); // Check every 30 seconds
+    return () => clearInterval(timerId);
+  }, []);
+
   const {
     highestStatus,
     assessmentStatus,
@@ -128,7 +133,7 @@ export function CandidatePortalLayout({ children }: { children: ReactNode }) {
     const activeSession = sessions.find(s => s.status === 'draft');
     if (activeSession) {
         const deadline = activeSession.deadlineAt?.toDate();
-        if (!deadline || new Date() < deadline) {
+        if (!deadline || now < deadline) {
             defaultResult.activeTestSession = activeSession;
         }
     }
@@ -163,7 +168,7 @@ export function CandidatePortalLayout({ children }: { children: ReactNode }) {
 
     return defaultResult;
 
-  }, [applications, sessions]);
+  }, [applications, sessions, now]);
   
   const menuConfig = useMemo(() => {
     const roleConfig = MENU_CONFIG[userProfile?.role as UserRole] || [];
@@ -213,6 +218,8 @@ export function CandidatePortalLayout({ children }: { children: ReactNode }) {
   if (!userProfile) {
     return null; // Should be handled by the parent layout's guard
   }
+  
+  const isTestInProgress = !!activeTestSession;
 
   return (
     <SidebarProvider defaultOpen>
@@ -236,9 +243,6 @@ export function CandidatePortalLayout({ children }: { children: ReactNode }) {
                 <SidebarMenu>
                     {group.title && <h2 className="px-2 py-1 text-xs font-semibold text-muted-foreground tracking-wider group-data-[state=collapsed]:hidden">{group.title}</h2>}
                     {group.items.map(item => {
-                        const isCurrentPageTest = pathname.startsWith('/careers/portal/assessment/personality');
-                        const isTestInProgress = !!activeTestSession;
-
                         const { locked: isGated, reason: gateReason } = getGatingInfo(item.label);
                         
                         let locked = isGated;
