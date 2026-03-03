@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { useAuth } from '@/providers/auth-provider';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { collection, query, where } from 'firebase/firestore';
-import type { JobApplication, JobApplicationStatus } from '@/lib/types';
+import type { JobApplication, JobApplicationStatus, AssessmentSession } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
@@ -30,7 +30,7 @@ const visibleSteps = [
 ];
 
 
-function ApplicationCard({ application }: { application: JobApplication }) {
+function ApplicationCard({ application, assessmentSessionStatus }: { application: JobApplication, assessmentSessionStatus?: 'draft' | 'submitted' | null }) {
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
@@ -105,7 +105,10 @@ function ApplicationCard({ application }: { application: JobApplication }) {
               const stepStatusIndex = ORDERED_RECRUITMENT_STAGES.indexOf(step.status as JobApplicationStatus);
               const isCurrentRejectedStep = isRejected && step.status === 'rejected';
 
-              const isCompleted = !isRejected && currentStatusIndex > stepStatusIndex;
+              let isCompleted = !isRejected && currentStatusIndex > stepStatusIndex;
+              if (step.status === 'tes_kepribadian') {
+                  isCompleted = assessmentSessionStatus === 'submitted';
+              }
               const isActive = !isRejected && currentStatusIndex === stepStatusIndex;
 
               return (
@@ -265,6 +268,27 @@ export default function ApplicationsPage() {
 
     const { data: applications, isLoading: applicationsLoading, error } = useCollection<JobApplication>(applicationsQuery);
 
+    const sessionsQuery = useMemoFirebase(() => {
+        if (!uid) return null;
+        return query(
+            collection(firestore, 'assessment_sessions'),
+            where('candidateUid', '==', uid)
+        );
+    }, [uid, firestore]);
+    const { data: sessions, isLoading: sessionsLoading } = useCollection<AssessmentSession>(sessionsQuery);
+
+    const sessionStatusByAppId = useMemo(() => {
+        if (!sessions) return new Map();
+        const statusMap = new Map<string, 'draft' | 'submitted'>();
+        sessions.forEach(session => {
+            if (session.applicationId) {
+                statusMap.set(session.applicationId, session.status);
+            }
+        });
+        return statusMap;
+    }, [sessions]);
+
+
     const sortedApplications = useMemo(() => {
         if (!applications) return [];
         return [...applications].sort((a, b) => {
@@ -274,7 +298,7 @@ export default function ApplicationsPage() {
         });
     }, [applications]);
 
-    const isLoading = authLoading || applicationsLoading;
+    const isLoading = authLoading || applicationsLoading || sessionsLoading;
 
     if (error) {
         return (
@@ -298,7 +322,11 @@ export default function ApplicationsPage() {
             ) : sortedApplications && sortedApplications.length > 0 ? (
                 <div className="space-y-6">
                     {sortedApplications.map(app => (
-                        <ApplicationCard key={app.id} application={app} />
+                        <ApplicationCard 
+                            key={app.id} 
+                            application={app} 
+                            assessmentSessionStatus={sessionStatusByAppId.get(app.id!)}
+                        />
                     ))}
                 </div>
             ) : (
