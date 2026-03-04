@@ -12,6 +12,7 @@ import { getInitials } from '@/lib/utils';
 import { ThemeToggle } from '../ui/ThemeToggle';
 import { Input } from '../ui/input';
 import { SidebarTrigger } from '../ui/sidebar';
+import { Badge } from '../ui/badge';
 
 function UserNav() {
     const { userProfile } = useAuth();
@@ -42,6 +43,9 @@ function UserNav() {
                 <p className="text-sm font-medium leading-none">{userProfile.fullName}</p>
                 <p className="text-xs leading-none text-muted-foreground">
                 {userProfile.email}
+                </p>
+                <p className="text-xs leading-none text-muted-foreground capitalize pt-1">
+                    {userProfile.employmentType || userProfile.role}
                 </p>
             </div>
             </DropdownMenuLabel>
