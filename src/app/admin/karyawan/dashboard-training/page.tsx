@@ -23,13 +23,13 @@ export default function TrainingDashboardPage() {
   }
 
   return (
-    <DashboardLayout pageTitle="Dashboard Training" menuConfig={menuConfig}>
+    <DashboardLayout pageTitle="Dashboard Masa Percobaan" menuConfig={menuConfig}>
         <Card>
             <CardHeader>
                 <CardTitle>Halo, {userProfile.fullName}!</CardTitle>
             </CardHeader>
             <CardContent>
-                <p>Selamat datang di dashboard peserta training.</p>
+                <p>Selamat datang di dashboard masa percobaan.</p>
                 <Badge className="mt-4 capitalize">{userProfile.employmentType}</Badge>
             </CardContent>
         </Card>
