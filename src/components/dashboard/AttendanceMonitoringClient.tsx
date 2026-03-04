@@ -24,6 +24,7 @@ interface AttendanceRecord {
   id: string; // userId
   name: string;
   brandName: string;
+  brandId?: string | string[];
   tapIn: string;
   tapOut: string;
   tapInId: string | null;
@@ -92,19 +93,28 @@ export function AttendanceMonitoringClient() {
     
     // --- Data Processing ---
     const { tableData, summaryData } = useMemo(() => {
-        const summary = { hadir: 0, belumTapIn: 0, offsite: 0, anomali: 0, terlambat: 0 };
-        if (!users || !attendanceEvents || !sites) {
+        if (!users || !attendanceEvents || !sites || !brands) {
             const defaultSummary = kpiCardsData.map(c => ({ title: c.title, value: 0 }));
             return { tableData: [], summaryData: defaultSummary };
         }
         
         const getTimestamp = (event: any): Timestamp | undefined => event.tsServer || event.timestamp || event.ts || event.createdAt;
-        const brandMap = new Map(brands?.map(b => [b.id, b.name]));
+        const brandMap = new Map(brands.map(b => [b.id, b.name]));
         const activeSite = sites.find(s => s.isActive);
+        
+        // 1. Filter users by brand first
+        const relevantUsers = brandFilter === 'all'
+            ? users
+            : users.filter(user => {
+                if (!user.brandId) return false;
+                if (Array.isArray(user.brandId)) return user.brandId.includes(brandFilter);
+                return user.brandId === brandFilter;
+            });
 
-        const processedData = users.map(user => {
+        const summary = { hadir: 0, offsite: 0, anomali: 0, terlambat: 0 };
+        
+        const processedData = relevantUsers.map(user => {
             const userEvents = attendanceEvents.filter(e => (e.uid === user.uid || e.userId === user.uid));
-            
             const tapIn = userEvents.find(e => e.type === 'tap_in' || e.type === 'IN');
             const tapOut = userEvents.find(e => e.type === 'tap_out' || e.type === 'OUT');
             
@@ -166,17 +176,16 @@ export function AttendanceMonitoringClient() {
                 earlyLeaveMinutes,
             };
         });
-
-        summary.belumTapIn = users.length - summary.hadir;
+        
+        summary.belumTapIn = relevantUsers.length - summary.hadir;
 
         const filteredTableData = processedData.filter(row => {
-            const brandMatch = brandFilter === 'all' || (Array.isArray(row.brandId) ? row.brandId.includes(brandFilter) : row.brandId === brandFilter);
             const statusMatch = statusFilter === 'all' ||
                 (statusFilter === 'present' && (row.status === 'Sedang Bekerja' || row.status === 'Selesai')) ||
                 (statusFilter === 'absent' && row.status === 'Belum Tap In') ||
                 (statusFilter === 'late' && row.lateMinutes !== null) ||
                 (statusFilter === 'offsite' && row.mode === 'offsite');
-            return brandMatch && statusMatch;
+            return statusMatch;
         });
 
         return {
@@ -203,10 +212,10 @@ export function AttendanceMonitoringClient() {
         try {
             const promises: Promise<any>[] = [];
             if (tapInId) {
-                promises.push(fetch(`/api/attendance/events/${tapInId}`, { method: 'DELETE' }));
+                promises.push(deleteDocumentNonBlocking(doc(firestore, 'attendance_events', tapInId)));
             }
             if (tapOutId) {
-                promises.push(fetch(`/api/attendance/events/${tapOutId}`, { method: 'DELETE' }));
+                promises.push(deleteDocumentNonBlocking(doc(firestore, 'attendance_events', tapOutId)));
             }
 
             await Promise.all(promises);
@@ -330,7 +339,7 @@ export function AttendanceMonitoringClient() {
                                 )) : (
                                     <TableRow>
                                         <TableCell colSpan={10} className="h-24 text-center">
-                                            Data absensi untuk tanggal yang dipilih belum tersedia.
+                                            Data absensi untuk filter yang dipilih belum tersedia.
                                         </TableCell>
                                     </TableRow>
                                 )}
