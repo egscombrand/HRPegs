@@ -1,3 +1,4 @@
+
 'use server';
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -5,11 +6,11 @@ import admin from '@/lib/firebase/admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import { generateUniqueCode } from '@/lib/utils';
-import type { Invite } from '@/lib/types';
+import { type InviteBatch } from '@/lib/types';
+import { firestore } from 'firebase-admin';
 
-const inviteEmploymentTypes = ['magang', 'training'] as const;
+const inviteEmploymentTypes = ['karyawan', 'magang', 'training'] as const;
 
-// Schema for request body validation
 const generateSchema = z.object({
   brandId: z.string().min(1, 'Brand is required.'),
   employmentType: z.enum(inviteEmploymentTypes),
@@ -20,7 +21,7 @@ export async function POST(req: NextRequest) {
   try {
     const authorization = req.headers.get('Authorization');
     if (!authorization?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized: Missing token.' }, { status: 401 });
     }
     const idToken = authorization.split('Bearer ')[1];
     const decodedToken = await admin.auth().verifyIdToken(idToken);
@@ -41,38 +42,46 @@ export async function POST(req: NextRequest) {
     }
     
     const { brandId, employmentType, quantity } = parseResult.data;
-    const batch = db.batch();
-    const now = Timestamp.now();
-    const expiresAt = Timestamp.fromMillis(now.toMillis() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
-
-    for (let i = 0; i < quantity; i++) {
-        const code = generateUniqueCode(8);
-        const inviteRef = db.collection('invites').doc(code);
-        
-        const inviteData: Omit<Invite, 'id'> = {
-            code,
-            brandId,
-            employmentType,
-            createdBy: decodedToken.uid,
-            createdAt: now,
-            expiresAt,
-            usedAt: null,
-            usedByUid: null,
-            isActive: true,
-        };
-
-        batch.set(inviteRef, inviteData);
-    }
     
-    await batch.commit();
+    const brandDoc = await db.collection('brands').doc(brandId).get();
+    if (!brandDoc.exists) {
+        return NextResponse.json({ error: 'Brand not found.' }, { status: 404 });
+    }
+    const brandName = brandDoc.data()?.name || 'Unknown Brand';
+    
+    const now = Timestamp.now();
+    const batchId = generateUniqueCode(10);
+    const batchRef = db.collection('invite_batches').doc(batchId);
+    
+    const batchData: Omit<InviteBatch, 'id'> = {
+        brandId,
+        brandName,
+        employmentType,
+        totalSlots: quantity,
+        claimedSlots: 0,
+        createdBy: decodedToken.uid,
+        createdAt: now,
+        updatedAt: now,
+    };
+    
+    await batchRef.set(batchData);
 
-    return NextResponse.json({ message: 'Invites generated successfully.', count: quantity }, { status: 201 });
+    return NextResponse.json(
+        { message: 'Invite batch generated successfully.', ...batchData },
+        { status: 201 }
+    );
 
   } catch (error: any) {
     console.error("Generate invites error:", error);
-    if (error.code === 'auth/id-token-expired') {
-        return NextResponse.json({ error: 'Your session has expired. Please log in again.' }, { status: 401 });
+    if (error.code && error.code.startsWith('auth/')) {
+        let message = 'Authentication error. Please try logging out and in again.';
+        if (error.code === 'auth/id-token-expired') {
+            message = 'Your session has expired. Please log in again.';
+        }
+        return NextResponse.json({ error: message }, { status: 401 });
     }
-    return NextResponse.json({ error: 'Invalid token or server error.' }, { status: 500 });
+    return NextResponse.json({ error: 'An unexpected server error occurred.' }, { status: 500 });
   }
 }
+
+    

@@ -45,7 +45,7 @@ export type InviteBatch = {
   id?: string; // The unique batch code
   brandId: string;
   brandName: string;
-  employmentType: 'magang' | 'training';
+  employmentType: 'karyawan' | 'magang' | 'training';
   totalSlots: number;
   claimedSlots: number;
   createdBy: string; // UID of HRD/SuperAdmin

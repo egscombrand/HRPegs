@@ -26,7 +26,7 @@ import { getInitials, cn } from '@/lib/utils';
 import { Separator } from '../ui/separator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 
-const inviteEmploymentTypes = ['magang', 'training'] as const;
+const inviteEmploymentTypes = ['karyawan', 'magang', 'training'] as const;
 
 const generateFormSchema = z.object({
   brandId: z.string({ required_error: 'Brand harus dipilih.' }),
