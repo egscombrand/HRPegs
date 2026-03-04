@@ -37,7 +37,7 @@ import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { useAuth } from '@/providers/auth-provider';
 import { Checkbox } from '../ui/checkbox';
-import { collection } from 'firebase/firestore';
+import { collection, doc } from 'firebase/firestore';
 
 interface UserFormDialogProps {
   user: UserProfile | null;
@@ -47,11 +47,13 @@ interface UserFormDialogProps {
 
 const brandSchema = z.union([z.string(), z.array(z.string())]).optional();
 
+const creatableRoles: UserRole[] = ['hrd', 'manager'];
+
 const createSchema = z.object({
   fullName: z.string().min(2, { message: 'Full name is required.' }),
   email: z.string().email({ message: 'A valid email is required.' }),
   password: z.string().min(8, { message: "Password must be at least 8 characters." }),
-  role: z.enum(ROLES),
+  role: z.enum(creatableRoles),
   employmentType: z.enum(EMPLOYMENT_TYPES, { required_error: 'Jenis pekerja harus dipilih.' }),
   isActive: z.boolean().default(true),
   brandId: brandSchema,
@@ -67,8 +69,6 @@ const editSchema = z.object({
 });
 
 type FormValues = z.infer<typeof createSchema> | z.infer<typeof editSchema>;
-
-const creatableRoles: UserRole[] = ['hrd', 'manager'];
 
 export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps) {
   const [loading, setLoading] = useState(false);
@@ -87,10 +87,10 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
       fullName: '',
       email: '',
       password: '',
-      role: 'karyawan' as UserRole,
+      role: 'hrd' as UserRole,
       employmentType: 'karyawan' as EmploymentType,
       isActive: true,
-      brandId: '' as string | string[] | undefined,
+      brandId: [] as string[] | undefined,
     }
   });
 
@@ -187,15 +187,16 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
                         render={({ field }) => (
                             <FormItem>
                             <FormLabel>Password</FormLabel>
-                            <FormControl>
-                                <div className="relative">
-                                <Input
-                                    type={showPassword ? 'text' : 'password'}
-                                    placeholder="********"
-                                    className="pr-10"
-                                    autoComplete="new-password"
-                                    {...field}
-                                />
+                             <div className="relative">
+                                <FormControl>
+                                  <Input
+                                      type={showPassword ? 'text' : 'password'}
+                                      placeholder="********"
+                                      className="pr-10"
+                                      autoComplete="new-password"
+                                      {...field}
+                                  />
+                                </FormControl>
                                 <button
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
@@ -204,8 +205,7 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
                                 >
                                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                                 </button>
-                                </div>
-                            </FormControl>
+                              </div>
                             <FormMessage />
                             </FormItem>
                         )}
@@ -218,53 +218,45 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
 
                   {role && role !== 'super-admin' && (
                     role === 'hrd' ? (
-                      <FormField
-                        control={form.control}
-                        name="brandId"
-                        render={() => (
-                            <FormItem>
-                                <div className="mb-4">
-                                    <FormLabel>Brands</FormLabel>
-                                    <FormDescription>
-                                        Assign one or more brands to this HRD user.
-                                    </FormDescription>
-                                </div>
-                                <div className="h-24 w-full rounded-md border p-4 overflow-y-auto space-y-2">
-                                    {brands?.map((brand) => (
-                                        <FormField
-                                            key={brand.id}
-                                            control={form.control}
-                                            name="brandId"
-                                            render={({ field }) => {
-                                                return (
-                                                    <FormItem
-                                                        key={brand.id}
-                                                        className="flex flex-row items-start space-x-3 space-y-0"
-                                                    >
-                                                        <FormControl>
-                                                            <Checkbox
-                                                                checked={Array.isArray(field.value) && field.value.includes(brand.id!)}
-                                                                onCheckedChange={(checked) => {
-                                                                    const currentValue = Array.isArray(field.value) ? field.value : [];
-                                                                    return checked
-                                                                        ? field.onChange([...currentValue, brand.id!])
-                                                                        : field.onChange(currentValue.filter((value) => value !== brand.id!));
-                                                                }}
-                                                            />
-                                                        </FormControl>
-                                                        <FormLabel className="font-normal">
-                                                            {brand.name}
-                                                        </FormLabel>
-                                                    </FormItem>
-                                                );
-                                            }}
-                                        />
-                                    ))}
-                                </div>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                      />
+                        <FormField
+                            control={form.control}
+                            name="brandId"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <div className="mb-4">
+                                        <FormLabel>Brands</FormLabel>
+                                        <FormDescription>
+                                            Assign one or more brands to this HRD user.
+                                        </FormDescription>
+                                    </div>
+                                    <div className="h-24 w-full rounded-md border p-4 overflow-y-auto space-y-2">
+                                        {brands?.map((brand) => (
+                                            <FormItem
+                                                key={brand.id}
+                                                className="flex flex-row items-start space-x-3 space-y-0"
+                                            >
+                                                <FormControl>
+                                                    <Checkbox
+                                                        checked={Array.isArray(field.value) && field.value.includes(brand.id!)}
+                                                        onCheckedChange={(checked) => {
+                                                            const currentValue = Array.isArray(field.value) ? field.value : [];
+                                                            const newValue = checked
+                                                                ? [...currentValue, brand.id!]
+                                                                : currentValue.filter((value) => value !== brand.id!);
+                                                            field.onChange(newValue);
+                                                        }}
+                                                    />
+                                                </FormControl>
+                                                <FormLabel className="font-normal">
+                                                    {brand.name}
+                                                </FormLabel>
+                                            </FormItem>
+                                        ))}
+                                    </div>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
                     ) : (
                       <FormField
                         control={form.control}
@@ -273,7 +265,7 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
                           <FormItem>
                             <FormLabel>Brand</FormLabel>
                             <Select
-                              onValueChange={field.onChange}
+                              onValueChange={(value) => field.onChange(value === 'unassigned' ? '' : value)}
                               value={typeof field.value === 'string' ? field.value : ''}
                               disabled={brandsLoading}
                             >
