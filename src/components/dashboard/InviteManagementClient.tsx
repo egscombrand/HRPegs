@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useCollection, useFirestore, useMemoFirebase, deleteDocumentNonBlocking } from '@/firebase';
-import { collection, doc, query, where } from 'firebase/firestore';
+import { collection, doc, query, where, writeBatch, serverTimestamp } from 'firebase/firestore';
 import type { InviteBatch, Brand, UserProfile } from '@/lib/types';
 import { useAuth } from '@/providers/auth-provider';
 import { useToast } from '@/hooks/use-toast';
@@ -13,7 +13,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, PlusCircle, Copy, Users, Trash2, UserX } from 'lucide-react';
@@ -22,7 +22,7 @@ import { KpiCard } from '../recruitment/KpiCard';
 import { DeleteConfirmationDialog } from './DeleteConfirmationDialog';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion';
 import { Avatar, AvatarFallback } from '../ui/avatar';
-import { getInitials } from '@/lib/utils';
+import { getInitials, cn } from '@/lib/utils';
 import { Separator } from '../ui/separator';
 
 const inviteEmploymentTypes = ['magang', 'training'] as const;
@@ -218,7 +218,21 @@ export function InviteManagementClient() {
                                     </div>
                                     <div className="flex items-center gap-4">
                                         <Badge variant="secondary">{batch.claimedSlots} / {batch.totalSlots} Terpakai</Badge>
-                                        <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); copyToClipboard(batch.id!); }}><Copy className="mr-2 h-3 w-3" /> Salin Link</Button>
+                                        <div
+                                            role="button"
+                                            tabIndex={0}
+                                            onClick={(e) => { e.stopPropagation(); copyToClipboard(batch.id!); }}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                copyToClipboard(batch.id!);
+                                                }
+                                            }}
+                                            className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), "cursor-pointer")}
+                                            >
+                                            <Copy className="mr-2 h-3 w-3" /> Salin Link
+                                        </div>
                                     </div>
                                 </div>
                             </AccordionTrigger>
