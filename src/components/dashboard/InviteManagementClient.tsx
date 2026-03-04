@@ -24,6 +24,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '..
 import { Avatar, AvatarFallback } from '../ui/avatar';
 import { getInitials, cn } from '@/lib/utils';
 import { Separator } from '../ui/separator';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 
 const inviteEmploymentTypes = ['magang', 'training'] as const;
 
@@ -32,8 +33,93 @@ const generateFormSchema = z.object({
   employmentType: z.enum(inviteEmploymentTypes, { required_error: 'Jenis pekerja harus dipilih.' }),
   quantity: z.coerce.number().int().min(1, 'Jumlah minimal 1.').max(100, 'Jumlah maksimal 100.'),
 });
-
 type GenerateFormValues = z.infer<typeof generateFormSchema>;
+
+const addQuotaSchema = z.object({
+  additionalQuantity: z.coerce.number().int().min(1, 'Jumlah minimal 1.').max(100, 'Jumlah maksimal 100.'),
+});
+type AddQuotaFormValues = z.infer<typeof addQuotaSchema>;
+
+
+function AddQuotaDialog({ batch, open, onOpenChange, onQuotaAdded }: { batch: InviteBatch | null, open: boolean, onOpenChange: (open: boolean) => void, onQuotaAdded: () => void }) {
+    const { firebaseUser } = useAuth();
+    const { toast } = useToast();
+    const [isSaving, setIsSaving] = useState(false);
+    
+    const form = useForm<AddQuotaFormValues>({
+        resolver: zodResolver(addQuotaSchema),
+        defaultValues: { additionalQuantity: 5 },
+    });
+
+    useEffect(() => {
+        if(open) {
+            form.reset({ additionalQuantity: 5 });
+        }
+    }, [open, form]);
+
+    const handleAddQuota = async (values: AddQuotaFormValues) => {
+        if (!batch || !firebaseUser) return;
+        setIsSaving(true);
+        try {
+            const idToken = await firebaseUser.getIdToken();
+            const response = await fetch(`/api/admin/invite-batches/${batch.id}`, {
+                method: 'PATCH',
+                headers: { 'Authorization': `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ additionalQuantity: values.additionalQuantity }),
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || 'Gagal menambah kuota.');
+            
+            toast({ title: 'Kuota Ditambahkan', description: `${values.additionalQuantity} slot baru telah ditambahkan ke batch ini.` });
+            onQuotaAdded();
+            onOpenChange(false);
+        } catch (e: any) {
+            toast({ variant: 'destructive', title: 'Gagal', description: e.message });
+        } finally {
+            setIsSaving(false);
+        }
+    }
+
+    if (!batch) return null;
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Tambah Kuota untuk: {batch.brandName}</DialogTitle>
+                    <DialogDescription>
+                        Menambah jumlah slot yang tersedia untuk batch undangan {batch.employmentType}. Link undangan tetap sama.
+                    </DialogDescription>
+                </DialogHeader>
+                <Form {...form}>
+                    <form id="add-quota-form" onSubmit={form.handleSubmit(handleAddQuota)} className="space-y-4 py-4">
+                         <FormField
+                            control={form.control}
+                            name="additionalQuantity"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Jumlah Kuota Tambahan</FormLabel>
+                                    <FormControl>
+                                        <Input type="number" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                    </form>
+                </Form>
+                 <DialogFooter>
+                    <Button variant="ghost" onClick={() => onOpenChange(false)}>Batal</Button>
+                    <Button type="submit" form="add-quota-form" disabled={isSaving}>
+                        {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Tambah
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
 
 export function InviteManagementClient() {
   const { firebaseUser, userProfile } = useAuth();
@@ -41,11 +127,12 @@ export function InviteManagementClient() {
   const { toast } = useToast();
   const [isGenerating, setIsGenerating] = useState(false);
   const [brandFilter, setBrandFilter] = useState('all');
+  const [addQuotaBatch, setAddQuotaBatch] = useState<InviteBatch | null>(null);
 
   const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
-  const { data: inviteBatches, isLoading: isLoadingInvites } = useCollection<InviteBatch>(
+  const { data: inviteBatches, isLoading: isLoadingInvites, mutate: mutateBatches } = useCollection<InviteBatch>(
     useMemoFirebase(() => collection(firestore, 'invite_batches'), [firestore])
   );
   const { data: brands, isLoading: isLoadingBrands } = useCollection<Brand>(
@@ -210,25 +297,20 @@ export function InviteManagementClient() {
                       const registeredUsers = usersByBatch.get(batch.id!) || [];
                       return (
                         <AccordionItem value={batch.id!} key={batch.id!} className="border rounded-md px-4 bg-background">
-                           <AccordionTrigger className="hover:no-underline">
+                           <AccordionTrigger className="hover:no-underline [&[data-state=open]>div>button]:bg-muted">
                                 <div className="flex justify-between items-center w-full pr-4">
                                     <div>
                                         <p className="font-semibold text-left">{batch.brandName}</p>
                                         <p className="text-sm text-muted-foreground capitalize text-left">{batch.employmentType}</p>
                                     </div>
-                                    <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-2">
                                         <Badge variant="secondary">{batch.claimedSlots} / {batch.totalSlots} Terpakai</Badge>
-                                        <div
+                                         <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setAddQuotaBatch(batch); }}><PlusCircle className="mr-2 h-3 w-3"/> Tambah</Button>
+                                         <div
                                             role="button"
                                             tabIndex={0}
                                             onClick={(e) => { e.stopPropagation(); copyToClipboard(batch.id!); }}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter' || e.key === ' ') {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                copyToClipboard(batch.id!);
-                                                }
-                                            }}
+                                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); copyToClipboard(batch.id!); }}}
                                             className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), "cursor-pointer")}
                                             >
                                             <Copy className="mr-2 h-3 w-3" /> Salin Link
@@ -276,6 +358,12 @@ export function InviteManagementClient() {
         onConfirm={confirmDeleteUser}
         itemName={userToDelete?.fullName}
         itemType="User Account"
+      />
+      <AddQuotaDialog
+        batch={addQuotaBatch}
+        open={!!addQuotaBatch}
+        onOpenChange={(open) => !open && setAddQuotaBatch(null)}
+        onQuotaAdded={mutateBatches}
       />
     </>
   );
