@@ -579,6 +579,7 @@ export type AttendanceEvent = {
     id?: string;
     uid: string;
     userId?: string; // Alias for uid
+    siteId?: string; // Denormalized site ID
     type: 'tap_in' | 'tap_out' | 'IN' | 'OUT';
     timestamp?: Timestamp; // Original HRP field
     ts?: Timestamp; // Alias for timestamp

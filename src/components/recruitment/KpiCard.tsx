@@ -9,9 +9,10 @@ interface KpiCardProps {
     value: string | number;
     delta?: string;
     deltaType?: 'default' | 'inverse';
+    description?: string;
 }
 
-export function KpiCard({ title, value, delta, deltaType = 'default' }: KpiCardProps) {
+export function KpiCard({ title, value, delta, deltaType = 'default', description }: KpiCardProps) {
     const isIncrease = delta ? delta.startsWith('+') : false;
     const isDecrease = delta ? delta.startsWith('-') : false;
     
@@ -26,17 +27,20 @@ export function KpiCard({ title, value, delta, deltaType = 'default' }: KpiCardP
             </CardHeader>
             <CardContent>
                 <div className="text-2xl font-bold">{value}</div>
-                {delta && (
-                    <p className={cn(
-                        "text-xs text-muted-foreground flex items-center gap-1",
-                        isGood && "text-green-600",
-                        isBad && "text-red-600"
-                    )}>
-                        {isIncrease && <ArrowUp className="h-4 w-4" />}
-                        {isDecrease && <ArrowDown className="h-4 w-4" />}
-                        {delta} vs last period
-                    </p>
-                )}
+                <div className="flex items-center text-xs text-muted-foreground">
+                    {delta && (
+                        <p className={cn(
+                            "flex items-center gap-1",
+                            isGood && "text-green-600",
+                            isBad && "text-red-600"
+                        )}>
+                            {isIncrease && <ArrowUp className="h-4 w-4" />}
+                            {isDecrease && <ArrowDown className="h-4 w-4" />}
+                            {delta}
+                        </p>
+                    )}
+                    {description && <p className="ml-1">{description}</p>}
+                </div>
             </CardContent>
         </Card>
     );

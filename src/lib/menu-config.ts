@@ -23,7 +23,6 @@ const RECRUITMENT_MENU_ITEMS: MenuGroup[] = [
     {
         title: "Rekrutmen",
         items: [
-            { href: '/admin/hrd', label: 'Dashboard', icon: createElement(LayoutDashboard) },
             { href: '/admin/jobs', label: 'Job Postings', icon: createElement(Briefcase) },
             { href: '/admin/recruitment', label: 'Recruitment', icon: createElement(Users) },
             { href: '/admin/hrd/assessments', label: 'Assessments', icon: createElement(ClipboardCheck) },
@@ -35,7 +34,6 @@ const EMPLOYEE_MONITORING_ITEMS: MenuGroup[] = [
     {
         title: "Monitoring Karyawan",
         items: [
-            { href: '/admin/hrd/monitoring', label: 'Dashboard Karyawan', icon: createElement(LayoutDashboard) },
             { href: '/admin/hrd/invites', label: 'Employee Invites', icon: createElement(UserPlus) },
             { href: '/admin/hrd/monitoring/absen', label: 'Monitoring Absen', icon: createElement(FileClock) },
             { href: '/admin/hrd/monitoring/lembur', label: 'Lembur', icon: createElement(Timer) },
@@ -51,6 +49,11 @@ const EMPLOYEE_MONITORING_ITEMS: MenuGroup[] = [
 
 export const MENU_CONFIG: Record<string, MenuGroup[]> = {
   'super-admin': [
+     {
+        items: [
+             { href: '/admin/hrd/dashboard', label: 'Dashboard', icon: createElement(LayoutDashboard) },
+        ]
+    },
     ...RECRUITMENT_MENU_ITEMS,
     ...EMPLOYEE_MONITORING_ITEMS,
     {
@@ -69,6 +72,11 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
     }
   ],
   'hrd': [
+    {
+        items: [
+             { href: '/admin/hrd/dashboard', label: 'Dashboard', icon: createElement(LayoutDashboard) },
+        ]
+    },
     ...RECRUITMENT_MENU_ITEMS,
     ...EMPLOYEE_MONITORING_ITEMS,
     {
