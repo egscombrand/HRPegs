@@ -20,9 +20,11 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, PlusCircle, Copy } from 'lucide-react';
 import { format } from 'date-fns';
 
+const inviteEmploymentTypes = ['magang', 'training'] as const;
+
 const generateFormSchema = z.object({
   brandId: z.string({ required_error: 'Brand harus dipilih.' }),
-  employmentType: z.enum(EMPLOYMENT_TYPES, { required_error: 'Jenis pekerja harus dipilih.' }),
+  employmentType: z.enum(inviteEmploymentTypes, { required_error: 'Jenis pekerja harus dipilih.' }),
   quantity: z.coerce.number().int().min(1, 'Jumlah minimal 1.').max(100, 'Jumlah maksimal 100.'),
 });
 
@@ -132,7 +134,7 @@ export function InviteManagementClient() {
                       <FormLabel>Employment Type</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl><SelectTrigger><SelectValue placeholder="Select a type" /></SelectTrigger></FormControl>
-                        <SelectContent>{EMPLOYMENT_TYPES.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}</SelectContent>
+                        <SelectContent>{inviteEmploymentTypes.map(type => <SelectItem key={type} value={type} className="capitalize">{type}</SelectItem>)}</SelectContent>
                       </Select>
                       <FormMessage />
                     </FormItem>
