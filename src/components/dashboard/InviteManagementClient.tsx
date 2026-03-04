@@ -52,7 +52,7 @@ export function InviteManagementClient() {
     useMemoFirebase(() => collection(firestore, 'brands'), [firestore])
   );
   const { data: users, isLoading: isLoadingUsers } = useCollection<UserProfile>(
-    useMemoFirebase(() => query(collection(firestore, 'users'), where('role', '==', 'karyawan')), [firestore])
+    useMemoFirebase(() => query(collection(firestore, 'users'), where('employmentType', 'in', ['magang', 'training'])), [firestore])
   );
 
   const form = useForm<GenerateFormValues>({
