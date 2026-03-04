@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useCollection, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
+import { useCollection, useFirestore, useMemoFirebase, deleteDocumentNonBlocking } from '@/firebase';
 import { collection, query, where, doc, type Timestamp } from 'firebase/firestore';
 import type { Brand, UserProfile, AttendanceEvent } from '@/lib/types';
 import { ROLES_INTERNAL } from '@/lib/types';
@@ -11,23 +11,30 @@ import { GoogleDatePicker } from '@/components/ui/google-date-picker';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '../ui/skeleton';
 import { KpiCard } from '@/components/recruitment/KpiCard';
-import { format, startOfDay, endOfDay } from 'date-fns';
+import { format, startOfDay, endOfDay, differenceInMinutes } from 'date-fns';
 import { Badge } from '../ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { getInitials } from '@/lib/utils';
 import Link from 'next/link';
+import { Trash2 } from 'lucide-react';
+import { DeleteConfirmationDialog } from './DeleteConfirmationDialog';
+import { useToast } from '@/hooks/use-toast';
 
 interface AttendanceRecord {
-  id: string;
+  id: string; // userId
   name: string;
   brandName: string;
   tapIn: string;
   tapOut: string;
+  tapInId: string | null;
+  tapOutId: string | null;
   status: 'Sedang Bekerja' | 'Selesai' | 'Belum Tap In';
   mode: 'onsite' | 'offsite' | '-';
-  flags: string[];
   photoUrl?: string | null;
   address: string;
+  location: { lat: number; lng: number } | null;
+  lateMinutes: number | null;
+  earlyLeaveMinutes: number | null;
 }
 
 const kpiCardsData = [
@@ -53,7 +60,10 @@ export function AttendanceMonitoringClient() {
     const [date, setDate] = useState<Date | null>(new Date());
     const [brandFilter, setBrandFilter] = useState('all');
     const [statusFilter, setStatusFilter] = useState('all');
+    const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+    const [eventsToDelete, setEventsToDelete] = useState<{ tapInId: string | null, tapOutId: string | null, userName: string | null }>({ tapInId: null, tapOutId: null, userName: null });
     const firestore = useFirestore();
+    const { toast } = useToast();
 
     // --- Data Fetching ---
     const { data: sites, isLoading: isLoadingConfig } = useCollection<any>(
@@ -76,7 +86,7 @@ export function AttendanceMonitoringClient() {
             where('tsServer', '<=', end)
         );
     }, [firestore, date]);
-    const { data: attendanceEvents, isLoading: isLoadingEvents } = useCollection<AttendanceEvent>(eventsQuery);
+    const { data: attendanceEvents, isLoading: isLoadingEvents, mutate: mutateEvents } = useCollection<AttendanceEvent>(eventsQuery);
 
     const isLoading = isLoadingConfig || isLoadingUsers || isLoadingBrands || isLoadingEvents;
     
@@ -104,13 +114,14 @@ export function AttendanceMonitoringClient() {
             let status: AttendanceRecord['status'] = 'Belum Tap In';
             if (tapIn && !tapOut) status = 'Sedang Bekerja';
             else if (tapIn && tapOut) status = 'Selesai';
+            
+            let lateMinutes: number | null = null;
+            let earlyLeaveMinutes: number | null = null;
 
-            const flags: string[] = [];
             if (tapIn && tapInTimestamp) {
                 summary.hadir++;
                 const modeString = (tapIn.mode as string)?.toLowerCase();
                 if (modeString === 'offsite') {
-                    flags.push('Offsite');
                     summary.offsite++;
                 }
 
@@ -121,7 +132,7 @@ export function AttendanceMonitoringClient() {
                     shiftStart.setHours(startHour, startMinute + activeSite.shift.graceLateMinutes, 0, 0);
 
                     if (tapInTime > shiftStart) {
-                        flags.push('Terlambat');
+                        lateMinutes = differenceInMinutes(tapInTime, shiftStart);
                         summary.terlambat++;
                     }
                 }
@@ -132,7 +143,9 @@ export function AttendanceMonitoringClient() {
                 const shiftEnd = new Date(tapOutTime);
                 const [endHour, endMinute] = activeSite.shift.endTime.split(':').map(Number);
                 shiftEnd.setHours(endHour, endMinute, 0, 0);
-                if (tapOutTime < shiftEnd) flags.push('Pulang Cepat');
+                if (tapOutTime < shiftEnd) {
+                    earlyLeaveMinutes = differenceInMinutes(shiftEnd, tapOutTime);
+                }
             }
 
             return {
@@ -142,11 +155,15 @@ export function AttendanceMonitoringClient() {
                 brandName: Array.isArray(user.brandId) ? user.brandId.map(id => brandMap.get(id)).join(', ') : brandMap.get(user.brandId as string) || '-',
                 tapIn: tapInTimestamp ? format(tapInTimestamp.toDate(), 'HH:mm') : '-',
                 tapOut: tapOutTimestamp ? format(tapOutTimestamp.toDate(), 'HH:mm') : '-',
+                tapInId: tapIn?.id || null,
+                tapOutId: tapOut?.id || null,
                 status: status,
                 mode: (tapIn?.mode as string)?.toLowerCase() || '-',
-                flags: flags,
                 photoUrl: tapIn?.photoUrl,
                 address: tapIn?.address || '-',
+                location: tapIn?.location || null,
+                lateMinutes,
+                earlyLeaveMinutes,
             };
         });
 
@@ -157,8 +174,8 @@ export function AttendanceMonitoringClient() {
             const statusMatch = statusFilter === 'all' ||
                 (statusFilter === 'present' && (row.status === 'Sedang Bekerja' || row.status === 'Selesai')) ||
                 (statusFilter === 'absent' && row.status === 'Belum Tap In') ||
-                (statusFilter === 'late' && row.flags.includes('Terlambat')) ||
-                (statusFilter === 'offsite' && row.flags.includes('Offsite'));
+                (statusFilter === 'late' && row.lateMinutes !== null) ||
+                (statusFilter === 'offsite' && row.mode === 'offsite');
             return brandMatch && statusMatch;
         });
 
@@ -173,6 +190,43 @@ export function AttendanceMonitoringClient() {
             ]
         };
     }, [users, attendanceEvents, sites, brands, brandFilter, statusFilter, date]);
+    
+    const handleCancelClick = (row: AttendanceRecord) => {
+        setEventsToDelete({ tapInId: row.tapInId, tapOutId: row.tapOutId, userName: row.name });
+        setIsDeleteConfirmOpen(true);
+    };
+
+    const confirmCancelAttendance = async () => {
+        const { tapInId, tapOutId } = eventsToDelete;
+        if (!tapInId && !tapOutId) return;
+
+        try {
+            const promises: Promise<any>[] = [];
+            if (tapInId) {
+                promises.push(fetch(`/api/attendance/events/${tapInId}`, { method: 'DELETE' }));
+            }
+            if (tapOutId) {
+                promises.push(fetch(`/api/attendance/events/${tapOutId}`, { method: 'DELETE' }));
+            }
+
+            await Promise.all(promises);
+
+            toast({
+                title: 'Absensi Dibatalkan',
+                description: `Catatan absensi untuk ${eventsToDelete.userName} telah dihapus.`,
+            });
+            mutateEvents(); // Re-fetch the events
+        } catch (error: any) {
+            toast({
+                variant: 'destructive',
+                title: 'Gagal Membatalkan',
+                description: error.message || 'Terjadi kesalahan pada server.',
+            });
+        } finally {
+            setIsDeleteConfirmOpen(false);
+        }
+    };
+
 
     return (
         <div className="space-y-6">
@@ -224,6 +278,7 @@ export function AttendanceMonitoringClient() {
                                     <TableHead>Status</TableHead>
                                     <TableHead>Mode</TableHead>
                                     <TableHead>Flags</TableHead>
+                                    <TableHead className="text-right">Aksi</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -245,7 +300,13 @@ export function AttendanceMonitoringClient() {
                                                 </Avatar>
                                             )}
                                         </TableCell>
-                                        <TableCell className="text-xs" title={row.address}>{row.address}</TableCell>
+                                        <TableCell className="text-xs max-w-xs truncate" title={row.address}>
+                                          {row.location ? (
+                                                <a href={`https://maps.google.com/?q=${row.location.lat},${row.location.lng}`} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                                                    {row.address}
+                                                </a>
+                                            ) : row.address}
+                                        </TableCell>
                                         <TableCell>{row.tapIn}</TableCell>
                                         <TableCell>{row.tapOut}</TableCell>
                                         <TableCell>
@@ -256,13 +317,19 @@ export function AttendanceMonitoringClient() {
                                         <TableCell className="capitalize">{row.mode}</TableCell>
                                         <TableCell>
                                             <div className="flex flex-wrap gap-1">
-                                                {row.flags.map((flag: string) => <Badge key={flag} variant={flag === 'Terlambat' ? 'destructive' : 'outline'}>{flag}</Badge>)}
+                                                {row.lateMinutes !== null && <Badge variant="destructive">Terlambat ({row.lateMinutes} mnt)</Badge>}
+                                                {row.earlyLeaveMinutes !== null && <Badge variant="destructive">Pulang Awal</Badge>}
                                             </div>
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <Button variant="ghost" size="icon" onClick={() => handleCancelClick(row)} disabled={!row.tapInId && !row.tapOutId} title="Batalkan Absensi">
+                                                <Trash2 className="h-4 w-4 text-destructive" />
+                                            </Button>
                                         </TableCell>
                                     </TableRow>
                                 )) : (
                                     <TableRow>
-                                        <TableCell colSpan={9} className="h-24 text-center">
+                                        <TableCell colSpan={10} className="h-24 text-center">
                                             Data absensi untuk tanggal yang dipilih belum tersedia.
                                         </TableCell>
                                     </TableRow>
@@ -272,6 +339,13 @@ export function AttendanceMonitoringClient() {
                     </div>
                 </>
             )}
+             <DeleteConfirmationDialog 
+                open={isDeleteConfirmOpen}
+                onOpenChange={setIsDeleteConfirmOpen}
+                onConfirm={confirmCancelAttendance}
+                itemName={`absensi untuk ${eventsToDelete.userName}`}
+                itemType="catatan"
+            />
         </div>
     );
 }
