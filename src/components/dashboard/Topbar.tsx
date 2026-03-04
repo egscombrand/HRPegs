@@ -44,9 +44,9 @@ function UserNav() {
                 <p className="text-xs leading-none text-muted-foreground">
                 {userProfile.email}
                 </p>
-                <p className="text-xs leading-none text-muted-foreground capitalize pt-1">
+                <Badge variant="outline" className="capitalize mt-2 w-fit">
                     {userProfile.employmentType || userProfile.role}
-                </p>
+                </Badge>
             </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
