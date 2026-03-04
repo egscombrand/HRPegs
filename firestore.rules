@@ -132,6 +132,14 @@ service cloud.firestore {
     match /roles_hrd/{userId} {
       allow read, write: if request.auth.token.email == 'super_admin@gmail.com' || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super-admin';
     }
+
+    /**
+     * /invite_batches/{batchId}
+     * - Allows HRD and Super Admins to manage invite batches.
+     */
+    match /invite_batches/{batchId} {
+      allow read, write: if isHrd() || isSuperAdmin();
+    }
     
     /**
      * /brands/{brandId}
