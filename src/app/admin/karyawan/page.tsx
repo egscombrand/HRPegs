@@ -1,27 +1,64 @@
 'use client';
 
-import { useMemo } from 'react';
-import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
-import { useRoleGuard } from '@/hooks/useRoleGuard';
-import { Skeleton } from '@/components/ui/skeleton';
-import { MENU_CONFIG } from '@/lib/menu-config';
+import { useEffect } from 'react';
+import { useAuth } from '@/providers/auth-provider';
+import { useRouter } from 'next/navigation';
+import { Loader2 } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertCircle } from 'lucide-react';
 
+export default function KaryawanDashboardRedirect() {
+  const { userProfile, loading } = useAuth();
+  const router = useRouter();
 
-export default function KaryawanDashboard() {
-  const hasAccess = useRoleGuard('karyawan');
-  const menuConfig = useMemo(() => MENU_CONFIG['karyawan'] || [], []);
+  useEffect(() => {
+    if (loading || !userProfile) {
+      return; // Wait for user profile to load
+    }
 
-  if (!hasAccess) {
+    if (userProfile.role !== 'karyawan') {
+        // This is a safeguard, the main guard should handle this.
+        router.replace('/admin');
+        return;
+    }
+
+    const { employmentType } = userProfile;
+    
+    switch (employmentType) {
+        case 'magang':
+            router.replace('/admin/karyawan/dashboard-magang');
+            break;
+        case 'training':
+            router.replace('/admin/karyawan/dashboard-training');
+            break;
+        case 'karyawan':
+        default:
+            router.replace('/admin/karyawan/dashboard');
+            break;
+    }
+
+  }, [userProfile, loading, router]);
+  
+  if (userProfile && !userProfile.employmentType) {
     return (
-      <div className="flex h-screen w-full items-center justify-center p-4">
-        <Skeleton className="h-[400px] w-full max-w-6xl" />
-      </div>
-    );
+       <div className="flex h-screen w-full items-center justify-center bg-background p-4">
+          <Alert variant="destructive" className="max-w-md">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Tipe Pekerjaan Tidak Ditemukan</AlertTitle>
+            <AlertDescription>
+                Tipe pekerjaan untuk akun Anda belum diatur. Silakan hubungi HRD untuk pembaruan. Anda akan diarahkan ke dashboard umum.
+            </AlertDescription>
+          </Alert>
+       </div>
+    )
   }
 
   return (
-    <DashboardLayout pageTitle="Employee Dashboard" menuConfig={menuConfig}>
-      <p>This is the main content area for the Employee dashboard. Access your personal information and company resources.</p>
-    </DashboardLayout>
+    <div className="flex h-screen w-full items-center justify-center bg-background">
+      <div className="flex flex-col items-center gap-4">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <p className="text-muted-foreground">Mengarahkan ke dashboard Anda...</p>
+      </div>
+    </div>
   );
 }

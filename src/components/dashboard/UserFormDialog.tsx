@@ -231,7 +231,7 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
                                     </div>
                                     <div className="h-24 w-full rounded-md border p-4 overflow-y-auto space-y-2">
                                         {brands?.map((brand) => (
-                                            <FormItem
+                                            <div
                                                 key={brand.id}
                                                 className="flex flex-row items-start space-x-3 space-y-0"
                                             >
@@ -250,7 +250,7 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
                                                 <FormLabel className="font-normal">
                                                     {brand.name}
                                                 </FormLabel>
-                                            </FormItem>
+                                            </div>
                                         ))}
                                     </div>
                                     <FormMessage />
