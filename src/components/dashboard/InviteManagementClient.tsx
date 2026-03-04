@@ -6,8 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { collection } from 'firebase/firestore';
-import type { Invite, Brand } from '@/lib/types';
-import { EMPLOYMENT_TYPES } from '@/lib/types';
+import type { Invite, Brand, UserProfile } from '@/lib/types';
 import { useAuth } from '@/providers/auth-provider';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -17,8 +16,9 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, PlusCircle, Copy } from 'lucide-react';
+import { Loader2, PlusCircle, Copy, Users, CheckCircle, Percent } from 'lucide-react';
 import { format } from 'date-fns';
+import { KpiCard } from '../recruitment/KpiCard';
 
 const inviteEmploymentTypes = ['magang', 'training'] as const;
 
@@ -42,6 +42,9 @@ export function InviteManagementClient() {
   const { data: brands, isLoading: isLoadingBrands } = useCollection<Brand>(
     useMemoFirebase(() => collection(firestore, 'brands'), [firestore])
   );
+  const { data: users, isLoading: isLoadingUsers } = useCollection<UserProfile>(
+    useMemoFirebase(() => collection(firestore, 'users'), [firestore])
+  );
 
   const form = useForm<GenerateFormValues>({
     resolver: zodResolver(generateFormSchema),
@@ -53,9 +56,27 @@ export function InviteManagementClient() {
     return new Map(brands.map(brand => [brand.id!, brand.name]));
   }, [brands]);
 
-  const sortedInvites = useMemo(() => {
-    if (!invites) return [];
-    return [...invites].sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+  const userMap = useMemo(() => {
+    if (!users) return new Map<string, string>();
+    return new Map(users.map(user => [user.uid, user.fullName]));
+  }, [users]);
+
+  const { sortedInvites, summary } = useMemo(() => {
+    if (!invites) return { sortedInvites: [], summary: { total: 0, used: 0, rate: 0 } };
+
+    const sorted = [...invites].sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+    const usedCount = sorted.filter(invite => invite.usedByUid).length;
+    const totalCount = sorted.length;
+    const rate = totalCount > 0 ? (usedCount / totalCount) * 100 : 0;
+    
+    return {
+      sortedInvites: sorted,
+      summary: {
+        total: totalCount,
+        used: usedCount,
+        rate: Math.round(rate),
+      }
+    };
   }, [invites]);
 
   const getInviteStatus = (invite: Invite) => {
@@ -87,7 +108,6 @@ export function InviteManagementClient() {
         throw new Error(result.error || 'Failed to generate invites.');
       }
       toast({ title: 'Codes Generated', description: `${result.count} new invite codes have been created.` });
-      // Data will refresh automatically due to useCollection listener
     } catch (e: any) {
       toast({ variant: 'destructive', title: 'Generation Failed', description: e.message });
     } finally {
@@ -100,112 +120,124 @@ export function InviteManagementClient() {
     navigator.clipboard.writeText(url);
     toast({ title: "Link Copied!", description: "Registration link copied to clipboard." });
   };
+  
+  const handleRegenerate = (invite: Invite) => {
+    form.setValue('brandId', invite.brandId);
+    form.setValue('employmentType', invite.employmentType);
+    toast({ description: "Formulir telah diisi berdasarkan undangan yang dipilih." });
+  };
 
   return (
-    <div className="grid gap-6 md:grid-cols-3">
-      <div className="md:col-span-1">
-        <Card>
-          <CardHeader>
-            <CardTitle>Generate Invites</CardTitle>
-            <CardDescription>Create new registration invite codes for employees.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(handleGenerate)} className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="brandId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Brand</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingBrands}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="Select a brand" /></SelectTrigger></FormControl>
-                        <SelectContent>{brands?.map(b => <SelectItem key={b.id!} value={b.id!}>{b.name}</SelectItem>)}</SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="employmentType"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Employment Type</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="Select a type" /></SelectTrigger></FormControl>
-                        <SelectContent>{inviteEmploymentTypes.map(type => <SelectItem key={type} value={type} className="capitalize">{type}</SelectItem>)}</SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="quantity"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Quantity</FormLabel>
-                      <FormControl><Input type="number" {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <Button type="submit" className="w-full" disabled={isGenerating}>
-                  {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
-                  Generate
-                </Button>
-              </form>
-            </Form>
-          </CardContent>
-        </Card>
-      </div>
-      <div className="md:col-span-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Generated Invites</CardTitle>
-            <CardDescription>List of all invite codes.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Code</TableHead>
-                    <TableHead>Brand</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Expires</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoadingInvites ? (
-                    <TableRow><TableCell colSpan={6} className="h-24 text-center">Loading...</TableCell></TableRow>
-                  ) : sortedInvites.length > 0 ? (
-                    sortedInvites.map(invite => {
-                      const status = getInviteStatus(invite);
-                      return (
-                        <TableRow key={invite.id}>
-                          <TableCell className="font-mono text-xs">{invite.code}</TableCell>
-                          <TableCell>{brandMap.get(invite.brandId) || '-'}</TableCell>
-                          <TableCell className="capitalize">{invite.employmentType}</TableCell>
-                          <TableCell><Badge variant={status.variant}>{status.label}</Badge></TableCell>
-                          <TableCell>{format(invite.expiresAt.toDate(), 'dd MMM yyyy')}</TableCell>
-                          <TableCell className="text-right">
-                             <Button variant="outline" size="sm" onClick={() => copyToClipboard(invite.code)}><Copy className="mr-2 h-3 w-3" /> Copy Link</Button>
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })
-                  ) : (
-                    <TableRow><TableCell colSpan={6} className="h-24 text-center">No invites found.</TableCell></TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
+    <div className="space-y-6">
+       <div className="grid gap-4 md:grid-cols-3">
+          <KpiCard title="Total Undangan Dibuat" value={summary.total} />
+          <KpiCard title="Undangan Terpakai" value={summary.used} />
+          <KpiCard title="Tingkat Penggunaan" value={`${summary.rate}%`} />
+       </div>
+      <div className="grid gap-6 md:grid-cols-3">
+        <div className="md:col-span-1">
+          <Card>
+            <CardHeader>
+              <CardTitle>Generate Invites</CardTitle>
+              <CardDescription>Create new registration invite codes for employees.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(handleGenerate)} className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="brandId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Brand</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingBrands}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Select a brand" /></SelectTrigger></FormControl>
+                          <SelectContent>{brands?.map(b => <SelectItem key={b.id!} value={b.id!}>{b.name}</SelectItem>)}</SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="employmentType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Employment Type</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl><SelectTrigger><SelectValue placeholder="Select a type" /></SelectTrigger></FormControl>
+                          <SelectContent>{inviteEmploymentTypes.map(type => <SelectItem key={type} value={type} className="capitalize">{type}</SelectItem>)}</SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="quantity"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Quantity</FormLabel>
+                        <FormControl><Input type="number" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <Button type="submit" className="w-full" disabled={isGenerating}>
+                    {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
+                    Generate
+                  </Button>
+                </form>
+              </Form>
+            </CardContent>
+          </Card>
+        </div>
+        <div className="md:col-span-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Generated Invites</CardTitle>
+              <CardDescription>List of all invite codes.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Code</TableHead>
+                      <TableHead>Used By</TableHead>
+                      <TableHead>Used At</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoadingInvites || isLoadingUsers ? (
+                      <TableRow><TableCell colSpan={5} className="h-24 text-center">Loading...</TableCell></TableRow>
+                    ) : sortedInvites.length > 0 ? (
+                      sortedInvites.map(invite => {
+                        const status = getInviteStatus(invite);
+                        return (
+                          <TableRow key={invite.id}>
+                            <TableCell className="font-mono text-xs">{invite.code}</TableCell>
+                            <TableCell className="text-sm">{invite.usedByUid ? userMap.get(invite.usedByUid) || 'N/A' : '-'}</TableCell>
+                            <TableCell>{invite.usedAt ? format(invite.usedAt.toDate(), 'dd MMM, HH:mm') : '-'}</TableCell>
+                            <TableCell><Badge variant={status.variant}>{status.label}</Badge></TableCell>
+                            <TableCell className="text-right space-x-1">
+                               <Button variant="outline" size="sm" onClick={() => copyToClipboard(invite.code)}><Copy className="mr-2 h-3 w-3" /> Copy</Button>
+                               <Button variant="ghost" size="sm" onClick={() => handleRegenerate(invite)}><PlusCircle className="mr-2 h-3 w-3" /> Lagi</Button>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })
+                    ) : (
+                      <TableRow><TableCell colSpan={5} className="h-24 text-center">No invites found.</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
