@@ -2,17 +2,20 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { getFunnelData, getApplicantsTrend, getSourcePerformance } from '@/lib/recruitment/metrics';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, PieChart, Pie, Cell } from 'recharts';
-import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
+import { ChartContainer, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import type { JobApplication } from '@/lib/types';
 import type { FilterState } from './RecruitmentDashboardClient';
 import { Info } from 'lucide-react';
 
 const chartConfig = {
   applicants: { label: 'Applicants', color: 'hsl(var(--chart-1))' },
+  submitted: { label: 'Submitted', color: 'hsl(var(--chart-1))' },
   screening: { label: 'Screening', color: 'hsl(var(--chart-2))' },
+  assessment: { label: 'Assessment', color: 'hsl(var(--chart-3))'},
   interview: { label: 'Interview', color: 'hsl(var(--chart-3))' },
-  hired: { label: 'Hired', color: 'hsl(var(--chart-4))' },
-};
+  offer: { label: 'Offer', color: 'hsl(var(--chart-4))'},
+  hired: { label: 'Hired', color: 'hsl(var(--chart-5))' },
+} satisfies ChartConfig;
 
 const COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
 
@@ -46,7 +49,7 @@ export function AnalyticsCharts({ applications, filters }: { applications: JobAp
                 <div key={stage.stage} className="flex flex-col items-center w-32 flex-shrink-0">
                     <p className="text-xs font-medium">{stage.stage}</p>
                     <p className="text-xl font-bold">{stage.count}</p>
-                    <div className="bg-primary/20 w-full rounded-t-md mt-1" style={{ height: `${Math.max(5, (stage.count / funnelData[0].count) * 100)}%`}} />
+                    <div className="w-full rounded-t-md mt-1" style={{ height: `${Math.max(5, (stage.count / funnelData[0].count) * 100)}%`, backgroundColor: COLORS[i % COLORS.length]}} />
                 </div>
             )) : (
                  <div className="h-full w-full flex items-center justify-center text-muted-foreground text-sm">No data for funnel.</div>
@@ -63,9 +66,9 @@ export function AnalyticsCharts({ applications, filters }: { applications: JobAp
         <CardContent>
           <ChartContainer config={chartConfig} className="h-[250px] w-full">
             <AreaChart data={trendData}>
-              <CartesianGrid vertical={false} />
+              <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
               <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} />
-              <YAxis />
+              <YAxis tickLine={false} axisLine={false} />
               <Tooltip content={<ChartTooltipContent />} />
               <Area type="monotone" dataKey="applicants" stroke="var(--color-applicants)" fill="var(--color-applicants)" fillOpacity={0.3} />
             </AreaChart>

@@ -2,8 +2,8 @@
 
 import { useState, useMemo } from 'react';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, query, where, Timestamp } from 'firebase/firestore';
-import type { JobApplication, Job, UserProfile, Brand, AttendanceSite, AttendanceEvent } from '@/lib/types';
+import { collection, query, where } from 'firebase/firestore';
+import type { JobApplication, UserProfile, Brand, AttendanceSite, AttendanceEvent } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { startOfDay, endOfDay, subDays } from 'date-fns';
@@ -28,7 +28,7 @@ function DashboardSkeleton() {
     )
 }
 
-export function HrdControlTowerClient() {
+export function DashboardKaryawanClient() {
     const firestore = useFirestore();
     const [view, setView] = useState('overview');
     
@@ -64,23 +64,11 @@ export function HrdControlTowerClient() {
     }, [firestore, filters.date]);
     const { data: attendanceEvents, isLoading: isLoadingEvents } = useCollection<AttendanceEvent>(eventsQuery);
     
-    // Fetch applications for today
-    const appsQuery = useMemoFirebase(() => {
-        const start = startOfDay(new Date());
-        const end = endOfDay(new Date());
-        return query(
-            collection(firestore, 'applications'),
-            where('submittedAt', '>=', start),
-            where('submittedAt', '<=', end)
-        );
-    }, [firestore]);
-    const { data: newApplications, isLoading: isLoadingApps } = useCollection<JobApplication>(appsQuery);
-
-    const isLoading = isLoadingUsers || isLoadingSites || isLoadingBrands || isLoadingEvents || isLoadingApps;
+    const isLoading = isLoadingUsers || isLoadingSites || isLoadingBrands || isLoadingEvents;
 
     const { kpis, attendanceRecords } = useMemo(() => {
-        return calculateKpisAndRecords(users, attendanceEvents, sites, brands, newApplications, filters);
-    }, [users, attendanceEvents, sites, brands, newApplications, filters]);
+        return calculateKpisAndRecords(users, attendanceEvents, sites, brands, null, filters);
+    }, [users, attendanceEvents, sites, brands, filters]);
 
     const chartData = useMemo(() => {
         return generateChartData(attendanceRecords, attendanceEvents, filters.date);

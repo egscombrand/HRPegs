@@ -31,7 +31,7 @@ export function calculateKpisAndRecords(
   attendanceEvents: AttendanceEvent[] | null,
   sites: AttendanceSite[] | null,
   brands: Brand[] | null,
-  newApplications: JobApplication[] | null,
+  newApplications: JobApplication[] | null, // This is now optional
   filters: FilterState
 ): { kpis: Kpi[]; attendanceRecords: AttendanceRecord[] } {
   const defaultKpis: Kpi[] = [
@@ -45,8 +45,6 @@ export function calculateKpisAndRecords(
     { title: 'Anomali', value: 0 },
     { title: 'Cuti Hari Ini', value: 0, description: 'Modul belum aktif' },
     { title: 'Izin Hari Ini', value: 0, description: 'Modul belum aktif' },
-    { title: 'Lamaran Baru', value: newApplications?.length || 0 },
-    { title: 'Interview Hari Ini', value: 0, description: 'Modul belum aktif' },
   ];
 
   if (!users || !sites || !brands) {
@@ -162,9 +160,13 @@ export function calculateKpisAndRecords(
     { title: 'Anomali', value: anomali, deltaType: 'inverse' },
     { title: 'Cuti Hari Ini', value: 0, description: 'Modul belum aktif' },
     { title: 'Izin Hari Ini', value: 0, description: 'Modul belum aktif' },
-    { title: 'Lamaran Baru', value: newApplications?.length || 0 },
-    { title: 'Interview Hari Ini', value: 0, description: 'Modul belum aktif' },
   ];
+  
+   // Add recruitment KPIs if data is available
+  if (newApplications) {
+    kpis.push({ title: 'Lamaran Baru', value: newApplications.length });
+    kpis.push({ title: 'Interview Hari Ini', value: 0, description: 'Modul belum aktif' });
+  }
 
   return { kpis, attendanceRecords };
 }

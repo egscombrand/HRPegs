@@ -1,16 +1,15 @@
 'use client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, PieChart, Pie, Cell } from 'recharts';
-import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
-import type { ChartData, Kpi } from './HrdDashboardTypes';
+import { ChartContainer, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
+import type { ChartData } from './HrdDashboardTypes';
 import { Info } from 'lucide-react';
 
 const chartConfig = {
-  applicants: { label: 'Applicants', color: 'hsl(var(--chart-1))' },
   hadir: { label: 'Hadir', color: 'hsl(var(--chart-1))' },
   terlambat: { label: 'Terlambat', color: 'hsl(var(--chart-2))' },
   offsite: { label: 'Offsite', color: 'hsl(var(--chart-3))' },
-};
+} satisfies ChartConfig;
 
 export function AnalyticsCharts({ chartData }: { chartData: ChartData }) {
 
@@ -37,13 +36,13 @@ export function AnalyticsCharts({ chartData }: { chartData: ChartData }) {
         <CardContent>
           <ChartContainer config={chartConfig} className="h-[250px] w-full">
             <AreaChart data={chartData.trend}>
-              <CartesianGrid vertical={false} />
+              <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
               <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} />
-              <YAxis />
+              <YAxis tickLine={false} axisLine={false} />
               <Tooltip content={<ChartTooltipContent />} />
-              <Area type="monotone" dataKey="hadir" stackId="1" stroke="var(--color-hadir)" fill="var(--color-hadir)" fillOpacity={0.4} />
-              <Area type="monotone" dataKey="terlambat" stackId="1" stroke="var(--color-terlambat)" fill="var(--color-terlambat)" fillOpacity={0.4}/>
-              <Area type="monotone" dataKey="offsite" stackId="1" stroke="var(--color-offsite)" fill="var(--color-offsite)" fillOpacity={0.4}/>
+              <Area type="monotone" dataKey="hadir" stackId="1" stroke="var(--color-hadir)" fill="var(--color-hadir)" fillOpacity={0.2} />
+              <Area type="monotone" dataKey="terlambat" stackId="1" stroke="var(--color-terlambat)" fill="var(--color-terlambat)" fillOpacity={0.2}/>
+              <Area type="monotone" dataKey="offsite" stackId="1" stroke="var(--color-offsite)" fill="var(--color-offsite)" fillOpacity={0.2}/>
             </AreaChart>
           </ChartContainer>
         </CardContent>
@@ -55,7 +54,7 @@ export function AnalyticsCharts({ chartData }: { chartData: ChartData }) {
            <CardDescription>Perbandingan jumlah karyawan berdasarkan status kehadiran hari ini.</CardDescription>
         </CardHeader>
         <CardContent>
-             <ChartContainer config={chartConfig} className="h-[250px] w-full">
+             <ChartContainer config={{}} className="h-[250px] w-full">
                 <ResponsiveContainer width="100%" height={250}>
                     <PieChart>
                     <Pie data={chartData.statusDistribution} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
@@ -80,7 +79,7 @@ export function AnalyticsCharts({ chartData }: { chartData: ChartData }) {
             {chartData.topLate.length > 0 ? (
                 <ChartContainer config={chartConfig} className="h-[300px] w-full">
                     <BarChart data={chartData.topLate} layout="vertical" margin={{ left: 20 }}>
-                        <CartesianGrid horizontal={false} />
+                        <CartesianGrid horizontal={false} stroke="hsl(var(--border))" />
                         <XAxis type="number" dataKey="totalLateMinutes" name="Menit" unit=" mnt" />
                         <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} tickMargin={10} width={120} />
                         <Tooltip content={<ChartTooltipContent />} />
