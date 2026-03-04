@@ -45,7 +45,7 @@ export type Invite = {
     code: string;
     brandId: string;
     brandName?: string; // Denormalized
-    employmentType: EmploymentType;
+    employmentType: 'magang' | 'training';
     createdBy: string; // UID of HRD/SuperAdmin
     createdAt: Timestamp;
     expiresAt: Timestamp;
