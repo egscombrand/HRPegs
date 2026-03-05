@@ -7,7 +7,7 @@ import * as z from 'zod';
 import { useAuth } from '@/providers/auth-provider';
 import { useFirestore, useDoc, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
 import { doc, serverTimestamp, Timestamp } from 'firebase/firestore';
-import type { EmployeeProfile, OrganizationalExperience } from '@/lib/types';
+import type { EmployeeProfile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,23 +17,8 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Loader2, PlusCircle, Trash2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
-
-const orgExperienceSchema = z.object({
-  id: z.string(),
-  organization: z.string().min(1, "Nama organisasi harus diisi"),
-  position: z.string().min(1, "Jabatan harus diisi"),
-  startDate: z.string().min(4, "Tahun mulai harus diisi"),
-  endDate: z.string().optional(),
-  isCurrent: z.boolean().default(false),
-  description: z.string().optional(),
-}).refine(data => data.isCurrent || (data.endDate && data.endDate.length > 0), {
-    message: "Tahun selesai harus diisi jika tidak aktif saat ini.",
-    path: ["endDate"],
-});
 
 const profileSchema = z.object({
   fullName: z.string().min(2, "Nama lengkap harus diisi."),
@@ -55,9 +40,6 @@ const profileSchema = z.object({
   emergencyContactName: z.string().min(2, "Nama kontak darurat harus diisi."),
   emergencyContactRelation: z.string().min(2, "Hubungan kontak darurat harus diisi."),
   emergencyContactPhone: z.string().min(10, "Nomor telepon darurat tidak valid."),
-
-  organizationalExperience: z.array(orgExperienceSchema).optional(),
-  portfolioUrl: z.string().url({ message: "URL tidak valid. Harap gunakan format https://..."}).optional().or(z.literal('')),
 });
 
 type FormValues = z.infer<typeof profileSchema>;
@@ -105,20 +87,13 @@ export default function InternProfilePage() {
     resolver: zodResolver(profileSchema),
     defaultValues: {
         email: userProfile?.email || '',
-        organizationalExperience: [],
     },
-  });
-
-  const { fields: orgExpFields, append: appendOrgExp, remove: removeOrgExp } = useFieldArray({
-    control: form.control,
-    name: "organizationalExperience",
   });
 
   useEffect(() => {
     if (initialProfile) {
       form.reset({
         ...initialProfile,
-        portfolioUrl: initialProfile.portfolioUrl || '',
         email: initialProfile.email || userProfile?.email,
       });
     } else if (userProfile) {
@@ -140,7 +115,6 @@ export default function InternProfilePage() {
     
     const payload: Partial<EmployeeProfile> & { updatedAt: any, completeness: any } = {
         ...values,
-        portfolioUrl: values.portfolioUrl || '',
         uid: userProfile.uid,
         employmentType: 'magang',
         updatedAt: serverTimestamp(),
@@ -208,38 +182,6 @@ export default function InternProfilePage() {
                                 <FormField control={form.control} name="major" render={({ field }) => (<FormItem><FormLabel>Jurusan</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
                             </div>
                             <FormField control={form.control} name="expectedEndDate" render={({ field }) => (<FormItem><FormLabel>Perkiraan Selesai Magang</FormLabel><FormControl><Input type="date" {...field} value={field.value ?? ''} /></FormControl><FormDescription>Ini adalah perkiraan dari Anda, tanggal resmi akan ditentukan oleh HRD.</FormDescription><FormMessage /></FormItem>)} />
-                        </div>
-                    </section>
-                    
-                    <Separator />
-
-                    <section>
-                        <h3 className="text-lg font-semibold border-b pb-2 mb-4">Pengalaman & Portofolio</h3>
-                        <div className="space-y-4">
-                           <FormField control={form.control} name="portfolioUrl" render={({ field }) => (<FormItem><FormLabel>URL Portofolio (Opsional)</FormLabel><FormControl><Input {...field} placeholder="https://behance.net/nama" value={field.value ?? ''} /></FormControl><FormDescription>Sangat direkomendasikan untuk posisi kreatif/teknis (contoh: desain, video, web).</FormDescription><FormMessage /></FormItem>)} />
-                           
-                           <div className="space-y-2">
-                                 <Label>Pengalaman Organisasi/Proyek (Opsional)</Label>
-                                <div className="space-y-4">
-                                {orgExpFields.map((field, index) => (
-                                    <div key={field.id} className="space-y-4 p-3 border rounded-md relative">
-                                        <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => removeOrgExp(index)}><Trash2 className="h-4 w-4" /></Button>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <FormField control={form.control} name={`organizationalExperience.${index}.organization`} render={({ field }) => (<FormItem><FormLabel>Nama Organisasi/Proyek</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
-                                            <FormField control={form.control} name={`organizationalExperience.${index}.position`} render={({ field }) => (<FormItem><FormLabel>Jabatan/Peran</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
-                                        </div>
-                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <FormField control={form.control} name={`organizationalExperience.${index}.startDate`} render={({ field }) => (<FormItem><FormLabel>Tahun Mulai</FormLabel><FormControl><Input type="number" {...field} placeholder="YYYY" value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
-                                            <FormField control={form.control} name={`organizationalExperience.${index}.endDate`} render={({ field }) => (<FormItem><FormLabel>Tahun Selesai</FormLabel><FormControl><Input type="number" {...field} placeholder="YYYY" disabled={form.watch(`organizationalExperience.${index}.isCurrent`)} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
-                                        </div>
-                                         <FormField control={form.control} name={`organizationalExperience.${index}.isCurrent`} render={({ field }) => (<FormItem className="flex flex-row items-center space-x-3 space-y-0"><FormControl><Checkbox checked={!!field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel>Masih aktif</FormLabel></div></FormItem>)} />
-                                        <FormField control={form.control} name={`organizationalExperience.${index}.description`} render={({ field }) => (<FormItem><FormLabel>Deskripsi Singkat</FormLabel><FormControl><Textarea {...field} rows={2} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
-                                    </div>
-                                ))}
-                                </div>
-                                <Button type="button" variant="outline" size="sm" onClick={() => appendOrgExp({ id: crypto.randomUUID(), organization: '', position: '', startDate: '', endDate: '', isCurrent: false, description: '' })}><PlusCircle className="mr-2 h-4 w-4" /> Tambah Pengalaman</Button>
-                           </div>
-
                         </div>
                     </section>
                     

@@ -117,11 +117,11 @@
         "major": { "type": "string" },
         "educationLevel": { "type": "string", "enum": ["SMA/SMK", "D3", "S1", "S2", "Lainnya"] },
         "expectedEndDate": { "type": "string", "format": "date" },
+        "internshipStartDate": { "type": "string", "format": "date" },
+        "internshipEndDate": { "type": "string", "format": "date" },
         "emergencyContactName": { "type": "string" },
         "emergencyContactRelation": { "type": "string" },
         "emergencyContactPhone": { "type": "string" },
-        "portfolioUrl": { "type": "string", "format": "uri" },
-        "organizationalExperience": { "type": "array", "items": { "$ref": "#/backend/entities/OrganizationalExperience" } },
         "documents": {
           "type": "object",
           "properties": {

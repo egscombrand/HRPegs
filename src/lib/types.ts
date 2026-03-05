@@ -46,11 +46,11 @@ export type EmployeeProfile = {
   major?: string;
   educationLevel: 'SMA/SMK' | 'D3' | 'S1' | 'S2' | 'Lainnya';
   expectedEndDate?: string; // YYYY-MM-DD
+  internshipStartDate?: Timestamp;
+  internshipEndDate?: Timestamp;
   emergencyContactName: string;
   emergencyContactRelation: string;
   emergencyContactPhone: string;
-  organizationalExperience?: OrganizationalExperience[];
-  portfolioUrl?: string;
   documents?: {
     idCardUrl?: string;
     studentCardUrl?: string;
