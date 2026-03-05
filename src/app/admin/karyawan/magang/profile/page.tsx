@@ -124,6 +124,7 @@ export default function InternProfilePage() {
     if (initialProfile) {
       form.reset({
         ...initialProfile,
+        portfolioUrl: initialProfile.portfolioUrl || '',
         email: initialProfile.email || userProfile?.email,
       });
     } else if (userProfile) {
@@ -161,6 +162,7 @@ export default function InternProfilePage() {
     
     const payload: Partial<EmployeeProfile> & { updatedAt: any, completeness: any } = {
         ...values,
+        portfolioUrl: values.portfolioUrl || '', // Ensure it is not undefined
         uid: userProfile.uid,
         employmentType: 'magang',
         updatedAt: serverTimestamp(),
