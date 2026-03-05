@@ -22,23 +22,23 @@ export default function CandidateDashboardPage() {
   }, [userProfile?.uid, firestore]);
   const { data: applications, isLoading: isLoadingApps } = useCollection<JobApplication>(applicationsQuery);
 
-  const highestStatus = useMemo(() => {
-    if (!applications) return null;
+  const { highestStatus, highestStatusApplication } = useMemo(() => {
+    if (!applications) return { highestStatus: null, highestStatusApplication: null };
     const nonRejectedApps = applications.filter(app => app.status !== 'rejected');
-    if (nonRejectedApps.length === 0) return null;
+    if (nonRejectedApps.length === 0) return { highestStatus: null, highestStatusApplication: null };
 
+    let highestApp: JobApplication | null = null;
     let highestStageIndex = -1;
-    let highestStage: JobApplicationStatus | null = null;
 
     nonRejectedApps.forEach(app => {
       const currentIndex = ORDERED_RECRUITMENT_STAGES.indexOf(app.status);
       if (currentIndex > highestStageIndex) {
         highestStageIndex = currentIndex;
-        highestStage = app.status;
+        highestApp = app;
       }
     });
 
-    return highestStage;
+    return { highestStatus: highestApp?.status || null, highestStatusApplication: highestApp };
   }, [applications]);
   
   return (
@@ -55,6 +55,7 @@ export default function CandidateDashboardPage() {
             </CardHeader>
             <CardContent>
                 <ApplicationStatusStepper 
+                    application={highestStatusApplication}
                     highestStatus={highestStatus} 
                     isProfileComplete={userProfile?.isProfileComplete || false}
                     isLoading={loading || isLoadingApps}

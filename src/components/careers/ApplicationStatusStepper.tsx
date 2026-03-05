@@ -1,12 +1,14 @@
 'use client';
 
-import { Check, Lock, Pencil, Hourglass } from 'lucide-react';
+import { Check, Lock, Pencil, Hourglass, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import type { JobApplicationStatus } from '@/lib/types';
+import type { JobApplication, JobApplicationStatus } from '@/lib/types';
 import { statusDisplayLabels } from '@/components/recruitment/ApplicationStatusBadge';
 import { Skeleton } from '../ui/skeleton';
+import { format } from 'date-fns';
+import { ORDERED_RECRUITMENT_STAGES } from '@/lib/types';
 
 // The key stages a candidate sees, in order.
 const candidateStages: JobApplicationStatus[] = [
@@ -20,6 +22,7 @@ const candidateStages: JobApplicationStatus[] = [
 type StepStatus = 'completed' | 'active' | 'locked' | 'waiting';
 
 interface ApplicationStatusStepperProps {
+    application: JobApplication | null;
     highestStatus: JobApplicationStatus | null;
     isProfileComplete: boolean;
     isLoading: boolean;
@@ -39,7 +42,7 @@ const StepperSkeleton = () => (
     </div>
 );
 
-export function ApplicationStatusStepper({ highestStatus, isProfileComplete, isLoading }: ApplicationStatusStepperProps) {
+export function ApplicationStatusStepper({ application, highestStatus, isProfileComplete, isLoading }: ApplicationStatusStepperProps) {
     if (isLoading) {
         return <StepperSkeleton />;
     }
@@ -52,8 +55,8 @@ export function ApplicationStatusStepper({ highestStatus, isProfileComplete, isL
             return { status: 'locked', reason: 'Lamar pekerjaan pertama Anda untuk memulai tahap ini.' };
         }
         
-        const currentHighestIndex = candidateStages.indexOf(highestStatus);
-        const stepIndex = candidateStages.indexOf(stage);
+        const currentHighestIndex = ORDERED_RECRUITMENT_STAGES.indexOf(highestStatus);
+        const stepIndex = ORDERED_RECRUITMENT_STAGES.indexOf(stage);
 
         if (highestStatus === 'rejected') {
             return { status: 'locked', reason: 'Proses lamaran Anda tidak dapat dilanjutkan saat ini.' };
@@ -73,6 +76,14 @@ export function ApplicationStatusStepper({ highestStatus, isProfileComplete, isL
                 case 'document_submission':
                     return { status: 'active', cta: <Button asChild size="sm"><Link href="/careers/portal/documents">Unggah Dokumen</Link></Button> };
                 case 'interview':
+                     const scheduledInterview = application?.interviews?.find(i => i.status === 'scheduled' && i.startAt.toDate() > new Date());
+                    if (scheduledInterview) {
+                        return { 
+                            status: 'active', 
+                            reason: `Wawancara terjadwal: ${format(scheduledInterview.startAt.toDate(), 'dd MMM yyyy, HH:mm')}`, 
+                            cta: <Button asChild size="sm"><Link href="/careers/portal/interviews">Lihat Detail</Link></Button> 
+                        };
+                    }
                      return { status: 'waiting', reason: 'Menunggu jadwal wawancara dari HRD. Jadwal akan muncul di halaman Jadwal Wawancara.' };
                 case 'hired':
                     return { status: 'completed', reason: 'Selamat! Anda telah diterima.' };
@@ -112,7 +123,7 @@ export function ApplicationStatusStepper({ highestStatus, isProfileComplete, isL
         <div className="space-y-6">
             {candidateStages.slice(1).map((stage) => { // slice(1) to skip 'submitted'
                  const stepDetails = getStepDetails(stage);
-                 const Icon = stepDetails.status === 'completed' ? Check : stepDetails.status === 'active' ? Pencil : stepDetails.status === 'waiting' ? Hourglass : Lock;
+                 const Icon = stepDetails.status === 'completed' ? Check : stage === 'interview' ? Calendar : stepDetails.status === 'active' ? Pencil : stepDetails.status === 'waiting' ? Hourglass : Lock;
                  const stageLabel = statusDisplayLabels[stage] || stage.replace('_', ' ');
 
                 return (
