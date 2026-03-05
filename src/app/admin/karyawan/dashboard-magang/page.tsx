@@ -1,7 +1,6 @@
 'use client';
 
-import { useMemo, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useMemo } from 'react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -10,19 +9,63 @@ import { MENU_CONFIG } from '@/lib/menu-config';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Loader2 } from 'lucide-react';
+import { useDoc, useFirestore, useMemoFirebase } from '@/firebase';
+import { doc } from 'firebase/firestore';
+import type { EmployeeProfile } from '@/lib/types';
+import { format } from 'date-fns';
+import { id } from 'date-fns/locale';
+
+function DashboardSkeleton() {
+    return (
+        <div className="space-y-4">
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-32 w-full" />
+        </div>
+    )
+}
+
+function PeriodCard({ profile }: { profile: EmployeeProfile | null }) {
+    return (
+        <Card className="bg-primary/5 text-primary-foreground border-primary/20">
+            <CardHeader>
+                <CardTitle className="text-lg text-primary">Periode Magang Anda</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <div className="flex items-center justify-around text-center">
+                    <div>
+                        <p className="text-xs text-primary/80">Mulai Magang</p>
+                        <p className="font-bold text-xl text-primary">{profile?.internshipStartDate ? format(profile.internshipStartDate.toDate(), 'dd MMM yyyy', { locale: id }) : 'TBA'}</p>
+                    </div>
+                    <div className="h-12 w-px bg-primary/20" />
+                    <div>
+                        <p className="text-xs text-primary/80">Selesai Magang</p>
+                        <p className="font-bold text-xl text-primary">{profile?.internshipEndDate ? format(profile.internshipEndDate.toDate(), 'dd MMM yyyy', { locale: id }) : 'TBA'}</p>
+                    </div>
+                </div>
+                {!profile?.internshipStartDate && (
+                    <p className="text-xs text-center text-primary/70 mt-3">Periode resmi magang Anda akan diatur dan ditampilkan di sini oleh HRD.</p>
+                )}
+            </CardContent>
+        </Card>
+    )
+}
 
 export default function MagangDashboardPage() {
   const { userProfile, loading: authLoading } = useAuth();
+  const firestore = useFirestore();
   
-  // NOTE: The redirect logic has been moved to /admin/karyawan/page.tsx to centralize routing decisions.
-  // This component now only displays the dashboard.
-
   const hasAccess = useRoleGuard('karyawan');
   const menuConfig = useMemo(() => MENU_CONFIG['karyawan-magang'] || [], []);
   
-  const isLoading = authLoading;
+  const employeeProfileRef = useMemoFirebase(
+    () => (userProfile ? doc(firestore, 'employee_profiles', userProfile.uid) : null),
+    [firestore, userProfile]
+  );
+  const { data: employeeProfile, isLoading: profileLoading } = useDoc<EmployeeProfile>(employeeProfileRef);
 
-  if (isLoading || !hasAccess || !userProfile || userProfile.employmentType !== 'magang') {
+  const isLoading = authLoading || profileLoading;
+
+  if (!hasAccess || !userProfile || userProfile.employmentType !== 'magang') {
     return (
       <div className="flex h-screen w-full items-center justify-center p-4">
         <div className="flex flex-col items-center gap-4">
@@ -35,15 +78,20 @@ export default function MagangDashboardPage() {
 
   return (
     <DashboardLayout pageTitle="Dashboard Magang" menuConfig={menuConfig}>
-        <Card>
-            <CardHeader>
-                <CardTitle>Halo, {userProfile.fullName}!</CardTitle>
-            </CardHeader>
-            <CardContent>
-                <p>Selamat datang di dashboard peserta magang.</p>
-                <Badge className="mt-4 capitalize">{userProfile.employmentType}</Badge>
-            </CardContent>
-        </Card>
+      {isLoading ? <DashboardSkeleton /> : (
+        <div className="space-y-6">
+            <Card>
+                <CardHeader>
+                    <CardTitle>Halo, {userProfile.fullName}!</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <p>Selamat datang di dashboard peserta magang.</p>
+                    <Badge className="mt-4 capitalize">{userProfile.employmentType}</Badge>
+                </CardContent>
+            </Card>
+            <PeriodCard profile={employeeProfile} />
+        </div>
+      )}
     </DashboardLayout>
   );
 }
