@@ -176,9 +176,10 @@ export function CandidatePortalLayout({ children }: { children: ReactNode }) {
       return roleConfig;
     }
     if (navSettings) {
+      const visibleKeys = new Set(navSettings.visibleMenuItems);
       return roleConfig.map(group => ({
         ...group,
-        items: group.items.filter(item => navSettings.visibleMenuItems.includes(item.label))
+        items: group.items.filter(item => visibleKeys.has(item.key))
       })).filter(group => group.items.length > 0);
     }
     return roleConfig;
