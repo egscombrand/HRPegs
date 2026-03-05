@@ -86,8 +86,6 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
         items: [
             { key: 'manager.team', href: '/admin/manager', label: 'My Team', icon: createElement(Users) },
             { key: 'personal.interviews', href: '/admin/interviews', label: 'My Interviews', icon: createElement(Video) },
-            // { key: 'manager.reports', href: '/admin/manager/reports', label: 'Reports', icon: createElement(BarChart) },
-            // { key: 'manager.approvals', href: '/admin/manager/approvals', label: 'Approvals', icon: createElement(CheckSquare), badge: 3 },
         ]
     }
   ],
@@ -96,9 +94,6 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
         title: "Karyawan",
         items: [
             { key: 'employee.profile', href: '/admin/karyawan', label: 'My Profile', icon: createElement(User) },
-            // { key: 'employee.documents', href: '/admin/karyawan/documents', label: 'My Documents', icon: createElement(FileText) },
-            // { key: 'employee.leave', href: '/admin/karyawan/leave', label: 'My Leave', icon: createElement(Calendar) },
-            // { key: 'employee.payslips', href: '/admin/karyawan/payslips', label: 'My Payslips', icon: createElement(DollarSign) },
         ]
     }
   ],

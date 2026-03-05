@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { collection, doc } from 'firebase/firestore';
 import { useCollection, useFirestore, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
 import { UserRole, ROLES } from '@/lib/types';
-import { ALL_MENU_ITEMS, ALL_UNIQUE_MENU_ITEMS } from '@/lib/menu-config';
+import { ALL_UNIQUE_MENU_ITEMS, ALL_MENU_ITEMS } from '@/lib/menu-config';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -18,7 +18,7 @@ type NavigationSettings = {
   visibleMenuItems: string[]; // Now stores keys
 }
 
-const rolesToDisplay = ROLES;
+const rolesToDisplay = ROLES.filter(r => r !== 'kandidat');
 
 export function MenuSettingsClient() {
   const firestore = useFirestore();
@@ -37,13 +37,14 @@ export function MenuSettingsClient() {
 
     const newSettings: Record<string, string[]> = {};
     
-    ROLES.forEach(role => {
+    rolesToDisplay.forEach(role => {
       const savedSetting = initialSettings?.find(s => s.id === role);
       if (savedSetting) {
         newSettings[role] = savedSetting.visibleMenuItems;
       } else {
         // Default to all keys for that role if no setting exists
-        newSettings[role] = ALL_MENU_ITEMS[role as UserRole]?.map(item => item.key) || [];
+        const defaultItemsForRole = ALL_MENU_ITEMS[role as UserRole] || [];
+        newSettings[role] = defaultItemsForRole.map(item => item.key);
       }
     });
     
@@ -81,7 +82,7 @@ export function MenuSettingsClient() {
     setLoading(false);
   };
   
-  if (isLoadingSettings && !isInitialized) {
+  if (!isInitialized) {
     return (
         <div className="space-y-4">
             <Skeleton className="h-48 w-full" />
@@ -113,7 +114,9 @@ export function MenuSettingsClient() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {ALL_UNIQUE_MENU_ITEMS.map(menuItem => (
+                {ALL_UNIQUE_MENU_ITEMS.map(menuItem => {
+                   if (menuItem.key.startsWith('candidate.')) return null;
+                   return (
                   <TableRow key={menuItem.key}>
                     <TableCell className="font-medium">{menuItem.label}</TableCell>
                     {rolesToDisplay.map(role => {
@@ -130,7 +133,8 @@ export function MenuSettingsClient() {
                       );
                     })}
                   </TableRow>
-                ))}
+                   )
+                })}
               </TableBody>
             </Table>
           </div>

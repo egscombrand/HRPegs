@@ -38,7 +38,7 @@ export function DashboardLayout({
     const roleMenuConfig = MENU_CONFIG[userProfile.role] || [];
     
     if (isLoadingSettings) {
-      // While loading settings, you can return the default config or an empty array
+      // While loading settings, return the default config to prevent UI flicker
       return roleMenuConfig;
     }
 
@@ -51,7 +51,7 @@ export function DashboardLayout({
       })).filter(group => group.items.length > 0);
     }
     
-    // If no settings document exists, return the default full menu
+    // If no settings document exists, return the default full menu for that role
     return roleMenuConfig;
 
   }, [userProfile, navSettings, isLoadingSettings]);
