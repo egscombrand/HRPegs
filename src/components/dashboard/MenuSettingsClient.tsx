@@ -118,8 +118,6 @@ export function MenuSettingsClient() {
                     <TableCell className="font-medium">{menuItem.label}</TableCell>
                     {rolesToDisplay.map(role => {
                       const isVisible = (settings[role] || []).includes(menuItem.key);
-                      const isApplicable = !!ALL_MENU_ITEMS[role as UserRole]?.find(item => item.key === menuItem.key);
-                      
                       return (
                         <TableCell key={`${role}-${menuItem.key}`} className="text-center">
                           <Checkbox
@@ -127,7 +125,6 @@ export function MenuSettingsClient() {
                             onCheckedChange={(checked) => handleCheckboxChange(role, menuItem.key, !!checked)}
                             id={`${role}-${menuItem.key}`}
                             aria-label={`Toggle ${menuItem.label} for ${role}`}
-                            disabled={!isApplicable}
                           />
                         </TableCell>
                       );
