@@ -6,27 +6,42 @@ import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
+import { useDoc, useFirestore, useMemoFirebase } from '@/firebase';
+import { doc } from 'firebase/firestore';
+import type { EmployeeProfile } from '@/lib/types';
 
 export default function KaryawanDashboardRedirect() {
-  const { userProfile, loading } = useAuth();
+  const { userProfile, loading: authLoading } = useAuth();
+  const firestore = useFirestore();
   const router = useRouter();
 
+  const profileDocRef = useMemoFirebase(
+    () => (userProfile ? doc(firestore, 'employee_profiles', userProfile.uid) : null),
+    [firestore, userProfile]
+  );
+  const { data: employeeProfile, isLoading: profileLoading } = useDoc<EmployeeProfile>(profileDocRef);
+
+  const isLoading = authLoading || (userProfile?.employmentType === 'magang' && profileLoading);
+
   useEffect(() => {
-    if (loading || !userProfile) {
-      return; // Wait for user profile to load
+    if (isLoading || !userProfile) {
+      return; // Wait for all data to load
     }
 
     if (userProfile.role !== 'karyawan') {
-        // This is a safeguard, the main guard should handle this.
-        router.replace('/admin');
-        return;
+      router.replace('/admin');
+      return;
     }
 
     const { employmentType } = userProfile;
     
     switch (employmentType) {
         case 'magang':
-            router.replace('/admin/karyawan/dashboard-magang');
+            if (!employeeProfile || !employeeProfile.completeness?.isComplete) {
+                router.replace('/admin/karyawan/magang/profile');
+            } else {
+                router.replace('/admin/karyawan/dashboard-magang');
+            }
             break;
         case 'training':
             router.replace('/admin/karyawan/dashboard-training');
@@ -37,7 +52,7 @@ export default function KaryawanDashboardRedirect() {
             break;
     }
 
-  }, [userProfile, loading, router]);
+  }, [userProfile, employeeProfile, isLoading, router]);
   
   if (userProfile && !userProfile.employmentType) {
     return (

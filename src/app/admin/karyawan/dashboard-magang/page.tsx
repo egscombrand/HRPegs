@@ -6,38 +6,21 @@ import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/providers/auth-provider';
-import { useDoc, useFirestore, useMemoFirebase } from '@/firebase';
 import { MENU_CONFIG } from '@/lib/menu-config';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Loader2 } from 'lucide-react';
-import { doc } from 'firebase/firestore';
-import type { EmployeeProfile } from '@/lib/types';
 
 export default function MagangDashboardPage() {
   const { userProfile, loading: authLoading } = useAuth();
-  const firestore = useFirestore();
-  const router = useRouter();
-
-  const profileDocRef = useMemoFirebase(
-    () => (userProfile ? doc(firestore, 'employee_profiles', userProfile.uid) : null),
-    [firestore, userProfile]
-  );
-  const { data: employeeProfile, isLoading: profileLoading } = useDoc<EmployeeProfile>(profileDocRef);
+  
+  // NOTE: The redirect logic has been moved to /admin/karyawan/page.tsx to centralize routing decisions.
+  // This component now only displays the dashboard.
 
   const hasAccess = useRoleGuard('karyawan');
   const menuConfig = useMemo(() => MENU_CONFIG['karyawan-magang'] || [], []);
   
-  const isLoading = authLoading || profileLoading;
-
-  useEffect(() => {
-    if (!isLoading && userProfile?.employmentType === 'magang') {
-      if (!employeeProfile || !employeeProfile.completeness?.isComplete) {
-        router.replace('/admin/karyawan/magang/profile');
-      }
-    }
-  }, [isLoading, userProfile, employeeProfile, router]);
-
+  const isLoading = authLoading;
 
   if (isLoading || !hasAccess || !userProfile || userProfile.employmentType !== 'magang') {
     return (
