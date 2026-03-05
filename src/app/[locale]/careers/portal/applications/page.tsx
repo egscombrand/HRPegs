@@ -63,6 +63,39 @@ function ApplicationCard({ application, assessmentSessionStatus }: { application
   const isRejected = application.status === 'rejected';
   const isHired = application.status === 'hired';
 
+  if (isHired) {
+    return (
+        <Card className="flex flex-col bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800">
+            <CardHeader>
+                <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
+                    <div>
+                        <CardTitle className="text-xl text-green-800 dark:text-green-200">{application.jobPosition}</CardTitle>
+                        <CardDescription className="flex items-center gap-2 pt-1 text-green-700 dark:text-green-300">
+                            <Building className="h-4 w-4" /> {application.brandName}
+                        </CardDescription>
+                    </div>
+                    <Badge className="w-fit bg-green-600 hover:bg-green-700">
+                        Diterima Kerja
+                    </Badge>
+                </div>
+            </CardHeader>
+            <CardContent className="flex-grow space-y-4">
+                <div className="p-4 rounded-md border-dashed border-green-400 bg-green-100 dark:bg-green-900/30 text-green-900 dark:text-green-100">
+                    <h3 className="font-bold text-lg mb-2 flex items-center gap-2"><Award className="h-5 w-5" /> Selamat! Anda telah diterima.</h3>
+                    <p className="text-sm">Akun Anda telah ditingkatkan menjadi akun karyawan. Silakan logout terlebih dahulu, kemudian login kembali melalui Portal Karyawan untuk mengakses dasbor internal Anda.</p>
+                </div>
+            </CardContent>
+            <CardFooter className="bg-green-100/50 dark:bg-green-900/20 p-4 border-t border-green-200 dark:border-green-800 flex justify-end">
+                <Button asChild>
+                    <Link href="/admin/login">
+                       Ke Portal Karyawan <ArrowRight className="ml-2 h-4 w-4" />
+                    </Link>
+                </Button>
+            </CardFooter>
+        </Card>
+    );
+  }
+
   const jobIsExpired = application.jobApplyDeadline && application.jobApplyDeadline.toDate() < new Date();
   
   const deadline = application.personalityTestAssignedAt ? new Date(application.personalityTestAssignedAt.toDate().getTime() + 24 * 60 * 60 * 1000) : null;

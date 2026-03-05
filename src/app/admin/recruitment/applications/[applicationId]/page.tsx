@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect } from 'react';
@@ -426,24 +425,20 @@ export default function ApplicationDetailPage() {
   const handleStageChange = async (newStage: JobApplication['status'], reason: string) => {
     if (!application || !userProfile) return false;
 
+    const batch = writeBatch(firestore);
+    const appRef = doc(firestore, 'applications', application.id!);
+    
     const timelineEvent: ApplicationTimelineEvent = {
         type: 'stage_changed',
         at: Timestamp.now(),
         by: userProfile.uid,
-        meta: {
-            from: application.status,
-            to: newStage,
-            note: reason,
-        }
+        meta: { from: application.status, to: newStage, note: reason }
     };
     
     const updatePayload: any = {
         status: newStage,
         updatedAt: serverTimestamp(),
-        timeline: [
-            ...(application.timeline || []),
-            timelineEvent
-        ]
+        timeline: [...(application.timeline || []), timelineEvent]
     };
     
     if (newStage === 'tes_kepribadian' && !application.personalityTestAssignedAt) {
@@ -453,9 +448,23 @@ export default function ApplicationDetailPage() {
       updatePayload.decisionAt = serverTimestamp();
     }
 
+    batch.update(appRef, updatePayload);
+
+    if (newStage === 'hired') {
+        const userRef = doc(firestore, 'users', application.candidateUid);
+        let employmentType: 'karyawan' | 'magang' | 'training' = 'karyawan';
+        if (application.jobType === 'internship') {
+            employmentType = 'magang';
+        }
+        batch.update(userRef, {
+            role: 'karyawan',
+            employmentType: employmentType,
+        });
+    }
+
     try {
-        await updateDoc(applicationRef!, updatePayload);
-        mutateApplication(); // Re-fetch data
+        await batch.commit();
+        mutateApplication();
         toast({ title: 'Status Diperbarui', description: `Kandidat dipindahkan ke tahap "${statusDisplayLabels[newStage]}".` });
         return true;
     } catch (error: any) {
@@ -582,5 +591,3 @@ export default function ApplicationDetailPage() {
     </DashboardLayout>
   );
 }
-
-    
