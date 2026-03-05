@@ -1,10 +1,11 @@
 'use client';
 
+import * as React from 'react';
 import { useState, useEffect } from 'react';
 import { collection, doc } from 'firebase/firestore';
 import { useCollection, useFirestore, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
 import { UserRole, ROLES } from '@/lib/types';
-import { ALL_MENU_GROUPS, ALL_MENU_ITEMS } from '@/lib/menu-config';
+import { ALL_MENU_GROUPS } from '@/lib/menu-config';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -12,7 +13,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Save } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Separator } from '../ui/separator';
 
 type NavigationSettings = {
   id: string; // role name
@@ -37,14 +37,15 @@ export function MenuSettingsClient() {
     }
 
     const newSettings: Record<string, string[]> = {};
+    const allMenuKeys = new Set(ALL_MENU_GROUPS.flatMap(g => g.items.map(i => i.key)));
     
     rolesToDisplay.forEach(role => {
       const savedSetting = initialSettings?.find(s => s.id === role);
       if (savedSetting) {
         newSettings[role] = savedSetting.visibleMenuItems;
       } else {
-        // Default to all menu items relevant to that role if no setting exists
-        newSettings[role] = (ALL_MENU_ITEMS[role as UserRole] || []).map(item => item.key);
+        // Default to all menu items if no setting exists
+        newSettings[role] = Array.from(allMenuKeys);
       }
     });
     
@@ -124,7 +125,6 @@ export function MenuSettingsClient() {
                         </TableRow>
                       )}
                       {group.items.map(menuItem => {
-                         if (menuItem.key.startsWith('candidate.')) return null;
                          return (
                             <TableRow key={menuItem.key}>
                                 <TableCell className="font-medium pl-8">{menuItem.label}</TableCell>
