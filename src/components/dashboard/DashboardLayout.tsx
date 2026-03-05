@@ -1,25 +1,60 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import React from 'react';
-import type { MenuGroup } from '@/lib/menu-config';
+import React, { useMemo } from 'react';
+import type { MenuGroup, MenuItem } from '@/lib/menu-config';
 import { SidebarNav } from './SidebarNav';
 import { Topbar } from './Topbar';
 import { SidebarProvider, SidebarInset } from '../ui/sidebar';
+import { useAuth } from '@/providers/auth-provider';
+import { useFirestore, useDoc, useMemoFirebase } from '@/firebase';
+import { doc } from 'firebase/firestore';
+import type { NavigationSetting } from '@/lib/types';
+import { MENU_CONFIG } from '@/lib/menu-config';
 
 type DashboardLayoutProps = {
   children: React.ReactNode;
   pageTitle: string;
-  menuConfig: MenuGroup[];
   actionArea?: ReactNode;
 };
 
 export function DashboardLayout({ 
   children, 
   pageTitle, 
-  menuConfig, 
   actionArea
 }: DashboardLayoutProps) {
+  const { userProfile } = useAuth();
+  const firestore = useFirestore();
+
+  const settingsDocRef = useMemoFirebase(
+    () => (userProfile ? doc(firestore, 'navigation_settings', userProfile.role) : null),
+    [userProfile, firestore]
+  );
+  const { data: navSettings, isLoading: isLoadingSettings } = useDoc<NavigationSetting>(settingsDocRef);
+  
+  const menuConfig = useMemo(() => {
+    if (!userProfile) return [];
+    
+    const roleMenuConfig = MENU_CONFIG[userProfile.role] || [];
+    
+    if (isLoadingSettings) {
+      // While loading settings, you can return the default config or an empty array
+      return roleMenuConfig;
+    }
+
+    if (navSettings && navSettings.visibleMenuItems) {
+      // Filter menu items based on the keys stored in Firestore
+      const visibleKeys = new Set(navSettings.visibleMenuItems);
+      return roleMenuConfig.map(group => ({
+        ...group,
+        items: group.items.filter(item => visibleKeys.has(item.key))
+      })).filter(group => group.items.length > 0);
+    }
+    
+    // If no settings document exists, return the default full menu
+    return roleMenuConfig;
+
+  }, [userProfile, navSettings, isLoadingSettings]);
 
   return (
     <SidebarProvider>

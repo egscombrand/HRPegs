@@ -15,7 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 type NavigationSettings = {
   id: string; // role name
-  visibleMenuItems: string[];
+  visibleMenuItems: string[]; // Now stores keys
 }
 
 const rolesToDisplay = ROLES;
@@ -42,7 +42,8 @@ export function MenuSettingsClient() {
       if (savedSetting) {
         newSettings[role] = savedSetting.visibleMenuItems;
       } else {
-        newSettings[role] = ALL_MENU_ITEMS[role as UserRole]?.map(item => item.label) || [];
+        // Default to all keys for that role if no setting exists
+        newSettings[role] = ALL_MENU_ITEMS[role as UserRole]?.map(item => item.key) || [];
       }
     });
     
@@ -51,25 +52,27 @@ export function MenuSettingsClient() {
 
   }, [initialSettings, isLoadingSettings, isInitialized]);
 
-  const handleCheckboxChange = (role: string, menuItemLabel: string, checked: boolean) => {
+  const handleCheckboxChange = (role: string, menuItemKey: string, checked: boolean) => {
     setSettings(prevSettings => {
       const currentItems = prevSettings[role] || [];
       const newItems = checked
-        ? [...currentItems, menuItemLabel]
-        : currentItems.filter(label => label !== menuItemLabel);
+        ? [...currentItems, menuItemKey]
+        : currentItems.filter(key => key !== menuItemKey);
       return { ...prevSettings, [role]: newItems };
     });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setLoading(true);
-    
-    Object.entries(settings).forEach(([role, visibleMenuItems]) => {
+    const promises = Object.entries(settings).map(([role, visibleMenuItems]) => {
       if (rolesToDisplay.includes(role as UserRole)) {
         const docRef = doc(firestore, 'navigation_settings', role);
-        setDocumentNonBlocking(docRef, { role, visibleMenuItems }, { merge: true });
+        return setDocumentNonBlocking(docRef, { role, visibleMenuItems }, { merge: true });
       }
+      return Promise.resolve();
     });
+    
+    await Promise.all(promises);
 
     toast({
         title: 'Settings Saved',
@@ -111,16 +114,20 @@ export function MenuSettingsClient() {
               </TableHeader>
               <TableBody>
                 {ALL_UNIQUE_MENU_ITEMS.map(menuItem => (
-                  <TableRow key={menuItem.label}>
+                  <TableRow key={menuItem.key}>
                     <TableCell className="font-medium">{menuItem.label}</TableCell>
                     {rolesToDisplay.map(role => {
+                      const isVisible = (settings[role] || []).includes(menuItem.key);
+                      const isApplicable = !!ALL_MENU_ITEMS[role as UserRole]?.find(item => item.key === menuItem.key);
+                      
                       return (
-                        <TableCell key={role} className="text-center">
+                        <TableCell key={`${role}-${menuItem.key}`} className="text-center">
                           <Checkbox
-                            checked={(settings[role] || []).includes(menuItem.label)}
-                            onCheckedChange={(checked) => handleCheckboxChange(role, menuItem.label, !!checked)}
-                            id={`${role}-${menuItem.label}`}
+                            checked={isVisible}
+                            onCheckedChange={(checked) => handleCheckboxChange(role, menuItem.key, !!checked)}
+                            id={`${role}-${menuItem.key}`}
                             aria-label={`Toggle ${menuItem.label} for ${role}`}
+                            disabled={!isApplicable}
                           />
                         </TableCell>
                       );

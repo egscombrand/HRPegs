@@ -8,6 +8,7 @@ import type { UserRole } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 
 export type MenuItem = {
+  key: string; // Unique identifier
   href: string;
   label: string;
   icon: ReactNode;
@@ -23,10 +24,10 @@ const RECRUITMENT_MENU_ITEMS: MenuGroup[] = [
     {
         title: "Rekrutmen",
         items: [
-            { href: '/admin/hrd/dashboard-rekrutmen', label: 'Dashboard Rekrutmen', icon: createElement(Users) },
-            { href: '/admin/jobs', label: 'Job Postings', icon: createElement(Briefcase) },
-            { href: '/admin/recruitment', label: 'Manajemen Aplikasi', icon: createElement(FolderKanban) },
-            { href: '/admin/hrd/assessments', label: 'Assessments', icon: createElement(ClipboardCheck) },
+            { key: 'recruitment.dashboard', href: '/admin/hrd/dashboard-rekrutmen', label: 'Dashboard Rekrutmen', icon: createElement(Users) },
+            { key: 'recruitment.jobs', href: '/admin/jobs', label: 'Job Postings', icon: createElement(Briefcase) },
+            { key: 'recruitment.applications', href: '/admin/recruitment', label: 'Manajemen Aplikasi', icon: createElement(FolderKanban) },
+            { key: 'recruitment.assessments', href: '/admin/hrd/assessments', label: 'Assessments', icon: createElement(ClipboardCheck) },
         ]
     }
 ];
@@ -35,16 +36,16 @@ const EMPLOYEE_MONITORING_ITEMS: MenuGroup[] = [
     {
         title: "Monitoring Karyawan",
         items: [
-            { href: '/admin/hrd/dashboard-karyawan', label: 'Dashboard Karyawan', icon: createElement(LayoutDashboard) },
-            { href: '/admin/hrd/invites', label: 'Employee Invites', icon: createElement(UserPlus) },
-            { href: '/admin/hrd/profil-magang', label: 'Profil Magang', icon: createElement(BookUser) },
-            { href: '/admin/hrd/monitoring/absen', label: 'Monitoring Absen', icon: createElement(FileClock) },
-            { href: '/admin/hrd/monitoring/lembur', label: 'Lembur', icon: createElement(Timer) },
-            { href: '/admin/hrd/monitoring/dinas', label: 'Dinas (Tracking)', icon: createElement(MapPin) },
-            { href: '/admin/hrd/monitoring/cuti', label: 'Cuti', icon: createElement(CalendarOff) },
-            { href: '/admin/hrd/monitoring/izin', label: 'Izin', icon: createElement(FileHeart) },
-            { href: '/admin/hrd/monitoring/pelatihan', label: 'Pengembangan SDM', icon: createElement(GraduationCap) },
-            { href: '/admin/hrd/monitoring/settings', label: 'Pengaturan Absensi', icon: createElement(Settings) },
+            { key: 'monitoring.dashboard', href: '/admin/hrd/dashboard-karyawan', label: 'Dashboard Karyawan', icon: createElement(LayoutDashboard) },
+            { key: 'monitoring.invites', href: '/admin/hrd/invites', label: 'Employee Invites', icon: createElement(UserPlus) },
+            { key: 'monitoring.interns', href: '/admin/hrd/profil-magang', label: 'Profil Magang', icon: createElement(BookUser) },
+            { key: 'monitoring.attendance', href: '/admin/hrd/monitoring/absen', label: 'Monitoring Absen', icon: createElement(FileClock) },
+            { key: 'monitoring.overtime', href: '/admin/hrd/monitoring/lembur', label: 'Lembur', icon: createElement(Timer) },
+            { key: 'monitoring.field_duty', href: '/admin/hrd/monitoring/dinas', label: 'Dinas (Tracking)', icon: createElement(MapPin) },
+            { key: 'monitoring.leave', href: '/admin/hrd/monitoring/cuti', label: 'Cuti', icon: createElement(CalendarOff) },
+            { key: 'monitoring.permission', href: '/admin/hrd/monitoring/izin', label: 'Izin', icon: createElement(FileHeart) },
+            { key: 'monitoring.training', href: '/admin/hrd/monitoring/pelatihan', label: 'Pengembangan SDM', icon: createElement(GraduationCap) },
+            { key: 'monitoring.settings', href: '/admin/hrd/monitoring/settings', label: 'Pengaturan Absensi', icon: createElement(Settings) },
         ]
     }
 ];
@@ -57,15 +58,15 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
     {
         title: "Administrasi",
         items: [
-            { href: '/admin/super-admin/user-management', label: 'User Management', icon: createElement(Users) },
-            { href: '/admin/super-admin/departments-brands', label: 'Master Data', icon: createElement(Database) },
-            { href: '/admin/super-admin/menu-settings', label: 'Access & Roles', icon: createElement(ShieldCheck) },
+            { key: 'admin.users', href: '/admin/super-admin/user-management', label: 'User Management', icon: createElement(Users) },
+            { key: 'admin.master', href: '/admin/super-admin/departments-brands', label: 'Master Data', icon: createElement(Database) },
+            { key: 'admin.access', href: '/admin/super-admin/menu-settings', label: 'Access & Roles', icon: createElement(ShieldCheck) },
         ]
     },
     {
         title: "Personal",
         items: [
-            { href: '/admin/interviews', label: 'My Interviews', icon: createElement(Video) },
+            { key: 'personal.interviews', href: '/admin/interviews', label: 'My Interviews', icon: createElement(Video) },
         ]
     }
   ],
@@ -75,28 +76,29 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
     {
         title: "Personal",
         items: [
-            { href: '/admin/interviews', label: 'My Interviews', icon: createElement(Video) }
+            { key: 'personal.interviews', href: '/admin/interviews', label: 'My Interviews', icon: createElement(Video) }
         ]
     }
   ],
   'manager': [
     {
+        title: "Manager",
         items: [
-            { href: '/admin/manager', label: 'My Team', icon: createElement(Users) },
-            { href: '/admin/interviews', label: 'My Interviews', icon: createElement(Video) },
-            { href: '/admin/manager/reports', label: 'Reports', icon: createElement(BarChart) },
-            { href: '/admin/manager/approvals', label: 'Approvals', icon: createElement(CheckSquare), badge: 3 },
+            { key: 'manager.team', href: '/admin/manager', label: 'My Team', icon: createElement(Users) },
+            { key: 'personal.interviews', href: '/admin/interviews', label: 'My Interviews', icon: createElement(Video) },
+            // { key: 'manager.reports', href: '/admin/manager/reports', label: 'Reports', icon: createElement(BarChart) },
+            // { key: 'manager.approvals', href: '/admin/manager/approvals', label: 'Approvals', icon: createElement(CheckSquare), badge: 3 },
         ]
     }
   ],
   'karyawan': [
     {
+        title: "Karyawan",
         items: [
-            { href: '/admin/karyawan', label: 'My Profile', icon: createElement(User) },
-            { href: '/admin/interviews', label: 'My Interviews', icon: createElement(Video) },
-            { href: '/admin/karyawan/documents', label: 'My Documents', icon: createElement(FileText) },
-            { href: '/admin/karyawan/leave', label: 'My Leave', icon: createElement(Calendar) },
-            { href: '/admin/karyawan/payslips', label: 'My Payslips', icon: createElement(DollarSign) },
+            { key: 'employee.profile', href: '/admin/karyawan', label: 'My Profile', icon: createElement(User) },
+            // { key: 'employee.documents', href: '/admin/karyawan/documents', label: 'My Documents', icon: createElement(FileText) },
+            // { key: 'employee.leave', href: '/admin/karyawan/leave', label: 'My Leave', icon: createElement(Calendar) },
+            // { key: 'employee.payslips', href: '/admin/karyawan/payslips', label: 'My Payslips', icon: createElement(DollarSign) },
         ]
     }
   ],
@@ -104,18 +106,18 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
     {
       title: "Karir",
       items: [
-        { href: '/careers/portal', label: 'Dashboard', icon: createElement(LayoutDashboard) },
-        { href: '/careers/portal/jobs', label: 'Daftar Lowongan', icon: createElement(Briefcase) },
-        { href: '/careers/portal/applications', label: 'Lamaran Saya', icon: createElement(FileText) },
+        { key: 'candidate.dashboard', href: '/careers/portal', label: 'Dashboard', icon: createElement(LayoutDashboard) },
+        { key: 'candidate.jobs', href: '/careers/portal/jobs', label: 'Daftar Lowongan', icon: createElement(Briefcase) },
+        { key: 'candidate.applications', href: '/careers/portal/applications', label: 'Lamaran Saya', icon: createElement(FileText) },
       ]
     },
     {
       title: "Proses Seleksi",
       items: [
-        { href: '/careers/portal/profile', label: 'Profil Pelamar', icon: createElement(User) },
-        { href: '/careers/portal/assessment/personality', label: 'Tes Kepribadian', icon: createElement(BrainCircuit) },
-        { href: '/careers/portal/documents', label: 'Pengumpulan Dokumen', icon: createElement(FileUp) },
-        { href: '/careers/portal/interviews', label: 'Jadwal Wawancara', icon: createElement(Calendar) },
+        { key: 'candidate.profile', href: '/careers/portal/profile', label: 'Profil Pelamar', icon: createElement(User) },
+        { key: 'candidate.assessment', href: '/careers/portal/assessment/personality', label: 'Tes Kepribadian', icon: createElement(BrainCircuit) },
+        { key: 'candidate.documents', href: '/careers/portal/documents', label: 'Pengumpulan Dokumen', icon: createElement(FileUp) },
+        { key: 'candidate.interviews', href: '/careers/portal/interviews', label: 'Jadwal Wawancara', icon: createElement(Calendar) },
       ]
     }
   ]
