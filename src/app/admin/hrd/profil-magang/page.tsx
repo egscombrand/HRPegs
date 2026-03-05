@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useState } from 'react';
@@ -43,8 +44,11 @@ export default function ProfilMagangPage() {
   }, [userProfile]);
   
   const profilesQuery = useMemoFirebase(
-    () => query(collection(firestore, 'employee_profiles'), where('employmentType', '==', 'magang')),
-    [firestore]
+    () => {
+        if (!hasAccess) return null; // Don't create query until access is confirmed
+        return query(collection(firestore, 'employee_profiles'), where('employmentType', '==', 'magang'));
+    },
+    [firestore, hasAccess] // Re-create query when hasAccess changes
   );
   
   const { data: profiles, isLoading } = useCollection<EmployeeProfile>(profilesQuery);
