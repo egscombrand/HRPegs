@@ -22,6 +22,7 @@ import { Separator } from '@/components/ui/separator';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { GoogleDatePicker } from '@/components/ui/google-date-picker';
+import { Label } from '@/components/ui/label';
 
 
 const profileSchema = z.object({
@@ -53,7 +54,7 @@ type FormValues = z.infer<typeof profileSchema>;
 
 function ProfileForm({ initialProfile, onSaveSuccess }: { initialProfile: Partial<EmployeeProfile>, onSaveSuccess: () => void }) {
   const [isSaving, setIsSaving] = useState(false);
-  const { userProfile } = useAuth();
+  const { firebaseUser } = useAuth();
   const firestore = useFirestore();
   const { toast } = useToast();
 
@@ -61,14 +62,14 @@ function ProfileForm({ initialProfile, onSaveSuccess }: { initialProfile: Partia
     resolver: zodResolver(profileSchema),
     defaultValues: {
         ...initialProfile,
-        email: initialProfile.email || userProfile?.email,
+        email: initialProfile.email,
         internshipStartDate: initialProfile.internshipStartDate?.toDate(),
         internshipEndDate: initialProfile.internshipEndDate?.toDate(),
     },
   });
 
   async function onSubmit(values: FormValues) {
-    if (!userProfile) {
+    if (!firebaseUser) {
         toast({ variant: "destructive", title: "Error", description: "User not found. Please re-login." });
         return;
     }
@@ -76,11 +77,10 @@ function ProfileForm({ initialProfile, onSaveSuccess }: { initialProfile: Partia
     
     const batch = writeBatch(firestore);
 
-    // 1. Update employee_profiles
-    const profileDocRef = doc(firestore, 'employee_profiles', userProfile.uid);
+    const profileDocRef = doc(firestore, 'employee_profiles', firebaseUser.uid);
     const profilePayload: Partial<EmployeeProfile> & { updatedAt: any, completeness: any } = {
         ...values,
-        uid: userProfile.uid,
+        uid: firebaseUser.uid,
         employmentType: 'magang',
         updatedAt: serverTimestamp(),
         internshipStartDate: values.internshipStartDate ? Timestamp.fromDate(values.internshipStartDate) : undefined,
@@ -92,10 +92,9 @@ function ProfileForm({ initialProfile, onSaveSuccess }: { initialProfile: Partia
     };
     batch.set(profileDocRef, profilePayload, { merge: true });
 
-    // 2. Update users collection with the correct employmentStage
-    const userDocRef = doc(firestore, 'users', userProfile.uid);
+    const userDocRef = doc(firestore, 'users', firebaseUser.uid);
     const newEmploymentStage = values.internSubtype === 'sekolah' ? 'intern_education' : 'intern_pre_probation';
-    batch.set(userDocRef, { employmentStage: newEmploymentStage }, { merge: true });
+    batch.set(userDocRef, { employmentStage: newEmploymentStage, employmentType: 'magang' }, { merge: true });
     
     try {
         await batch.commit();
@@ -266,7 +265,7 @@ function ProfilePreview({ profile, onEdit }: { profile: EmployeeProfile, onEdit:
 }
 
 function InternProfilePageContent() {
-    const { userProfile, loading: authLoading } = useAuth();
+    const { userProfile, loading: authLoading, refreshUserProfile } = useAuth();
     const firestore = useFirestore();
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -282,6 +281,7 @@ function InternProfilePageContent() {
 
     const handleSaveSuccess = () => {
         refetchProfile();
+        refreshUserProfile();
         router.push('/admin/karyawan/magang/profile');
     };
 
@@ -312,3 +312,5 @@ export default function InternProfilePage() {
         </Suspense>
     )
 }
+
+    
