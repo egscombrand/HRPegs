@@ -21,6 +21,7 @@ import { Loader2, Edit } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
+import { GoogleDatePicker } from '@/components/ui/google-date-picker';
 
 
 const profileSchema = z.object({
@@ -43,6 +44,9 @@ const profileSchema = z.object({
   emergencyContactName: z.string().min(2, "Nama kontak darurat harus diisi."),
   emergencyContactRelation: z.string().min(2, "Hubungan kontak darurat harus diisi."),
   emergencyContactPhone: z.string().min(10, "Nomor telepon darurat tidak valid."),
+  
+  internshipStartDate: z.date().optional(),
+  internshipEndDate: z.date().optional(),
 });
 
 type FormValues = z.infer<typeof profileSchema>;
@@ -58,6 +62,8 @@ function ProfileForm({ initialProfile, onSaveSuccess }: { initialProfile: Partia
     defaultValues: {
         ...initialProfile,
         email: initialProfile.email || userProfile?.email,
+        internshipStartDate: initialProfile.internshipStartDate?.toDate(),
+        internshipEndDate: initialProfile.internshipEndDate?.toDate(),
     },
   });
 
@@ -77,6 +83,8 @@ function ProfileForm({ initialProfile, onSaveSuccess }: { initialProfile: Partia
         uid: userProfile.uid,
         employmentType: 'magang',
         updatedAt: serverTimestamp(),
+        internshipStartDate: values.internshipStartDate ? Timestamp.fromDate(values.internshipStartDate) : undefined,
+        internshipEndDate: values.internshipEndDate ? Timestamp.fromDate(values.internshipEndDate) : undefined,
         completeness: {
             isComplete: true,
             completedAt: serverTimestamp(),
@@ -87,7 +95,7 @@ function ProfileForm({ initialProfile, onSaveSuccess }: { initialProfile: Partia
     // 2. Update users collection with the correct employmentStage
     const userDocRef = doc(firestore, 'users', userProfile.uid);
     const newEmploymentStage = values.internSubtype === 'sekolah' ? 'intern_education' : 'intern_pre_probation';
-    batch.update(userDocRef, { employmentStage: newEmploymentStage });
+    batch.set(userDocRef, { employmentStage: newEmploymentStage }, { merge: true });
     
     try {
         await batch.commit();
@@ -138,6 +146,7 @@ function ProfileForm({ initialProfile, onSaveSuccess }: { initialProfile: Partia
                                 <FormField control={form.control} name="educationLevel" render={({ field }) => (<FormItem><FormLabel>Jenjang Pendidikan <span className="text-destructive">*</span></FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Pilih jenjang" /></SelectTrigger></FormControl><SelectContent><SelectItem value="SMA/SMK">SMA/SMK</SelectItem><SelectItem value="D3">D3</SelectItem><SelectItem value="S1">S1</SelectItem><SelectItem value="S2">S2</SelectItem><SelectItem value="Lainnya">Lainnya</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
                                 <FormField control={form.control} name="major" render={({ field }) => (<FormItem><FormLabel>Jurusan</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
                             </div>
+                            <FormField control={form.control} name="expectedEndDate" render={({ field }) => (<FormItem><FormLabel>Perkiraan Selesai (Opsional)</FormLabel><FormControl><Input type="date" {...field} value={field.value ?? ''} /></FormControl><FormDescription>Jika terikat pendidikan, isi perkiraan tanggal selesai masa studi/magang.</FormDescription><FormMessage /></FormItem>)} />
                         </div>
                     </section>
                     
