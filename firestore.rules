@@ -106,13 +106,25 @@ service cloud.firestore {
     }
 
     /**
-     * /profiles/{userId}
+     * /profiles/{userId} (Candidate Profile)
      * - A candidate can read and write to their own profile.
      * - Internal users can read any single profile for review purposes.
      */
     match /profiles/{userId} {
       allow get: if isOwner(userId) || isInternal();
       allow write: if isOwner(userId);
+    }
+
+    /**
+     * /employee_profiles/{uid} (Intern/Employee Profile)
+     * - An employee can read/write their own profile.
+     * - HRD and Super Admins can view any profile for monitoring.
+     */
+    match /employee_profiles/{uid} {
+      allow get: if isOwner(uid) || isHrd() || isSuperAdmin();
+      allow create, update: if isOwner(uid) && request.resource.data.uid == uid;
+      allow list: if isHrd() || isSuperAdmin();
+      allow delete: if false;
     }
     
     /**
