@@ -29,6 +29,39 @@ export type UserProfile = {
   inviteBatchId?: string;
 };
 
+export type EmployeeProfile = {
+  id?: string;
+  uid: string;
+  employmentType: 'magang' | 'training' | 'karyawan';
+  internSubtype: 'sekolah' | 'freshgraduate';
+  fullName: string;
+  nickName?: string;
+  phone: string;
+  email: string;
+  gender?: 'Laki-laki' | 'Perempuan' | 'Lainnya';
+  birthPlace?: string;
+  birthDate?: string; // YYYY-MM-DD
+  addressCurrent: string;
+  schoolOrCampus: string;
+  major?: string;
+  educationLevel: 'SMA/SMK' | 'D3' | 'S1' | 'S2' | 'Lainnya';
+  expectedEndDate?: string; // YYYY-MM-DD
+  emergencyContactName: string;
+  emergencyContactRelation: string;
+  emergencyContactPhone: string;
+  documents?: {
+    idCardUrl?: string;
+    studentCardUrl?: string;
+    cvUrl?: string;
+  };
+  completeness?: {
+    isComplete: boolean;
+    completedAt?: Timestamp;
+  };
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+};
+
 export type Brand = {
   id?: string;
   name: string;
