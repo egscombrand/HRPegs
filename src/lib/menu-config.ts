@@ -76,7 +76,7 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
     {
         title: "Personal",
         items: [
-            { key: 'personal.interviews', href: '/admin/interviews', label: 'My Interviews', icon: createElement(Video) }
+            { key: 'personal.interviews.hrd', href: '/admin/interviews', label: 'My Interviews', icon: createElement(Video) }
         ]
     }
   ],
@@ -117,27 +117,6 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
     }
   ]
 };
-
-const allMenuItemsByRole: Partial<Record<UserRole, MenuItem[]>> = {};
-for (const role in MENU_CONFIG) {
-    if (Object.prototype.hasOwnProperty.call(MENU_CONFIG, role)) {
-        const menuGroups = MENU_CONFIG[role as keyof typeof MENU_CONFIG];
-        if (menuGroups) {
-            allMenuItemsByRole[role as UserRole] = menuGroups.flatMap(group => group.items);
-        }
-    }
-}
-export const ALL_MENU_ITEMS = allMenuItemsByRole as Record<UserRole, MenuItem[]>;
-
-const uniqueItems = new Map<string, MenuItem>();
-Object.values(allMenuItemsByRole).flat().forEach(item => {
-    if (item && item.label && !uniqueItems.has(item.key)) {
-        uniqueItems.set(item.key, item);
-    }
-});
-
-export const ALL_UNIQUE_MENU_ITEMS: MenuItem[] = Array.from(uniqueItems.values());
-
 
 // Create a master list of all groups with their items, merging items under the same group title.
 const allGroupsMap = new Map<string, MenuItem[]>();

@@ -16,11 +16,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 type NavigationSettings = {
   id: string; // role name
-  visibleMenuItems: string[]; // Now stores keys
+  visibleMenuItems: string[]; // Stores menu item keys
 }
 
-// Show all roles for the super admin to configure
-const rolesToDisplay = ROLES;
+const rolesToDisplay: UserRole[] = ['super-admin', 'hrd', 'manager', 'karyawan', 'kandidat'];
 
 export function MenuSettingsClient() {
   const firestore = useFirestore();
@@ -45,7 +44,6 @@ export function MenuSettingsClient() {
       if (savedSetting) {
         newSettings[role] = savedSetting.visibleMenuItems;
       } else {
-        // Default to all menu items if no setting exists
         newSettings[role] = Array.from(allMenuKeys);
       }
     });

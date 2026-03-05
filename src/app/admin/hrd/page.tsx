@@ -7,7 +7,7 @@ import { Loader2 } from 'lucide-react';
 export default function HrdDashboardRedirect() {
     const router = useRouter();
     useEffect(() => {
-        router.replace('/admin/hrd/dashboard');
+        router.replace('/admin/hrd/dashboard-karyawan');
     }, [router]);
 
     return (
