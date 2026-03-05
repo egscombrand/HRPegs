@@ -79,14 +79,6 @@ export function InternProfileDetailDialog({ profile, open, onOpenChange }: Inter
                         <dd className="text-sm col-span-2">{profile.portfolioUrl ? <a href={profile.portfolioUrl} target="_blank" rel="noopener noreferrer" className="text-primary underline">{profile.portfolioUrl}</a> : '-'}</dd>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 py-1.5">
-                        <dt className="text-sm font-medium text-muted-foreground">Keahlian</dt>
-                        <dd className="text-sm col-span-2 flex flex-wrap gap-2">
-                            {profile.skills && profile.skills.length > 0 ? (
-                                profile.skills.map(skill => <Badge key={skill} variant="secondary">{skill}</Badge>)
-                            ) : '-'}
-                        </dd>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 py-1.5">
                         <dt className="text-sm font-medium text-muted-foreground self-start">Pengalaman Organisasi</dt>
                         <dd className="text-sm col-span-2 space-y-3">
                            {profile.organizationalExperience && profile.organizationalExperience.length > 0 ? (

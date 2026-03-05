@@ -17,9 +17,8 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Loader2, PlusCircle, Trash2, X } from 'lucide-react';
+import { Loader2, PlusCircle, Trash2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
-import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 
@@ -57,7 +56,6 @@ const profileSchema = z.object({
   emergencyContactRelation: z.string().min(2, "Hubungan kontak darurat harus diisi."),
   emergencyContactPhone: z.string().min(10, "Nomor telepon darurat tidak valid."),
 
-  skills: z.array(z.string()).optional(),
   organizationalExperience: z.array(orgExperienceSchema).optional(),
   portfolioUrl: z.string().url({ message: "URL tidak valid. Harap gunakan format https://..."}).optional().or(z.literal('')),
 });
@@ -96,7 +94,6 @@ export default function InternProfilePage() {
   const { toast } = useToast();
   const router = useRouter();
   const [isSaving, setIsSaving] = useState(false);
-  const [skillInputValue, setSkillInputValue] = useState('');
 
   const profileDocRef = useMemoFirebase(
     () => (userProfile ? doc(firestore, 'employee_profiles', userProfile.uid) : null),
@@ -108,7 +105,6 @@ export default function InternProfilePage() {
     resolver: zodResolver(profileSchema),
     defaultValues: {
         email: userProfile?.email || '',
-        skills: [],
         organizationalExperience: [],
     },
   });
@@ -117,8 +113,6 @@ export default function InternProfilePage() {
     control: form.control,
     name: "organizationalExperience",
   });
-
-  const skills = form.watch('skills') || [];
 
   useEffect(() => {
     if (initialProfile) {
@@ -137,22 +131,6 @@ export default function InternProfilePage() {
   
   const isLoading = authLoading || profileLoading;
 
-  const handleSkillKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && skillInputValue.trim()) {
-        e.preventDefault();
-        const newSkill = skillInputValue.trim();
-        if (!skills.includes(newSkill)) {
-            form.setValue('skills', [...skills, newSkill], { shouldValidate: true });
-        }
-        setSkillInputValue('');
-    }
-  };
-
-  const removeSkill = (skillToRemove: string) => {
-    form.setValue('skills', skills.filter(skill => skill !== skillToRemove), { shouldValidate: true });
-  };
-
-
   async function onSubmit(values: FormValues) {
     if (!userProfile) {
         toast({ variant: "destructive", title: "Error", description: "User not found. Please re-login." });
@@ -162,7 +140,7 @@ export default function InternProfilePage() {
     
     const payload: Partial<EmployeeProfile> & { updatedAt: any, completeness: any } = {
         ...values,
-        portfolioUrl: values.portfolioUrl || '', // Ensure it is not undefined
+        portfolioUrl: values.portfolioUrl || '',
         uid: userProfile.uid,
         employmentType: 'magang',
         updatedAt: serverTimestamp(),
@@ -236,29 +214,9 @@ export default function InternProfilePage() {
                     <Separator />
 
                     <section>
-                        <h3 className="text-lg font-semibold border-b pb-2 mb-4">Keahlian & Pengalaman</h3>
+                        <h3 className="text-lg font-semibold border-b pb-2 mb-4">Pengalaman & Portofolio</h3>
                         <div className="space-y-4">
                            <FormField control={form.control} name="portfolioUrl" render={({ field }) => (<FormItem><FormLabel>URL Portofolio (Opsional)</FormLabel><FormControl><Input {...field} placeholder="https://behance.net/nama" value={field.value ?? ''} /></FormControl><FormDescription>Sangat direkomendasikan untuk posisi kreatif/teknis (contoh: desain, video, web).</FormDescription><FormMessage /></FormItem>)} />
-
-                           <FormItem>
-                             <FormLabel>Keahlian Teknis (Opsional)</FormLabel>
-                             <FormControl>
-                                <Input 
-                                    placeholder="Contoh: Photoshop, Figma, Javascript (Tekan Enter untuk menambah)"
-                                    value={skillInputValue}
-                                    onChange={(e) => setSkillInputValue(e.target.value)}
-                                    onKeyDown={handleSkillKeyDown}
-                                />
-                             </FormControl>
-                             <div className="pt-2 flex flex-wrap gap-2 min-h-[2.5rem]">
-                                {skills.map((skill) => (
-                                    <Badge key={skill} variant="secondary" className="py-1 pl-3 pr-2">
-                                        {skill}
-                                        <button type="button" onClick={() => removeSkill(skill)} className="ml-2 rounded-full hover:bg-muted-foreground/20 p-0.5"><X className="h-3 w-3" /></button>
-                                    </Badge>
-                                ))}
-                             </div>
-                           </FormItem>
                            
                            <div className="space-y-2">
                                  <Label>Pengalaman Organisasi/Proyek (Opsional)</Label>

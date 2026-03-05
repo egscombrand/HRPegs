@@ -120,7 +120,6 @@
         "emergencyContactName": { "type": "string" },
         "emergencyContactRelation": { "type": "string" },
         "emergencyContactPhone": { "type": "string" },
-        "skills": { "type": "array", "items": { "type": "string" } },
         "portfolioUrl": { "type": "string", "format": "uri" },
         "organizationalExperience": { "type": "array", "items": { "$ref": "#/backend/entities/OrganizationalExperience" } },
         "documents": {
