@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useAuth } from '@/providers/auth-provider';
 import { useFirestore, useDoc, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
-import { doc, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { doc, serverTimestamp, Timestamp, writeBatch } from 'firebase/firestore';
 import type { EmployeeProfile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -68,8 +68,11 @@ function ProfileForm({ initialProfile, onSaveSuccess }: { initialProfile: Partia
     }
     setIsSaving(true);
     
+    const batch = writeBatch(firestore);
+
+    // 1. Update employee_profiles
     const profileDocRef = doc(firestore, 'employee_profiles', userProfile.uid);
-    const payload: Partial<EmployeeProfile> & { updatedAt: any, completeness: any } = {
+    const profilePayload: Partial<EmployeeProfile> & { updatedAt: any, completeness: any } = {
         ...values,
         uid: userProfile.uid,
         employmentType: 'magang',
@@ -79,9 +82,15 @@ function ProfileForm({ initialProfile, onSaveSuccess }: { initialProfile: Partia
             completedAt: serverTimestamp(),
         }
     };
+    batch.set(profileDocRef, profilePayload, { merge: true });
+
+    // 2. Update users collection with the correct employmentStage
+    const userDocRef = doc(firestore, 'users', userProfile.uid);
+    const newEmploymentStage = values.internSubtype === 'sekolah' ? 'intern_education' : 'intern_pre_probation';
+    batch.update(userDocRef, { employmentStage: newEmploymentStage });
     
     try {
-        await setDocumentNonBlocking(profileDocRef, payload, { merge: true });
+        await batch.commit();
         toast({ title: "Profil Disimpan", description: "Profil Anda telah berhasil diperbarui." });
         onSaveSuccess();
     } catch (error: any) {
@@ -123,13 +132,12 @@ function ProfileForm({ initialProfile, onSaveSuccess }: { initialProfile: Partia
                     <section>
                         <h3 className="text-lg font-semibold border-b pb-2 mb-4">Status Magang</h3>
                         <div className="space-y-4">
-                           <FormField control={form.control} name="internSubtype" render={({ field }) => (<FormItem><FormLabel>Tipe Magang <span className="text-destructive">*</span></FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Pilih tipe magang" /></SelectTrigger></FormControl><SelectContent><SelectItem value="sekolah">Magang Terikat Pendidikan</SelectItem><SelectItem value="freshgraduate">Magang Pra-Probation</SelectItem></SelectContent></Select><FormDescription><strong>Magang Terikat Pendidikan:</strong> Peserta yang masih memiliki ikatan pendidikan dan akan kembali studi setelah magang.<br/><strong>Magang Pra-Probation:</strong> Peserta yang sudah lulus dan mengikuti magang sebagai jalur menuju masa percobaan.</FormDescription><FormMessage /></FormItem>)} />
+                           <FormField control={form.control} name="internSubtype" render={({ field }) => (<FormItem><FormLabel>Tipe Magang <span className="text-destructive">*</span></FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Pilih tipe magang" /></SelectTrigger></FormControl><SelectContent><SelectItem value="sekolah">Magang Terikat Pendidikan</SelectItem><SelectItem value="freshgraduate">Magang Pra-Probation</SelectItem></SelectContent></Select><FormDescription><strong>Magang Terikat Pendidikan:</strong> Peserta yang masih memiliki ikatan pendidikan (sekolah/kuliah) dan akan kembali studi setelah magang.<br/><strong>Magang Pra-Probation:</strong> Peserta yang sudah lulus dan mengikuti magang sebagai jalur menuju masa percobaan karyawan.</FormDescription><FormMessage /></FormItem>)} />
                             <FormField control={form.control} name="schoolOrCampus" render={({ field }) => (<FormItem><FormLabel>Asal Sekolah/Kampus <span className="text-destructive">*</span></FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
                             <div className="grid md:grid-cols-2 gap-4">
                                 <FormField control={form.control} name="educationLevel" render={({ field }) => (<FormItem><FormLabel>Jenjang Pendidikan <span className="text-destructive">*</span></FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Pilih jenjang" /></SelectTrigger></FormControl><SelectContent><SelectItem value="SMA/SMK">SMA/SMK</SelectItem><SelectItem value="D3">D3</SelectItem><SelectItem value="S1">S1</SelectItem><SelectItem value="S2">S2</SelectItem><SelectItem value="Lainnya">Lainnya</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
                                 <FormField control={form.control} name="major" render={({ field }) => (<FormItem><FormLabel>Jurusan</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
                             </div>
-                            <FormField control={form.control} name="expectedEndDate" render={({ field }) => (<FormItem><FormLabel>Perkiraan Selesai Magang</FormLabel><FormControl><Input type="date" {...field} value={field.value ?? ''} /></FormControl><FormDescription>Ini adalah perkiraan dari Anda, tanggal resmi akan ditentukan oleh HRD.</FormDescription><FormMessage /></FormItem>)} />
                         </div>
                     </section>
                     
@@ -187,6 +195,32 @@ function ProfilePreview({ profile, onEdit }: { profile: EmployeeProfile, onEdit:
                 <Button variant="outline" onClick={onEdit}><Edit className="mr-2 h-4 w-4"/>Edit Profil</Button>
             </CardHeader>
             <CardContent className="space-y-6">
+                {(profile.internshipStartDate || profile.internshipEndDate) && (
+                    <Card className="bg-primary/5 text-primary-foreground border-primary/20">
+                        <CardHeader>
+                            <CardTitle className="text-lg text-primary">Periode Magang Anda</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="flex items-center justify-around text-center">
+                                <div>
+                                    <p className="text-xs text-primary/80">Mulai Magang</p>
+                                    <p className="font-bold text-xl text-primary">{profile.internshipStartDate ? format(profile.internshipStartDate.toDate(), 'dd MMM yyyy', { locale: id }) : 'TBA'}</p>
+                                </div>
+                                <div className="h-12 w-px bg-primary/20" />
+                                <div>
+                                    <p className="text-xs text-primary/80">Selesai Magang</p>
+                                    <p className="font-bold text-xl text-primary">{profile.internshipEndDate ? format(profile.internshipEndDate.toDate(), 'dd MMM yyyy', { locale: id }) : 'TBA'}</p>
+                                </div>
+                            </div>
+                            {!profile.internshipStartDate && (
+                                <p className="text-xs text-center text-primary/70 mt-3">Periode resmi magang Anda akan diatur dan ditampilkan di sini oleh HRD.</p>
+                            )}
+                        </CardContent>
+                    </Card>
+                )}
+                
+                <Separator />
+                
                 <div>
                     <SectionTitle>Identitas</SectionTitle>
                     <dl className="space-y-1">
@@ -194,7 +228,7 @@ function ProfilePreview({ profile, onEdit }: { profile: EmployeeProfile, onEdit:
                         <InfoRow label="Nama Panggilan" value={profile.nickName} />
                         <InfoRow label="Telepon" value={profile.phone} />
                         <InfoRow label="Jenis Kelamin" value={profile.gender} />
-                        <InfoRow label="Tempat, Tanggal Lahir" value={`${profile.birthPlace || ''}, ${profile.birthDate || ''}`} />
+                        <InfoRow label="Tempat, Tanggal Lahir" value={`${profile.birthPlace || ''}, ${profile.birthDate ? format(new Date(profile.birthDate), 'dd MMMM yyyy', {locale: id}) : '-'}`} />
                     </dl>
                 </div>
                 <Separator/>
