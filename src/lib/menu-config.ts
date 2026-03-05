@@ -37,6 +37,7 @@ const EMPLOYEE_MONITORING_ITEMS: MenuGroup[] = [
         items: [
             { href: '/admin/hrd/dashboard-karyawan', label: 'Dashboard Karyawan', icon: createElement(LayoutDashboard) },
             { href: '/admin/hrd/invites', label: 'Employee Invites', icon: createElement(UserPlus) },
+            { href: '/admin/hrd/profil-magang', label: 'Profil Magang', icon: createElement(BookUser) },
             { href: '/admin/hrd/monitoring/absen', label: 'Monitoring Absen', icon: createElement(FileClock) },
             { href: '/admin/hrd/monitoring/lembur', label: 'Lembur', icon: createElement(Timer) },
             { href: '/admin/hrd/monitoring/dinas', label: 'Dinas (Tracking)', icon: createElement(MapPin) },
