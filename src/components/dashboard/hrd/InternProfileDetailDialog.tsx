@@ -4,7 +4,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import type { EmployeeProfile } from '@/lib/types';
+import type { EmployeeProfile, OrganizationalExperience } from '@/lib/types';
+import { Badge } from '@/components/ui/badge';
 
 const InfoRow = ({ label, value }: { label: string; value?: string | number | null }) => (
   <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 py-1.5">
@@ -17,6 +18,15 @@ const SectionTitle = ({ children }: { children: React.ReactNode }) => (
     <h3 className="text-lg font-semibold tracking-tight border-b pb-2 mb-4">{children}</h3>
 );
 
+const OrgExperienceView = ({ item }: { item: OrganizationalExperience }) => (
+    <div className="text-sm border-t pt-3">
+        <p className="font-semibold">{item.position} <span className="font-normal text-muted-foreground">di {item.organization}</span></p>
+        <p className="text-muted-foreground text-xs">{item.startDate} - {item.isCurrent ? 'Sekarang' : item.endDate}</p>
+        {item.description && <p className="mt-2 text-xs">{item.description}</p>}
+    </div>
+);
+
+
 interface InternProfileDetailDialogProps {
   profile: EmployeeProfile | null;
   open: boolean;
@@ -28,7 +38,7 @@ export function InternProfileDetailDialog({ profile, open, onOpenChange }: Inter
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Detail Profil Magang: {profile.fullName}</DialogTitle>
           <DialogDescription>{profile.email}</DialogDescription>
@@ -56,6 +66,34 @@ export function InternProfileDetailDialog({ profile, open, onOpenChange }: Inter
                     <InfoRow label="Jurusan" value={profile.major} />
                     <InfoRow label="Jenjang Pendidikan" value={profile.educationLevel} />
                     <InfoRow label="Perkiraan Selesai" value={profile.expectedEndDate} />
+                </dl>
+            </div>
+            
+             <Separator />
+
+            <div>
+                <SectionTitle>Keahlian & Pengalaman</SectionTitle>
+                 <dl className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 py-1.5">
+                        <dt className="text-sm font-medium text-muted-foreground">URL Portofolio</dt>
+                        <dd className="text-sm col-span-2">{profile.portfolioUrl ? <a href={profile.portfolioUrl} target="_blank" rel="noopener noreferrer" className="text-primary underline">{profile.portfolioUrl}</a> : '-'}</dd>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 py-1.5">
+                        <dt className="text-sm font-medium text-muted-foreground">Keahlian</dt>
+                        <dd className="text-sm col-span-2 flex flex-wrap gap-2">
+                            {profile.skills && profile.skills.length > 0 ? (
+                                profile.skills.map(skill => <Badge key={skill} variant="secondary">{skill}</Badge>)
+                            ) : '-'}
+                        </dd>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 py-1.5">
+                        <dt className="text-sm font-medium text-muted-foreground self-start">Pengalaman Organisasi</dt>
+                        <dd className="text-sm col-span-2 space-y-3">
+                           {profile.organizationalExperience && profile.organizationalExperience.length > 0 ? (
+                                profile.organizationalExperience.map((item, i) => <OrgExperienceView key={i} item={item} />)
+                            ) : '-'}
+                        </dd>
+                    </div>
                 </dl>
             </div>
             

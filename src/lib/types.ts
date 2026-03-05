@@ -49,6 +49,9 @@ export type EmployeeProfile = {
   emergencyContactName: string;
   emergencyContactRelation: string;
   emergencyContactPhone: string;
+  skills?: string[];
+  organizationalExperience?: OrganizationalExperience[];
+  portfolioUrl?: string;
   documents?: {
     idCardUrl?: string;
     studentCardUrl?: string;
