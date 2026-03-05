@@ -34,7 +34,7 @@ const profileSchema = z.object({
   birthPlace: z.string().optional(),
   birthDate: z.string().optional(),
   
-  internSubtype: z.enum(['sekolah', 'freshgraduate'], { required_error: "Tipe magang harus dipilih." }),
+  internSubtype: z.enum(['intern_education', 'intern_pre_probation'], { required_error: "Tipe magang harus dipilih." }),
   schoolOrCampus: z.string().min(3, "Asal sekolah/kampus harus diisi."),
   educationLevel: z.enum(['SMA/SMK', 'D3', 'S1', 'S2', 'Lainnya'], { required_error: "Jenjang pendidikan harus dipilih." }),
   major: z.string().optional(),
@@ -46,8 +46,8 @@ const profileSchema = z.object({
   emergencyContactRelation: z.string().min(2, "Hubungan kontak darurat harus diisi."),
   emergencyContactPhone: z.string().min(10, "Nomor telepon darurat tidak valid."),
   
-  internshipStartDate: z.date().optional(),
-  internshipEndDate: z.date().optional(),
+  internshipStartDate: z.date().optional().nullable(),
+  internshipEndDate: z.date().optional().nullable(),
 });
 
 type FormValues = z.infer<typeof profileSchema>;
@@ -62,9 +62,9 @@ function ProfileForm({ initialProfile, onSaveSuccess }: { initialProfile: Partia
     resolver: zodResolver(profileSchema),
     defaultValues: {
         ...initialProfile,
-        email: initialProfile.email,
-        internshipStartDate: initialProfile.internshipStartDate?.toDate(),
-        internshipEndDate: initialProfile.internshipEndDate?.toDate(),
+        email: initialProfile.email || '',
+        internshipStartDate: initialProfile.internshipStartDate?.toDate() || null,
+        internshipEndDate: initialProfile.internshipEndDate?.toDate() || null,
     },
   });
 
@@ -83,8 +83,8 @@ function ProfileForm({ initialProfile, onSaveSuccess }: { initialProfile: Partia
         uid: firebaseUser.uid,
         employmentType: 'magang',
         updatedAt: serverTimestamp(),
-        internshipStartDate: values.internshipStartDate ? Timestamp.fromDate(values.internshipStartDate) : undefined,
-        internshipEndDate: values.internshipEndDate ? Timestamp.fromDate(values.internshipEndDate) : undefined,
+        internshipStartDate: values.internshipStartDate ? Timestamp.fromDate(values.internshipStartDate) : null,
+        internshipEndDate: values.internshipEndDate ? Timestamp.fromDate(values.internshipEndDate) : null,
         completeness: {
             isComplete: true,
             completedAt: serverTimestamp(),
@@ -93,7 +93,7 @@ function ProfileForm({ initialProfile, onSaveSuccess }: { initialProfile: Partia
     batch.set(profileDocRef, profilePayload, { merge: true });
 
     const userDocRef = doc(firestore, 'users', firebaseUser.uid);
-    const newEmploymentStage = values.internSubtype === 'sekolah' ? 'intern_education' : 'intern_pre_probation';
+    const newEmploymentStage = values.internSubtype === 'intern_education' ? 'intern_education' : 'intern_pre_probation';
     batch.set(userDocRef, { employmentStage: newEmploymentStage, employmentType: 'magang' }, { merge: true });
     
     try {
@@ -139,7 +139,7 @@ function ProfileForm({ initialProfile, onSaveSuccess }: { initialProfile: Partia
                     <section>
                         <h3 className="text-lg font-semibold border-b pb-2 mb-4">Status Magang</h3>
                         <div className="space-y-4">
-                           <FormField control={form.control} name="internSubtype" render={({ field }) => (<FormItem><FormLabel>Tipe Magang <span className="text-destructive">*</span></FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Pilih tipe magang" /></SelectTrigger></FormControl><SelectContent><SelectItem value="sekolah">Magang Terikat Pendidikan</SelectItem><SelectItem value="freshgraduate">Magang Pra-Probation</SelectItem></SelectContent></Select><FormDescription><strong>Magang Terikat Pendidikan:</strong> Peserta yang masih memiliki ikatan pendidikan (sekolah/kuliah) dan akan kembali studi setelah magang.<br/><strong>Magang Pra-Probation:</strong> Peserta yang sudah lulus dan mengikuti magang sebagai jalur menuju masa percobaan karyawan.</FormDescription><FormMessage /></FormItem>)} />
+                           <FormField control={form.control} name="internSubtype" render={({ field }) => (<FormItem><FormLabel>Tipe Magang <span className="text-destructive">*</span></FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Pilih tipe magang" /></SelectTrigger></FormControl><SelectContent><SelectItem value="intern_education">Magang Terikat Pendidikan</SelectItem><SelectItem value="intern_pre_probation">Magang Pra-Probation</SelectItem></SelectContent></Select><FormDescription><strong>Magang Terikat Pendidikan:</strong> Peserta yang masih memiliki ikatan pendidikan (sekolah/kuliah) dan akan kembali studi setelah magang.<br/><strong>Magang Pra-Probation:</strong> Peserta yang sudah lulus dan mengikuti magang sebagai jalur menuju masa percobaan karyawan.</FormDescription><FormMessage /></FormItem>)} />
                             <FormField control={form.control} name="schoolOrCampus" render={({ field }) => (<FormItem><FormLabel>Asal Sekolah/Kampus <span className="text-destructive">*</span></FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
                             <div className="grid md:grid-cols-2 gap-4">
                                 <FormField control={form.control} name="educationLevel" render={({ field }) => (<FormItem><FormLabel>Jenjang Pendidikan <span className="text-destructive">*</span></FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Pilih jenjang" /></SelectTrigger></FormControl><SelectContent><SelectItem value="SMA/SMK">SMA/SMK</SelectItem><SelectItem value="D3">D3</SelectItem><SelectItem value="S1">S1</SelectItem><SelectItem value="S2">S2</SelectItem><SelectItem value="Lainnya">Lainnya</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
@@ -243,7 +243,7 @@ function ProfilePreview({ profile, onEdit }: { profile: EmployeeProfile, onEdit:
                 <div>
                     <SectionTitle>Status Magang</SectionTitle>
                      <dl className="space-y-1">
-                        <InfoRow label="Tipe Magang" value={profile.internSubtype === 'sekolah' ? 'Magang Terikat Pendidikan' : 'Magang Pra-Probation'} />
+                        <InfoRow label="Tipe Magang" value={profile.internSubtype === 'intern_education' ? 'Magang Terikat Pendidikan' : 'Magang Pra-Probation'} />
                         <InfoRow label="Asal Sekolah/Kampus" value={profile.schoolOrCampus} />
                         <InfoRow label="Jurusan" value={profile.major} />
                         <InfoRow label="Jenjang Pendidikan" value={profile.educationLevel} />
@@ -312,5 +312,3 @@ export default function InternProfilePage() {
         </Suspense>
     )
 }
-
-    
