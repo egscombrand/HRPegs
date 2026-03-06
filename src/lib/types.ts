@@ -216,6 +216,7 @@ export type JobApplication = {
   // New offer fields
   offerStatus?: 'sent' | 'accepted' | 'rejected' | 'withdrawn';
   offeredSalary?: number | null;
+  probationDurationMonths?: number | null;
   contractStartDate?: Timestamp | null;
   contractDurationMonths?: number | null;
   contractEndDate?: Timestamp | null;
