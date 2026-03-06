@@ -362,6 +362,42 @@
           "type": "string",
           "format": "uri",
           "description": "URL to the candidate's Ijazah/SKL for this application."
+        },
+        "offerStatus": {
+          "type": "string",
+          "description": "The status of the job offer.",
+          "enum": ["sent", "accepted", "rejected", "withdrawn"]
+        },
+        "offeredSalary": {
+          "type": "number",
+          "description": "The salary offered to the candidate."
+        },
+        "contractStartDate": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The proposed start date for the contract."
+        },
+        "contractDurationMonths": {
+          "type": "number",
+          "description": "The duration of the contract in months."
+        },
+        "contractEndDate": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The proposed end date for the contract."
+        },
+        "offerNotes": {
+          "type": "string",
+          "description": "Additional notes regarding the job offer."
+        },
+        "candidateOfferDecisionAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of when the candidate made a decision on the offer."
+        },
+        "internalAccessEnabled": {
+          "type": "boolean",
+          "description": "Indicates if the candidate's account has been converted to an internal employee account."
         }
       },
       "required": [

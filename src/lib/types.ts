@@ -198,8 +198,6 @@ export type InterviewChangeRequest = {
 
 export type JobApplication = {
   id?: string;
-  // This is a mix of new and old fields. They need to be harmonized.
-  // New ATS fields:
   stage?: JobApplicationStatus;
   stageEnteredAt?: Timestamp;
   appliedAt?: Timestamp;
@@ -214,12 +212,15 @@ export type JobApplication = {
   timeline?: ApplicationTimelineEvent[];
   cvVerified?: boolean;
   ijazahVerified?: boolean;
-
+  
   // New offer fields
-  offerNotes?: string;
-  contractStartDate?: Timestamp;
-  contractEndDate?: Timestamp;
-  contractDurationMonths?: number;
+  offerStatus?: 'sent' | 'accepted' | 'rejected' | 'withdrawn';
+  offeredSalary?: number | null;
+  contractStartDate?: Timestamp | null;
+  contractDurationMonths?: number | null;
+  contractEndDate?: Timestamp | null;
+  offerNotes?: string | null;
+  candidateOfferDecisionAt?: Timestamp | null;
   internalAccessEnabled?: boolean;
 
   // Denormalized data
