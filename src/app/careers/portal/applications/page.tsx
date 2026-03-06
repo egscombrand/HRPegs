@@ -8,12 +8,12 @@ import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { collection, query, where } from 'firebase/firestore';
 import type { JobApplication, JobApplicationStatus, AssessmentSession } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
-import { format } from 'date-fns';
+import { format, formatDistanceToNowStrict } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { ArrowRight, Check, Briefcase, Building, FileSignature, FileUp, ClipboardCheck, Users, Award, XCircle, BrainCircuit, FileText, Search, Calendar, Link as LinkIcon } from "lucide-react";
+import { ArrowRight, Check, Briefcase, Building, FileSignature, FileUp, ClipboardCheck, Users, Award, XCircle, BrainCircuit, FileText, Search, Calendar, Link as LinkIcon, FileClock } from "lucide-react";
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 import { ORDERED_RECRUITMENT_STAGES } from '@/lib/types';
@@ -62,38 +62,74 @@ function ApplicationCard({ application, assessmentSessionStatus }: { application
   const currentStatusIndex = ORDERED_RECRUITMENT_STAGES.indexOf(application.status);
   const isRejected = application.status === 'rejected';
   const isHired = application.status === 'hired';
+  const isActivated = application.internalAccessEnabled === true;
 
   if (isHired) {
-    return (
-        <Card className="flex flex-col bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800">
-            <CardHeader>
-                <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
-                    <div>
-                        <CardTitle className="text-xl text-green-800 dark:text-green-200">{application.jobPosition}</CardTitle>
-                        <CardDescription className="flex items-center gap-2 pt-1 text-green-700 dark:text-green-300">
-                            <Building className="h-4 w-4" /> {application.brandName}
-                        </CardDescription>
+    if (isActivated) {
+      return ( // User has been hired AND activated
+          <Card className="flex flex-col bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800">
+              <CardHeader>
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
+                      <div>
+                          <CardTitle className="text-xl text-green-800 dark:text-green-200">{application.jobPosition}</CardTitle>
+                          <CardDescription className="flex items-center gap-2 pt-1 text-green-700 dark:text-green-300">
+                              <Building className="h-4 w-4" /> {application.brandName}
+                          </CardDescription>
+                      </div>
+                      <Badge className="w-fit bg-green-600 hover:bg-green-700">
+                          Akun Diaktifkan
+                      </Badge>
+                  </div>
+              </CardHeader>
+              <CardContent className="flex-grow space-y-4">
+                  <div className="p-4 rounded-md border-dashed border-green-400 bg-green-100 dark:bg-green-900/30 text-green-900 dark:text-green-100">
+                      <h3 className="font-bold text-lg mb-2 flex items-center gap-2"><Award className="h-5 w-5" /> Selamat! Anda sekarang adalah bagian dari tim.</h3>
+                      <p className="text-sm">Akun Anda telah diaktifkan. Silakan logout, kemudian login kembali melalui Portal Karyawan untuk mengakses dasbor internal Anda.</p>
+                  </div>
+              </CardContent>
+              <CardFooter className="bg-green-100/50 dark:bg-green-900/20 p-4 border-t border-green-200 dark:border-green-800 flex justify-end">
+                  <Button asChild>
+                      <Link href="/admin/login">
+                         Ke Portal Karyawan <ArrowRight className="ml-2 h-4 w-4" />
+                      </Link>
+                  </Button>
+              </CardFooter>
+          </Card>
+      );
+    } else {
+       return ( // User has been hired but NOT yet activated
+          <Card className="flex flex-col bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800">
+              <CardHeader>
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
+                      <div>
+                          <CardTitle className="text-xl text-blue-800 dark:text-blue-200">{application.jobPosition}</CardTitle>
+                          <CardDescription className="flex items-center gap-2 pt-1 text-blue-700 dark:text-blue-300">
+                              <Building className="h-4 w-4" /> {application.brandName}
+                          </CardDescription>
+                      </div>
+                      <Badge className="w-fit bg-blue-600 hover:bg-blue-700">
+                          Penawaran Diterima
+                      </Badge>
+                  </div>
+              </CardHeader>
+              <CardContent className="flex-grow space-y-4">
+                  <div className="p-4 rounded-md border border-dashed border-blue-400 bg-blue-100 dark:bg-blue-900/30 text-blue-900 dark:text-blue-100">
+                      <h3 className="font-bold text-lg mb-2 flex items-center gap-2"><FileClock className="h-5 w-5" /> Selamat, Anda telah diterima!</h3>
+                      <p className="text-sm">Tim HRD akan segera menghubungi Anda untuk proses onboarding. Akses ke portal internal akan diberikan pada hari pertama Anda bekerja.</p>
+                  </div>
+                   <div className="text-sm space-y-2 pt-2">
+                        <h4 className="font-semibold">Detail Penawaran:</h4>
+                        <div className="grid grid-cols-2 gap-2 text-muted-foreground">
+                            {application.contractStartDate && <p><strong>Mulai Bekerja:</strong> {format(application.contractStartDate.toDate(), 'dd MMM yyyy')}</p>}
+                            {application.contractDurationMonths && <p><strong>Durasi:</strong> {application.contractDurationMonths} bulan</p>}
+                            {application.contractEndDate && <p><strong>Selesai Kontrak:</strong> {format(application.contractEndDate.toDate(), 'dd MMM yyyy')}</p>}
+                        </div>
+                        {application.offerNotes && <p className="italic text-xs"><strong>Catatan:</strong> {application.offerNotes}</p>}
                     </div>
-                    <Badge className="w-fit bg-green-600 hover:bg-green-700">
-                        Diterima Kerja
-                    </Badge>
-                </div>
-            </CardHeader>
-            <CardContent className="flex-grow space-y-4">
-                <div className="p-4 rounded-md border-dashed border-green-400 bg-green-100 dark:bg-green-900/30 text-green-900 dark:text-green-100">
-                    <h3 className="font-bold text-lg mb-2 flex items-center gap-2"><Award className="h-5 w-5" /> Selamat! Anda telah diterima.</h3>
-                    <p className="text-sm">Akun Anda telah ditingkatkan menjadi akun karyawan. Silakan logout terlebih dahulu, kemudian login kembali melalui Portal Karyawan untuk mengakses dasbor internal Anda.</p>
-                </div>
-            </CardContent>
-            <CardFooter className="bg-green-100/50 dark:bg-green-900/20 p-4 border-t border-green-200 dark:border-green-800 flex justify-end">
-                <Button asChild>
-                    <Link href="/admin/login">
-                       Ke Portal Karyawan <ArrowRight className="ml-2 h-4 w-4" />
-                    </Link>
-                </Button>
-            </CardFooter>
-        </Card>
-    );
+              </CardContent>
+          </Card>
+      );
+    }
   }
 
   const jobIsExpired = application.jobApplyDeadline && application.jobApplyDeadline.toDate() < new Date();
@@ -300,7 +336,7 @@ export default function ApplicationsPage() {
     }, [uid, firestore]);
 
     const { data: applications, isLoading: applicationsLoading, error } = useCollection<JobApplication>(applicationsQuery);
-    
+
     const sessionsQuery = useMemoFirebase(() => {
         if (!uid) return null;
         return query(

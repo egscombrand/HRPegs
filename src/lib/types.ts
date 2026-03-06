@@ -215,6 +215,13 @@ export type JobApplication = {
   cvVerified?: boolean;
   ijazahVerified?: boolean;
 
+  // New offer fields
+  offerNotes?: string;
+  contractStartDate?: Timestamp;
+  contractEndDate?: Timestamp;
+  contractDurationMonths?: number;
+  internalAccessEnabled?: boolean;
+
   // Denormalized data
   candidateName: string;
   candidateEmail: string;
