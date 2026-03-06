@@ -9,31 +9,41 @@ const patchSchema = z.object({
   additionalQuantity: z.coerce.number().int().min(1, 'Jumlah minimal 1.').max(100, 'Jumlah maksimal 100.'),
 });
 
+// Helper to verify user role
+async function verifyAdmin(req: NextRequest) {
+    const authorization = req.headers.get('Authorization');
+    if (!authorization?.startsWith('Bearer ')) {
+        return { error: 'Unauthorized: Missing token.', status: 401 };
+    }
+    const idToken = authorization.split('Bearer ')[1];
+    try {
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+        const userDoc = await admin.firestore().collection('users').doc(decodedToken.uid).get();
+        if (!userDoc.exists() || !['super-admin', 'hrd'].includes(userDoc.data()?.role)) {
+            return { error: 'Forbidden.', status: 403 };
+        }
+        return { uid: decodedToken.uid };
+    } catch (error) {
+        return { error: 'Invalid token.', status: 401 };
+    }
+}
+
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: { batchId: string } }
 ) {
+  const authResult = await verifyAdmin(req);
+  if (authResult.error) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status });
+  }
+
   const { batchId } = params;
   if (!batchId) {
     return NextResponse.json({ error: 'Batch ID is required.' }, { status: 400 });
   }
 
   try {
-    const authorization = req.headers.get('Authorization');
-    if (!authorization?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized: Missing token.' }, { status: 401 });
-    }
-    const idToken = authorization.split('Bearer ')[1];
-    const decodedToken = await admin.auth().verifyIdToken(idToken);
-
-    const db = admin.firestore();
-    const adminRoleDoc = await db.collection('roles_admin').doc(decodedToken.uid).get();
-    const hrdRoleDoc = await db.collection('roles_hrd').doc(decodedToken.uid).get();
-
-    if (!adminRoleDoc.exists && !hrdRoleDoc.exists) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
     const body = await req.json();
     const parseResult = patchSchema.safeParse(body);
 
@@ -42,8 +52,10 @@ export async function PATCH(
     }
 
     const { additionalQuantity } = parseResult.data;
+    const db = admin.firestore();
     const batchRef = db.collection('invite_batches').doc(batchId);
 
+    // Use a transaction to safely read and update
     await db.runTransaction(async (transaction) => {
         const batchDoc = await transaction.get(batchRef);
         if (!batchDoc.exists) {
@@ -60,9 +72,6 @@ export async function PATCH(
 
   } catch (error: any) {
     console.error('Error adding quota to batch:', error);
-     if (error.code && error.code.startsWith('auth/')) {
-      return NextResponse.json({ error: 'Invalid or expired token.' }, { status: 401 });
-    }
     return NextResponse.json({ error: error.message || 'An unexpected server error occurred.' }, { status: 500 });
   }
 }
@@ -72,27 +81,18 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: { batchId: string } }
 ) {
+  const authResult = await verifyAdmin(req);
+  if (authResult.error) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status });
+  }
+
   const { batchId } = params;
   if (!batchId) {
     return NextResponse.json({ error: 'Batch ID is required.' }, { status: 400 });
   }
 
   try {
-    const authorization = req.headers.get('Authorization');
-    if (!authorization?.startsWith('Bearer ')) {
-        return NextResponse.json({ error: 'Unauthorized: Missing token.' }, { status: 401 });
-    }
-    const idToken = authorization.split('Bearer ')[1];
-    const decodedToken = await admin.auth().verifyIdToken(idToken);
-
     const db = admin.firestore();
-    const adminRoleDoc = await db.collection('roles_admin').doc(decodedToken.uid).get();
-    const hrdRoleDoc = await db.collection('roles_hrd').doc(decodedToken.uid).get();
-
-    if (!adminRoleDoc.exists && !hrdRoleDoc.exists) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
     const batchRef = db.collection('invite_batches').doc(batchId);
     
     const batchDoc = await batchRef.get();
@@ -102,14 +102,10 @@ export async function DELETE(
 
     await batchRef.delete();
 
-    // Mengembalikan respons tanpa body untuk DELETE request yang berhasil
     return new NextResponse(null, { status: 204 });
 
   } catch (error: any) {
     console.error('Error deleting invite batch:', error);
-    if (error.code && error.code.startsWith('auth/')) {
-      return NextResponse.json({ error: 'Invalid or expired token.' }, { status: 401 });
-    }
     return NextResponse.json({ error: error.message || 'An unexpected server error occurred.' }, { status: 500 });
   }
 }

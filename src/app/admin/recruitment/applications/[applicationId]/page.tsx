@@ -452,14 +452,24 @@ export default function ApplicationDetailPage() {
 
     if (newStage === 'hired') {
         const userRef = doc(firestore, 'users', application.candidateUid);
-        let employmentType: 'karyawan' | 'magang' | 'training' = 'karyawan';
-        if (application.jobType === 'internship') {
-            employmentType = 'magang';
-        }
-        batch.update(userRef, {
+        const userUpdatePayload: Partial<UserProfile> = {
             role: 'karyawan',
-            employmentType: employmentType,
-        });
+            brandId: application.brandId,
+        };
+
+        if (application.jobType === 'internship') {
+            userUpdatePayload.employmentType = 'magang';
+            userUpdatePayload.employmentStage = 'intern_pre_probation';
+        } else if (application.jobType === 'fulltime') {
+            userUpdatePayload.employmentType = 'karyawan';
+            userUpdatePayload.employmentStage = 'probation';
+        } else if (application.jobType === 'contract') {
+            // Fallback for contract type
+            userUpdatePayload.employmentType = 'training'; 
+            userUpdatePayload.employmentStage = 'probation';
+        }
+        
+        batch.set(userRef, userUpdatePayload, { merge: true });
     }
 
     try {

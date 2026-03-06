@@ -77,19 +77,27 @@ export function ApplicationStatusStepper({ application, highestStatus, isProfile
                 case 'document_submission':
                     return { status: 'active', cta: <Button asChild size="sm"><Link href="/careers/portal/documents">Unggah Dokumen</Link></Button> };
                 case 'interview':
-                     const getNextUpcomingInterview = () => {
+                     const getMostRelevantInterview = () => {
                         if (!application?.interviews || application.interviews.length === 0) return null;
-                        const now = new Date().getTime();
+                        const now = new Date();
                         const scheduledInterviews = application.interviews.filter(i => i.status === 'scheduled');
                         if (scheduledInterviews.length === 0) return null;
                         
+                        // Separate into upcoming and past
                         const upcoming = scheduledInterviews
-                          .filter(i => i.startAt.toDate().getTime() >= now)
-                          .sort((a, b) => a.startAt.toDate().getTime() - b.startAt.toDate().getTime());
-                          
-                        return upcoming.length > 0 ? upcoming[0] : null;
+                            .filter(i => i.startAt.toDate() >= now)
+                            .sort((a, b) => a.startAt.toDate().getTime() - b.startAt.toDate().getTime());
+                        
+                        if (upcoming.length > 0) return upcoming[0]; // Return the soonest upcoming interview
+                        
+                        // If no upcoming, find the most recent past one
+                        const past = scheduledInterviews
+                            .filter(i => i.startAt.toDate() < now)
+                            .sort((a, b) => b.startAt.toDate().getTime() - a.startAt.toDate().getTime());
+                        
+                        return past.length > 0 ? past[0] : null;
                     };
-                    const scheduledInterview = getNextUpcomingInterview();
+                    const scheduledInterview = getMostRelevantInterview();
 
                     if (scheduledInterview) {
                         return { 

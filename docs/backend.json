@@ -109,7 +109,7 @@
       "properties": {
         "uid": { "type": "string", "description": "Matches Firebase Auth UID." },
         "employmentType": { "type": "string", "enum": ["magang", "training", "karyawan"] },
-        "internSubtype": { "type": "string", "enum": ["sekolah", "freshgraduate"] },
+        "internSubtype": { "type": "string", "enum": ["intern_education", "intern_pre_probation"] },
         "fullName": { "type": "string" },
         "nickName": { "type": "string" },
         "phone": { "type": "string" },

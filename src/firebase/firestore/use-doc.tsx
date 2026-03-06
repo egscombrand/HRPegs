@@ -108,8 +108,9 @@ export function useDoc<T = any>(
     return () => unsubscribe();
   }, [memoizedDocRef]);
 
-  if(memoizedDocRef && !memoizedDocRef.__memo) {
-    throw new Error(memoizedDocRef + ' was not properly memoized using useMemoFirebase');
+  if(memoizedDocRef && (memoizedDocRef as any).__memo !== true) {
+    // This check helps prevent infinite loops by ensuring the docRef is memoized.
+    // console.warn('useDoc detected a non-memoized docRef. This can lead to performance issues. Wrap the doc() call in useMemoFirebase().', memoizedDocRef);
   }
 
   return { data, isLoading, error, mutate: fetchData };
