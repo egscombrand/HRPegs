@@ -121,18 +121,26 @@ export default function MagangDashboardPage() {
 
   const applicationQuery = useMemoFirebase(() => {
     if (!userProfile) return null;
+    // Remove orderBy and limit to avoid needing a composite index
     return query(
       collection(firestore, 'applications'),
       where('candidateUid', '==', userProfile.uid),
-      where('status', '==', 'hired'),
-      orderBy('updatedAt', 'desc'),
-      limit(1)
+      where('status', '==', 'hired')
     );
   }, [firestore, userProfile]);
 
   const { data: applications, isLoading: isLoadingApplication } = useCollection<JobApplication>(applicationQuery);
 
-  const application = useMemo(() => applications?.[0] || null, [applications]);
+  const application = useMemo(() => {
+    if (!applications || applications.length === 0) return null;
+    // Sort on the client to get the most recent hired application
+    const sortedApps = [...applications].sort((a, b) => {
+        const timeA = a.updatedAt?.toMillis() || 0;
+        const timeB = b.updatedAt?.toMillis() || 0;
+        return timeB - timeA;
+    });
+    return sortedApps[0];
+  }, [applications]);
 
   const isLoading = authLoading || profileLoading || brandsLoading || isLoadingApplication;
 
