@@ -85,20 +85,36 @@ function ProfileForm({ initialProfile, onSaveSuccess }: { initialProfile: Partia
     setIsSaving(true);
     
     const batch = writeBatch(firestore);
-
     const profileDocRef = doc(firestore, 'employee_profiles', firebaseUser.uid);
-    const profilePayload: Partial<EmployeeProfile> & { updatedAt: any, completeness: any } = {
-        ...values,
-        uid: firebaseUser.uid,
-        employmentType: 'magang',
-        updatedAt: serverTimestamp(),
-        internshipStartDate: values.internshipStartDate ? Timestamp.fromDate(values.internshipStartDate) : null,
-        internshipEndDate: values.internshipEndDate ? Timestamp.fromDate(values.internshipEndDate) : null,
-        completeness: {
-            isComplete: true,
-            completedAt: serverTimestamp(),
-        }
+
+    const profilePayload = {
+      fullName: values.fullName,
+      nickName: values.nickName || null,
+      phone: values.phone,
+      email: values.email,
+      gender: values.gender || null,
+      birthPlace: values.birthPlace || null,
+      birthDate: values.birthDate || null,
+      internSubtype: values.internSubtype,
+      schoolOrCampus: values.schoolOrCampus,
+      educationLevel: values.educationLevel,
+      major: values.major || null,
+      expectedEndDate: values.expectedEndDate || null,
+      addressCurrent: values.addressCurrent,
+      emergencyContactName: values.emergencyContactName,
+      emergencyContactRelation: values.emergencyContactRelation,
+      emergencyContactPhone: values.emergencyContactPhone,
+      internshipStartDate: values.internshipStartDate ? Timestamp.fromDate(values.internshipStartDate) : null,
+      internshipEndDate: values.internshipEndDate ? Timestamp.fromDate(values.internshipEndDate) : null,
+      uid: firebaseUser.uid,
+      employmentType: 'magang' as const,
+      updatedAt: serverTimestamp(),
+      completeness: {
+        isComplete: true,
+        completedAt: serverTimestamp(),
+      },
     };
+
     batch.set(profileDocRef, profilePayload, { merge: true });
 
     const userDocRef = doc(firestore, 'users', firebaseUser.uid);
