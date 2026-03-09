@@ -95,7 +95,7 @@ service cloud.firestore {
      */
     match /users/{userId} {
       allow get: if isOwner(userId) || isInternal();
-      allow update: if isOwner(userId) || isSuperAdmin();
+      allow update: if isOwner(userId) || isSuperAdmin() || isHrd();
       allow list: if isSuperAdmin() || isHrd();
       allow create: if (isOwner(userId) && request.resource.data.role == 'kandidat' && hasValidCreateData(userId)) || isSuperAdmin();
       allow delete: if isSuperAdmin();
@@ -278,6 +278,12 @@ service cloud.firestore {
     match /attendance_sites/{siteId} {
       allow read: if isHrd() || isSuperAdmin();
       allow write: if isHrd() || isSuperAdmin();
+    }
+
+    match /attendance_events/{eventId} {
+      allow read: if isHrd() || isSuperAdmin();
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow delete: if isHrd() || isSuperAdmin();
     }
     
     // --- Assessment Rules ---
