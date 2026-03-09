@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Save } from 'lucide-react';
 import { add, addMonths, format } from 'date-fns';
+import { id as idLocale } from 'date-fns/locale';
 import { GoogleDatePicker } from '../ui/google-date-picker';
 import type { Job, JobApplication } from '@/lib/types';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
@@ -36,7 +37,6 @@ interface OfferDialogProps {
   onConfirm: (data: OfferFormData) => Promise<void>;
   candidateName: string;
   job: Job;
-  application: JobApplication;
 }
 
 export function OfferDialog({ open, onOpenChange, onConfirm, candidateName, job }: OfferDialogProps) {
@@ -118,13 +118,13 @@ export function OfferDialog({ open, onOpenChange, onConfirm, candidateName, job 
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Durasi Kontrak</FormLabel>
-                      <div className="relative flex items-center">
+                      <div className="relative">
                         <FormControl>
                           <Input
                             type="number"
                             {...field}
-                            onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
-                            className="pr-12"
+                            onChange={(e) => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value, 10))}
+                            className="pr-16"
                           />
                         </FormControl>
                         <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground">
@@ -139,7 +139,7 @@ export function OfferDialog({ open, onOpenChange, onConfirm, candidateName, job 
             
             {contractEndDate && (
                 <div className="text-sm text-muted-foreground">
-                    Perkiraan Selesai Kontrak: <span className="font-semibold text-foreground">{format(contractEndDate, 'dd MMMM yyyy')}</span>
+                    Perkiraan Selesai Kontrak: <span className="font-semibold text-foreground">{format(contractEndDate, 'eeee, dd MMMM yyyy', { locale: idLocale })}</span>
                 </div>
             )}
             
@@ -150,19 +150,19 @@ export function OfferDialog({ open, onOpenChange, onConfirm, candidateName, job 
                   render={({ field }) => (
                     <FormItem>
                         <FormLabel>Masa Percobaan</FormLabel>
-                        <div className="relative flex items-center">
-                          <FormControl>
-                            <Input
-                              type="number"
-                              {...field}
-                              value={field.value ?? ''}
-                              onChange={(e) => field.onChange(e.target.value === '' ? null : Number(e.target.value))}
-                              className="pr-12"
-                            />
-                          </FormControl>
-                           <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground">
-                              bulan
-                          </span>
+                         <div className="relative">
+                            <FormControl>
+                                <Input
+                                type="number"
+                                {...field}
+                                value={field.value ?? ''}
+                                onChange={(e) => field.onChange(e.target.value === '' ? null : Number(e.target.value))}
+                                className="pr-16"
+                                />
+                            </FormControl>
+                             <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground">
+                                bulan
+                            </span>
                         </div>
                         <FormMessage />
                     </FormItem>
