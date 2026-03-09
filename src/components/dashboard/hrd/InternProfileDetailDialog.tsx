@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import type { EmployeeProfile, JobApplication, Brand, UserProfile } from '@/lib/types';
+import type { EmployeeProfile, JobApplication, Brand, UserProfile, Job } from '@/lib/types';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -68,6 +68,12 @@ export function InternProfileDetailDialog({ profile, open, onOpenChange, onAdmin
     return sortedApps[0];
   }, [applications]);
   
+  const jobRef = useMemoFirebase(() => {
+    if (!application) return null;
+    return doc(firestore, 'jobs', application.jobId);
+  }, [firestore, application]);
+  const { data: job, isLoading: isLoadingJob } = useDoc<Job>(jobRef);
+  
   const brandMap = useMemo(() => {
     if (!brands) return new Map<string, string>();
     return new Map(brands.map(b => [b.id!, b.name]));
@@ -90,12 +96,12 @@ export function InternProfileDetailDialog({ profile, open, onOpenChange, onAdmin
     setIsEditAdminOpen(false);
   }
   
-  const isLoadingDetails = isLoadingApplication || isLoadingUser || isLoadingBrands;
+  const isLoadingDetails = isLoadingApplication || isLoadingUser || isLoadingBrands || isLoadingJob;
 
   if (!profile) return null;
 
   // --- UNIFIED DATA LOGIC ---
-  const divisionToDisplay = profile.division || application?.jobPosition;
+  const divisionToDisplay = profile.division || job?.division;
   const supervisorToDisplay = profile.supervisorName;
   const startDateToDisplay = profile.internshipStartDate?.toDate() || application?.contractStartDate?.toDate();
   const endDateToDisplay = profile.internshipEndDate?.toDate() || application?.contractEndDate?.toDate();
