@@ -48,6 +48,8 @@ interface UserFormDialogProps {
 const brandSchema = z.union([z.string(), z.array(z.string())]).optional();
 
 const creatableRoles: UserRole[] = ['hrd', 'manager'];
+const allRolesForEdit: UserRole[] = ['super-admin', 'hrd', 'manager', 'karyawan', 'kandidat'];
+
 
 const createSchema = z.object({
   fullName: z.string().min(2, { message: 'Full name is required.' }),
@@ -212,7 +214,7 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
                         />
                   )}
 
-                  <FormField control={form.control} name="role" render={({ field }) => (<FormItem><FormLabel>Role</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select a role" /></SelectTrigger></FormControl><SelectContent>{creatableRoles.map((r) => (<SelectItem key={r} value={r}>{r.replace(/[-_]/g, ' ')}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)}/>
+                  <FormField control={form.control} name="role" render={({ field }) => (<FormItem><FormLabel>Role</FormLabel><Select onValueChange={field.onChange} value={field.value} disabled={mode === 'edit' && user?.role === 'super-admin'}><FormControl><SelectTrigger><SelectValue placeholder="Select a role" /></SelectTrigger></FormControl><SelectContent>{mode === 'create' ? creatableRoles.map((r) => (<SelectItem key={r} value={r}>{r.replace(/[-_]/g, ' ')}</SelectItem>)) : allRolesForEdit.map((r) => (<SelectItem key={r} value={r}>{r.replace(/[-_]/g, ' ')}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)}/>
                   
                   <FormField control={form.control} name="employmentType" render={({ field }) => (<FormItem><FormLabel>Jenis Pekerja</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Pilih jenis pekerja" /></SelectTrigger></FormControl><SelectContent>{EMPLOYMENT_TYPES.map((r) => (<SelectItem key={r} value={r}>{r}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)}/>
 
@@ -231,26 +233,22 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
                                     </div>
                                     <div className="h-24 w-full rounded-md border p-4 overflow-y-auto space-y-2">
                                         {brands?.map((brand) => (
-                                            <div
-                                                key={brand.id}
-                                                className="flex flex-row items-start space-x-3 space-y-0"
-                                            >
+                                            <FormItem key={brand.id} className="flex flex-row items-start space-x-3 space-y-0 mb-2">
                                                 <FormControl>
                                                     <Checkbox
                                                         checked={Array.isArray(field.value) && field.value.includes(brand.id!)}
                                                         onCheckedChange={(checked) => {
                                                             const currentValue = Array.isArray(field.value) ? field.value : [];
-                                                            const newValue = checked
-                                                                ? [...currentValue, brand.id!]
-                                                                : currentValue.filter((value) => value !== brand.id!);
-                                                            field.onChange(newValue);
+                                                            return checked
+                                                                ? field.onChange([...currentValue, brand.id!])
+                                                                : field.onChange(currentValue.filter((value) => value !== brand.id!));
                                                         }}
                                                     />
                                                 </FormControl>
                                                 <FormLabel className="font-normal">
                                                     {brand.name}
                                                 </FormLabel>
-                                            </div>
+                                            </FormItem>
                                         ))}
                                     </div>
                                     <FormMessage />
