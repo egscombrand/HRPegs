@@ -9,9 +9,9 @@ import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, query, where, orderBy, limit } from 'firebase/firestore';
+import { collection, query, where } from 'firebase/firestore';
 import { Loader2 } from 'lucide-react';
-import React from 'react';
+import React, { useMemo } from 'react';
 
 
 const InfoRow = ({ label, value }: { label: string; value?: string | number | null }) => (
@@ -38,17 +38,24 @@ export function InternProfileDetailDialog({ profile, open, onOpenChange }: Inter
 
   const applicationQuery = useMemoFirebase(() => {
     if (!profile) return null;
+    // Remove orderBy to prevent needing a composite index. Sorting will be done client-side.
     return query(
       collection(firestore, 'applications'),
       where('candidateUid', '==', profile.uid),
-      where('status', '==', 'hired'),
-      orderBy('updatedAt', 'desc'),
-      limit(1)
+      where('status', '==', 'hired')
     );
   }, [firestore, profile]);
 
   const { data: applications, isLoading: isLoadingApplication } = useCollection<JobApplication>(applicationQuery);
-  const application = applications?.[0];
+
+  const application = useMemo(() => {
+    if (!applications || applications.length === 0) {
+      return null;
+    }
+    // Sort client-side to find the most recent hired application
+    const sortedApps = [...applications].sort((a, b) => (b.updatedAt?.toMillis() ?? 0) - (a.updatedAt?.toMillis() ?? 0));
+    return sortedApps[0];
+  }, [applications]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
