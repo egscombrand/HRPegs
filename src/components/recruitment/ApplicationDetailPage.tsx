@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import { useAuth } from '@/providers/auth-provider';
 import { useDoc, useFirestore, useMemoFirebase, updateDocumentNonBlocking } from '@/firebase';
 import { doc, serverTimestamp, updateDoc, writeBatch } from 'firebase/firestore';
-import type { JobApplication, Profile, Job, ApplicationTimelineEvent, ApplicationInterview } from '@/lib/types';
+import type { JobApplication, Profile, Job, ApplicationTimelineEvent, ApplicationInterview, UserProfile } from '@/lib/types';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { Skeleton } from '@/components/ui/skeleton';
