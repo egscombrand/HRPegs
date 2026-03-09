@@ -5,12 +5,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import type { EmployeeProfile, JobApplication } from '@/lib/types';
+import type { EmployeeProfile, JobApplication, Brand, UserProfile } from '@/lib/types';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, query, where } from 'firebase/firestore';
+import { useCollection, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
+import { collection, query, where, doc } from 'firebase/firestore';
 import { Loader2, Edit } from 'lucide-react';
 import { InternAdminDataFormDialog } from './InternAdminDataFormDialog';
 
@@ -35,14 +35,10 @@ interface InternProfileDetailDialogProps {
 
 export function InternProfileDetailDialog({ profile, open, onOpenChange, onAdminDataChange }: InternProfileDetailDialogProps) {
   const [isEditAdminOpen, setIsEditAdminOpen] = useState(false);
-
-  if (!profile) return null;
-
   const firestore = useFirestore();
 
   const applicationQuery = useMemoFirebase(() => {
     if (!profile) return null;
-    // REMOVED orderBy to prevent needing a composite index.
     return query(
       collection(firestore, 'applications'),
       where('candidateUid', '==', profile.uid),
@@ -51,10 +47,19 @@ export function InternProfileDetailDialog({ profile, open, onOpenChange, onAdmin
   }, [firestore, profile]);
 
   const { data: applications, isLoading: isLoadingApplication } = useCollection<JobApplication>(applicationQuery);
+  
+  const userRef = useMemoFirebase(() => {
+      if (!profile) return null;
+      return doc(firestore, 'users', profile.uid);
+  }, [firestore, profile]);
+  const { data: userProfile, isLoading: isLoadingUser } = useDoc<UserProfile>(userRef);
+
+  const { data: brands, isLoading: isLoadingBrands } = useCollection<Brand>(
+      useMemoFirebase(() => collection(firestore, 'brands'), [firestore])
+  );
 
   const application = useMemo(() => {
     if (!applications || applications.length === 0) return null;
-    // Sort on the client to find the most recent application.
     const sortedApps = [...applications].sort((a, b) => {
         const timeA = a.updatedAt?.toMillis() || 0;
         const timeB = b.updatedAt?.toMillis() || 0;
@@ -63,17 +68,35 @@ export function InternProfileDetailDialog({ profile, open, onOpenChange, onAdmin
     return sortedApps[0];
   }, [applications]);
   
+  const brandMap = useMemo(() => {
+    if (!brands) return new Map<string, string>();
+    return new Map(brands.map(b => [b.id!, b.name]));
+  }, [brands]);
+
+  const brandNameToDisplay = useMemo(() => {
+    if (profile?.brandName) return profile.brandName;
+    if (userProfile?.brandId) {
+      if (Array.isArray(userProfile.brandId)) {
+        return userProfile.brandId.map(id => brandMap.get(id)).filter(Boolean).join(', ');
+      }
+      return brandMap.get(userProfile.brandId as string);
+    }
+    if (application?.brandName) return application.brandName;
+    return 'Belum diatur';
+  }, [profile, userProfile, application, brandMap]);
+
   const handleAdminFormSuccess = () => {
     onAdminDataChange();
     setIsEditAdminOpen(false);
   }
+  
+  const isLoadingDetails = isLoadingApplication || isLoadingUser || isLoadingBrands;
+
+  if (!profile) return null;
 
   // --- UNIFIED DATA LOGIC ---
-  // Priority: Official HR data > Data from recruitment offer
-  const brandNameToDisplay = profile.brandName || application?.brandName;
-  const divisionToDisplay = profile.division || application?.jobPosition; // jobPosition as fallback for division
+  const divisionToDisplay = profile.division || application?.jobPosition;
   const supervisorToDisplay = profile.supervisorName;
-
   const startDateToDisplay = profile.internshipStartDate?.toDate() || application?.contractStartDate?.toDate();
   const endDateToDisplay = profile.internshipEndDate?.toDate() || application?.contractEndDate?.toDate();
   const compensationToDisplay = profile.compensationAmount ?? application?.offeredSalary;
@@ -110,7 +133,11 @@ export function InternProfileDetailDialog({ profile, open, onOpenChange, onAdmin
                 <dl className="space-y-1">
                   <InfoRow label="Tipe Magang" value={profile.internSubtype === 'intern_education' ? 'Terikat Pendidikan' : 'Pra-Probation'} />
                   <InfoRow label="Tipe Pekerja" value={profile.employmentType} />
-                  <InfoRow label="Penempatan Brand" value={brandNameToDisplay} />
+                  {isLoadingDetails ? (
+                    <div className="flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin"/> Memuat data brand...</div>
+                  ) : (
+                    <InfoRow label="Penempatan Brand" value={brandNameToDisplay} />
+                  )}
                   <InfoRow label="Divisi" value={divisionToDisplay} />
                   <InfoRow label="Supervisor / PIC" value={supervisorToDisplay} />
                 </dl>
