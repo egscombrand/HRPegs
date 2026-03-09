@@ -19,8 +19,8 @@ import { doc, serverTimestamp, Timestamp, writeBatch, query, collection, where }
 import type { EmployeeProfile, Brand, UserProfile, JobApplication } from '@/lib/types';
 import { ROLES_INTERNAL } from '@/lib/types';
 import { addMonths } from 'date-fns';
-import { Card, CardContent } from '../ui/card';
-import { Separator } from '../ui/separator';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
 
 const adminFormSchema = z.object({
   division: z.string().optional(),
@@ -82,7 +82,7 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, applica
   const filteredSupervisors = useMemo(() => {
     if (!supervisors || !brandId) return [];
     return supervisors.filter(user => {
-      if (user.uid === profile.uid) return false;
+      if (user.uid === profile.uid) return false; // Exclude the intern themselves
       if (!user.isActive || !['manager', 'karyawan'].includes(user.role)) return false;
       if (Array.isArray(user.brandId)) return user.brandId.includes(brandId);
       return user.brandId === brandId;
@@ -147,7 +147,7 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, applica
   
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Edit Data Administrasi: {profile.fullName}</DialogTitle>
           <DialogDescription>
