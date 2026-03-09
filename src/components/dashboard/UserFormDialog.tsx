@@ -220,7 +220,7 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
 
                   {role && role !== 'super-admin' && (
                     role === 'hrd' ? (
-                       <FormField
+                      <FormField
                         control={form.control}
                         name="brandId"
                         render={() => (
@@ -233,38 +233,34 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
                             </div>
                             <div className="h-24 w-full rounded-md border p-4 overflow-y-auto space-y-2">
                             {brands?.map((brand) => (
-                              <FormField
-                                key={brand.id}
-                                control={form.control}
-                                name="brandId"
-                                render={({ field }) => {
-                                  const fieldValue = Array.isArray(field.value) ? field.value : [];
-                                  return (
-                                    <FormItem
+                                <FormField
+                                  key={brand.id}
+                                  control={form.control}
+                                  name="brandId"
+                                  render={({ field }) => (
+                                      <FormItem
                                       key={brand.id}
                                       className="flex flex-row items-start space-x-3 space-y-0"
-                                    >
+                                      >
                                       <FormControl>
-                                        <Checkbox
-                                          checked={fieldValue.includes(brand.id!)}
-                                          onCheckedChange={(checked) => {
-                                            return checked
-                                              ? field.onChange([...fieldValue, brand.id!])
-                                              : field.onChange(
-                                                  fieldValue?.filter(
-                                                    (value) => value !== brand.id!
-                                                  )
-                                                )
-                                          }}
-                                        />
+                                          <Checkbox
+                                              checked={Array.isArray(field.value) && field.value.includes(brand.id!)}
+                                              onCheckedChange={(checked) => {
+                                                  const currentValue = Array.isArray(field.value) ? field.value : [];
+                                                  return checked
+                                                      ? field.onChange([...currentValue, brand.id!])
+                                                      : field.onChange(
+                                                          currentValue.filter((value) => value !== brand.id!)
+                                                        );
+                                              }}
+                                          />
                                       </FormControl>
                                       <FormLabel className="font-normal">
-                                        {brand.name}
+                                          {brand.name}
                                       </FormLabel>
-                                    </FormItem>
-                                  )
-                                }}
-                              />
+                                      </FormItem>
+                                  )}
+                                />
                             ))}
                             </div>
                             <FormMessage />
