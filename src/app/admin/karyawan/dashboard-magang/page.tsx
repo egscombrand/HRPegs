@@ -6,7 +6,7 @@ import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/providers/auth-provider';
 import { MENU_CONFIG } from '@/lib/menu-config';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Loader2 } from 'lucide-react';
 import { useDoc, useFirestore, useMemoFirebase } from '@/firebase';
@@ -20,8 +20,25 @@ function DashboardSkeleton() {
         <div className="space-y-4">
             <Skeleton className="h-24 w-full" />
             <Skeleton className="h-32 w-full" />
+            <Skeleton className="h-32 w-full" />
         </div>
     )
+}
+
+function PlacementInfoCard({ profile }: { profile: EmployeeProfile | null }) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="text-lg">Informasi Penempatan</CardTitle>
+                 <CardDescription>Detail penempatan dan penanggung jawab Anda selama periode magang.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+                <div className="flex justify-between"><span className="text-muted-foreground">Brand</span> <span className="font-semibold">{profile?.brandName || 'Belum diatur'}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Divisi</span> <span className="font-semibold">{profile?.division || 'Belum diatur'}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Supervisor / PIC</span> <span className="font-semibold">{profile?.supervisorName || 'Belum diatur'}</span></div>
+            </CardContent>
+        </Card>
+    );
 }
 
 function PeriodCard({ profile }: { profile: EmployeeProfile | null }) {
@@ -89,6 +106,7 @@ export default function MagangDashboardPage() {
                     <Badge className="mt-4 capitalize">{userProfile.employmentType}</Badge>
                 </CardContent>
             </Card>
+            <PlacementInfoCard profile={employeeProfile} />
             <PeriodCard profile={employeeProfile} />
         </div>
       )}
