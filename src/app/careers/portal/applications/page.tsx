@@ -98,10 +98,9 @@ function ApplicationCard({ application, assessmentSessionStatus }: { application
   
   const currentStatusIndex = ORDERED_RECRUITMENT_STAGES.indexOf(application.status);
   const isRejected = application.status === 'rejected';
-  const isHired = application.status === 'hired';
+  const isHired = application.status === 'hired' && application.internalAccessEnabled === true;
   const isOffered = application.status === 'offered';
-  const isActivated = application.internalAccessEnabled === true;
-
+  
   if (isOffered) {
     if (application.offerStatus === 'sent') {
       return (
@@ -228,8 +227,8 @@ function ApplicationCard({ application, assessmentSessionStatus }: { application
                     <Building className="h-4 w-4" /> {application.brandName}
                 </CardDescription>
             </div>
-             <Badge variant={isRejected ? 'destructive' : isHired ? 'default' : 'secondary'} className={cn("w-fit", isHired && application.offerStatus === 'accepted' && "bg-blue-600 hover:bg-blue-600")}>
-                {statusDisplayLabels[application.status]}
+             <Badge variant={isRejected ? 'destructive' : isHired ? 'default' : 'secondary'} className={cn("w-fit", application.offerStatus === 'accepted' && "bg-blue-600 hover:bg-blue-600")}>
+                {application.offerStatus === 'accepted' ? 'Penawaran Diterima' : statusDisplayLabels[application.status]}
             </Badge>
         </div>
       </CardHeader>
@@ -494,5 +493,3 @@ export default function ApplicationsPage() {
         </div>
     );
 }
-
-    

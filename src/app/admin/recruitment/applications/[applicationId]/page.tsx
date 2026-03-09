@@ -428,9 +428,9 @@ export default function ApplicationDetailPage() {
   const handleStageChange = async (newStage: JobApplication['status'], reason: string) => {
     if (!application || !userProfile) return false;
     
-    if (newStage === 'hired') {
+    if (newStage === 'offered') {
         setIsOfferDialogOpen(true);
-        return false; // Prevent default stage change, let the dialog handle it
+        return false;
     }
 
     const timelineEvent: ApplicationTimelineEvent = {
@@ -479,7 +479,7 @@ export default function ApplicationDetailPage() {
     combinedDate.setHours(hours, minutes);
 
     const updatePayload = {
-        status: 'hired' as const, // Represents "Offer Stage"
+        status: 'offered' as const,
         offerStatus: 'sent' as const,
         offeredSalary: offerData.offeredSalary,
         probationDurationMonths: offerData.probationDurationMonths,
@@ -526,9 +526,10 @@ export default function ApplicationDetailPage() {
         type: 'status_changed',
         at: Timestamp.now(),
         by: userProfile.uid,
-        meta: { note: 'Akun kandidat telah diaktifkan sebagai karyawan internal.' }
+        meta: { from: 'offered', to: 'hired', note: 'Akun kandidat telah diaktifkan sebagai karyawan internal.' }
     };
     batch.update(appRef, {
+        status: 'hired',
         internalAccessEnabled: true,
         timeline: [...(application.timeline || []), timelineEvent]
     });
@@ -645,7 +646,7 @@ export default function ApplicationDetailPage() {
             </CardContent>
           </Card>
           
-            {application.offerStatus === 'accepted' && !application.internalAccessEnabled && (
+            {application.status === 'offered' && application.offerStatus === 'accepted' && !application.internalAccessEnabled && (
                 <Card className="border-green-500">
                     <CardHeader>
                         <CardTitle className="text-green-600 flex items-center gap-2"><CheckCircle /> Penawaran Diterima</CardTitle>
@@ -660,11 +661,11 @@ export default function ApplicationDetailPage() {
                 </Card>
             )}
 
-            {application.offerStatus === 'rejected' && (
+            {application.status !== 'rejected' && application.offerStatus === 'rejected' && (
                  <Card className="border-destructive">
                     <CardHeader>
                         <CardTitle className="text-destructive flex items-center gap-2"><XCircle /> Penawaran Ditolak</CardTitle>
-                        <CardDescription>Kandidat telah menolak penawaran kerja pada {application.candidateOfferDecisionAt ? format(application.candidateOfferDecisionAt.toDate(), 'dd MMM yyyy') : ''}.</CardDescription>
+                        <CardDescription>Kandidat telah menolak penawaran kerja pada {application.candidateOfferDecisionAt ? format(application.candidateOfferDecisionAt.toDate(), 'dd MMM yyyy') : ''}. Proses rekrutmen untuk kandidat ini telah selesai.</CardDescription>
                     </CardHeader>
                 </Card>
             )}
