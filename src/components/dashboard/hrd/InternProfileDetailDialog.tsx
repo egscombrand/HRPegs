@@ -10,7 +10,7 @@ import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, query, where, orderBy } from 'firebase/firestore';
+import { collection, query, where } from 'firebase/firestore';
 import { Loader2, Edit } from 'lucide-react';
 import { InternAdminDataFormDialog } from './InternAdminDataFormDialog';
 
@@ -42,20 +42,25 @@ export function InternProfileDetailDialog({ profile, open, onOpenChange, onAdmin
 
   const applicationQuery = useMemoFirebase(() => {
     if (!profile) return null;
-    // Query for hired applications and sort by the last update to get the most recent one.
+    // REMOVED orderBy to prevent needing a composite index.
     return query(
       collection(firestore, 'applications'),
       where('candidateUid', '==', profile.uid),
-      where('status', '==', 'hired'),
-      orderBy('updatedAt', 'desc'),
+      where('status', '==', 'hired')
     );
   }, [firestore, profile]);
 
   const { data: applications, isLoading: isLoadingApplication } = useCollection<JobApplication>(applicationQuery);
 
   const application = useMemo(() => {
-    // Since we sort by date, the first result is the most recent.
-    return applications?.[0] || null;
+    if (!applications || applications.length === 0) return null;
+    // Sort on the client to find the most recent application.
+    const sortedApps = [...applications].sort((a, b) => {
+        const timeA = a.updatedAt?.toMillis() || 0;
+        const timeB = b.updatedAt?.toMillis() || 0;
+        return timeB - timeA;
+    });
+    return sortedApps[0];
   }, [applications]);
   
   const handleAdminFormSuccess = () => {
