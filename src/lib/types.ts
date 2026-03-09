@@ -64,8 +64,8 @@ export type EmployeeProfile = {
     isComplete: boolean;
     completedAt?: Timestamp;
   };
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
 };
 
 export type Brand = {
@@ -646,3 +646,4 @@ export type AttendanceEvent = {
     flags?: string[];
     address?: string;
 };
+

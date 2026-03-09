@@ -1,13 +1,13 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useAuth } from '@/providers/auth-provider';
 import { useFirestore, useDoc, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
 import { doc, serverTimestamp, Timestamp, writeBatch } from 'firebase/firestore';
-import type { EmployeeProfile } from '@/lib/types';
+import type { EmployeeProfile, Profile, Address } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -67,6 +67,15 @@ function ProfileForm({ initialProfile, onSaveSuccess }: { initialProfile: Partia
         internshipEndDate: initialProfile.internshipEndDate?.toDate() || null,
     },
   });
+
+  useEffect(() => {
+    form.reset({
+        ...initialProfile,
+        email: initialProfile.email || '',
+        internshipStartDate: initialProfile.internshipStartDate?.toDate() || null,
+        internshipEndDate: initialProfile.internshipEndDate?.toDate() || null,
+    });
+  }, [initialProfile, form]);
 
   async function onSubmit(values: FormValues) {
     if (!firebaseUser) {
@@ -270,14 +279,61 @@ function InternProfilePageContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
 
-    const profileDocRef = useMemoFirebase(
+    const employeeProfileDocRef = useMemoFirebase(
         () => (userProfile ? doc(firestore, 'employee_profiles', userProfile.uid) : null),
         [firestore, userProfile]
     );
-    const { data: initialProfile, isLoading: profileLoading, mutate: refetchProfile } = useDoc<EmployeeProfile>(profileDocRef);
+    const { data: employeeProfile, isLoading: employeeProfileLoading, mutate: refetchProfile } = useDoc<EmployeeProfile>(employeeProfileDocRef);
+
+    const recruitmentProfileDocRef = useMemoFirebase(
+      () => (userProfile ? doc(firestore, 'profiles', userProfile.uid) : null),
+      [firestore, userProfile]
+    );
+    const { data: recruitmentProfile, isLoading: recruitmentProfileLoading } = useDoc<Profile>(recruitmentProfileDocRef);
 
     const mode = searchParams.get('mode');
-    const isLoading = authLoading || profileLoading;
+    const isLoading = authLoading || employeeProfileLoading || recruitmentProfileLoading;
+
+    const combinedInitialProfile = useMemo(() => {
+        if (!userProfile) return {};
+
+        const formatAddress = (addr?: Partial<Address>): string => {
+            if (!addr || !addr.street) return '';
+            return [
+                addr.street,
+                addr.rt && addr.rw ? `RT ${addr.rt}/RW ${addr.rw}` : '',
+                addr.village,
+                addr.district,
+                `${addr.city || ''}, ${addr.province || ''} ${addr.postalCode || ''}`.trim(),
+            ].filter(Boolean).join(', ');
+        };
+        
+        const latestEducation = recruitmentProfile?.education?.[0];
+        const addressToUse = recruitmentProfile?.isDomicileSameAsKtp ? recruitmentProfile.addressKtp : recruitmentProfile.addressDomicile;
+
+        // Merge data with priority: existing employee data > recruitment data > auth data
+        return {
+            fullName: employeeProfile?.fullName || recruitmentProfile?.fullName || userProfile.fullName,
+            email: userProfile.email,
+            nickName: employeeProfile?.nickName || recruitmentProfile?.nickname,
+            phone: employeeProfile?.phone || recruitmentProfile?.phone,
+            gender: employeeProfile?.gender || recruitmentProfile?.gender,
+            birthPlace: employeeProfile?.birthPlace || recruitmentProfile?.birthPlace,
+            birthDate: employeeProfile?.birthDate || (recruitmentProfile?.birthDate instanceof Timestamp ? format(recruitmentProfile.birthDate.toDate(), 'yyyy-MM-dd') : undefined),
+            addressCurrent: employeeProfile?.addressCurrent || formatAddress(addressToUse),
+            schoolOrCampus: employeeProfile?.schoolOrCampus || latestEducation?.institution,
+            major: employeeProfile?.major || latestEducation?.fieldOfStudy,
+            educationLevel: employeeProfile?.educationLevel || latestEducation?.level,
+            // Keep existing specific intern data
+            internSubtype: employeeProfile?.internSubtype,
+            expectedEndDate: employeeProfile?.expectedEndDate,
+            internshipStartDate: employeeProfile?.internshipStartDate,
+            internshipEndDate: employeeProfile?.internshipEndDate,
+            emergencyContactName: employeeProfile?.emergencyContactName,
+            emergencyContactRelation: employeeProfile?.emergencyContactRelation,
+            emergencyContactPhone: employeeProfile?.emergencyContactPhone,
+        };
+    }, [employeeProfile, recruitmentProfile, userProfile]);
 
     const handleSaveSuccess = () => {
         refetchProfile();
@@ -289,19 +345,13 @@ function InternProfilePageContent() {
         return <Skeleton className="h-96 w-full" />;
     }
     
-    const isProfileComplete = initialProfile?.completeness?.isComplete;
+    const isProfileComplete = employeeProfile?.completeness?.isComplete;
     const showForm = !isProfileComplete || mode === 'edit';
 
-    const defaultProfile = {
-        email: userProfile?.email || '',
-        fullName: userProfile?.fullName || '',
-        ...initialProfile,
-    };
-
     return showForm ? (
-        <ProfileForm initialProfile={defaultProfile} onSaveSuccess={handleSaveSuccess} />
+        <ProfileForm initialProfile={combinedInitialProfile} onSaveSuccess={handleSaveSuccess} />
     ) : (
-        <ProfilePreview profile={initialProfile!} onEdit={() => router.push('/admin/karyawan/magang/profile?mode=edit')} />
+        <ProfilePreview profile={employeeProfile!} onEdit={() => router.push('/admin/karyawan/magang/profile?mode=edit')} />
     );
 }
 
@@ -312,3 +362,4 @@ export default function InternProfilePage() {
         </Suspense>
     )
 }
+
