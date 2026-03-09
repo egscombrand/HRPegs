@@ -16,7 +16,7 @@ import { ProfileView } from '@/components/recruitment/ProfileView';
 import { ApplicationStatusBadge, statusDisplayLabels } from '@/components/recruitment/ApplicationStatusBadge';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { getInitials } from '@/lib/utils';
+import { getInitials, cn } from '@/lib/utils';
 import { format, differenceInMinutes, add } from 'date-fns';
 import { ApplicationProgressStepper } from '@/components/recruitment/ApplicationProgressStepper';
 import { CandidateDocumentsCard } from '@/components/recruitment/CandidateDocumentsCard';
@@ -376,6 +376,70 @@ function InterviewManagement({ application, onUpdate, allUsers, allBrands, job }
   );
 }
 
+function OfferPreviewCard({ application, onActivate, isActivating }: { application: JobApplication, onActivate: () => void, isActivating: boolean }) {
+  if (!application.offerStatus) {
+    return null;
+  }
+
+  const getStatusBadge = () => {
+    switch (application.offerStatus) {
+      case 'sent':
+        return <Badge variant="secondary">Menunggu Keputusan Kandidat</Badge>;
+      case 'accepted':
+        return <Badge className="bg-green-600">Penawaran Diterima</Badge>;
+      case 'rejected':
+        return <Badge variant="destructive">Penawaran Ditolak</Badge>;
+      default:
+        return null;
+    }
+  };
+  
+  const formatSalary = (value: number | undefined | null) => {
+    if (value === undefined || value === null) return '-';
+    return `Rp ${value.toLocaleString('id-ID')}`;
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex justify-between items-start">
+          <CardTitle>Preview Penawaran Kerja</CardTitle>
+          {getStatusBadge()}
+        </div>
+        <CardDescription>
+          Ini adalah detail penawaran yang telah dikirimkan kepada kandidat.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 pt-2">
+            <div><p className="text-muted-foreground">Kompensasi</p><p className="font-bold text-base">{formatSalary(application.offeredSalary)} / bulan</p></div>
+            <div><p className="text-muted-foreground">Durasi Kontrak</p><p className="font-semibold">{application.contractDurationMonths} bulan</p></div>
+            {application.probationDurationMonths && <div><p className="text-muted-foreground">Masa Percobaan</p><p className="font-semibold">{application.probationDurationMonths} bulan</p></div>}
+            <div><p className="text-muted-foreground">Tanggal Mulai</p><p className="font-semibold">{application.contractStartDate ? format(application.contractStartDate.toDate(), 'eeee, dd MMMM yyyy, HH:mm', { locale: idLocale }) : '-'}</p></div>
+            {application.contractEndDate && <div><p className="text-muted-foreground">Tanggal Selesai</p><p className="font-semibold">{format(application.contractEndDate.toDate(), 'eeee, dd MMMM yyyy')}</p></div>}
+        </div>
+        {application.offerNotes && <p className="text-xs text-muted-foreground italic pt-2"><strong>Catatan:</strong> {application.offerNotes}</p>}
+      </CardContent>
+      {application.offerStatus === 'accepted' && !application.internalAccessEnabled && (
+        <CardFooter>
+            <Button onClick={onActivate} disabled={isActivating}>
+                {isActivating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+                Aktifkan Akun Karyawan
+            </Button>
+        </CardFooter>
+      )}
+      {application.offerStatus === 'rejected' && (
+        <CardFooter className="bg-destructive/10 border-t pt-4">
+            <p className="text-sm font-medium text-destructive flex items-center gap-2">
+                <XCircle className="h-5 w-5"/>
+                Kandidat telah menolak penawaran ini pada {application.candidateOfferDecisionAt ? format(application.candidateOfferDecisionAt.toDate(), 'dd MMM yyyy') : ''}.
+            </p>
+        </CardFooter>
+      )}
+    </Card>
+  );
+}
+
 
 export default function ApplicationDetailPage() {
   const hasAccess = useRoleGuard(['hrd', 'super-admin']);
@@ -442,15 +506,15 @@ export default function ApplicationDetailPage() {
     
     const updatePayload: any = {
         status: newStage,
-        updatedAt: serverTimestamp(),
+        updatedAt: Timestamp.now(),
         timeline: [...(application.timeline || []), timelineEvent]
     };
     
     if (newStage === 'tes_kepribadian' && !application.personalityTestAssignedAt) {
-      updatePayload.personalityTestAssignedAt = serverTimestamp();
+      updatePayload.personalityTestAssignedAt = Timestamp.now();
     }
     if (newStage === 'rejected') {
-      updatePayload.decisionAt = serverTimestamp();
+      updatePayload.decisionAt = Timestamp.now();
     }
 
     try {
@@ -487,7 +551,7 @@ export default function ApplicationDetailPage() {
         contractDurationMonths: offerData.contractDurationMonths,
         contractEndDate: offerData.contractEndDate ? Timestamp.fromDate(offerData.contractEndDate) : null,
         offerNotes: offerData.offerNotes,
-        updatedAt: serverTimestamp(),
+        updatedAt: Timestamp.now(),
         timeline: [...(application.timeline || []), timelineEvent],
     };
 
@@ -566,7 +630,7 @@ export default function ApplicationDetailPage() {
 
       const updatePayload = {
         status: 'screening',
-        updatedAt: serverTimestamp(),
+        updatedAt: Timestamp.now(),
         timeline: [...(application.timeline || []), timelineEvent],
       };
 
@@ -646,29 +710,13 @@ export default function ApplicationDetailPage() {
             </CardContent>
           </Card>
           
-            {application.status === 'offered' && application.offerStatus === 'accepted' && !application.internalAccessEnabled && (
-                <Card className="border-green-500">
-                    <CardHeader>
-                        <CardTitle className="text-green-600 flex items-center gap-2"><CheckCircle /> Penawaran Diterima</CardTitle>
-                        <CardDescription>Kandidat telah menerima penawaran kerja. Anda sekarang dapat mengaktifkan akun internal mereka.</CardDescription>
-                    </CardHeader>
-                    <CardFooter>
-                        <Button onClick={handleActivateEmployee} disabled={isActivating}>
-                            {isActivating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                            Aktifkan sebagai Karyawan
-                        </Button>
-                    </CardFooter>
-                </Card>
-            )}
-
-            {application.status !== 'rejected' && application.offerStatus === 'rejected' && (
-                 <Card className="border-destructive">
-                    <CardHeader>
-                        <CardTitle className="text-destructive flex items-center gap-2"><XCircle /> Penawaran Ditolak</CardTitle>
-                        <CardDescription>Kandidat telah menolak penawaran kerja pada {application.candidateOfferDecisionAt ? format(application.candidateOfferDecisionAt.toDate(), 'dd MMM yyyy') : ''}. Proses rekrutmen untuk kandidat ini telah selesai.</CardDescription>
-                    </CardHeader>
-                </Card>
-            )}
+          {application.status === 'offered' && (
+            <OfferPreviewCard
+              application={application}
+              onActivate={handleActivateEmployee}
+              isActivating={isActivating}
+            />
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             <div className="lg:col-span-2 space-y-6">
