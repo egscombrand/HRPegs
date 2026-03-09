@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Lock, Pencil, Hourglass, Calendar } from 'lucide-react';
+import { Check, Lock, Pencil, Hourglass, Calendar, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -83,14 +83,12 @@ export function ApplicationStatusStepper({ application, highestStatus, isProfile
                         const scheduledInterviews = application.interviews.filter(i => i.status === 'scheduled');
                         if (scheduledInterviews.length === 0) return null;
                         
-                        // Separate into upcoming and past
                         const upcoming = scheduledInterviews
                             .filter(i => i.startAt.toDate() >= now)
                             .sort((a, b) => a.startAt.toDate().getTime() - b.startAt.toDate().getTime());
                         
-                        if (upcoming.length > 0) return upcoming[0]; // Return the soonest upcoming interview
+                        if (upcoming.length > 0) return upcoming[0];
                         
-                        // If no upcoming, find the most recent past one
                         const past = scheduledInterviews
                             .filter(i => i.startAt.toDate() < now)
                             .sort((a, b) => b.startAt.toDate().getTime() - a.startAt.toDate().getTime());
@@ -108,7 +106,13 @@ export function ApplicationStatusStepper({ application, highestStatus, isProfile
                     }
                      return { status: 'waiting', reason: 'Menunggu jadwal wawancara dari HRD. Jadwal akan muncul di halaman Jadwal Wawancara.' };
                 case 'hired':
-                    return { status: 'completed', reason: 'Selamat! Anda telah diterima.' };
+                    if (application?.offerStatus === 'sent') {
+                        return { status: 'active', reason: 'Anda telah menerima penawaran kerja. Tinjau dan berikan keputusan.', cta: <Button asChild size="sm"><Link href="/careers/portal/applications">Lihat Penawaran</Link></Button> };
+                    }
+                    if (application?.offerStatus === 'accepted') {
+                         return { status: 'completed', reason: 'Selamat! Anda telah menerima penawaran ini.' };
+                    }
+                    return { status: 'waiting', reason: 'Proses akhir sedang disiapkan oleh HRD.' };
                 case 'verification':
                      return { status: 'waiting', reason: 'Dokumen dan hasil tes Anda sedang diverifikasi oleh HRD.' };
                 default:
@@ -145,7 +149,7 @@ export function ApplicationStatusStepper({ application, highestStatus, isProfile
         <div className="space-y-6">
             {candidateStages.slice(1).map((stage) => { // slice(1) to skip 'submitted'
                  const stepDetails = getStepDetails(stage);
-                 const Icon = stepDetails.status === 'completed' ? Check : stage === 'interview' ? Calendar : stepDetails.status === 'active' ? Pencil : stepDetails.status === 'waiting' ? Hourglass : Lock;
+                 const Icon = stepDetails.status === 'completed' ? Check : stage === 'interview' ? Calendar : stage === 'document_submission' ? FileText : stepDetails.status === 'active' ? Pencil : stepDetails.status === 'waiting' ? Hourglass : Lock;
                  const stageLabel = statusDisplayLabels[stage] || stage.replace('_', ' ');
 
                 return (

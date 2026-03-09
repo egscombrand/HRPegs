@@ -7,7 +7,6 @@ import { Check, MoreVertical } from 'lucide-react';
 import { type JobApplication, ORDERED_RECRUITMENT_STAGES } from '@/lib/types';
 import { statusDisplayLabels } from '@/components/recruitment/ApplicationStatusBadge';
 import { StageChangeDialog } from './StageChangeDialog';
-import { ScheduleInterviewDialog } from './ScheduleInterviewDialog';
 
 interface ApplicationActionBarProps {
   application: JobApplication;

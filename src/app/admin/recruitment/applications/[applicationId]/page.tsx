@@ -9,7 +9,7 @@ import type { JobApplication, Profile, Job, ApplicationTimelineEvent, Applicatio
 import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Mail, Phone, XCircle, Calendar, Users, RefreshCw, X, MessageSquare, AlertTriangle, Edit, ShieldCheck, Loader2 } from 'lucide-react';
+import { Mail, Phone, XCircle, Calendar, Users, RefreshCw, X, MessageSquare, AlertTriangle, Edit, ShieldCheck, CheckCircle, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { MENU_CONFIG } from '@/lib/menu-config';
 import { ProfileView } from '@/components/recruitment/ProfileView';
@@ -31,7 +31,6 @@ import { Badge } from '@/components/ui/badge';
 import { id as idLocale } from 'date-fns/locale';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ManagePanelistsDialog } from '@/components/recruitment/ManagePanelistsDialog';
-import { CheckCircle } from 'lucide-react';
 
 function ApplicationDetailSkeleton() {
   return <Skeleton className="h-[500px] w-full" />;
@@ -129,7 +128,7 @@ function InterviewManagement({ application, onUpdate, allUsers, allBrands, job }
                 const allPanelistIds = new Set<string>();
                 newInterviews.forEach(iv => {
                     if (iv.status === 'scheduled') {
-                        iv.panelistIds.forEach(id => allPanelistIds.add(id));
+                        (iv.panelistIds || []).forEach(id => allPanelistIds.add(id));
                     }
                 });
 
@@ -355,7 +354,7 @@ function InterviewManagement({ application, onUpdate, allUsers, allBrands, job }
             dateTime: activeInterview.startAt.toDate(),
             duration: differenceInMinutes(activeInterview.endAt.toDate(), activeInterview.startAt.toDate()),
             meetingLink: activeInterview.meetingLink,
-            panelists: activeInterview.panelistIds?.map((id, index) => ({ value: id, label: (activeInterview.panelistNames || [])[index] || id })) || [],
+            panelists: (activeInterview.panelistIds || []).map((id, index) => ({ value: id, label: (activeInterview.panelistNames || [])[index] || id })),
             notes: activeInterview.notes,
         } : undefined}
         allUsers={allUsers}
@@ -429,30 +428,28 @@ export default function ApplicationDetailPage() {
   const handleStageChange = async (newStage: JobApplication['status'], reason: string) => {
     if (!application || !userProfile) return false;
     
+    if (newStage === 'hired') {
+        setIsOfferDialogOpen(true);
+        return false; // Prevent default stage change, let the dialog handle it
+    }
+
     const timelineEvent: ApplicationTimelineEvent = {
         type: 'stage_changed',
         at: Timestamp.now(),
         by: userProfile.uid,
-        meta: {
-            from: application.status,
-            to: newStage,
-            note: reason,
-        }
+        meta: { from: application.status, to: newStage, note: reason }
     };
     
     const updatePayload: any = {
         status: newStage,
         updatedAt: serverTimestamp(),
-        timeline: [
-            ...(application.timeline || []),
-            timelineEvent
-        ]
+        timeline: [...(application.timeline || []), timelineEvent]
     };
     
     if (newStage === 'tes_kepribadian' && !application.personalityTestAssignedAt) {
       updatePayload.personalityTestAssignedAt = serverTimestamp();
     }
-    if (['hired', 'rejected'].includes(newStage)) {
+    if (newStage === 'rejected') {
       updatePayload.decisionAt = serverTimestamp();
     }
 
@@ -476,15 +473,19 @@ export default function ApplicationDetailPage() {
         by: userProfile.uid,
         meta: { note: 'Penawaran kerja resmi telah dikirimkan kepada kandidat.' }
     };
+    
+    const [hours, minutes] = offerData.startTime.split(':').map(Number);
+    const combinedDate = new Date(offerData.contractStartDate);
+    combinedDate.setHours(hours, minutes);
 
     const updatePayload = {
         status: 'hired' as const, // Represents "Offer Stage"
         offerStatus: 'sent' as const,
         offeredSalary: offerData.offeredSalary,
         probationDurationMonths: offerData.probationDurationMonths,
-        contractStartDate: offerData.contractStartDate,
+        contractStartDate: Timestamp.fromDate(combinedDate),
         contractDurationMonths: offerData.contractDurationMonths,
-        contractEndDate: offerData.contractEndDate,
+        contractEndDate: offerData.contractEndDate ? Timestamp.fromDate(offerData.contractEndDate) : null,
         offerNotes: offerData.offerNotes,
         updatedAt: serverTimestamp(),
         timeline: [...(application.timeline || []), timelineEvent],
@@ -643,7 +644,7 @@ export default function ApplicationDetailPage() {
                  )}
             </CardContent>
           </Card>
-
+          
             {application.offerStatus === 'accepted' && !application.internalAccessEnabled && (
                 <Card className="border-green-500">
                     <CardHeader>
