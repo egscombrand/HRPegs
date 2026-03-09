@@ -106,13 +106,25 @@ service cloud.firestore {
     }
 
     /**
-     * /profiles/{userId}
+     * /profiles/{userId} (Candidate Profile)
      * - A candidate can read and write to their own profile.
      * - Internal users can read any single profile for review purposes.
      */
     match /profiles/{userId} {
       allow get: if isOwner(userId) || isInternal();
       allow write: if isOwner(userId);
+    }
+
+    /**
+     * /employee_profiles/{uid} (Intern/Employee Profile)
+     * - An employee can read/write their own profile.
+     * - HRD and Super Admins can view any profile for monitoring.
+     */
+    match /employee_profiles/{uid} {
+      allow get: if isOwner(uid) || isHrd() || isSuperAdmin();
+      allow create, update: if isOwner(uid) && request.resource.data.uid == uid;
+      allow list: if isHrd() || isSuperAdmin();
+      allow delete: if false;
     }
     
     /**
@@ -131,6 +143,14 @@ service cloud.firestore {
      */
     match /roles_hrd/{userId} {
       allow read, write: if request.auth.token.email == 'super_admin@gmail.com' || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super-admin';
+    }
+
+    /**
+     * /invite_batches/{batchId}
+     * - Allows HRD and Super Admins to manage invite batches.
+     */
+    match /invite_batches/{batchId} {
+      allow read, write: if isHrd() || isSuperAdmin();
     }
     
     /**
@@ -175,6 +195,7 @@ service cloud.firestore {
         // UPDATE: A candidate can update their own DRAFT. Internal users can update any. candidateUid cannot be changed.
         allow update: if (
                         (isOwner() && resource.data.status == "draft") ||
+                        isDecidingOffer() ||
                         isSubmittingDocuments() ||
                         isUpdatingSubmittedDocuments() ||
                         isRequestingReschedule() ||
@@ -191,6 +212,20 @@ service cloud.firestore {
         }
         function isCreatingOwn() {
             return request.auth.uid == request.resource.data.candidateUid;
+        }
+        function isDecidingOffer() {
+            let isOwner = request.auth.uid == resource.data.candidateUid;
+            let isSentOffer = resource.data.status == 'offered' && resource.data.offerStatus == 'sent';
+            let changedKeys = request.resource.data.diff(resource.data).affectedKeys();
+            
+            let isAccepting = request.resource.data.offerStatus == 'accepted' 
+                                && changedKeys.hasOnly(['offerStatus', 'candidateOfferDecisionAt', 'updatedAt']);
+                                
+            let isRejecting = request.resource.data.offerStatus == 'rejected' 
+                                && request.resource.data.status == 'rejected'
+                                && changedKeys.hasOnly(['offerStatus', 'candidateOfferDecisionAt', 'updatedAt', 'status']);
+
+            return isOwner && isSentOffer && (isAccepting || isRejecting);
         }
         function isSubmittingDocuments() {
             let changedKeys = request.resource.data.diff(resource.data).affectedKeys();
@@ -216,7 +251,7 @@ service cloud.firestore {
         }
         function isInternalStatusUpdate() {
             let changedKeys = request.resource.data.diff(resource.data).affectedKeys();
-            let allowedKeys = ['status', 'updatedAt', 'personalityTestAssignedAt', 'cvVerified', 'ijazahVerified', 'timeline', 'interviews', 'allPanelistIds'];
+            let allowedKeys = ['status', 'updatedAt', 'personalityTestAssignedAt', 'cvVerified', 'ijazahVerified', 'timeline', 'interviews', 'allPanelistIds', 'offerStatus', 'offeredSalary', 'probationDurationMonths', 'contractStartDate', 'contractDurationMonths', 'contractEndDate', 'offerNotes', 'internalAccessEnabled'];
             return isInternal() && changedKeys.hasOnly(allowedKeys);
         }
         function isRequestingReschedule() {
@@ -307,3 +342,5 @@ service cloud.firestore {
     }
   }
 }
+
+    
