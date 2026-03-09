@@ -27,7 +27,8 @@ const visibleSteps = [
   { status: 'verification', label: 'Verifikasi', icon: ClipboardCheck },
   { status: 'document_submission', label: 'Dokumen', icon: FileText },
   { status: 'interview', label: 'Wawancara', icon: Users },
-  { status: 'hired', label: 'Penawaran', icon: Award },
+  { status: 'offered', label: 'Penawaran', icon: Award },
+  { status: 'hired', label: 'Diterima', icon: Check },
 ];
 
 
@@ -98,9 +99,10 @@ function ApplicationCard({ application, assessmentSessionStatus }: { application
   const currentStatusIndex = ORDERED_RECRUITMENT_STAGES.indexOf(application.status);
   const isRejected = application.status === 'rejected';
   const isHired = application.status === 'hired';
+  const isOffered = application.status === 'offered';
   const isActivated = application.internalAccessEnabled === true;
 
-  if (isHired) {
+  if (isOffered) {
     if (application.offerStatus === 'sent') {
       return (
         <Card className="flex flex-col border-primary/50">
@@ -122,7 +124,7 @@ function ApplicationCard({ application, assessmentSessionStatus }: { application
                 <div><p className="text-muted-foreground">Tipe Pekerjaan</p><p className="font-semibold capitalize">{application.jobType}</p></div>
                 <div><p className="text-muted-foreground">Durasi Kontrak</p><p className="font-semibold">{application.contractDurationMonths} bulan</p></div>
                 {application.probationDurationMonths && <div><p className="text-muted-foreground">Masa Percobaan</p><p className="font-semibold">{application.probationDurationMonths} bulan</p></div>}
-                <div><p className="text-muted-foreground">Tanggal Mulai</p><p className="font-semibold">{application.contractStartDate ? format(application.contractStartDate.toDate(), 'dd MMMM yyyy', { locale: id }) : '-'}</p></div>
+                <div><p className="text-muted-foreground">Tanggal Mulai</p><p className="font-semibold">{application.contractStartDate ? format(application.contractStartDate.toDate(), 'dd MMMM yyyy, HH:mm', { locale: id }) : '-'}</p></div>
                 <div><p className="text-muted-foreground">Tanggal Selesai</p><p className="font-semibold">{application.contractEndDate ? format(application.contractEndDate.toDate(), 'dd MMMM yyyy', { locale: id }) : '-'}</p></div>
             </div>
             {application.offerNotes && <p className="text-xs text-muted-foreground italic pt-2"><strong>Catatan:</strong> {application.offerNotes}</p>}
@@ -139,51 +141,51 @@ function ApplicationCard({ application, assessmentSessionStatus }: { application
     }
     
     if (application.offerStatus === 'accepted') {
-        if (isActivated) {
-            return (
-                <Card className="flex flex-col bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800">
-                    <CardHeader>
-                        <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
-                            <div>
-                                <CardTitle className="text-xl text-green-800 dark:text-green-200">{application.jobPosition}</CardTitle>
-                                <CardDescription className="flex items-center gap-2 pt-1 text-green-700 dark:text-green-300"><Building className="h-4 w-4" /> {application.brandName}</CardDescription>
-                            </div>
-                            <Badge className="w-fit bg-green-600 hover:bg-green-700">Akun Diaktifkan</Badge>
+        return (
+            <Card className="flex flex-col bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800">
+                <CardHeader>
+                    <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
+                        <div>
+                            <CardTitle className="text-xl text-blue-800 dark:text-blue-200">{application.jobPosition}</CardTitle>
+                            <CardDescription className="flex items-center gap-2 pt-1 text-blue-700 dark:text-blue-300"><Building className="h-4 w-4" /> {application.brandName}</CardDescription>
                         </div>
-                    </CardHeader>
-                    <CardContent className="flex-grow space-y-4">
-                        <div className="p-4 rounded-md border-dashed border-green-400 bg-green-100 dark:bg-green-900/30 text-green-900 dark:text-green-100">
-                            <h3 className="font-bold text-lg mb-2 flex items-center gap-2"><Award className="h-5 w-5" /> Selamat! Anda sekarang adalah bagian dari tim.</h3>
-                            <p className="text-sm">Akun Anda telah diaktifkan. Silakan logout, kemudian login kembali melalui Portal Karyawan untuk mengakses dasbor internal Anda.</p>
-                        </div>
-                    </CardContent>
-                    <CardFooter className="bg-green-100/50 dark:bg-green-900/20 p-4 border-t border-green-200 dark:border-green-800 flex justify-end">
-                        <Button asChild><Link href="/admin/login">Ke Portal Karyawan <ArrowRight className="ml-2 h-4 w-4" /></Link></Button>
-                    </CardFooter>
-                </Card>
-            );
-        } else {
-             return (
-                <Card className="flex flex-col bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800">
-                    <CardHeader>
-                        <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
-                            <div>
-                                <CardTitle className="text-xl text-blue-800 dark:text-blue-200">{application.jobPosition}</CardTitle>
-                                <CardDescription className="flex items-center gap-2 pt-1 text-blue-700 dark:text-blue-300"><Building className="h-4 w-4" /> {application.brandName}</CardDescription>
-                            </div>
-                            <Badge className="w-fit bg-blue-600 hover:bg-blue-700">Penawaran Diterima</Badge>
-                        </div>
-                    </CardHeader>
-                    <CardContent className="flex-grow space-y-4">
-                        <div className="p-4 rounded-md border-dashed border-blue-400 bg-blue-100 dark:bg-blue-900/30 text-blue-900 dark:text-blue-100">
-                            <h3 className="font-bold text-lg mb-2 flex items-center gap-2"><FileClock className="h-5 w-5" /> Anda telah menyetujui penawaran kerja ini.</h3>
-                            <p className="text-sm">Silakan menunggu proses aktivasi akun dan arahan onboarding dari tim HRD.</p>
-                        </div>
-                    </CardContent>
-                </Card>
-            );
-        }
+                        <Badge className="w-fit bg-blue-600 hover:bg-blue-700">Penawaran Diterima</Badge>
+                    </div>
+                </CardHeader>
+                <CardContent className="flex-grow space-y-4">
+                    <div className="p-4 rounded-md border-dashed border-blue-400 bg-blue-100 dark:bg-blue-900/30 text-blue-900 dark:text-blue-100">
+                        <h3 className="font-bold text-lg mb-2 flex items-center gap-2"><FileClock className="h-5 w-5" /> Anda telah menyetujui penawaran kerja ini.</h3>
+                        <p className="text-sm">Silakan menunggu proses aktivasi akun dan arahan onboarding dari tim HRD.</p>
+                    </div>
+                </CardContent>
+            </Card>
+        );
     }
+  }
+
+  if (isHired) {
+    return (
+        <Card className="flex flex-col bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800">
+            <CardHeader>
+                <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
+                    <div>
+                        <CardTitle className="text-xl text-green-800 dark:text-green-200">{application.jobPosition}</CardTitle>
+                        <CardDescription className="flex items-center gap-2 pt-1 text-green-700 dark:text-green-300"><Building className="h-4 w-4" /> {application.brandName}</CardDescription>
+                    </div>
+                    <Badge className="w-fit bg-green-600 hover:bg-green-700">Akun Diaktifkan</Badge>
+                </div>
+            </CardHeader>
+            <CardContent className="flex-grow space-y-4">
+                <div className="p-4 rounded-md border-dashed border-green-400 bg-green-100 dark:bg-green-900/30 text-green-900 dark:text-green-100">
+                    <h3 className="font-bold text-lg mb-2 flex items-center gap-2"><Award className="h-5 w-5" /> Selamat! Anda sekarang adalah bagian dari tim.</h3>
+                    <p className="text-sm">Akun Anda telah diaktifkan. Silakan logout, kemudian login kembali melalui Portal Karyawan untuk mengakses dasbor internal Anda.</p>
+                </div>
+            </CardContent>
+            <CardFooter className="bg-green-100/50 dark:bg-green-900/20 p-4 border-t border-green-200 dark:border-green-800 flex justify-end">
+                <Button asChild><Link href="/admin/login">Ke Portal Karyawan <ArrowRight className="ml-2 h-4 w-4" /></Link></Button>
+            </CardFooter>
+        </Card>
+    );
   }
 
   const jobIsExpired = application.jobApplyDeadline && application.jobApplyDeadline.toDate() < new Date();
@@ -227,7 +229,7 @@ function ApplicationCard({ application, assessmentSessionStatus }: { application
                 </CardDescription>
             </div>
              <Badge variant={isRejected ? 'destructive' : isHired ? 'default' : 'secondary'} className={cn("w-fit", isHired && application.offerStatus === 'accepted' && "bg-blue-600 hover:bg-blue-600")}>
-                {isHired && application.offerStatus === 'sent' ? 'Penawaran Dikirim' : statusDisplayLabels[application.status]}
+                {statusDisplayLabels[application.status]}
             </Badge>
         </div>
       </CardHeader>
@@ -243,7 +245,7 @@ function ApplicationCard({ application, assessmentSessionStatus }: { application
               if (step.status === 'tes_kepribadian') {
                   isCompleted = assessmentSessionStatus === 'submitted';
               }
-              if (step.status === 'hired' && application.offerStatus === 'accepted') {
+              if (step.status === 'offered' && application.offerStatus === 'accepted') {
                   isCompleted = true;
               }
 
@@ -492,3 +494,5 @@ export default function ApplicationsPage() {
         </div>
     );
 }
+
+    
