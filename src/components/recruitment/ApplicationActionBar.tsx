@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import React, { useState } from 'react';
@@ -14,6 +12,7 @@ import { ScheduleInterviewDialog } from './ScheduleInterviewDialog';
 interface ApplicationActionBarProps {
   application: JobApplication;
   onStageChange: (newStage: JobApplication['status'], reason: string) => Promise<boolean>;
+  onSendOfferClick: () => void;
 }
 
 const getStageActions = (currentStatus: JobApplication['status']) => {
@@ -31,13 +30,17 @@ const getStageActions = (currentStatus: JobApplication['status']) => {
     return { primaryAction, otherActions };
 }
 
-export function ApplicationActionBar({ application, onStageChange }: ApplicationActionBarProps) {
+export function ApplicationActionBar({ application, onStageChange, onSendOfferClick }: ApplicationActionBarProps) {
   const [stageChangeDialogOpen, setStageChangeDialogOpen] = useState(false);
   const [targetStage, setTargetStage] = useState<JobApplication['status'] | null>(null);
 
   const handleActionClick = (stage: JobApplication['status']) => {
-    setTargetStage(stage);
-    setStageChangeDialogOpen(true);
+    if (stage === 'hired') {
+      onSendOfferClick();
+    } else {
+      setTargetStage(stage);
+      setStageChangeDialogOpen(true);
+    }
   };
 
   const handleConfirmStageChange = async (reason: string) => {
