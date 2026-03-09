@@ -7,7 +7,7 @@ import * as z from 'zod';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Edit } from 'lucide-react';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -80,6 +80,11 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, applica
     if (!supervisors || !selectedBrandId) return [];
 
     return supervisors.filter(user => {
+      // Exclude the intern themselves from being their own supervisor
+      if (user.uid === profile.uid) {
+        return false;
+      }
+      
       // Must be an active manager or employee
       if (!user.isActive || !['manager', 'karyawan'].includes(user.role)) {
         return false;
@@ -91,7 +96,7 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, applica
       }
       return user.brandId === selectedBrandId;
     });
-  }, [supervisors, selectedBrandId]);
+  }, [supervisors, selectedBrandId, profile.uid]);
 
   useEffect(() => {
     if (startDate && duration && duration > 0) {
