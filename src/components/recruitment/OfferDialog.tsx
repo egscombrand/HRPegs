@@ -39,6 +39,17 @@ interface OfferDialogProps {
   job: Job;
 }
 
+const formatSalary = (value: number | string | undefined | null) => {
+  if (value === undefined || value === null || value === '') return '';
+  const num = typeof value === 'string' ? parseInt(value.replace(/\./g, ''), 10) : value;
+  if (isNaN(num)) return '';
+  return num.toLocaleString('id-ID');
+};
+
+const unformatSalary = (value: string) => {
+  return parseInt(value.replace(/\./g, ''), 10) || 0;
+};
+
 export function OfferDialog({ open, onOpenChange, onConfirm, candidateName, job }: OfferDialogProps) {
   const [isSaving, setIsSaving] = useState(false);
   
@@ -59,8 +70,11 @@ export function OfferDialog({ open, onOpenChange, onConfirm, candidateName, job 
   
   useEffect(() => {
     if (startDate && duration && duration > 0) {
-        const endDate = addMonths(startDate, duration);
-        setValue('contractEndDate', endDate);
+        const parsedDuration = typeof duration === 'string' ? parseInt(duration, 10) : duration;
+        if (!isNaN(parsedDuration)) {
+            const endDate = addMonths(startDate, parsedDuration);
+            setValue('contractEndDate', endDate);
+        }
     }
   }, [startDate, duration, setValue]);
   
@@ -97,18 +111,34 @@ export function OfferDialog({ open, onOpenChange, onConfirm, candidateName, job 
                 </div>
             </div>
             
-            <FormField control={form.control} name="offeredSalary" render={({ field }) => ( 
-                <FormItem> 
-                    <FormLabel>Gaji / Kompensasi (per bulan)</FormLabel> 
+             <FormField
+                control={form.control}
+                name="offeredSalary"
+                render={({ field }) => (
+                <FormItem>
+                    <FormLabel>Gaji / Kompensasi (per bulan)</FormLabel>
                     <FormControl>
-                        <div className="relative">
-                            <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground pointer-events-none">Rp</span>
-                            <Input type="number" placeholder="5000000" className="pl-8" {...field} />
-                        </div>
-                    </FormControl> 
-                    <FormMessage /> 
-                </FormItem> 
-            )}/>
+                    <div className="relative">
+                        <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground pointer-events-none">
+                        Rp
+                        </span>
+                        <Input
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="5.000.000"
+                            className="pl-8"
+                            value={formatSalary(field.value)}
+                            onChange={(e) => {
+                                const numericValue = unformatSalary(e.target.value);
+                                field.onChange(numericValue);
+                            }}
+                        />
+                    </div>
+                    </FormControl>
+                    <FormMessage />
+                </FormItem>
+                )}
+            />
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField control={form.control} name="contractStartDate" render={({ field }) => ( <FormItem className="flex flex-col"><FormLabel>Tanggal Mulai Kerja</FormLabel><FormControl><GoogleDatePicker value={field.value} onChange={field.onChange} /></FormControl><FormMessage /></FormItem> )}/>
@@ -123,8 +153,10 @@ export function OfferDialog({ open, onOpenChange, onConfirm, candidateName, job 
                           <Input
                             type="number"
                             {...field}
-                            onChange={(e) => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value, 10))}
-                            className="pr-16"
+                            onChange={(e) => {
+                                const val = e.target.value;
+                                field.onChange(val === '' ? undefined : parseInt(val, 10));
+                            }}
                           />
                         </FormControl>
                         <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground">
