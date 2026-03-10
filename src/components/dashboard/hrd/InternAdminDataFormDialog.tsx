@@ -74,8 +74,6 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, onSucce
   }, [firestore, application]);
   const { data: job } = useDoc<Job>(jobRef);
 
-  const isRecruited = !!application;
-  
   const form = useForm<AdminFormValues>({
     resolver: zodResolver(adminFormSchema),
   });
@@ -224,10 +222,8 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, onSucce
                                         <GoogleDatePicker 
                                             value={field.value} 
                                             onChange={field.onChange}
-                                            disabled={isRecruited}
                                         />
                                     </FormControl>
-                                    {isRecruited && <FormDescription>Ditentukan dari kontrak rekrutmen.</FormDescription>}
                                     <FormMessage />
                                 </FormItem>
                             )} />
@@ -240,10 +236,8 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, onSucce
                                             {...field} 
                                             value={field.value ?? ''}
                                             onChange={(e) => field.onChange(e.target.value === '' ? null : Number(e.target.value))}
-                                            disabled={isRecruited}
                                         />
                                     </FormControl>
-                                     {isRecruited && <FormDescription>Ditentukan dari kontrak rekrutmen.</FormDescription>}
                                     <FormMessage />
                                 </FormItem>
                             )} />
