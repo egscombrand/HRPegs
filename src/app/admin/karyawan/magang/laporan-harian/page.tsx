@@ -200,8 +200,8 @@ export default function LaporanHarianPage() {
 
     const ContentSection = ({ title, content }: { title: string, content: string }) => (
         <div>
-            <h4 className="font-semibold">{title}</h4>
-            <p className="text-muted-foreground whitespace-pre-wrap mt-1">{content}</p>
+            <h4 className="font-semibold text-muted-foreground">{title}</h4>
+            <p className="text-foreground whitespace-pre-wrap mt-1">{content}</p>
         </div>
     );
 
@@ -241,7 +241,7 @@ export default function LaporanHarianPage() {
                      </Form>
                     <DialogFooter>
                         <Button type="button" variant="ghost" onClick={() => setIsEditing(false)}>Batal</Button>
-                        <Button type="submit" form="report-form" disabled={isSaving}>
+                        <Button type="submit" form="report-form" disabled={isSaving || !form.formState.isValid}>
                             {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
                             <Send className="mr-2 h-4 w-4"/> Kirim Laporan
                         </Button>
@@ -259,8 +259,7 @@ export default function LaporanHarianPage() {
                         <DialogTitle className="text-2xl">{format(selectedReport.date.toDate(), "eeee, dd MMMM yyyy", { locale: id })}</DialogTitle>
                         <DialogDescription className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
                             <span>Dikirim: {formatDistanceToNow(selectedReport.submittedAt?.toDate() || selectedReport.createdAt.toDate(), { addSuffix: true, locale: id })}</span>
-                            {selectedReport.reviewedAt && <span>Direview: {formatDistanceToNow(selectedReport.reviewedAt.toDate(), { addSuffix: true, locale: id })}</span>}
-                            <span>Mentor: {supervisorDisplayName}</span>
+                            {supervisorDisplayName && <span>Mentor: {supervisorDisplayName}</span>}
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-6 py-4 text-sm">
@@ -271,7 +270,6 @@ export default function LaporanHarianPage() {
                                 <AlertDescription className={cn(currentStatusInfo.variant === 'warning' && 'text-yellow-700 dark:text-yellow-300')}>{currentStatusInfo.description}</AlertDescription>
                             </Alert>
                         )}
-                        <Separator />
                         <div className="space-y-4">
                             <ContentSection title="Uraian Aktivitas" content={selectedReport.activity} />
                             <ContentSection title="Pembelajaran yang Diperoleh" content={selectedReport.learning} />
@@ -300,7 +298,7 @@ export default function LaporanHarianPage() {
                     </div>
                      <DialogFooter className="flex-col sm:flex-row sm:justify-end items-stretch sm:items-center">
                         <Button type="button" variant="outline" onClick={handleCloseDialog}>Tutup</Button>
-                         {selectedReport.status === 'needs_revision' && isDateToday && (
+                         {selectedReport.status === 'needs_revision' && (isDateToday || isDateInPastCheck) && (
                             <Button type="button" onClick={(e) => { e.preventDefault(); setIsEditing(true);}}>Perbaiki Laporan</Button>
                         )}
                     </DialogFooter>
