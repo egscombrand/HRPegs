@@ -28,17 +28,17 @@ const adminFormSchema = z.object({
   internshipStartDate: z.date().optional().nullable(),
   contractDurationMonths: z.coerce.number().int().min(1, 'Durasi kontrak minimal 1 bulan.').optional().nullable(),
   internshipEndDate: z.date().optional().nullable(),
+  compensationAmount: z.coerce.number().int().min(0, 'Kompensasi tidak boleh negatif.').optional().nullable(),
   hrdNotes: z.string().optional(),
 });
 
 type AdminFormValues = z.infer<typeof adminFormSchema>;
 
 interface InternAdminDataFormDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
   profile: EmployeeProfile;
   onSuccess: () => void;
-  application: JobApplication | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 
 const InfoRow = ({ label, value }: { label: string; value?: string | number | null }) => (
@@ -48,12 +48,36 @@ const InfoRow = ({ label, value }: { label: string; value?: string | number | nu
     </div>
 );
 
-export function InternAdminDataFormDialog({ open, onOpenChange, profile, onSuccess, application }: InternAdminDataFormDialogProps) {
+const formatSalary = (value: number | string | undefined | null) => {
+  if (value === undefined || value === null || value === '') return '';
+  const num = typeof value === 'string' ? parseInt(value.replace(/\./g, ''), 10) : value;
+  if (isNaN(num)) return '';
+  return num.toLocaleString('id-ID');
+};
+
+const unformatSalary = (value: string) => {
+  return parseInt(value.replace(/\./g, ''), 10) || 0;
+};
+
+
+export function InternAdminDataFormDialog({ open, onOpenChange, profile, onSuccess }: InternAdminDataFormDialogProps) {
   const [isSaving, setIsSaving] = useState(false);
   const { userProfile: hrdProfile } = useAuth();
   const firestore = useFirestore();
   const { toast } = useToast();
 
+  const applicationQuery = useMemoFirebase(() => {
+    if (!profile) return null;
+    return query(
+      collection(firestore, 'applications'),
+      where('candidateUid', '==', profile.uid),
+      where('status', '==', 'hired'),
+      where('jobType', '==', 'internship')
+    );
+  }, [firestore, profile]);
+  const { data: applications } = useCollection<JobApplication>(applicationQuery);
+  const application = useMemo(() => applications?.[0] || null, [applications]);
+  
   const userRef = useMemoFirebase(() => {
     if (!profile) return null;
     return doc(firestore, 'users', profile.uid);
@@ -98,13 +122,11 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, onSucce
     
     return { finalBrandId: singleId, finalBrandName: name };
   }, [profile, userProfile, application, brands]);
-  
-  const compensationAmount = profile.compensationAmount ?? application?.offeredSalary;
 
   const filteredSupervisors = useMemo(() => {
     if (!supervisors || !finalBrandId) return [];
     return supervisors.filter(user => {
-      if (user.uid === profile.uid) return false; // Exclude self
+      if (user.uid === profile.uid) return false;
       if (!user.isActive || !['manager', 'karyawan'].includes(user.role)) return false;
       if (Array.isArray(user.brandId)) return user.brandId.includes(finalBrandId);
       return user.brandId === finalBrandId;
@@ -132,6 +154,7 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, onSucce
             internshipStartDate: profile.internshipStartDate?.toDate() || application?.contractStartDate?.toDate() || null,
             contractDurationMonths: profile.contractDurationMonths ?? application?.contractDurationMonths ?? null,
             internshipEndDate: profile.internshipEndDate?.toDate() || application?.contractEndDate?.toDate() || null,
+            compensationAmount: profile.compensationAmount ?? application?.offeredSalary ?? 0,
         };
         form.reset(defaultValues);
         initialValuesSet.current = true;
@@ -150,9 +173,9 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, onSucce
 
         const employeePayload = {
             ...values,
+            compensationAmount: values.compensationAmount ?? null,
             brandId: finalBrandId, 
             brandName: finalBrandName,
-            compensationAmount: compensationAmount ?? null,
             internshipStartDate: values.internshipStartDate ? Timestamp.fromDate(values.internshipStartDate) : null,
             internshipEndDate: values.internshipEndDate ? Timestamp.fromDate(values.internshipEndDate) : null,
             updatedAt: serverTimestamp(),
@@ -190,7 +213,6 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, onSucce
                     </CardHeader>
                     <CardContent>
                         <InfoRow label="Penempatan Brand" value={finalBrandName} />
-                        <InfoRow label="Uang Saku (per bulan)" value={compensationAmount ? `Rp ${compensationAmount.toLocaleString('id-ID')}` : 'Belum diatur'} />
                     </CardContent>
                 </Card>
 
@@ -213,8 +235,35 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, onSucce
                     <Separator />
                     
                     <section>
-                        <h3 className="text-lg font-semibold border-b pb-2 mb-4">Informasi Kontrak Magang</h3>
+                        <h3 className="text-lg font-semibold border-b pb-2 mb-4">Informasi Kontrak & Kompensasi</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6">
+                            <FormField
+                                control={form.control}
+                                name="compensationAmount"
+                                render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Uang Saku (per bulan)</FormLabel>
+                                    <FormControl>
+                                    <div className="relative">
+                                        <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground pointer-events-none">Rp</span>
+                                        <Input
+                                            type="text"
+                                            inputMode="numeric"
+                                            placeholder="500.000"
+                                            className="pl-8"
+                                            value={formatSalary(field.value)}
+                                            onChange={(e) => {
+                                                const numericValue = unformatSalary(e.target.value);
+                                                field.onChange(numericValue);
+                                            }}
+                                        />
+                                    </div>
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                                )}
+                            />
+                            <div />
                             <FormField control={form.control} name="internshipStartDate" render={({ field }) => (
                                 <FormItem className="flex flex-col">
                                     <FormLabel>Mulai Magang</FormLabel>
@@ -222,6 +271,7 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, onSucce
                                         <GoogleDatePicker 
                                             value={field.value} 
                                             onChange={field.onChange}
+                                            portalled={false}
                                         />
                                     </FormControl>
                                     <FormMessage />
@@ -245,7 +295,7 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, onSucce
                                 <FormField control={form.control} name="internshipEndDate" render={({ field }) => (
                                 <FormItem className="flex flex-col">
                                     <FormLabel>Selesai Magang (Otomatis)</FormLabel>
-                                    <FormControl><GoogleDatePicker value={field.value} onChange={field.onChange} disabled /></FormControl>
+                                    <FormControl><GoogleDatePicker portalled={false} value={field.value} onChange={field.onChange} disabled /></FormControl>
                                     <FormMessage />
                                 </FormItem>
                                 )} />
