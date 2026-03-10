@@ -1,8 +1,8 @@
 'use client';
 import { useState, useMemo, useRef, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, isSameMonth, isSameDay, isToday, addMonths, subMonths, isFuture, isPast } from 'date-fns';
 import { id } from 'date-fns/locale';
@@ -25,7 +25,7 @@ import { doc, collection, query, where, Timestamp, serverTimestamp } from 'fireb
 import type { DailyReport, EmployeeProfile, ReportStatus } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 
@@ -213,9 +213,9 @@ export default function LaporanHarianPage() {
                     </DialogHeader>
                      <Form {...form}>
                         <form id="report-form" className="space-y-6 py-4" onSubmit={form.handleSubmit(prepareSubmit)}>
-                            <FormField control={form.control} name="activity" render={({ field }) => (<FormItem><Label>Uraian Aktivitas <span className="text-destructive">*</span></Label><FormControl><Textarea {...field} rows={5} placeholder="Jelaskan secara rinci pekerjaan dan tugas yang Anda lakukan hari ini..." /></FormControl><FormMessage /></FormItem>)} />
-                            <FormField control={form.control} name="learning" render={({ field }) => (<FormItem><Label>Pembelajaran yang Diperoleh <span className="text-destructive">*</span></Label><FormControl><Textarea {...field} rows={3} placeholder="Hal atau pengetahuan baru apa yang Anda dapatkan?" /></FormControl><FormMessage /></FormItem>)} />
-                            <FormField control={form.control} name="obstacle" render={({ field }) => (<FormItem><Label>Kendala yang Dialami <span className="text-destructive">*</span></Label><FormControl><Textarea {...field} rows={3} placeholder="Apa saja kesulitan yang Anda hadapi dan bagaimana Anda mencoba menyelesaikannya?" /></FormControl><FormMessage /></FormItem>)} />
+                            <FormField control={form.control} name="activity" render={({ field }) => (<FormItem><FormLabel>Uraian Aktivitas <span className="text-destructive">*</span></FormLabel><FormControl><Textarea {...field} rows={5} placeholder="Jelaskan secara rinci pekerjaan dan tugas yang Anda lakukan hari ini..." /></FormControl><FormMessage /></FormItem>)} />
+                            <FormField control={form.control} name="learning" render={({ field }) => (<FormItem><FormLabel>Pembelajaran yang Diperoleh <span className="text-destructive">*</span></FormLabel><FormControl><Textarea {...field} rows={3} placeholder="Hal atau pengetahuan baru apa yang Anda dapatkan?" /></FormControl><FormMessage /></FormItem>)} />
+                            <FormField control={form.control} name="obstacle" render={({ field }) => (<FormItem><FormLabel>Kendala yang Dialami <span className="text-destructive">*</span></FormLabel><FormControl><Textarea {...field} rows={3} placeholder="Apa saja kesulitan yang Anda hadapi dan bagaimana Anda mencoba menyelesaikannya?" /></FormControl><FormMessage /></FormItem>)} />
                             <FormField control={form.control} name="declaration" render={({ field }) => (
                               <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm">
                                 <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange}/></FormControl>
@@ -360,7 +360,7 @@ export default function LaporanHarianPage() {
                                     className={cn(
                                         "relative h-20 p-2 text-left align-top transition-colors rounded-lg",
                                         isCurrentMonthDay ? "hover:bg-accent" : "text-muted-foreground/50 hover:bg-accent/50",
-                                        isDateInPast && "opacity-75",
+                                        isDateInPast(day) && !isToday(day) && "opacity-75",
                                         isDateSelected && "bg-primary/10 ring-2 ring-primary",
                                         isFutureDate && "opacity-50 cursor-not-allowed hover:bg-transparent"
                                     )}
