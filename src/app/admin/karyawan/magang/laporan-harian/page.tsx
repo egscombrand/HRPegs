@@ -4,9 +4,9 @@ import { useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, isSameMonth, isSameDay, isToday, addMonths, subMonths, isFuture, isPast } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, isSameMonth, isSameDay, isToday, isPast, addMonths, subMonths, isFuture, formatDistanceToNow } from 'date-fns';
 import { id } from 'date-fns/locale';
-import { FilePlus, Send, ChevronLeft, ChevronRight, Calendar as CalendarIcon, CheckCircle, Clock, AlertCircle, Loader2 } from 'lucide-react';
+import { FilePlus, Send, ChevronLeft, ChevronRight, Calendar as CalendarIcon, CheckCircle, Clock, AlertCircle, Loader2, UserCheck, FileClock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -28,6 +28,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 
 const statusConfig: Record<ReportStatus, { label: string; color: string; icon: React.ReactNode }> = {
@@ -83,20 +84,10 @@ export default function LaporanHarianPage() {
     }, [firestore, firebaseUser?.uid]);
     const { data: allFetchedReports, isLoading: isLoadingReports, mutate: mutateReports } = useCollection<DailyReport>(reportsQuery);
 
-    const fetchedReports = useMemo(() => {
-        if (!allFetchedReports) return null;
-        const start = startOfMonth(currentMonth);
-        const end = endOfMonth(currentMonth);
-        return allFetchedReports.filter(report => {
-            const reportDate = report.date.toDate();
-            return reportDate >= start && reportDate <= end;
-        });
-    }, [allFetchedReports, currentMonth]);
-
     const reportsMap = useMemo(() => {
-        if (!fetchedReports) return new Map<string, DailyReport>();
-        return new Map(fetchedReports.map(report => [format(report.date.toDate(), 'yyyy-MM-dd'), report]));
-    }, [fetchedReports]);
+        if (!allFetchedReports) return new Map<string, DailyReport>();
+        return new Map(allFetchedReports.map(report => [format(report.date.toDate(), 'yyyy-MM-dd'), report]));
+    }, [allFetchedReports]);
     
     const firstDayOfMonth = startOfMonth(currentMonth);
     const days = eachDayOfInterval({
@@ -200,19 +191,33 @@ export default function LaporanHarianPage() {
     };
 
     const statusSummary = useMemo(() => {
-        if (!fetchedReports) return {} as Record<ReportStatus, number>;
-        return fetchedReports.reduce((acc, report) => {
+        if (!allFetchedReports) return {} as Record<ReportStatus, number>;
+        return allFetchedReports.reduce((acc, report) => {
             acc[report.status] = (acc[report.status] || 0) + 1;
             return acc;
         }, {} as Record<ReportStatus, number>);
-    }, [fetchedReports]);
+    }, [allFetchedReports]);
+
+    const ContentSection = ({ title, content }: { title: string, content: string }) => (
+        <div>
+            <h4 className="font-semibold">{title}</h4>
+            <p className="text-muted-foreground whitespace-pre-wrap mt-1">{content}</p>
+        </div>
+    );
 
     const renderDialogContent = () => {
         const isDateToday = selectedDate && isToday(selectedDate);
         const isDateInPastCheck = selectedDate && !isToday(selectedDate) && isPast(selectedDate);
-        const isDateInFuture = selectedDate && isFuture(selectedDate);
+        const isFutureDate = selectedDate && isFuture(selectedDate);
         
-        const canEdit = isDateToday && (!selectedReport || selectedReport.status === 'needs_revision' || selectedReport.status === 'draft');
+        const canEdit = isDateToday && (!selectedReport || selectedReport.status === 'needs_revision');
+
+        const statusInfo: Record<ReportStatus, { icon: React.ReactNode; title: string; description: string; variant: "default" | "destructive" | "warning"; }> = {
+            submitted: { icon: <FileClock className="h-4 w-4" />, title: 'Menunggu Review', description: 'Laporan Anda sudah terkirim dan sedang menunggu tinjauan dari mentor.', variant: 'default' },
+            needs_revision: { icon: <AlertCircle className="h-4 w-4" />, title: 'Perlu Revisi', description: 'Mentor Anda memberikan catatan. Silakan perbaiki laporan Anda.', variant: 'destructive' },
+            approved: { icon: <CheckCircle className="h-4 w-4" />, title: 'Disetujui', description: 'Laporan Anda telah disetujui oleh mentor. Kerja bagus!', variant: 'default' },
+            draft: { icon: <FileClock className="h-4 w-4" />, title: 'Draf', description: 'Laporan ini belum dikirim.', variant: 'default' }
+        };
 
         if (isEditing) {
             return (
@@ -246,42 +251,57 @@ export default function LaporanHarianPage() {
         }
 
         if (selectedReport) {
+            const currentStatusInfo = statusInfo[selectedReport.status];
             return (
-                <>
+                 <>
                     <DialogHeader>
-                        <DialogTitle>Laporan: {format(selectedReport.date.toDate(), "eeee, dd MMMM", { locale: id })}</DialogTitle>
-                         <div className="pt-2">
-                           <Badge variant="outline" className={cn("mt-2", statusConfig[selectedReport.status]?.color?.replace('bg-', 'text-').replace('-500', '-700 dark:text-white border-current'))}>
-                                {statusConfig[selectedReport.status]?.label}
-                           </Badge>
-                            {selectedReport.status === 'submitted' && (
-                                <p className="text-xs text-muted-foreground mt-2">Laporan Anda sedang menunggu tinjauan dari mentor.</p>
-                            )}
-                         </div>
+                        <DialogTitle className="text-2xl">{format(selectedReport.date.toDate(), "eeee, dd MMMM yyyy", { locale: id })}</DialogTitle>
+                        <DialogDescription className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                            <span>Dikirim: {formatDistanceToNow(selectedReport.submittedAt?.toDate() || selectedReport.createdAt.toDate(), { addSuffix: true, locale: id })}</span>
+                            {selectedReport.reviewedAt && <span>Direview: {formatDistanceToNow(selectedReport.reviewedAt.toDate(), { addSuffix: true, locale: id })}</span>}
+                            <span>Mentor: {selectedReport.supervisorName || 'Belum ditugaskan'}</span>
+                        </DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-4 py-4 text-sm">
-                         <Separator/>
-                         <div className="space-y-1"><h4 className="font-semibold">Uraian Aktivitas</h4><p className="text-muted-foreground whitespace-pre-wrap">{selectedReport.activity}</p></div>
-                         <div className="space-y-1"><h4 className="font-semibold">Pembelajaran</h4><p className="text-muted-foreground whitespace-pre-wrap">{selectedReport.learning}</p></div>
-                         <div className="space-y-1"><h4 className="font-semibold">Kendala</h4><p className="text-muted-foreground whitespace-pre-wrap">{selectedReport.obstacle}</p></div>
-                         {selectedReport.reviewerNotes && (
-                            <>
-                            <Separator/>
-                            <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-400 rounded-r-md">
-                                <h4 className="font-semibold text-yellow-800 dark:text-yellow-200">Catatan Revisi dari Mentor</h4>
-                                <p className="text-yellow-700 dark:text-yellow-300 italic">"{selectedReport.reviewerNotes}"</p>
-                            </div>
-                            </>
-                         )}
-                    </div>
-                     <DialogFooter className="flex-col sm:flex-row sm:justify-between items-stretch sm:items-center">
-                        {isDateInPastCheck && <p className="text-xs text-muted-foreground text-left">Laporan untuk tanggal yang lewat tidak dapat diubah.</p>}
-                        <div className='flex gap-2 self-end ml-auto'>
-                            <Button type="button" variant="outline" onClick={handleCloseDialog}>Tutup</Button>
-                             {canEdit && (
-                                <Button type="button" onClick={(e) => { e.preventDefault(); setIsEditing(true);}}><FilePlus className="mr-2 h-4 w-4" /> Edit Laporan</Button>
-                            )}
+                    <div className="space-y-6 py-4 text-sm">
+                        {currentStatusInfo && (
+                            <Alert variant={currentStatusInfo.variant === 'warning' ? 'default' : currentStatusInfo.variant} className={cn(currentStatusInfo.variant === 'warning' && 'bg-yellow-50 border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-800')}>
+                                {currentStatusInfo.icon}
+                                <AlertTitle className={cn(currentStatusInfo.variant === 'warning' && 'text-yellow-800 dark:text-yellow-200')}>{currentStatusInfo.title}</AlertTitle>
+                                <AlertDescription className={cn(currentStatusInfo.variant === 'warning' && 'text-yellow-700 dark:text-yellow-300')}>{currentStatusInfo.description}</AlertDescription>
+                            </Alert>
+                        )}
+                        <Separator />
+                        <div className="space-y-4">
+                            <ContentSection title="Uraian Aktivitas" content={selectedReport.activity} />
+                            <ContentSection title="Pembelajaran yang Diperoleh" content={selectedReport.learning} />
+                            <ContentSection title="Kendala yang Dialami" content={selectedReport.obstacle} />
                         </div>
+                        
+                        {(selectedReport.status === 'needs_revision' || selectedReport.status === 'approved') && selectedReport.reviewerNotes && (
+                            <>
+                                <Separator />
+                                <Card>
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-base flex items-center gap-2">
+                                            <UserCheck className="h-5 w-5 text-primary" />
+                                            Feedback dari Mentor
+                                        </CardTitle>
+                                        <CardDescription>{selectedReport.reviewedByName} &bull; {format(selectedReport.reviewedAt!.toDate(), 'dd MMM, HH:mm')}</CardDescription>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <blockquote className="border-l-4 pl-4 italic text-muted-foreground">
+                                            {selectedReport.reviewerNotes}
+                                        </blockquote>
+                                    </CardContent>
+                                </Card>
+                            </>
+                        )}
+                    </div>
+                     <DialogFooter className="flex-col sm:flex-row sm:justify-end items-stretch sm:items-center">
+                        <Button type="button" variant="outline" onClick={handleCloseDialog}>Tutup</Button>
+                         {canEdit && (
+                            <Button type="button" onClick={(e) => { e.preventDefault(); setIsEditing(true);}}>Perbaiki Laporan</Button>
+                        )}
                     </DialogFooter>
                 </>
             );
@@ -292,7 +312,7 @@ export default function LaporanHarianPage() {
         if (isDateInPastCheck) {
             emptyStateTitle = "Periode Terlewat";
             emptyStateDescription = "Periode input untuk tanggal ini telah lewat.";
-        } else if (isDateInFuture) {
+        } else if (isFutureDate) {
             emptyStateTitle = "Tanggal Akan Datang";
             emptyStateDescription = "Laporan hanya dapat dibuat pada hari berjalan.";
         }
@@ -308,7 +328,7 @@ export default function LaporanHarianPage() {
                     <p className="text-muted-foreground text-sm">{emptyStateDescription}</p>
                 </div>
                 <DialogFooter className="flex-col sm:flex-row sm:justify-between items-stretch sm:items-center">
-                    {(isDateInPastCheck || isDateInFuture) ? <p className="text-xs text-muted-foreground text-left mr-auto">Info</p> : <div></div>}
+                    <div></div>
                      <div className="flex gap-2 self-end">
                         <Button type="button" variant="outline" onClick={handleCloseDialog}>Tutup</Button>
                         {isDateToday && (
@@ -390,7 +410,7 @@ export default function LaporanHarianPage() {
             </Card>
 
              <Dialog open={isDialogOpen} onOpenChange={handleCloseDialog}>
-                <DialogContent className="max-h-[90vh] flex flex-col">
+                <DialogContent className="max-h-[90vh] flex flex-col sm:max-w-2xl">
                     <div className="flex-grow overflow-y-auto -mx-6 px-6">
                         {renderDialogContent()}
                     </div>
