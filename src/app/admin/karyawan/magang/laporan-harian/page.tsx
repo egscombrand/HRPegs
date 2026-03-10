@@ -112,7 +112,7 @@ export default function LaporanHarianPage() {
             declaration: false,
         });
 
-        if (report && (report.status === 'needs_revision') && isToday(day)) {
+        if (report && (report.status === 'needs_revision')) {
             setIsEditing(true);
         } else {
             setIsEditing(false);
@@ -148,16 +148,21 @@ export default function LaporanHarianPage() {
     
         const isUpdate = reportsMap.has(dateString);
     
+        const reportDataPayload = {
+            activity: values.activity,
+            learning: values.learning,
+            obstacle: values.obstacle,
+            updatedAt: serverTimestamp() as Timestamp,
+            brandId: (Array.isArray(employeeProfile.brandId) ? employeeProfile.brandId[0] : employeeProfile.brandId) || null,
+            supervisorUid: employeeProfile.supervisorUid || null,
+            supervisorName: employeeProfile.supervisorName || null,
+        };
+
         try {
             if (isUpdate) {
                 const updateData: Partial<DailyReport> = {
                     status: 'submitted' as ReportStatus,
-                    activity: values.activity,
-                    learning: values.learning,
-                    obstacle: values.obstacle,
-                    updatedAt: serverTimestamp() as Timestamp,
-                    brandId: (Array.isArray(employeeProfile.brandId) ? employeeProfile.brandId[0] : employeeProfile.brandId) || null,
-                    supervisorUid: employeeProfile.supervisorUid || null,
+                    ...reportDataPayload
                 };
                 await updateDocumentNonBlocking(reportRef, updateData);
             } else {
@@ -165,13 +170,8 @@ export default function LaporanHarianPage() {
                     uid: firebaseUser.uid,
                     date: Timestamp.fromDate(selectedDate),
                     status: 'submitted',
-                    activity: values.activity,
-                    learning: values.learning,
-                    obstacle: values.obstacle,
                     createdAt: serverTimestamp() as Timestamp,
-                    updatedAt: serverTimestamp() as Timestamp,
-                    brandId: (Array.isArray(employeeProfile.brandId) ? employeeProfile.brandId[0] : employeeProfile.brandId) || null,
-                    supervisorUid: employeeProfile.supervisorUid || null,
+                    ...reportDataPayload,
                 };
                 await setDocumentNonBlocking(reportRef, createData, {});
             }
@@ -213,7 +213,7 @@ export default function LaporanHarianPage() {
         const canEdit = isDateToday && (!selectedReport || selectedReport.status === 'needs_revision');
 
         const statusInfo: Record<ReportStatus, { icon: React.ReactNode; title: string; description: string; variant: "default" | "destructive" | "warning"; }> = {
-            submitted: { icon: <FileClock className="h-4 w-4" />, title: 'Menunggu Review', description: 'Laporan Anda sudah terkirim dan sedang menunggu tinjauan dari mentor.', variant: 'default' },
+            submitted: { icon: <FileClock className="h-4 w-4" />, title: 'Menunggu Review', description: 'Laporan Anda sedang menunggu tinjauan dari mentor.', variant: 'default' },
             needs_revision: { icon: <AlertCircle className="h-4 w-4" />, title: 'Perlu Revisi', description: 'Mentor Anda memberikan catatan. Silakan perbaiki laporan Anda.', variant: 'destructive' },
             approved: { icon: <CheckCircle className="h-4 w-4" />, title: 'Disetujui', description: 'Laporan Anda telah disetujui oleh mentor. Kerja bagus!', variant: 'default' },
             draft: { icon: <FileClock className="h-4 w-4" />, title: 'Draf', description: 'Laporan ini belum dikirim.', variant: 'default' }
@@ -252,6 +252,7 @@ export default function LaporanHarianPage() {
 
         if (selectedReport) {
             const currentStatusInfo = statusInfo[selectedReport.status];
+            const supervisorDisplayName = selectedReport.supervisorName || employeeProfile?.supervisorName || 'Belum ditugaskan';
             return (
                  <>
                     <DialogHeader>
@@ -259,7 +260,7 @@ export default function LaporanHarianPage() {
                         <DialogDescription className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
                             <span>Dikirim: {formatDistanceToNow(selectedReport.submittedAt?.toDate() || selectedReport.createdAt.toDate(), { addSuffix: true, locale: id })}</span>
                             {selectedReport.reviewedAt && <span>Direview: {formatDistanceToNow(selectedReport.reviewedAt.toDate(), { addSuffix: true, locale: id })}</span>}
-                            <span>Mentor: {selectedReport.supervisorName || 'Belum ditugaskan'}</span>
+                            <span>Mentor: {supervisorDisplayName}</span>
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-6 py-4 text-sm">
@@ -286,7 +287,7 @@ export default function LaporanHarianPage() {
                                             <UserCheck className="h-5 w-5 text-primary" />
                                             Feedback dari Mentor
                                         </CardTitle>
-                                        <CardDescription>{selectedReport.reviewedByName} &bull; {format(selectedReport.reviewedAt!.toDate(), 'dd MMM, HH:mm')}</CardDescription>
+                                        <CardDescription>{selectedReport.reviewedByName} &bull; {selectedReport.reviewedAt ? format(selectedReport.reviewedAt.toDate(), 'dd MMM, HH:mm') : ''}</CardDescription>
                                     </CardHeader>
                                     <CardContent>
                                         <blockquote className="border-l-4 pl-4 italic text-muted-foreground">
@@ -299,7 +300,7 @@ export default function LaporanHarianPage() {
                     </div>
                      <DialogFooter className="flex-col sm:flex-row sm:justify-end items-stretch sm:items-center">
                         <Button type="button" variant="outline" onClick={handleCloseDialog}>Tutup</Button>
-                         {canEdit && (
+                         {selectedReport.status === 'needs_revision' && isDateToday && (
                             <Button type="button" onClick={(e) => { e.preventDefault(); setIsEditing(true);}}>Perbaiki Laporan</Button>
                         )}
                     </DialogFooter>
