@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/providers/auth-provider';
-import { useDoc, useCollection, useFirestore, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
+import { useDoc, useCollection, useFirestore, useMemoFirebase, setDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
 import { doc, collection, query, where, Timestamp, serverTimestamp } from 'firebase/firestore';
 import type { DailyReport, EmployeeProfile, ReportStatus } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -157,24 +157,32 @@ export default function LaporanHarianPage() {
     
         const isUpdate = reportsMap.has(dateString);
     
-        const newReportData: Partial<Omit<DailyReport, 'id'>> = {
-            uid: firebaseUser.uid,
-            date: Timestamp.fromDate(selectedDate),
-            status: 'submitted',
-            activity: values.activity,
-            learning: values.learning,
-            obstacle: values.obstacle,
-            updatedAt: serverTimestamp(),
-            brandId: Array.isArray(employeeProfile.brandId) ? employeeProfile.brandId[0] : employeeProfile.brandId || null,
-            supervisorUid: employeeProfile.supervisorUid || null,
-        };
-        
-        if (!isUpdate) {
-            newReportData.createdAt = serverTimestamp();
-        }
-    
         try {
-            await setDocumentNonBlocking(reportRef, newReportData, { merge: true });
+            if (isUpdate) {
+                const updateData = {
+                    status: 'submitted' as ReportStatus,
+                    activity: values.activity,
+                    learning: values.learning,
+                    obstacle: values.obstacle,
+                    updatedAt: serverTimestamp(),
+                };
+                await updateDocumentNonBlocking(reportRef, updateData);
+            } else {
+                const createData: Omit<DailyReport, 'id'> = {
+                    uid: firebaseUser.uid,
+                    date: Timestamp.fromDate(selectedDate),
+                    status: 'submitted',
+                    activity: values.activity,
+                    learning: values.learning,
+                    obstacle: values.obstacle,
+                    brandId: Array.isArray(employeeProfile.brandId) ? employeeProfile.brandId[0] : employeeProfile.brandId || undefined,
+                    supervisorUid: employeeProfile.supervisorUid || undefined,
+                    createdAt: serverTimestamp() as Timestamp,
+                    updatedAt: serverTimestamp() as Timestamp,
+                };
+                await setDocumentNonBlocking(reportRef, createData, {});
+            }
+
             toast({
                 title: "Laporan Terkirim",
                 description: `Laporan Anda untuk tanggal ${format(selectedDate, "dd MMM yyyy")} telah berhasil dikirim.`,
@@ -202,7 +210,7 @@ export default function LaporanHarianPage() {
         const isDateInPast = selectedDate && !isToday(selectedDate) && isPast(selectedDate);
         const isDateInFuture = selectedDate && isFuture(selectedDate);
         
-        const canEdit = isDateToday && (selectedReport?.status === 'needs_revision' || selectedReport?.status === 'draft');
+        const canEdit = isDateToday && (!selectedReport || selectedReport.status === 'needs_revision' || selectedReport.status === 'draft');
 
         if (isEditing) {
             return (
