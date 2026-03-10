@@ -34,6 +34,7 @@ import { useDoc, useCollection, useFirestore, useMemoFirebase, setDocumentNonBlo
 import { doc, collection, query, where, Timestamp, serverTimestamp } from 'firebase/firestore';
 import type { DailyReport, EmployeeProfile, ReportStatus } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Checkbox } from '@/components/ui/checkbox';
 
 
 const statusConfig: Record<ReportStatus, { label: string; color: string; icon: React.ReactNode }> = {
@@ -55,6 +56,7 @@ export default function LaporanHarianPage() {
     const [isEditing, setIsEditing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+    const [isDeclarationChecked, setIsDeclarationChecked] = useState(false);
     const reportFormRef = useRef<HTMLFormElement | null>(null);
 
     const employeeProfileRef = useMemoFirebase(() => {
@@ -104,11 +106,13 @@ export default function LaporanHarianPage() {
         } else {
             setIsEditing(false);
         }
+        setIsDeclarationChecked(false);
         setIsDialogOpen(true);
     };
     
     const handleCloseDialog = () => {
         setIsDialogOpen(false);
+        setIsDeclarationChecked(false);
         setTimeout(() => setSelectedDate(null), 300); 
     }
 
@@ -161,6 +165,7 @@ export default function LaporanHarianPage() {
         } finally {
             setIsSaving(false);
             setIsConfirmOpen(false);
+            setIsDeclarationChecked(false);
         }
     };
 
@@ -180,6 +185,7 @@ export default function LaporanHarianPage() {
         const handleEditClick = (e: React.MouseEvent<HTMLButtonElement>) => {
             e.preventDefault();
             setIsEditing(true);
+            setIsDeclarationChecked(false);
         }
 
         if (isEditing) {
@@ -202,10 +208,25 @@ export default function LaporanHarianPage() {
                           <Label htmlFor="obstacle">Kendala yang Dialami</Label>
                           <Textarea id="obstacle" name="obstacle" defaultValue={selectedReport?.obstacle || ''} rows={3} placeholder="Apa saja kesulitan yang Anda hadapi dan bagaimana Anda mencoba menyelesaikannya?" />
                         </div>
+                        <div className="flex items-start space-x-3 pt-2">
+                            <Checkbox 
+                                id="declaration" 
+                                checked={isDeclarationChecked} 
+                                onCheckedChange={(checked) => setIsDeclarationChecked(!!checked)} 
+                            />
+                            <div className="grid gap-1.5 leading-none">
+                                <label
+                                    htmlFor="declaration"
+                                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                >
+                                Saya menyatakan bahwa laporan yang saya isi adalah benar dan sesuai dengan aktivitas yang saya lakukan.
+                                </label>
+                            </div>
+                        </div>
                     </form>
                     <DialogFooter>
                         <Button type="button" variant="ghost" onClick={() => setIsEditing(false)}>Batal</Button>
-                        <Button type="submit" form="report-form" disabled={isSaving}>
+                        <Button type="submit" form="report-form" disabled={isSaving || !isDeclarationChecked}>
                             {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
                             <Send className="mr-2 h-4 w-4"/> Kirim Laporan
                         </Button>
@@ -241,9 +262,14 @@ export default function LaporanHarianPage() {
                          )}
                     </div>
                      <DialogFooter className="flex-col sm:flex-row sm:justify-between items-stretch sm:items-center">
-                        {isDateInPast && <p className="text-xs text-muted-foreground text-left mr-auto">Laporan untuk tanggal yang lewat tidak dapat diubah.</p>}
+                        <div className="flex-grow">
+                            {isDateInPast && <p className="text-xs text-muted-foreground text-left">Laporan untuk tanggal yang lewat tidak dapat diubah.</p>}
+                        </div>
                         <div className='flex gap-2 self-end'>
                             <Button type="button" variant="outline" onClick={handleCloseDialog}>Tutup</Button>
+                             {selectedReport.status === 'needs_revision' && isDateToday && (
+                                <Button type="button" onClick={handleEditClick}><FilePlus className="mr-2 h-4 w-4" /> Edit Laporan</Button>
+                            )}
                         </div>
                     </DialogFooter>
                 </>
@@ -271,11 +297,11 @@ export default function LaporanHarianPage() {
                     <p className="text-muted-foreground text-sm">{emptyStateDescription}</p>
                 </div>
                 <DialogFooter className="flex-col sm:flex-row sm:justify-between items-stretch sm:items-center">
-                     {(isDateInPast || isDateInFuture) ? <p className="text-xs text-muted-foreground text-left mr-auto">Info</p> : <div></div>}
+                    {(isDateInPast || isDateInFuture) ? <p className="text-xs text-muted-foreground text-left mr-auto">Info</p> : <div></div>}
                      <div className="flex gap-2 self-end">
                         <Button type="button" variant="outline" onClick={handleCloseDialog}>Tutup</Button>
                         {isDateToday && (
-                            <Button type="button" onClick={(e) => { e.preventDefault(); setIsEditing(true); }}><FilePlus className="mr-2 h-4 w-4" /> Buat Laporan</Button>
+                            <Button type="button" onClick={(e) => { e.preventDefault(); setIsDeclarationChecked(false); setIsEditing(true); }}><FilePlus className="mr-2 h-4 w-4" /> Buat Laporan</Button>
                         )}
                     </div>
                 </DialogFooter>
@@ -326,8 +352,7 @@ export default function LaporanHarianPage() {
                             const isCurrentMonthDay = isSameMonth(day, currentMonth);
                             const isDateSelected = selectedDate && isSameDay(day, selectedDate);
                             const isFutureDate = isFuture(day) && !isToday(day);
-                            const isPastDate = !isToday(day) && isPast(day);
-
+                            
                             return (
                                 <button
                                     key={day.toString()}
@@ -337,8 +362,7 @@ export default function LaporanHarianPage() {
                                     className={cn(
                                         "relative h-20 p-2 text-left align-top transition-colors rounded-lg",
                                         isCurrentMonthDay ? "hover:bg-accent" : "text-muted-foreground/50 hover:bg-accent/50",
-                                        isPastDate && "opacity-75",
-                                        !isCurrentMonthDay && isPastDate && "opacity-50",
+                                        !isCurrentMonthDay && !isFutureDate && "opacity-75",
                                         isDateSelected && "bg-primary/10 ring-2 ring-primary",
                                         isFutureDate && "text-muted-foreground/30 cursor-not-allowed hover:bg-transparent"
                                     )}
