@@ -139,6 +139,13 @@ export default function LaporanHarianPage() {
             setIsConfirmOpen(false);
             return;
         }
+
+        if (!employeeProfile.supervisorUid) {
+             toast({ title: "Mentor Belum Ditugaskan", description: "Anda tidak dapat mengirim laporan karena mentor belum ditetapkan oleh HRD. Silakan hubungi HRD.", variant: "destructive" });
+             setIsConfirmOpen(false);
+             return;
+        }
+        
         setIsSaving(true);
     
         const values = form.getValues();
@@ -146,7 +153,7 @@ export default function LaporanHarianPage() {
         const docId = `${firebaseUser.uid}_${dateString}`;
         const reportRef = doc(firestore, 'daily_reports', docId);
     
-        const isUpdate = reportsMap.has(dateString);
+        const isUpdate = !!selectedReport;
     
         const reportDataPayload = {
             activity: values.activity,
@@ -200,8 +207,10 @@ export default function LaporanHarianPage() {
 
     const ContentSection = ({ title, content }: { title: string, content: string }) => (
         <div>
-            <h4 className="font-semibold text-muted-foreground">{title}</h4>
-            <p className="text-foreground whitespace-pre-wrap mt-1">{content}</p>
+            <h4 className="font-semibold text-base mb-1">{title}</h4>
+            <div className="text-sm text-muted-foreground p-3 bg-muted/50 rounded-md whitespace-pre-wrap">
+                {content}
+            </div>
         </div>
     );
 
@@ -211,6 +220,7 @@ export default function LaporanHarianPage() {
         const isFutureDate = selectedDate && isFuture(selectedDate);
         
         const canEdit = isDateToday && (!selectedReport || selectedReport.status === 'needs_revision');
+        const mentorNotAssigned = !employeeProfile?.supervisorUid;
 
         const statusInfo: Record<ReportStatus, { icon: React.ReactNode; title: string; description: string; variant: "default" | "destructive" | "warning"; }> = {
             submitted: { icon: <FileClock className="h-4 w-4" />, title: 'Menunggu Review', description: 'Laporan Anda sedang menunggu tinjauan dari mentor.', variant: 'default' },
@@ -226,6 +236,13 @@ export default function LaporanHarianPage() {
                         <DialogTitle>Laporan: {selectedDate && format(selectedDate, "eeee, dd MMMM", { locale: id })}</DialogTitle>
                         <DialogDescription>Isi semua field untuk melaporkan aktivitas harian Anda.</DialogDescription>
                     </DialogHeader>
+                    {mentorNotAssigned && (
+                        <Alert variant="destructive">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertTitle>Mentor Belum Ditugaskan</AlertTitle>
+                            <AlertDescription>Anda tidak dapat mengirim laporan karena mentor belum ditetapkan oleh HRD. Silakan hubungi HRD.</AlertDescription>
+                        </Alert>
+                    )}
                      <Form {...form}>
                         <form id="report-form" className="space-y-6 py-4" onSubmit={form.handleSubmit(prepareSubmit)}>
                             <FormField control={form.control} name="activity" render={({ field }) => (<FormItem><FormLabel>Uraian Aktivitas <span className="text-destructive">*</span></FormLabel><FormControl><Textarea {...field} rows={5} placeholder="Jelaskan secara rinci pekerjaan dan tugas yang Anda lakukan hari ini..." /></FormControl><FormMessage /></FormItem>)} />
@@ -241,7 +258,7 @@ export default function LaporanHarianPage() {
                      </Form>
                     <DialogFooter>
                         <Button type="button" variant="ghost" onClick={() => setIsEditing(false)}>Batal</Button>
-                        <Button type="submit" form="report-form" disabled={isSaving || !form.formState.isValid}>
+                        <Button type="submit" form="report-form" disabled={isSaving || !form.formState.isValid || mentorNotAssigned}>
                             {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
                             <Send className="mr-2 h-4 w-4"/> Kirim Laporan
                         </Button>
@@ -258,16 +275,19 @@ export default function LaporanHarianPage() {
                     <DialogHeader>
                         <DialogTitle className="text-2xl">{format(selectedReport.date.toDate(), "eeee, dd MMMM yyyy", { locale: id })}</DialogTitle>
                         <DialogDescription className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                             <Badge variant={currentStatusInfo.variant === 'default' ? 'secondary' : currentStatusInfo.variant} className={cn(currentStatusInfo.variant === 'warning' && 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:border-yellow-800 dark:text-yellow-200')}>
+                                {currentStatusInfo.title}
+                            </Badge>
                             <span>Dikirim: {formatDistanceToNow(selectedReport.submittedAt?.toDate() || selectedReport.createdAt.toDate(), { addSuffix: true, locale: id })}</span>
                             {supervisorDisplayName && <span>Mentor: {supervisorDisplayName}</span>}
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-6 py-4 text-sm">
-                        {currentStatusInfo && (
+                        {currentStatusInfo && currentStatusInfo.title === 'Menunggu Review' && (
                             <Alert variant={currentStatusInfo.variant === 'warning' ? 'default' : currentStatusInfo.variant} className={cn(currentStatusInfo.variant === 'warning' && 'bg-yellow-50 border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-800')}>
-                                {currentStatusInfo.icon}
-                                <AlertTitle className={cn(currentStatusInfo.variant === 'warning' && 'text-yellow-800 dark:text-yellow-200')}>{currentStatusInfo.title}</AlertTitle>
-                                <AlertDescription className={cn(currentStatusInfo.variant === 'warning' && 'text-yellow-700 dark:text-yellow-300')}>{currentStatusInfo.description}</AlertDescription>
+                                <FileClock className="h-4 w-4" />
+                                <AlertTitle>{currentStatusInfo.title}</AlertTitle>
+                                <AlertDescription>{currentStatusInfo.description}</AlertDescription>
                             </Alert>
                         )}
                         <div className="space-y-4">
@@ -298,7 +318,7 @@ export default function LaporanHarianPage() {
                     </div>
                      <DialogFooter className="flex-col sm:flex-row sm:justify-end items-stretch sm:items-center">
                         <Button type="button" variant="outline" onClick={handleCloseDialog}>Tutup</Button>
-                         {selectedReport.status === 'needs_revision' && (isDateToday || isDateInPastCheck) && (
+                         {selectedReport.status === 'needs_revision' && (
                             <Button type="button" onClick={(e) => { e.preventDefault(); setIsEditing(true);}}>Perbaiki Laporan</Button>
                         )}
                     </DialogFooter>
@@ -321,6 +341,13 @@ export default function LaporanHarianPage() {
                 <DialogHeader>
                     <DialogTitle>{selectedDate ? format(selectedDate, "eeee, dd MMMM", { locale: id }) : 'Pilih Tanggal'}</DialogTitle>
                 </DialogHeader>
+                 {isDateToday && mentorNotAssigned && (
+                    <Alert variant="destructive">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertTitle>Mentor Belum Ditugaskan</AlertTitle>
+                        <AlertDescription>Anda tidak dapat mengirim laporan karena mentor belum ditetapkan oleh HRD. Silakan hubungi HRD.</AlertDescription>
+                    </Alert>
+                 )}
                 <div className="h-48 flex flex-col items-center justify-center text-center p-6 bg-muted/50 rounded-md">
                     <CalendarIcon className="h-12 w-12 text-muted-foreground mb-4"/>
                     <h3 className="font-semibold text-lg">{emptyStateTitle}</h3>
@@ -331,7 +358,9 @@ export default function LaporanHarianPage() {
                      <div className="flex gap-2 self-end">
                         <Button type="button" variant="outline" onClick={handleCloseDialog}>Tutup</Button>
                         {isDateToday && (
-                            <Button type="button" onClick={(e) => { e.preventDefault(); setIsEditing(true); }}><FilePlus className="mr-2 h-4 w-4" /> Buat Laporan</Button>
+                            <Button type="button" onClick={(e) => { e.preventDefault(); setIsEditing(true); }} disabled={mentorNotAssigned}>
+                                <FilePlus className="mr-2 h-4 w-4" /> Buat Laporan
+                            </Button>
                         )}
                     </div>
                 </DialogFooter>
