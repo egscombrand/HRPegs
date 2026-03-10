@@ -15,9 +15,9 @@ import { format, differenceInDays } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
-import { Progress } from '../ui/progress';
-import { Badge } from '../ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
 
 function DashboardSkeleton() {
     return (
@@ -246,3 +246,5 @@ export default function MagangDashboardPage() {
     </DashboardLayout>
   );
 }
+
+    
