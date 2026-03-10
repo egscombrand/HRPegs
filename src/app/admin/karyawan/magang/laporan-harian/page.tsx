@@ -165,6 +165,9 @@ export default function LaporanHarianPage() {
                     learning: values.learning,
                     obstacle: values.obstacle,
                     updatedAt: serverTimestamp(),
+                    // Ensure optional fields are not undefined
+                    brandId: (Array.isArray(employeeProfile.brandId) ? employeeProfile.brandId[0] : employeeProfile.brandId) || null,
+                    supervisorUid: employeeProfile.supervisorUid || null,
                 };
                 await updateDocumentNonBlocking(reportRef, updateData);
             } else {
@@ -175,10 +178,11 @@ export default function LaporanHarianPage() {
                     activity: values.activity,
                     learning: values.learning,
                     obstacle: values.obstacle,
-                    brandId: Array.isArray(employeeProfile.brandId) ? employeeProfile.brandId[0] : employeeProfile.brandId || undefined,
-                    supervisorUid: employeeProfile.supervisorUid || undefined,
                     createdAt: serverTimestamp() as Timestamp,
                     updatedAt: serverTimestamp() as Timestamp,
+                    // Ensure optional fields are not undefined
+                    brandId: (Array.isArray(employeeProfile.brandId) ? employeeProfile.brandId[0] : employeeProfile.brandId) || null,
+                    supervisorUid: employeeProfile.supervisorUid || null,
                 };
                 await setDocumentNonBlocking(reportRef, createData, {});
             }
@@ -207,7 +211,7 @@ export default function LaporanHarianPage() {
 
     const renderDialogContent = () => {
         const isDateToday = selectedDate && isToday(selectedDate);
-        const isDateInPast = selectedDate && !isToday(selectedDate) && isPast(selectedDate);
+        const isDateInPastCheck = selectedDate && !isToday(selectedDate) && isPast(selectedDate);
         const isDateInFuture = selectedDate && isFuture(selectedDate);
         
         const canEdit = isDateToday && (!selectedReport || selectedReport.status === 'needs_revision' || selectedReport.status === 'draft');
@@ -270,7 +274,7 @@ export default function LaporanHarianPage() {
                          )}
                     </div>
                      <DialogFooter className="flex-col sm:flex-row sm:justify-between items-stretch sm:items-center">
-                        {isDateInPast && <p className="text-xs text-muted-foreground text-left">Laporan untuk tanggal yang lewat tidak dapat diubah.</p>}
+                        {isDateInPastCheck && <p className="text-xs text-muted-foreground text-left">Laporan untuk tanggal yang lewat tidak dapat diubah.</p>}
                         <div className='flex gap-2 self-end ml-auto'>
                             <Button type="button" variant="outline" onClick={handleCloseDialog}>Tutup</Button>
                              {canEdit && (
@@ -284,7 +288,7 @@ export default function LaporanHarianPage() {
         
         let emptyStateTitle = "Belum ada laporan";
         let emptyStateDescription = "Tidak ada laporan yang dibuat pada tanggal ini.";
-        if (isDateInPast) {
+        if (isDateInPastCheck) {
             emptyStateTitle = "Periode Terlewat";
             emptyStateDescription = "Periode input untuk tanggal ini telah lewat.";
         } else if (isDateInFuture) {
@@ -303,7 +307,7 @@ export default function LaporanHarianPage() {
                     <p className="text-muted-foreground text-sm">{emptyStateDescription}</p>
                 </div>
                 <DialogFooter className="flex-col sm:flex-row sm:justify-between items-stretch sm:items-center">
-                    {(isDateInPast || isDateInFuture) ? <p className="text-xs text-muted-foreground text-left mr-auto">Info</p> : <div></div>}
+                    {(isDateInPastCheck || isDateInFuture) ? <p className="text-xs text-muted-foreground text-left mr-auto">Info</p> : <div></div>}
                      <div className="flex gap-2 self-end">
                         <Button type="button" variant="outline" onClick={handleCloseDialog}>Tutup</Button>
                         {isDateToday && (
