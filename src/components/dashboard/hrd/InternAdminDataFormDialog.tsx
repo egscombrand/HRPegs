@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -10,7 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, Edit } from 'lucide-react';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { GoogleDatePicker } from '@/components/ui/google-date-picker';
 import { useAuth } from '@/providers/auth-provider';
@@ -123,15 +123,29 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, onSucce
     return { finalBrandId: singleId, finalBrandName: name };
   }, [profile, userProfile, application, brands]);
 
-  const filteredSupervisors = useMemo(() => {
-    if (!supervisors || !finalBrandId) return [];
-    return supervisors.filter(user => {
-      if (user.uid === profile.uid) return false;
-      if (!user.isActive || !['manager', 'karyawan'].includes(user.role)) return false;
-      if (Array.isArray(user.brandId)) return user.brandId.includes(finalBrandId);
-      return user.brandId === finalBrandId;
-    });
+  const { managers, employees } = useMemo(() => {
+    const managers: UserProfile[] = [];
+    const employees: UserProfile[] = [];
+    if (!supervisors || !finalBrandId) return { managers, employees };
+
+    for (const user of supervisors) {
+        if (user.uid === profile.uid || !user.isActive) continue;
+
+        const userIsInBrand = Array.isArray(user.brandId) 
+            ? user.brandId.includes(finalBrandId) 
+            : user.brandId === finalBrandId;
+
+        if (userIsInBrand) {
+            if (user.role === 'manager') {
+                managers.push(user);
+            } else if (user.role === 'karyawan') {
+                employees.push(user);
+            }
+        }
+    }
+    return { managers, employees };
   }, [supervisors, finalBrandId, profile.uid]);
+
 
   useEffect(() => {
     if (startDate && duration && duration > 0) {
@@ -227,7 +241,32 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, onSucce
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6">
                             <FormField control={form.control} name="division" render={({ field }) => (<FormItem><FormLabel>Divisi</FormLabel><FormControl><Input placeholder="e.g., Creative, Finance" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
                             <FormField control={form.control} name="supervisorName" render={({ field }) => (
-                                <FormItem><FormLabel>Supervisor / PIC</FormLabel><Select onValueChange={field.onChange} value={field.value || ''}><FormControl><SelectTrigger><SelectValue placeholder="Pilih Supervisor" /></SelectTrigger></FormControl><SelectContent>{filteredSupervisors.map(s => <SelectItem key={s.uid} value={s.fullName}>{s.fullName}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
+                                <FormItem>
+                                    <FormLabel>Pilih Mentor / Supervisor</FormLabel>
+                                    <Select onValueChange={field.onChange} value={field.value || ''}>
+                                        <FormControl>
+                                            <SelectTrigger><SelectValue placeholder="Pilih dari daftar" /></SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                            {managers.length > 0 && (
+                                                <SelectGroup>
+                                                    <SelectLabel>Manager</SelectLabel>
+                                                    {managers.map(s => <SelectItem key={s.uid} value={s.fullName}>{s.fullName}</SelectItem>)}
+                                                </SelectGroup>
+                                            )}
+                                            {employees.length > 0 && (
+                                                <SelectGroup>
+                                                    <SelectLabel>Karyawan</SelectLabel>
+                                                    {employees.map(s => <SelectItem key={s.uid} value={s.fullName}>{s.fullName}</SelectItem>)}
+                                                </SelectGroup>
+                                            )}
+                                            {managers.length === 0 && employees.length === 0 && (
+                                                <SelectItem value="no-options" disabled>Tidak ada user yang cocok di brand ini.</SelectItem>
+                                            )}
+                                        </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
                             )}/>
                             <FormField control={form.control} name="internSubtype" render={({ field }) => (
                                 <FormItem><FormLabel>Tipe Magang</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Pilih tipe magang" /></SelectTrigger></FormControl><SelectContent><SelectItem value="intern_education">Terikat Pendidikan</SelectItem><SelectItem value="intern_pre_probation">Pra-Probation</SelectItem></SelectContent></Select><FormMessage /></FormItem>
@@ -327,3 +366,5 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, onSucce
     </Dialog>
   );
 }
+
+    
