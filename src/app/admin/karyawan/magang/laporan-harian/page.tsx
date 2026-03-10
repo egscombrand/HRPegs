@@ -33,7 +33,7 @@ import * as z from 'zod';
 const statusConfig: Record<ReportStatus, { label: string; color: string; icon: React.ReactNode }> = {
     approved: { label: 'Disetujui', color: 'bg-green-500', icon: <CheckCircle className="h-4 w-4" /> },
     needs_revision: { label: 'Perlu Revisi', color: 'bg-yellow-500', icon: <AlertCircle className="h-4 w-4" /> },
-    submitted: { label: 'Terkirim', color: 'bg-blue-500', icon: <Clock className="h-4 w-4" /> },
+    submitted: { label: 'Menunggu Review', color: 'bg-blue-500', icon: <Clock className="h-4 w-4" /> },
     draft: { label: 'Draf', color: 'bg-gray-400', icon: <FilePlus className="h-4 w-4" /> },
 };
 
@@ -254,6 +254,9 @@ export default function LaporanHarianPage() {
                            <Badge variant="outline" className={cn("mt-2", statusConfig[selectedReport.status]?.color?.replace('bg-', 'text-').replace('-500', '-700 dark:text-white border-current'))}>
                                 {statusConfig[selectedReport.status]?.label}
                            </Badge>
+                            {selectedReport.status === 'submitted' && (
+                                <p className="text-xs text-muted-foreground mt-2">Laporan Anda sedang menunggu tinjauan dari mentor.</p>
+                            )}
                          </div>
                     </DialogHeader>
                     <div className="space-y-4 py-4 text-sm">
