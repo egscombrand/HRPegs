@@ -16,7 +16,7 @@ import { GoogleDatePicker } from '@/components/ui/google-date-picker';
 import { useAuth } from '@/providers/auth-provider';
 import { useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import { doc, serverTimestamp, Timestamp, writeBatch, query, collection, where } from 'firebase/firestore';
-import type { EmployeeProfile, Brand, UserProfile, JobApplication } from '@/lib/types';
+import type { EmployeeProfile, Brand, UserProfile, JobApplication, Job } from '@/lib/types';
 import { ROLES_INTERNAL } from '@/lib/types';
 import { addMonths } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -38,8 +38,7 @@ interface InternAdminDataFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   profile: EmployeeProfile;
-  application: JobApplication | null;
-  onSuccess: () => void;
+  onAdminDataChange: () => void;
 }
 
 const InfoRow = ({ label, value }: { label: string; value?: string | number | null }) => (
@@ -49,11 +48,26 @@ const InfoRow = ({ label, value }: { label: string; value?: string | number | nu
     </div>
 );
 
-export function InternAdminDataFormDialog({ open, onOpenChange, profile, application, onSuccess }: InternAdminDataFormDialogProps) {
+export function InternAdminDataFormDialog({ open, onOpenChange, profile, onAdminDataChange }: InternAdminDataFormDialogProps) {
   const [isSaving, setIsSaving] = useState(false);
   const { userProfile: hrdProfile } = useAuth();
   const firestore = useFirestore();
   const { toast } = useToast();
+
+  const applicationQuery = useMemoFirebase(() => {
+    if (!profile) return null;
+    return query(
+      collection(firestore, 'applications'),
+      where('candidateUid', '==', profile.uid),
+      where('status', '==', 'hired')
+    );
+  }, [firestore, profile]);
+
+  const { data: applications, isLoading: isLoadingApplication } = useCollection<JobApplication>(applicationQuery);
+  const application = useMemo(() => {
+    if (!applications || applications.length === 0) return null;
+    return [...applications].sort((a,b) => (b.updatedAt?.toMillis() || 0) - (a.updatedAt?.toMillis() || 0))[0];
+  }, [applications]);
 
   const { data: brands, isLoading: isLoadingBrands } = useCollection<Brand>(
     useMemoFirebase(() => collection(firestore, 'brands'), [firestore])
@@ -69,13 +83,8 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, applica
   }, [firestore, profile]);
   const { data: userProfile, isLoading: isLoadingUser } = useDoc<UserProfile>(userRef);
 
-  const brandMap = useMemo(() => {
-    if (!brands) return new Map<string, string>();
-    return new Map(brands.map(b => [b.id!, b.name]));
-  }, [brands]);
-
   const { finalBrandId, finalBrandName } = useMemo(() => {
-    // Priority: Employee Profile -> User Profile -> Application
+    const brandMap = new Map(brands?.map(b => [b.id!, b.name]) || []);
     let id = profile.brandId || userProfile?.brandId || application?.brandId;
     const singleId = Array.isArray(id) ? id[0] : id;
 
@@ -104,7 +113,7 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, applica
   const filteredSupervisors = useMemo(() => {
     if (!supervisors || !finalBrandId) return [];
     return supervisors.filter(user => {
-      if (user.uid === profile.uid) return false;
+      if (user.uid === profile.uid) return false; // Exclude self
       if (!user.isActive || !['manager', 'karyawan'].includes(user.role)) return false;
       if (Array.isArray(user.brandId)) return user.brandId.includes(finalBrandId);
       return user.brandId === finalBrandId;
@@ -146,7 +155,7 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, applica
             ...values,
             brandId: finalBrandId, 
             brandName: finalBrandName,
-            compensationAmount: compensationAmount,
+            compensationAmount: compensationAmount ?? null,
             internshipStartDate: values.internshipStartDate ? Timestamp.fromDate(values.internshipStartDate) : null,
             internshipEndDate: values.internshipEndDate ? Timestamp.fromDate(values.internshipEndDate) : null,
             updatedAt: serverTimestamp(),
@@ -158,7 +167,7 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, applica
         
         await batch.commit();
         toast({ title: 'Data Administrasi Disimpan' });
-        onSuccess();
+        onAdminDataChange();
         onOpenChange(false);
     } catch (error: any) {
         toast({ variant: 'destructive', title: 'Gagal menyimpan data', description: error.message });
