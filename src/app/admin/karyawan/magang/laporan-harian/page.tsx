@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, isSameMonth, isSameDay, isToday, addMonths, subMonths, isFuture, isPast } from 'date-fns';
 import { id } from 'date-fns/locale';
-import { FilePlus, Send, Edit, ChevronLeft, ChevronRight, Calendar as CalendarIcon, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { FilePlus, Send, Edit, ChevronLeft, ChevronRight, Calendar as CalendarIcon, CheckCircle, Clock, AlertCircle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -20,31 +20,59 @@ import {
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { Form } from '@/components/ui/form';
+import { useAuth } from '@/providers/auth-provider';
+import { useDoc, useCollection, useFirestore, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
+import { doc, collection, query, where, Timestamp, serverTimestamp } from 'firebase/firestore';
+import type { DailyReport, EmployeeProfile, ReportStatus } from '@/lib/types';
+import { Skeleton } from '@/components/ui/skeleton';
 
-type ReportStatus = 'disetujui' | 'revisi' | 'terkirim' | 'draft';
-
-const initialMockReports: Record<string, { status: ReportStatus; activity: string; learning: string; obstacle: string; mentorNote?: string }> = {
-    '2024-07-15': { status: 'disetujui', activity: 'Rapat tim desain dan finalisasi mockup.', learning: 'Belajar tentang alur kerja tim dan pentingnya design system.', obstacle: 'Tidak ada kendala berarti.' },
-    '2024-07-16': { status: 'revisi', activity: 'Membuat wireframe untuk fitur login.', learning: 'Menggunakan komponen-komponen di Figma.', obstacle: 'Performa laptop agak lambat saat file besar.', mentorNote: 'Tolong detailkan lagi bagian wireframe, komponen apa saja yang dibuat?' },
-    '2024-07-17': { status: 'terkirim', activity: 'Riset UX kompetitor untuk fitur dashboard.', learning: 'Menganalisis kelebihan dan kekurangan UX dari 3 aplikasi kompetitor.', obstacle: 'Akses terbatas ke beberapa fitur premium kompetitor.' },
-};
 
 const statusConfig: Record<ReportStatus, { label: string; color: string; icon: React.ReactNode }> = {
-    disetujui: { label: 'Disetujui', color: 'bg-green-500', icon: <CheckCircle className="h-4 w-4" /> },
-    revisi: { label: 'Perlu Revisi', color: 'bg-yellow-500', icon: <AlertCircle className="h-4 w-4" /> },
-    terkirim: { label: 'Terkirim', color: 'bg-blue-500', icon: <Clock className="h-4 w-4" /> },
+    approved: { label: 'Disetujui', color: 'bg-green-500', icon: <CheckCircle className="h-4 w-4" /> },
+    needs_revision: { label: 'Perlu Revisi', color: 'bg-yellow-500', icon: <AlertCircle className="h-4 w-4" /> },
+    submitted: { label: 'Terkirim', color: 'bg-blue-500', icon: <Clock className="h-4 w-4" /> },
     draft: { label: 'Draf', color: 'bg-gray-400', icon: <Edit className="h-4 w-4" /> },
 };
 
 
 export default function LaporanHarianPage() {
-    const [reports, setReports] = useState(initialMockReports);
+    const { firebaseUser } = useAuth();
+    const firestore = useFirestore();
+    const { toast } = useToast();
+    
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
-    const { toast } = useToast();
+    const [isSaving, setIsSaving] = useState(false);
 
+    // Fetch employee profile to get supervisor info, which is needed for saving the report
+    const employeeProfileRef = useMemoFirebase(() => {
+        if (!firebaseUser) return null;
+        return doc(firestore, 'employee_profiles', firebaseUser.uid);
+    }, [firestore, firebaseUser?.uid]);
+    const { data: employeeProfile, isLoading: isLoadingProfile } = useDoc<EmployeeProfile>(employeeProfileRef);
+
+    // Fetch reports for the current month
+    const reportsQuery = useMemoFirebase(() => {
+        if (!firebaseUser) return null;
+        const start = startOfMonth(currentMonth);
+        const end = endOfMonth(currentMonth);
+        return query(
+            collection(firestore, 'daily_reports'),
+            where('uid', '==', firebaseUser.uid),
+            where('date', '>=', start),
+            where('date', '<=', end)
+        );
+    }, [firestore, firebaseUser, currentMonth]);
+    const { data: fetchedReports, isLoading: isLoadingReports } = useCollection<DailyReport>(reportsQuery);
+
+    // Create a map for quick lookups by date
+    const reportsMap = useMemo(() => {
+        if (!fetchedReports) return new Map<string, DailyReport>();
+        return new Map(fetchedReports.map(report => [format(report.date.toDate(), 'yyyy-MM-dd'), report]));
+    }, [fetchedReports]);
+    
     const firstDayOfMonth = startOfMonth(currentMonth);
     const days = eachDayOfInterval({
         start: startOfWeek(firstDayOfMonth, { weekStartsOn: 1 }),
@@ -54,12 +82,12 @@ export default function LaporanHarianPage() {
     const selectedReport = useMemo(() => {
         if (!selectedDate) return null;
         const dateString = format(selectedDate, 'yyyy-MM-dd');
-        return reports[dateString] ? { date: selectedDate, ...reports[dateString] } : null;
-    }, [selectedDate, reports]);
+        return reportsMap.get(dateString) || null;
+    }, [selectedDate, reportsMap]);
 
     const handleDateClick = (day: Date) => {
         setSelectedDate(day);
-        setIsEditing(false); // Selalu tampilkan detail dulu saat tanggal diklik
+        setIsEditing(false);
         setIsDialogOpen(true);
     };
     
@@ -68,40 +96,58 @@ export default function LaporanHarianPage() {
         setTimeout(() => setSelectedDate(null), 300); 
     }
 
-    const handleSaveReport = (e: React.FormEvent<HTMLFormElement>) => {
+    const handleSaveReport = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        if (!selectedDate) return;
+        if (!selectedDate || !firebaseUser || !employeeProfile) {
+            toast({ title: "Gagal Menyimpan", description: "Data pengguna atau profil tidak ditemukan.", variant: "destructive" });
+            return;
+        }
+        setIsSaving(true);
 
         const formData = new FormData(e.currentTarget);
-        const newReportData = {
-            status: 'terkirim' as ReportStatus,
+        const dateString = format(selectedDate, 'yyyy-MM-dd');
+        const docId = `${firebaseUser.uid}_${dateString}`;
+        const reportRef = doc(firestore, 'daily_reports', docId);
+
+        const isUpdate = reportsMap.has(dateString);
+
+        const newReportData: Partial<DailyReport> = {
+            uid: firebaseUser.uid,
+            date: Timestamp.fromDate(selectedDate),
+            status: 'submitted',
             activity: formData.get('activity') as string,
             learning: formData.get('learning') as string,
             obstacle: formData.get('obstacle') as string,
+            updatedAt: serverTimestamp() as Timestamp,
         };
+        
+        if (!isUpdate) {
+            newReportData.createdAt = serverTimestamp() as Timestamp;
+            newReportData.supervisorUid = employeeProfile.supervisorUid || null;
+            newReportData.brandId = Array.isArray(employeeProfile.brandId) ? employeeProfile.brandId[0] : employeeProfile.brandId || null;
+        }
 
-        const dateString = format(selectedDate, 'yyyy-MM-dd');
-
-        setReports(prev => ({
-            ...prev,
-            [dateString]: newReportData,
-        }));
-
-        toast({
-            title: "Laporan Terkirim",
-            description: `Laporan Anda untuk tanggal ${format(selectedDate, "dd MMM yyyy")} telah disimpan.`,
-        });
-
-        setIsEditing(false); // Kembali ke tampilan detail
+        try {
+            await setDocumentNonBlocking(reportRef, newReportData, { merge: true });
+            toast({
+                title: "Laporan Terkirim",
+                description: `Laporan Anda untuk tanggal ${format(selectedDate, "dd MMM yyyy")} telah disimpan.`,
+            });
+            setIsEditing(false); // Go back to detail view
+        } catch (error: any) {
+            toast({ title: "Gagal Menyimpan", description: error.message, variant: "destructive" });
+        } finally {
+            setIsSaving(false);
+        }
     };
 
-
     const statusSummary = useMemo(() => {
-        return Object.values(reports).reduce((acc, report) => {
+        if (!fetchedReports) return {} as Record<ReportStatus, number>;
+        return fetchedReports.reduce((acc, report) => {
             acc[report.status] = (acc[report.status] || 0) + 1;
             return acc;
         }, {} as Record<ReportStatus, number>);
-    }, [reports]);
+    }, [fetchedReports]);
 
     const renderDialogContent = () => {
         const isDateToday = selectedDate && isToday(selectedDate);
@@ -136,7 +182,10 @@ export default function LaporanHarianPage() {
                     </form>
                     <DialogFooter>
                         <Button type="button" variant="ghost" onClick={() => setIsEditing(false)}>Batal</Button>
-                        <Button type="submit" form="report-form"><Send className="mr-2 h-4 w-4"/> Kirim Laporan</Button>
+                        <Button type="submit" form="report-form" disabled={isSaving}>
+                            {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                            <Send className="mr-2 h-4 w-4"/> Kirim Laporan
+                        </Button>
                     </DialogFooter>
                 </>
             );
@@ -146,10 +195,10 @@ export default function LaporanHarianPage() {
             return (
                 <>
                     <DialogHeader>
-                        <DialogTitle>Laporan: {format(selectedReport.date, "eeee, dd MMMM", { locale: id })}</DialogTitle>
+                        <DialogTitle>Laporan: {format(selectedReport.date.toDate(), "eeee, dd MMMM", { locale: id })}</DialogTitle>
                          <div className="pt-2">
-                           <Badge variant="outline" className={cn("mt-2", statusConfig[selectedReport.status].color.replace('bg-', 'text-').replace('-500', '-700 dark:text-white border-current'))}>
-                                {statusConfig[selectedReport.status].label}
+                           <Badge variant="outline" className={cn("mt-2", statusConfig[selectedReport.status]?.color?.replace('bg-', 'text-').replace('-500', '-700 dark:text-white border-current'))}>
+                                {statusConfig[selectedReport.status]?.label}
                            </Badge>
                          </div>
                     </DialogHeader>
@@ -158,12 +207,12 @@ export default function LaporanHarianPage() {
                          <div className="space-y-1"><h4 className="font-semibold">Uraian Aktivitas</h4><p className="text-muted-foreground whitespace-pre-wrap">{selectedReport.activity}</p></div>
                          <div className="space-y-1"><h4 className="font-semibold">Pembelajaran</h4><p className="text-muted-foreground whitespace-pre-wrap">{selectedReport.learning}</p></div>
                          <div className="space-y-1"><h4 className="font-semibold">Kendala</h4><p className="text-muted-foreground whitespace-pre-wrap">{selectedReport.obstacle}</p></div>
-                         {selectedReport.mentorNote && (
+                         {selectedReport.reviewerNotes && (
                             <>
                             <Separator/>
                             <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-400 rounded-r-md">
                                 <h4 className="font-semibold text-yellow-800 dark:text-yellow-200">Catatan Revisi dari Mentor</h4>
-                                <p className="text-yellow-700 dark:text-yellow-300 italic">"{selectedReport.mentorNote}"</p>
+                                <p className="text-yellow-700 dark:text-yellow-300 italic">"{selectedReport.reviewerNotes}"</p>
                             </div>
                             </>
                          )}
@@ -215,6 +264,15 @@ export default function LaporanHarianPage() {
         );
     };
 
+    if (isLoadingReports || isLoadingProfile) {
+      return (
+        <Card>
+          <CardHeader><Skeleton className="h-8 w-48" /></CardHeader>
+          <CardContent><Skeleton className="h-80 w-full" /></CardContent>
+        </Card>
+      );
+    }
+
     return (
         <>
             <Card>
@@ -245,7 +303,7 @@ export default function LaporanHarianPage() {
                     <div className="grid grid-cols-7">
                         {days.map(day => {
                             const dateString = format(day, 'yyyy-MM-dd');
-                            const report = reports[dateString];
+                            const report = reportsMap.get(dateString);
                             const isCurrentMonthDay = isSameMonth(day, currentMonth);
                             const isDateSelected = selectedDate && isSameDay(day, selectedDate);
                             const isFutureDate = isFuture(day) && !isToday(day);
@@ -269,7 +327,7 @@ export default function LaporanHarianPage() {
                                     <span className={cn("font-medium", isToday(day) && "bg-primary text-primary-foreground rounded-full h-6 w-6 flex items-center justify-center ring-2 ring-offset-2 ring-primary")}>
                                         {format(day, 'd')}
                                     </span>
-                                    {report && <span className={cn("absolute bottom-2 left-2 h-2 w-2 rounded-full", statusConfig[report.status].color)} />}
+                                    {report && <span className={cn("absolute bottom-2 left-2 h-2 w-2 rounded-full", statusConfig[report.status]?.color)} />}
                                 </button>
                             );
                         })}
