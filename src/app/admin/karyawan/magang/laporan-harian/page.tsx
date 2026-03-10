@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, isSameMonth, isSameDay, isToday, addMonths, subMonths, isFuture } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, isSameMonth, isSameDay, isToday, addMonths, subMonths, isFuture, isPast } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { FilePlus, Send, Edit, ChevronLeft, ChevronRight, Calendar as CalendarIcon, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -105,6 +105,13 @@ export default function LaporanHarianPage() {
 
     const renderDialogContent = () => {
         const isDateToday = selectedDate && isToday(selectedDate);
+        const isDateInPast = selectedDate && !isToday(selectedDate) && isPast(selectedDate);
+
+        const handleEditClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+            e.preventDefault();
+            setIsEditing(true);
+        }
+
         if (isEditing) {
             return (
                 <>
@@ -112,7 +119,7 @@ export default function LaporanHarianPage() {
                         <DialogTitle>Laporan: {selectedDate && format(selectedDate, "eeee, dd MMMM", { locale: id })}</DialogTitle>
                         <DialogDescription>Isi semua field untuk melaporkan aktivitas harian Anda.</DialogDescription>
                     </DialogHeader>
-                    <form id="report-form" className="space-y-6 py-4" onSubmit={handleSaveReport}>
+                     <form id="report-form" className="space-y-6 py-4" onSubmit={handleSaveReport}>
                         <div className="space-y-2">
                           <Label htmlFor="activity">Uraian Aktivitas</Label>
                           <Textarea id="activity" name="activity" defaultValue={selectedReport?.activity || ''} rows={5} placeholder="Jelaskan secara rinci pekerjaan dan tugas yang Anda lakukan hari ini..." />
@@ -127,7 +134,7 @@ export default function LaporanHarianPage() {
                         </div>
                     </form>
                     <DialogFooter>
-                        <Button type="button" variant="ghost" onClick={(e) => { e.preventDefault(); setIsEditing(false); }}>Batal</Button>
+                        <Button type="button" variant="ghost" onClick={() => setIsEditing(false)}>Batal</Button>
                         <Button type="submit" form="report-form"><Send className="mr-2 h-4 w-4"/> Kirim Laporan</Button>
                     </DialogFooter>
                 </>
@@ -161,11 +168,11 @@ export default function LaporanHarianPage() {
                          )}
                     </div>
                      <DialogFooter className="flex-col sm:flex-row sm:justify-between items-stretch sm:items-center">
-                        {selectedDate && !isDateToday && <p className='text-xs text-muted-foreground'>Laporan untuk tanggal yang lewat tidak dapat diubah.</p>}
+                        {isDateInPast && <p className="text-xs text-muted-foreground text-left mr-auto">Laporan untuk tanggal yang lewat tidak dapat diubah.</p>}
                         <div className='flex gap-2 self-end'>
                             <Button type="button" variant="outline" onClick={handleCloseDialog}>Tutup</Button>
                             {isDateToday && (
-                                <Button type="button" onClick={(e) => { e.preventDefault(); setIsEditing(true);}}><Edit className="mr-2 h-4 w-4"/> Edit</Button>
+                                <Button type="button" onClick={handleEditClick}><Edit className="mr-2 h-4 w-4"/> Edit</Button>
                             )}
                         </div>
                     </DialogFooter>
@@ -183,11 +190,14 @@ export default function LaporanHarianPage() {
                     <h3 className="font-semibold text-lg">Belum ada laporan</h3>
                     <p className="text-muted-foreground text-sm">Tidak ada laporan yang dibuat pada tanggal ini.</p>
                 </div>
-                <DialogFooter>
-                    <Button type="button" variant="outline" onClick={handleCloseDialog}>Tutup</Button>
-                    {isDateToday && (
-                        <Button type="button" onClick={(e) => { e.preventDefault(); setIsEditing(true); }}><FilePlus className="mr-2 h-4 w-4" /> Buat Laporan</Button>
-                    )}
+                <DialogFooter className="flex-col sm:flex-row sm:justify-between items-stretch sm:items-center">
+                     {isDateInPast && <p className="text-xs text-muted-foreground text-left mr-auto">Laporan untuk tanggal yang lewat tidak dapat diubah.</p>}
+                     <div className="flex gap-2 self-end">
+                        <Button type="button" variant="outline" onClick={handleCloseDialog}>Tutup</Button>
+                        {isDateToday && (
+                            <Button type="button" onClick={handleEditClick}><FilePlus className="mr-2 h-4 w-4" /> Buat Laporan</Button>
+                        )}
+                    </div>
                 </DialogFooter>
             </>
         );
@@ -227,6 +237,7 @@ export default function LaporanHarianPage() {
                             const isCurrentMonthDay = isSameMonth(day, currentMonth);
                             const isDateSelected = selectedDate && isSameDay(day, selectedDate);
                             const isFutureDate = isFuture(day) && !isToday(day);
+                            const isPastDate = !isToday(day) && isPast(day);
 
                             return (
                                 <button
@@ -237,6 +248,8 @@ export default function LaporanHarianPage() {
                                     className={cn(
                                         "relative h-20 p-2 text-left align-top transition-colors rounded-lg",
                                         isCurrentMonthDay ? "hover:bg-accent" : "text-muted-foreground/50 hover:bg-accent/50",
+                                        isPastDate && "opacity-75",
+                                        !isCurrentMonthDay && isPastDate && "opacity-50",
                                         isDateSelected && "bg-primary/10 ring-2 ring-primary",
                                         isFutureDate && "text-muted-foreground/30 cursor-not-allowed hover:bg-transparent"
                                     )}
