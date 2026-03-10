@@ -63,6 +63,16 @@ export function LaporanMagangClient() {
     }).sort((a, b) => b.date.toMillis() - a.date.toMillis());
   }, [reports, internMap]);
   
+  const uniqueSupervisors = useMemo(() => {
+    const supervisorSet = new Set<string>();
+    reportsWithDetails.forEach(r => {
+      if (r.supervisorName && r.supervisorName !== 'Unassigned') {
+        supervisorSet.add(r.supervisorName);
+      }
+    });
+    return Array.from(supervisorSet).sort();
+  }, [reportsWithDetails]);
+
   const filteredReports = useMemo(() => {
     if (!userProfile) return [];
     
@@ -87,16 +97,6 @@ export function LaporanMagangClient() {
     
     return filtered;
   }, [reportsWithDetails, userProfile, brandFilter, supervisorFilter, searchTerm]);
-
-  const uniqueSupervisors = useMemo(() => {
-    const supervisorSet = new Set<string>();
-    reportsWithDetails.forEach(r => {
-      if (r.supervisorName && r.supervisorName !== 'Unassigned') {
-        supervisorSet.add(r.supervisorName);
-      }
-    });
-    return Array.from(supervisorSet).sort();
-  }, [reportsWithDetails]);
 
   const kpiData = useMemo(() => {
     const submitted = filteredReports.filter(r => r.status === 'submitted').length;
