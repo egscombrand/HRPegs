@@ -21,10 +21,10 @@ import {
 
 type ReportStatus = 'disetujui' | 'revisi' | 'terkirim' | 'draft';
 
-const mockReports: Record<string, { status: ReportStatus; activity: string; learning: string; obstacle: string; plan: string; mentorNote?: string }> = {
-    '2024-07-15': { status: 'disetujui', activity: 'Rapat tim desain dan finalisasi mockup.', learning: 'Belajar tentang alur kerja tim dan pentingnya design system.', obstacle: 'Tidak ada kendala berarti.', plan: 'Mulai slicing komponen UI.' },
-    '2024-07-16': { status: 'revisi', activity: 'Membuat wireframe untuk fitur login.', learning: 'Menggunakan komponen-komponen di Figma.', obstacle: 'Performa laptop agak lambat saat file besar.', plan: 'Membersihkan file cache.', mentorNote: 'Tolong detailkan lagi bagian wireframe, komponen apa saja yang dibuat?' },
-    '2024-07-17': { status: 'terkirim', activity: 'Riset UX kompetitor untuk fitur dashboard.', learning: 'Menganalisis kelebihan dan kekurangan UX dari 3 aplikasi kompetitor.', obstacle: 'Akses terbatas ke beberapa fitur premium kompetitor.', plan: 'Membuat ringkasan temuan dan mempresentasikannya.' },
+const mockReports: Record<string, { status: ReportStatus; activity: string; learning: string; obstacle: string; mentorNote?: string }> = {
+    '2024-07-15': { status: 'disetujui', activity: 'Rapat tim desain dan finalisasi mockup.', learning: 'Belajar tentang alur kerja tim dan pentingnya design system.', obstacle: 'Tidak ada kendala berarti.' },
+    '2024-07-16': { status: 'revisi', activity: 'Membuat wireframe untuk fitur login.', learning: 'Menggunakan komponen-komponen di Figma.', obstacle: 'Performa laptop agak lambat saat file besar.', mentorNote: 'Tolong detailkan lagi bagian wireframe, komponen apa saja yang dibuat?' },
+    '2024-07-17': { status: 'terkirim', activity: 'Riset UX kompetitor untuk fitur dashboard.', learning: 'Menganalisis kelebihan dan kekurangan UX dari 3 aplikasi kompetitor.', obstacle: 'Akses terbatas ke beberapa fitur premium kompetitor.' },
 };
 
 const statusConfig: Record<ReportStatus, { label: string; color: string; icon: React.ReactNode }> = {
@@ -93,10 +93,6 @@ export default function LaporanHarianPage() {
                           <Label htmlFor="obstacle">Kendala yang Dialami</Label>
                           <Textarea id="obstacle" defaultValue={selectedReport?.obstacle || ''} rows={3} placeholder="Apa saja kesulitan yang Anda hadapi dan bagaimana Anda mencoba menyelesaikannya?" />
                         </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="plan">Rencana Tindak Lanjut</Label>
-                          <Textarea id="plan" defaultValue={selectedReport?.plan || ''} rows={3} placeholder="Apa langkah Anda selanjutnya untuk pekerjaan besok?" />
-                        </div>
                     </form>
                     <DialogFooter>
                         <Button type="button" variant="ghost" onClick={() => setIsEditing(false)}>Batal</Button>
@@ -122,7 +118,6 @@ export default function LaporanHarianPage() {
                          <div className="space-y-1"><h4 className="font-semibold">Uraian Aktivitas</h4><p className="text-muted-foreground">{selectedReport.activity}</p></div>
                          <div className="space-y-1"><h4 className="font-semibold">Pembelajaran</h4><p className="text-muted-foreground">{selectedReport.learning}</p></div>
                          <div className="space-y-1"><h4 className="font-semibold">Kendala</h4><p className="text-muted-foreground">{selectedReport.obstacle}</p></div>
-                         <div className="space-y-1"><h4 className="font-semibold">Rencana</h4><p className="text-muted-foreground">{selectedReport.plan}</p></div>
                          {selectedReport.mentorNote && (
                             <>
                             <Separator/>
