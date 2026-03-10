@@ -8,95 +8,60 @@ import { useAuth } from '@/providers/auth-provider';
 import { MENU_CONFIG } from '@/lib/menu-config';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ArrowRight, FilePlus, BookOpen, BarChart3, CheckSquare, Target, Activity } from 'lucide-react';
 import { useDoc, useFirestore, useMemoFirebase, useCollection } from '@/firebase';
 import { doc, collection, query, where, orderBy, limit } from 'firebase/firestore';
 import type { EmployeeProfile, UserProfile, Brand, JobApplication } from '@/lib/types';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
 
 function DashboardSkeleton() {
     return (
-        <div className="space-y-4">
-            <Skeleton className="h-24 w-full" />
-            <Skeleton className="h-32 w-full" />
-            <Skeleton className="h-32 w-full" />
+        <div className="space-y-6">
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+                <Skeleton className="h-28" />
+                <Skeleton className="h-28" />
+                <Skeleton className="h-28" />
+                <Skeleton className="h-28" />
+            </div>
+            <div className="grid gap-6 lg:grid-cols-3">
+                <Skeleton className="lg:col-span-2 h-64" />
+                <Skeleton className="h-64" />
+            </div>
         </div>
     )
 }
 
-function PlacementInfoCard({
-  profile,
-  userProfile,
-  brands,
-}: {
-  profile: EmployeeProfile | null;
-  userProfile: UserProfile | null;
-  brands: Brand[] | null;
-}) {
-  const brandMap = useMemo(() => {
-    if (!brands) return new Map<string, string>();
-    return new Map(brands.map(b => [b.id!, b.name]));
-  }, [brands]);
+function IdentityCard({ profile, userProfile, brands }: { profile: EmployeeProfile | null; userProfile: UserProfile | null; brands: Brand[] | null; }) {
+    const brandMap = useMemo(() => new Map(brands?.map(b => [b.id!, b.name]) || []), [brands]);
+    
+    const brandNameToDisplay = useMemo(() => {
+        if (profile?.brandName) return profile.brandName;
+        if (userProfile?.brandId) {
+          if (Array.isArray(userProfile.brandId)) {
+            return userProfile.brandId.map(id => brandMap.get(id)).filter(Boolean).join(', ');
+          }
+          return brandMap.get(userProfile.brandId as string);
+        }
+        return 'Belum diatur';
+      }, [profile, userProfile, brandMap]);
 
-  const brandNameToDisplay = useMemo(() => {
-    // Priority 1: From employee_profiles (HR-set override)
-    if (profile?.brandName) {
-      return profile.brandName;
-    }
-    // Priority 2: From users (set during registration/activation)
-    if (userProfile?.brandId) {
-      if (Array.isArray(userProfile.brandId)) {
-        return userProfile.brandId
-          .map(id => brandMap.get(id))
-          .filter(Boolean)
-          .join(', ');
-      }
-      return brandMap.get(userProfile.brandId as string);
-    }
-    return 'Belum diatur';
-  }, [profile, userProfile, brandMap]);
-  
+    const startDate = profile?.internshipStartDate?.toDate();
+    const endDate = profile?.internshipEndDate?.toDate();
+
     return (
         <Card>
             <CardHeader>
-                <CardTitle className="text-lg">Informasi Penempatan</CardTitle>
-                 <CardDescription>Detail penempatan dan penanggung jawab Anda selama periode magang.</CardDescription>
+                <CardTitle>{userProfile?.fullName}</CardTitle>
+                <CardDescription className="capitalize">{userProfile?.employmentType}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
                 <div className="flex justify-between"><span className="text-muted-foreground">Brand</span> <span className="font-semibold">{brandNameToDisplay}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Divisi</span> <span className="font-semibold">{profile?.division || 'Belum diatur'}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Supervisor / PIC</span> <span className="font-semibold">{profile?.supervisorName || 'Belum diatur'}</span></div>
-            </CardContent>
-        </Card>
-    );
-}
-
-function PeriodCard({ profile, application }: { profile: EmployeeProfile | null, application: JobApplication | null }) {
-    // Priority: Official HR data (profile) > Data from recruitment offer (application)
-    const startDate = profile?.internshipStartDate?.toDate() || application?.contractStartDate?.toDate();
-    const endDate = profile?.internshipEndDate?.toDate() || application?.contractEndDate?.toDate();
-
-    return (
-        <Card className="bg-primary/5 text-primary-foreground border-primary/20">
-            <CardHeader>
-                <CardTitle className="text-lg text-primary">Periode Magang Anda</CardTitle>
-            </CardHeader>
-            <CardContent>
-                <div className="flex items-center justify-around text-center">
-                    <div>
-                        <p className="text-xs text-primary/80">Mulai Magang</p>
-                        <p className="font-bold text-xl text-primary">{startDate ? format(startDate, 'dd MMM yyyy', { locale: id }) : 'TBA'}</p>
-                    </div>
-                    <div className="h-12 w-px bg-primary/20" />
-                    <div>
-                        <p className="text-xs text-primary/80">Selesai Magang</p>
-                        <p className="font-bold text-xl text-primary">{endDate ? format(endDate, 'dd MMM yyyy', { locale: id }) : 'TBA'}</p>
-                    </div>
-                </div>
-                {!startDate && (
-                    <p className="text-xs text-center text-primary/70 mt-3">Periode resmi magang Anda akan diatur dan ditampilkan di sini oleh HRD.</p>
-                )}
+                <div className="flex justify-between"><span className="text-muted-foreground">Mentor/PIC</span> <span className="font-semibold">{profile?.supervisorName || 'Belum diatur'}</span></div>
+                 <div className="flex justify-between"><span className="text-muted-foreground">Periode</span> <span className="font-semibold">{startDate && endDate ? `${format(startDate, 'dd MMM yyyy')} - ${format(endDate, 'dd MMM yyyy')}` : 'Belum diatur'}</span></div>
             </CardContent>
         </Card>
     )
@@ -119,30 +84,7 @@ export default function MagangDashboardPage() {
     useMemoFirebase(() => collection(firestore, 'brands'), [firestore])
   );
 
-  const applicationQuery = useMemoFirebase(() => {
-    if (!userProfile) return null;
-    // Remove orderBy and limit to avoid needing a composite index
-    return query(
-      collection(firestore, 'applications'),
-      where('candidateUid', '==', userProfile.uid),
-      where('status', '==', 'hired')
-    );
-  }, [firestore, userProfile]);
-
-  const { data: applications, isLoading: isLoadingApplication } = useCollection<JobApplication>(applicationQuery);
-
-  const application = useMemo(() => {
-    if (!applications || applications.length === 0) return null;
-    // Sort on the client to get the most recent hired application
-    const sortedApps = [...applications].sort((a, b) => {
-        const timeA = a.updatedAt?.toMillis() || 0;
-        const timeB = b.updatedAt?.toMillis() || 0;
-        return timeB - timeA;
-    });
-    return sortedApps[0];
-  }, [applications]);
-
-  const isLoading = authLoading || profileLoading || brandsLoading || isLoadingApplication;
+  const isLoading = authLoading || profileLoading || brandsLoading;
 
   if (!hasAccess || !userProfile || userProfile.employmentType !== 'magang') {
     return (
@@ -159,17 +101,50 @@ export default function MagangDashboardPage() {
     <DashboardLayout pageTitle="Dashboard Magang" menuConfig={menuConfig}>
       {isLoading ? <DashboardSkeleton /> : (
         <div className="space-y-6">
-            <Card>
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                <IdentityCard profile={employeeProfile} userProfile={userProfile} brands={brands} />
+                <Card className="lg:col-span-2">
+                    <CardHeader>
+                        <CardTitle>Progres Laporan</CardTitle>
+                        <CardDescription>Ringkasan status laporan harian Anda.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-center">
+                        <div className="p-4 bg-muted/50 rounded-lg"><p className="text-2xl font-bold">21</p><p className="text-xs text-muted-foreground">Total Laporan</p></div>
+                        <div className="p-4 bg-muted/50 rounded-lg"><p className="text-2xl font-bold">15</p><p className="text-xs text-muted-foreground">Disetujui</p></div>
+                        <div className="p-4 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg"><p className="text-2xl font-bold">3</p><p className="text-xs text-yellow-600 dark:text-yellow-400">Perlu Revisi</p></div>
+                        <div className="p-4 bg-blue-100 dark:bg-blue-900/30 rounded-lg"><p className="text-2xl font-bold">3</p><p className="text-xs text-blue-600 dark:text-blue-400">Menunggu Review</p></div>
+                    </CardContent>
+                </Card>
+            </div>
+             <div className="grid gap-6 md:grid-cols-2">
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2"><Target className="text-primary"/> Target & Indikator Kinerja</CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-sm text-muted-foreground">
+                        Fitur ini sedang dalam pengembangan. Di sini akan ditampilkan target-target yang harus Anda capai selama periode magang.
+                    </CardContent>
+                </Card>
+                 <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2"><Activity className="text-primary"/> Aktivitas Terbaru</CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-sm text-muted-foreground">
+                         Fitur ini sedang dalam pengembangan. Di sini akan ditampilkan histori singkat dari laporan terakhir yang Anda kirim atau feedback yang Anda terima.
+                    </CardContent>
+                </Card>
+            </div>
+             <Card>
                 <CardHeader>
-                    <CardTitle>Halo, {userProfile.fullName}!</CardTitle>
+                    <CardTitle>Aksi Cepat</CardTitle>
                 </CardHeader>
-                <CardContent>
-                    <p>Selamat datang di dashboard peserta magang.</p>
-                    <Badge className="mt-4 capitalize">{userProfile.employmentType}</Badge>
+                <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <Button asChild variant="outline"><Link href="/admin/karyawan/magang/laporan-harian"><FilePlus className="mr-2"/> Buat Laporan</Link></Button>
+                    <Button asChild variant="outline"><Link href="/admin/karyawan/magang/rekap-laporan"><BarChart3 className="mr-2"/> Lihat Rekap</Link></Button>
+                    <Button asChild variant="outline"><Link href="/admin/karyawan/magang/evaluasi"><CheckSquare className="mr-2"/> Lihat Feedback</Link></Button>
+                     <Button asChild><Link href="/admin/karyawan/magang/profile">Lengkapi Profil <ArrowRight className="ml-2"/></Link></Button>
                 </CardContent>
             </Card>
-            <PlacementInfoCard profile={employeeProfile} userProfile={userProfile} brands={brands} />
-            <PeriodCard profile={employeeProfile} application={application} />
         </div>
       )}
     </DashboardLayout>

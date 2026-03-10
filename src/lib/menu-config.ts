@@ -77,6 +77,9 @@ export const ALL_MENU_GROUPS: MenuGroup[] = [
         items: [
             { key: 'employee.dashboard', href: '/admin/karyawan/dashboard', label: 'Dashboard', icon: createElement(LayoutDashboard) },
             { key: 'employee.dashboard.magang', href: '/admin/karyawan/dashboard-magang', label: 'Dashboard Magang', icon: createElement(LayoutDashboard) },
+            { key: 'employee.laporan.harian', href: '/admin/karyawan/magang/laporan-harian', label: 'Laporan Harian', icon: createElement(FileText) },
+            { key: 'employee.laporan.rekap', href: '/admin/karyawan/magang/rekap-laporan', label: 'Rekap Laporan', icon: createElement(BarChart) },
+            { key: 'employee.laporan.evaluasi', href: '/admin/karyawan/magang/evaluasi', label: 'Evaluasi & Feedback', icon: createElement(CheckSquare) },
             { key: 'employee.profile.magang', href: '/admin/karyawan/magang/profile', label: 'Profil Magang', icon: createElement(User) },
             { key: 'employee.dashboard.training', href: '/admin/karyawan/dashboard-training', label: 'Dashboard Training', icon: createElement(LayoutDashboard) },
         ]
@@ -149,13 +152,21 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
     }
   ],
   'karyawan-magang': [
-    {
-        title: "Karyawan",
+      {
+        title: "Internship",
         items: [
             { key: 'employee.dashboard.magang', href: '/admin/karyawan/dashboard-magang', label: 'Dashboard Magang', icon: createElement(LayoutDashboard) },
             { key: 'employee.profile.magang', href: '/admin/karyawan/magang/profile', label: 'Profil Magang', icon: createElement(User) },
         ]
-    }
+      },
+      {
+        title: "Laporan Magang",
+        items: [
+            { key: 'employee.laporan.harian', href: '/admin/karyawan/magang/laporan-harian', label: 'Laporan Harian', icon: createElement(FileText) },
+            { key: 'employee.laporan.rekap', href: '/admin/karyawan/magang/rekap-laporan', label: 'Rekap Laporan', icon: createElement(BarChart) },
+            { key: 'employee.laporan.evaluasi', href: '/admin/karyawan/magang/evaluasi', label: 'Evaluasi & Feedback', icon: createElement(CheckSquare) },
+        ]
+      }
   ],
   'karyawan-training': [
       {
