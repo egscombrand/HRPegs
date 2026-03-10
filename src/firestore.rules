@@ -96,7 +96,7 @@ service cloud.firestore {
      */
     match /users/{userId} {
       allow get: if isOwner(userId) || isInternal();
-      allow update: if isOwner(userId) || isSuperAdmin();
+      allow update: if isOwner(userId) || isSuperAdmin() || isHrd();
       allow list: if isSuperAdmin() || isHrd();
       allow create: if (isOwner(userId) && request.resource.data.role == 'kandidat' && hasValidCreateData(userId)) || isSuperAdmin();
       allow delete: if isSuperAdmin();
@@ -353,19 +353,25 @@ service cloud.firestore {
                     isSuperAdmin()
                   );
 
-      // CREATE: Owner can create a report with 'submitted' status.
-      allow create: if isOwner(request.resource.data.uid) && request.resource.data.status == 'submitted';
+      // CREATE: Owner can create a report with 'draft' or 'submitted' status.
+      allow create: if isOwner(request.resource.data.uid)
+                    && (request.resource.data.status == 'draft' || request.resource.data.status == 'submitted');
 
       // UPDATE:
-      // 1. Intern can re-submit a report that needs revision.
-      // 2. Reviewer (Supervisor, HRD, Admin) can change status of a submitted report.
       allow update: if isSignedIn() && (
-                      (isOwner(resource.data.uid) && resource.data.status == 'needs_revision' && request.resource.data.status == 'submitted') ||
-                      ((request.auth.uid == resource.data.supervisorUid || isHrd() || isSuperAdmin()) && resource.data.status == 'submitted')
+                      // Intern can update their report if it needs revision or is a draft
+                      (isOwner(resource.data.uid) &&
+                       (resource.data.status == 'draft' || resource.data.status == 'needs_revision') &&
+                       // And they are not trying to approve it themselves
+                       !(request.resource.data.status == 'approved')) ||
+
+                      // Reviewer can update a submitted report
+                      ((request.auth.uid == resource.data.supervisorUid || isHrd() || isSuperAdmin()) &&
+                       resource.data.status == 'submitted')
                     );
 
-      // DELETE: Only HRD and Super Admins.
-      allow delete: if isHrd() || isSuperAdmin();
+      // DELETE: No one can delete a report for audit trail.
+      allow delete: if false;
     }
   }
 }

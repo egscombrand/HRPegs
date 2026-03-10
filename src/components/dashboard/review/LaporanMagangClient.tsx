@@ -40,12 +40,7 @@ export function LaporanMagangClient() {
     useMemoFirebase(() => collection(firestore, 'brands'), [firestore])
   );
 
-  const { data: supervisors, isLoading: isLoadingSupervisors } = useCollection<UserProfile>(
-      useMemoFirebase(() => query(collection(firestore, 'users'), where('role', 'in', ['manager', 'karyawan', 'hrd', 'super-admin'])), [firestore])
-  );
-
   const internMap = useMemo(() => new Map(interns?.map(i => [i.uid, i])), [interns]);
-  const brandMap = useMemo(() => new Map(brands?.map(b => [b.id!, b.name])), [brands]);
   
   const reportsWithDetails = useMemo(() => {
     if (!reports) return [];
@@ -55,6 +50,7 @@ export function LaporanMagangClient() {
         return {
             ...report,
             internName: internProfile?.fullName || 'Unknown Intern',
+            supervisorUid: internProfile?.supervisorUid || null,
             supervisorName: internProfile?.supervisorName || 'Unassigned',
             division: internProfile?.division || 'N/A',
             brandName: internProfile?.brandName || 'N/A',
@@ -79,21 +75,20 @@ export function LaporanMagangClient() {
     
     let filtered = reportsWithDetails;
 
-    // Supervisor/Manager can only see reports from their mentees
+    // Role-based filtering
     if (userProfile.role === 'manager') {
-      filtered = filtered.filter(r => r.supervisorName === userProfile.fullName);
-    }
-    
-    // Apply UI filters
-    if (brandFilter !== 'all') {
-        filtered = filtered.filter(r => r.brandId === brandFilter);
-    }
-    if (supervisorFilter !== 'all') {
-        filtered = filtered.filter(r => r.supervisorName === supervisorFilter);
-    }
-    if (searchTerm.trim() !== '') {
-        const lowercasedSearch = searchTerm.toLowerCase();
-        filtered = filtered.filter(r => r.internName.toLowerCase().includes(lowercasedSearch));
+      filtered = filtered.filter(r => r.supervisorUid === userProfile.uid);
+    } else { // HRD and Super Admin can filter
+        if (brandFilter !== 'all') {
+            filtered = filtered.filter(r => r.brandId === brandFilter);
+        }
+        if (supervisorFilter !== 'all') {
+            filtered = filtered.filter(r => r.supervisorName === supervisorFilter);
+        }
+        if (searchTerm.trim() !== '') {
+            const lowercasedSearch = searchTerm.toLowerCase();
+            filtered = filtered.filter(r => r.internName.toLowerCase().includes(lowercasedSearch));
+        }
     }
     
     return filtered;
@@ -122,7 +117,7 @@ export function LaporanMagangClient() {
     setSearchTerm('');
   };
 
-  const isLoading = isLoadingReports || isLoadingInterns || isLoadingBrands || isLoadingSupervisors;
+  const isLoading = isLoadingReports || isLoadingInterns || isLoadingBrands;
 
   if (isLoading) {
     return <div className="h-64 flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
@@ -130,37 +125,38 @@ export function LaporanMagangClient() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-grow min-w-[200px]">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Cari nama intern..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-8" />
-        </div>
-        <Select value={brandFilter} onValueChange={setBrandFilter} disabled={isLoadingBrands}>
-            <SelectTrigger className="w-full sm:w-[180px]"><SelectValue placeholder="Semua Brand" /></SelectTrigger>
-            <SelectContent><SelectItem value="all">Semua Brand</SelectItem>{brands?.map(b => <SelectItem key={b.id!} value={b.id!}>{b.name}</SelectItem>)}</SelectContent>
-        </Select>
-        {userProfile?.role !== 'manager' && (
-            <Select value={supervisorFilter} onValueChange={setSupervisorFilter}>
-                <SelectTrigger className="w-full sm:w-[180px]"><SelectValue placeholder="Semua Mentor" /></SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="all">Semua Mentor</SelectItem>
-                    {uniqueSupervisors.length > 0 ? (
-                        uniqueSupervisors.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)
-                    ) : (
-                        <SelectItem value="no-mentors" disabled>Tidak ada mentor yang ditugaskan</SelectItem>
-                    )}
-                </SelectContent>
-            </Select>
-        )}
-        <Button onClick={handleResetFilters} variant="ghost" size="sm" className="text-muted-foreground"><RotateCcw className="mr-2 h-4 w-4" />Reset</Button>
-      </div>
-
-       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <KpiCard title="Total Laporan" value={kpiData.totalReports} />
-            <KpiCard title="Menunggu Review" value={kpiData.submitted} />
-            <KpiCard title="Perlu Revisi" value={kpiData.needs_revision} deltaType="inverse" />
-            <KpiCard title="Disetujui" value={kpiData.approved} />
-      </div>
+      {userProfile && ['hrd', 'super-admin'].includes(userProfile.role) && (
+        <>
+            <div className="flex flex-wrap items-center gap-2">
+                <div className="relative flex-grow min-w-[200px]">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input placeholder="Cari nama intern..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-8" />
+                </div>
+                <Select value={brandFilter} onValueChange={setBrandFilter} disabled={isLoadingBrands}>
+                    <SelectTrigger className="w-full sm:w-[180px]"><SelectValue placeholder="Semua Brand" /></SelectTrigger>
+                    <SelectContent><SelectItem value="all">Semua Brand</SelectItem>{brands?.map(b => <SelectItem key={b.id!} value={b.id!}>{b.name}</SelectItem>)}</SelectContent>
+                </Select>
+                <Select value={supervisorFilter} onValueChange={setSupervisorFilter}>
+                    <SelectTrigger className="w-full sm:w-[180px]"><SelectValue placeholder="Semua Mentor" /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">Semua Mentor</SelectItem>
+                        {uniqueSupervisors.length > 0 ? (
+                            uniqueSupervisors.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)
+                        ) : (
+                            <SelectItem value="no-mentors" disabled>Tidak ada mentor yang ditugaskan</SelectItem>
+                        )}
+                    </SelectContent>
+                </Select>
+                <Button onClick={handleResetFilters} variant="ghost" size="sm" className="text-muted-foreground"><RotateCcw className="mr-2 h-4 w-4" />Reset</Button>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <KpiCard title="Total Laporan" value={kpiData.totalReports} />
+                <KpiCard title="Menunggu Review" value={kpiData.submitted} />
+                <KpiCard title="Perlu Revisi" value={kpiData.needs_revision} deltaType="inverse" />
+                <KpiCard title="Disetujui" value={kpiData.approved} />
+            </div>
+        </>
+      )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
