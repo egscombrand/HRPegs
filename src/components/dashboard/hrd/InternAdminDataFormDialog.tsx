@@ -146,6 +146,7 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, onSucce
   const initialValuesSet = useRef(false);
   useEffect(() => {
     if (open && !initialValuesSet.current) {
+        const initialCompensation = profile.compensationAmount ?? application?.offeredSalary ?? 0;
         const defaultValues = {
             division: profile.division || job?.division || '',
             supervisorName: profile.supervisorName || '',
@@ -154,7 +155,7 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, onSucce
             internshipStartDate: profile.internshipStartDate?.toDate() || application?.contractStartDate?.toDate() || null,
             contractDurationMonths: profile.contractDurationMonths ?? application?.contractDurationMonths ?? null,
             internshipEndDate: profile.internshipEndDate?.toDate() || application?.contractEndDate?.toDate() || null,
-            compensationAmount: profile.compensationAmount ?? application?.offeredSalary ?? 0,
+            compensationAmount: initialCompensation,
         };
         form.reset(defaultValues);
         initialValuesSet.current = true;
@@ -171,15 +172,22 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, onSucce
         const batch = writeBatch(firestore);
         const employeeProfileRef = doc(firestore, 'employee_profiles', profile.uid);
 
+        // Explicitly build the payload to ensure pristine default values are included.
         const employeePayload = {
-            ...values,
+            division: values.division,
+            supervisorName: values.supervisorName,
+            internSubtype: values.internSubtype,
+            hrdNotes: values.hrdNotes,
+            internshipStartDate: values.internshipStartDate ? Timestamp.fromDate(values.internshipStartDate) : null,
+            contractDurationMonths: values.contractDurationMonths ?? null,
+            internshipEndDate: values.internshipEndDate ? Timestamp.fromDate(values.internshipEndDate) : null,
             compensationAmount: values.compensationAmount ?? null,
+            // Non-form values that need to be set
             brandId: finalBrandId, 
             brandName: finalBrandName,
-            internshipStartDate: values.internshipStartDate ? Timestamp.fromDate(values.internshipStartDate) : null,
-            internshipEndDate: values.internshipEndDate ? Timestamp.fromDate(values.internshipEndDate) : null,
             updatedAt: serverTimestamp(),
         };
+
         batch.set(employeeProfileRef, employeePayload, { merge: true });
 
         const userRef = doc(firestore, 'users', profile.uid);
@@ -242,7 +250,7 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, onSucce
                                 name="compensationAmount"
                                 render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Uang Saku (per bulan)</FormLabel>
+                                    <FormLabel>{job?.statusJob === 'internship' ? 'Uang Saku (per bulan)' : 'Gaji (per bulan)'}</FormLabel>
                                     <FormControl>
                                     <div className="relative">
                                         <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground pointer-events-none">Rp</span>
