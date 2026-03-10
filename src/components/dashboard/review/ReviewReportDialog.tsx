@@ -22,6 +22,7 @@ import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const reviewSchema = z.object({
   reviewerNotes: z.string().min(10, { message: 'Catatan revisi harus diisi, minimal 10 karakter.' }),
@@ -113,7 +114,8 @@ export function ReviewReportDialog({ open, onOpenChange, report, onSuccess }: Re
               <span>Mentor: {report.supervisorName}</span>
            </DialogDescription>
         </DialogHeader>
-        <div className="flex-grow overflow-y-auto -mx-6 px-6 py-4 space-y-6">
+        <ScrollArea className="flex-grow">
+        <div className="px-6 py-4 space-y-6">
             <Alert variant={currentStatusInfo.variant === 'warning' ? 'default' : currentStatusInfo.variant} className={cn(
                 currentStatusInfo.variant === 'warning' && 'bg-yellow-50 border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-800',
                 currentStatusInfo.variant === 'default' && 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800',
@@ -159,7 +161,8 @@ export function ReviewReportDialog({ open, onOpenChange, report, onSuccess }: Re
                   name="reviewerNotes"
                   render={({ field }) => (
                     <FormItem>
-                      <Label className="text-base font-semibold">Catatan Reviewer <span className="text-destructive font-normal">(wajib jika minta revisi)</span></Label>
+                      <Label className="text-base font-semibold">Catatan Reviewer</Label>
+                      <FormDescription className="text-xs">Wajib diisi saat meminta revisi.</FormDescription>
                       <FormControl>
                         <Textarea placeholder="Berikan feedback atau arahan untuk revisi..." {...field} rows={4} />
                       </FormControl>
@@ -170,6 +173,7 @@ export function ReviewReportDialog({ open, onOpenChange, report, onSuccess }: Re
               </form>
             </Form>
         </div>
+        </ScrollArea>
         <DialogFooter className="flex-shrink-0 p-6 pt-4 border-t bg-background">
           <div className="flex w-full justify-between items-center">
             <Button variant="ghost" onClick={() => onOpenChange(false)}>Tutup</Button>
