@@ -139,9 +139,16 @@ export function LaporanMagangClient() {
             <SelectContent><SelectItem value="all">Semua Brand</SelectItem>{brands?.map(b => <SelectItem key={b.id!} value={b.id!}>{b.name}</SelectItem>)}</SelectContent>
         </Select>
         {userProfile?.role !== 'manager' && (
-            <Select value={supervisorFilter} onValueChange={setSupervisorFilter} disabled={uniqueSupervisors.length === 0}>
-                <SelectTrigger className="w-full sm:w-[180px]"><SelectValue placeholder="Semua Supervisor" /></SelectTrigger>
-                <SelectContent><SelectItem value="all">Semua Supervisor</SelectItem>{uniqueSupervisors.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+            <Select value={supervisorFilter} onValueChange={setSupervisorFilter}>
+                <SelectTrigger className="w-full sm:w-[180px]"><SelectValue placeholder="Semua Mentor" /></SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">Semua Mentor</SelectItem>
+                    {uniqueSupervisors.length > 0 ? (
+                        uniqueSupervisors.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)
+                    ) : (
+                        <SelectItem value="no-mentors" disabled>Tidak ada mentor yang ditugaskan</SelectItem>
+                    )}
+                </SelectContent>
             </Select>
         )}
         <Button onClick={handleResetFilters} variant="ghost" size="sm" className="text-muted-foreground"><RotateCcw className="mr-2 h-4 w-4" />Reset</Button>
@@ -169,7 +176,7 @@ export function LaporanMagangClient() {
               <TableHead>Brand</TableHead>
               <TableHead>Divisi</TableHead>
               <TableHead>Tanggal</TableHead>
-              <TableHead>Supervisor</TableHead>
+              <TableHead>Mentor / PIC</TableHead>
               <TableHead>Update Terakhir</TableHead>
               <TableHead className="text-right">Aksi</TableHead>
             </TableRow>
