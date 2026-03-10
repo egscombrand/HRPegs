@@ -360,7 +360,7 @@ export default function LaporanHarianPage() {
                                     className={cn(
                                         "relative h-20 p-2 text-left align-top transition-colors rounded-lg",
                                         isCurrentMonthDay ? "hover:bg-accent" : "text-muted-foreground/50 hover:bg-accent/50",
-                                        isDateInPast(day) && !isToday(day) && "opacity-75",
+                                        isPast(day) && !isToday(day) && "opacity-75",
                                         isDateSelected && "bg-primary/10 ring-2 ring-primary",
                                         isFutureDate && "opacity-50 cursor-not-allowed hover:bg-transparent"
                                     )}
