@@ -2,7 +2,7 @@
 import { createElement, type ReactNode } from 'react';
 import { 
     LayoutDashboard, Users, Briefcase, User, Calendar, DollarSign, Settings, ShieldCheck, Database, History, 
-    Contact, UserPlus, FolderKanban, CalendarOff, UserMinus, KanbanSquare, CheckSquare, BarChart, ClipboardCheck, Award, Search, FileText, FileUp, Video, BrainCircuit, Timer, MapPin, BookUser, FileHeart, FileClock, GraduationCap 
+    Contact, UserPlus, FolderKanban, CalendarOff, UserMinus, KanbanSquare, CheckSquare, BarChart, ClipboardCheck, Award, Search, FileText, FileUp, Video, BrainCircuit, Timer, MapPin, BookUser, FileHeart, FileClock, GraduationCap, PenSquare
 } from 'lucide-react';
 import type { UserRole } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
@@ -54,10 +54,18 @@ const EMPLOYEE_MONITORING_ITEMS: MenuGroup = {
     ]
 };
 
+const REVIEW_ITEMS: MenuGroup = {
+    title: "Review",
+    items: [
+        { key: 'review.reports', href: '/admin/review/laporan-magang', label: 'Review Laporan Magang', icon: createElement(PenSquare) },
+    ]
+};
+
 export const ALL_MENU_GROUPS: MenuGroup[] = [
     RECRUITMENT_MENU_ITEMS,
     EMPLOYEE_MANAGEMENT_ITEMS,
     EMPLOYEE_MONITORING_ITEMS,
+    REVIEW_ITEMS,
     {
         title: "Administrasi",
         items: [
@@ -108,6 +116,7 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
     RECRUITMENT_MENU_ITEMS,
     EMPLOYEE_MANAGEMENT_ITEMS,
     EMPLOYEE_MONITORING_ITEMS,
+    REVIEW_ITEMS,
     {
         title: "Administrasi",
         items: [
@@ -127,6 +136,7 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
     RECRUITMENT_MENU_ITEMS,
     EMPLOYEE_MANAGEMENT_ITEMS,
     EMPLOYEE_MONITORING_ITEMS,
+    REVIEW_ITEMS,
     {
         title: "Personal",
         items: [
@@ -139,6 +149,7 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
         title: "Manager",
         items: [
             { key: 'manager.team', href: '/admin/manager', label: 'My Team', icon: createElement(Users) },
+            { key: 'review.reports', href: '/admin/review/laporan-magang', label: 'Review Laporan', icon: createElement(PenSquare) },
             { key: 'personal.interviews.manager', href: '/admin/interviews', label: 'My Interviews', icon: createElement(Video) },
         ]
     }

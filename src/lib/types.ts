@@ -69,6 +69,7 @@ export type EmployeeProfile = {
 
   // Fields managed by HR
   division?: string;
+  supervisorUid?: string;
   supervisorName?: string;
   hrdNotes?: string;
   compensationAmount?: number;
@@ -654,4 +655,25 @@ export type AttendanceEvent = {
     displayName?: string;
     flags?: string[];
     address?: string;
+};
+
+export type ReportStatus = 'draft' | 'submitted' | 'needs_revision' | 'approved';
+
+export type DailyReport = {
+  id?: string;
+  uid: string;
+  date: Timestamp;
+  status: ReportStatus;
+  activity: string;
+  learning: string;
+  obstacle: string;
+  supervisorUid?: string;
+  brandId?: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  submittedAt?: Timestamp;
+  reviewedByUid?: string;
+  reviewedByName?: string;
+  reviewedAt?: Timestamp;
+  reviewerNotes?: string;
 };
