@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, isSameMonth, isSameDay, isToday, addMonths, subMonths } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, isSameMonth, isSameDay, isToday, addMonths, subMonths, isFuture } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { FilePlus, Send, Edit, ChevronLeft, ChevronRight, Calendar as CalendarIcon, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -104,6 +104,7 @@ export default function LaporanHarianPage() {
     }, [reports]);
 
     const renderDialogContent = () => {
+        const isDateToday = selectedDate && isToday(selectedDate);
         if (isEditing) {
             return (
                 <>
@@ -126,7 +127,7 @@ export default function LaporanHarianPage() {
                         </div>
                     </form>
                     <DialogFooter>
-                        <Button type="button" variant="ghost" onClick={() => setIsEditing(false)}>Batal</Button>
+                        <Button type="button" variant="ghost" onClick={(e) => { e.preventDefault(); setIsEditing(false); }}>Batal</Button>
                         <Button type="submit" form="report-form"><Send className="mr-2 h-4 w-4"/> Kirim Laporan</Button>
                     </DialogFooter>
                 </>
@@ -159,9 +160,14 @@ export default function LaporanHarianPage() {
                             </>
                          )}
                     </div>
-                     <DialogFooter>
-                        <Button type="button" variant="outline" onClick={handleCloseDialog}>Tutup</Button>
-                        <Button type="button" onClick={(e) => { e.preventDefault(); setIsEditing(true);}}><Edit className="mr-2 h-4 w-4"/> Edit</Button>
+                     <DialogFooter className="flex-col sm:flex-row sm:justify-between items-stretch sm:items-center">
+                        {selectedDate && !isDateToday && <p className='text-xs text-muted-foreground'>Laporan untuk tanggal yang lewat tidak dapat diubah.</p>}
+                        <div className='flex gap-2 self-end'>
+                            <Button type="button" variant="outline" onClick={handleCloseDialog}>Tutup</Button>
+                            {isDateToday && (
+                                <Button type="button" onClick={(e) => { e.preventDefault(); setIsEditing(true);}}><Edit className="mr-2 h-4 w-4"/> Edit</Button>
+                            )}
+                        </div>
                     </DialogFooter>
                 </>
             );
@@ -179,7 +185,9 @@ export default function LaporanHarianPage() {
                 </div>
                 <DialogFooter>
                     <Button type="button" variant="outline" onClick={handleCloseDialog}>Tutup</Button>
-                    <Button type="button" onClick={(e) => { e.preventDefault(); setIsEditing(true); }}><FilePlus className="mr-2 h-4 w-4" /> Buat Laporan</Button>
+                    {isDateToday && (
+                        <Button type="button" onClick={(e) => { e.preventDefault(); setIsEditing(true); }}><FilePlus className="mr-2 h-4 w-4" /> Buat Laporan</Button>
+                    )}
                 </DialogFooter>
             </>
         );
@@ -192,7 +200,7 @@ export default function LaporanHarianPage() {
                     <div className="flex flex-wrap items-center justify-between gap-4">
                         <div>
                             <CardTitle className="text-2xl">{format(currentMonth, 'MMMM yyyy', { locale: id })}</CardTitle>
-                             <div className="flex items-center gap-4 text-xs text-muted-foreground mt-2">
+                             <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground mt-2">
                                 {Object.entries(statusConfig).map(([status, config]) => (
                                     <div key={status} className="flex items-center gap-1.5">
                                         <span className={cn("h-2 w-2 rounded-full", config.color)} />
@@ -216,18 +224,21 @@ export default function LaporanHarianPage() {
                         {days.map(day => {
                             const dateString = format(day, 'yyyy-MM-dd');
                             const report = reports[dateString];
-                            const isCurrentMonth = isSameMonth(day, currentMonth);
+                            const isCurrentMonthDay = isSameMonth(day, currentMonth);
                             const isDateSelected = selectedDate && isSameDay(day, selectedDate);
+                            const isFutureDate = isFuture(day) && !isToday(day);
 
                             return (
                                 <button
                                     key={day.toString()}
                                     type="button"
-                                    onClick={() => handleDateClick(day)}
+                                    onClick={() => !isFutureDate && handleDateClick(day)}
+                                    disabled={isFutureDate}
                                     className={cn(
                                         "relative h-20 p-2 text-left align-top transition-colors rounded-lg",
-                                        isCurrentMonth ? "hover:bg-accent" : "text-muted-foreground/50",
-                                        isDateSelected && "bg-primary/10 ring-2 ring-primary"
+                                        isCurrentMonthDay ? "hover:bg-accent" : "text-muted-foreground/50 hover:bg-accent/50",
+                                        isDateSelected && "bg-primary/10 ring-2 ring-primary",
+                                        isFutureDate && "text-muted-foreground/30 cursor-not-allowed hover:bg-transparent"
                                     )}
                                 >
                                     <span className={cn("font-medium", isToday(day) && "bg-primary text-primary-foreground rounded-full h-6 w-6 flex items-center justify-center")}>
