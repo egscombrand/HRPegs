@@ -80,15 +80,27 @@ export default function LaporanHarianPage() {
                         <DialogTitle>Laporan: {selectedDate && format(selectedDate, "eeee, dd MMMM", { locale: id })}</DialogTitle>
                         <DialogDescription>Isi semua field untuk melaporkan aktivitas harian Anda.</DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-4 py-4">
-                        <div className="space-y-2"><Label htmlFor="activity">Uraian Aktivitas</Label><Textarea id="activity" defaultValue={selectedReport?.activity || ''} rows={4} /></div>
-                        <div className="space-y-2"><Label htmlFor="learning">Pembelajaran yang Diperoleh</Label><Textarea id="learning" defaultValue={selectedReport?.learning || ''} rows={3} /></div>
-                        <div className="space-y-2"><Label htmlFor="obstacle">Kendala yang Dialami</Label><Textarea id="obstacle" defaultValue={selectedReport?.obstacle || ''} rows={3} /></div>
-                        <div className="space-y-2"><Label htmlFor="plan">Rencana Tindak Lanjut</Label><Textarea id="plan" defaultValue={selectedReport?.plan || ''} rows={2} /></div>
-                    </div>
+                    <form id="report-form" className="space-y-6 py-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="activity">Uraian Aktivitas</Label>
+                          <Textarea id="activity" defaultValue={selectedReport?.activity || ''} rows={5} placeholder="Jelaskan secara rinci pekerjaan dan tugas yang Anda lakukan hari ini..." />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="learning">Pembelajaran yang Diperoleh</Label>
+                          <Textarea id="learning" defaultValue={selectedReport?.learning || ''} rows={3} placeholder="Hal atau pengetahuan baru apa yang Anda dapatkan?" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="obstacle">Kendala yang Dialami</Label>
+                          <Textarea id="obstacle" defaultValue={selectedReport?.obstacle || ''} rows={3} placeholder="Apa saja kesulitan yang Anda hadapi dan bagaimana Anda mencoba menyelesaikannya?" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="plan">Rencana Tindak Lanjut</Label>
+                          <Textarea id="plan" defaultValue={selectedReport?.plan || ''} rows={3} placeholder="Apa langkah Anda selanjutnya untuk pekerjaan besok?" />
+                        </div>
+                    </form>
                     <DialogFooter>
                         <Button type="button" variant="ghost" onClick={() => setIsEditing(false)}>Batal</Button>
-                        <Button type="button" onClick={() => { /* save logic */ setIsEditing(false); }}><Send className="mr-2 h-4 w-4"/> Kirim Laporan</Button>
+                        <Button type="submit" form="report-form" onClick={() => { /* save logic */ setIsEditing(false); }}><Send className="mr-2 h-4 w-4"/> Kirim Laporan</Button>
                     </DialogFooter>
                 </>
             );
@@ -204,8 +216,10 @@ export default function LaporanHarianPage() {
             </Card>
 
              <Dialog open={isDialogOpen} onOpenChange={handleCloseDialog}>
-                <DialogContent>
-                    {renderDialogContent()}
+                <DialogContent className="max-h-[90vh] flex flex-col">
+                    <div className="flex-grow overflow-y-auto -mx-6 px-6">
+                        {renderDialogContent()}
+                    </div>
                 </DialogContent>
             </Dialog>
         </>
