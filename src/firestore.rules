@@ -1,5 +1,4 @@
 
-
 /**
  * This ruleset enforces a strict security model for the HRP Starter application,
  * balancing user ownership with powerful administrative capabilities.

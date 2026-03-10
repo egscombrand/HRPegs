@@ -149,7 +149,7 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
         title: "Manager",
         items: [
             { key: 'manager.team', href: '/admin/manager', label: 'My Team', icon: createElement(Users) },
-            { key: 'review.reports', href: '/admin/review/laporan-magang', label: 'Review Laporan', icon: createElement(PenSquare) },
+            { key: 'review.reports', href: '/admin/review/laporan-magang', label: 'Review Laporan Magang', icon: createElement(PenSquare) },
             { key: 'personal.interviews.manager', href: '/admin/interviews', label: 'My Interviews', icon: createElement(Video) },
         ]
     }

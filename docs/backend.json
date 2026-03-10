@@ -143,7 +143,9 @@
           }
         },
         "createdAt": { "type": "string", "format": "date-time" },
-        "updatedAt": { "type": "string", "format": "date-time" }
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "supervisorUid": { "type": "string", "description": "UID of the assigned supervisor/mentor." },
+        "supervisorName": { "type": "string", "description": "Denormalized name of the supervisor." }
       },
       "required": ["uid", "employmentType", "fullName", "phone", "email", "addressCurrent", "schoolOrCampus", "educationLevel", "internSubtype", "emergencyContactName", "emergencyContactRelation", "emergencyContactPhone"]
     },

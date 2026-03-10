@@ -121,7 +121,7 @@ export default function LaporanHarianPage() {
             declaration: false,
         });
 
-        if (report && (report.status === 'needs_revision' || report.status === 'draft') && isToday(day)) {
+        if (report && (report.status === 'needs_revision') && isToday(day)) {
             setIsEditing(true);
         } else {
             setIsEditing(false);
@@ -159,13 +159,12 @@ export default function LaporanHarianPage() {
     
         try {
             if (isUpdate) {
-                const updateData = {
+                const updateData: Partial<DailyReport> = {
                     status: 'submitted' as ReportStatus,
                     activity: values.activity,
                     learning: values.learning,
                     obstacle: values.obstacle,
-                    updatedAt: serverTimestamp(),
-                    // Ensure optional fields are not undefined
+                    updatedAt: serverTimestamp() as Timestamp,
                     brandId: (Array.isArray(employeeProfile.brandId) ? employeeProfile.brandId[0] : employeeProfile.brandId) || null,
                     supervisorUid: employeeProfile.supervisorUid || null,
                 };
@@ -180,7 +179,6 @@ export default function LaporanHarianPage() {
                     obstacle: values.obstacle,
                     createdAt: serverTimestamp() as Timestamp,
                     updatedAt: serverTimestamp() as Timestamp,
-                    // Ensure optional fields are not undefined
                     brandId: (Array.isArray(employeeProfile.brandId) ? employeeProfile.brandId[0] : employeeProfile.brandId) || null,
                     supervisorUid: employeeProfile.supervisorUid || null,
                 };
