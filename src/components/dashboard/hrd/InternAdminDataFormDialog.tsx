@@ -245,12 +245,12 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, onSucce
                     <section>
                         <h3 className="text-lg font-semibold border-b pb-2 mb-4">Informasi Kontrak & Kompensasi</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6">
-                            <FormField
+                             <FormField
                                 control={form.control}
                                 name="compensationAmount"
                                 render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>{job?.statusJob === 'internship' ? 'Uang Saku (per bulan)' : 'Gaji (per bulan)'}</FormLabel>
+                                    <FormLabel>Uang Saku (per bulan)</FormLabel>
                                     <FormControl>
                                     <div className="relative">
                                         <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground pointer-events-none">Rp</span>
