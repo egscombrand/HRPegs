@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -28,9 +29,21 @@ export function LaporanMagangClient() {
   const [supervisorFilter, setSupervisorFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
 
-  const { data: reports, isLoading: isLoadingReports, mutate: mutateReports } = useCollection<DailyReport>(
-    useMemoFirebase(() => collection(firestore, 'daily_reports'), [firestore])
-  );
+  const reportsQuery = useMemoFirebase(() => {
+    if (!userProfile) return null;
+
+    if (['manager', 'karyawan'].includes(userProfile.role)) {
+        // Mentors can only see reports assigned to them. This query is secure and efficient.
+        return query(collection(firestore, 'daily_reports'), where('supervisorUid', '==', userProfile.uid));
+    }
+    
+    // HRD and Super Admin can see all reports.
+    // This is allowed by the security rules, and client-side filters will apply to this broad set.
+    return collection(firestore, 'daily_reports');
+
+  }, [firestore, userProfile]);
+
+  const { data: reports, isLoading: isLoadingReports, mutate: mutateReports } = useCollection<DailyReport>(reportsQuery);
 
   const { data: interns, isLoading: isLoadingInterns } = useCollection<EmployeeProfile>(
     useMemoFirebase(() => query(collection(firestore, 'employee_profiles'), where('employmentType', '==', 'magang')), [firestore])
@@ -50,8 +63,8 @@ export function LaporanMagangClient() {
         return {
             ...report,
             internName: internProfile?.fullName || 'Unknown Intern',
-            supervisorUid: internProfile?.supervisorUid || null,
-            supervisorName: internProfile?.supervisorName || 'Unassigned',
+            supervisorUid: internProfile?.supervisorUid || report.supervisorUid || null,
+            supervisorName: internProfile?.supervisorName || report.supervisorName || 'Unassigned',
             division: internProfile?.division || 'N/A',
             brandName: internProfile?.brandName || 'N/A',
             brandId: internProfile?.brandId || 'N/A',
@@ -71,14 +84,10 @@ export function LaporanMagangClient() {
   }, [interns]);
 
   const filteredReports = useMemo(() => {
-    if (!userProfile) return [];
-    
     let filtered = reportsWithDetails;
-
-    // Role-based filtering
-    if (['manager', 'karyawan'].includes(userProfile.role)) {
-      filtered = filtered.filter(r => r.supervisorUid === userProfile.uid);
-    } else { // HRD and Super Admin can filter
+    
+    // HRD/Admin filtering is now client-side after the broad fetch
+    if (userProfile && ['hrd', 'super-admin'].includes(userProfile.role)) {
         if (brandFilter !== 'all') {
             filtered = filtered.filter(r => r.brandId === brandFilter);
         }

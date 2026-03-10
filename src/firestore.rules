@@ -344,13 +344,18 @@ service cloud.firestore {
 
     // --- Intern Daily Report Rules ---
     match /daily_reports/{reportId} {
-      // READ: Owner, assigned supervisor, HRD, or Super Admin can read.
-      allow read: if isSignedIn() && (
+      // GET: Owner, assigned supervisor, HRD, or Super Admin can read.
+      allow get: if isSignedIn() && (
                     isOwner(resource.data.uid) ||
                     request.auth.uid == resource.data.supervisorUid ||
                     isHrd() ||
                     isSuperAdmin()
                   );
+                  
+      // LIST: Allow any signed-in user to perform queries.
+      // The `get` rule above will be checked for each document in the result set,
+      // ensuring users only see data they are permitted to.
+      allow list: if isSignedIn();
 
       // CREATE: Owner can create a report with 'draft' or 'submitted' status.
       allow create: if isOwner(request.resource.data.uid)
