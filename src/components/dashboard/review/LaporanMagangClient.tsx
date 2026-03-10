@@ -64,14 +64,15 @@ export function LaporanMagangClient() {
   }, [reports, internMap]);
   
   const uniqueSupervisors = useMemo(() => {
+    if (!interns) return [];
     const supervisorSet = new Set<string>();
-    reportsWithDetails.forEach(r => {
-      if (r.supervisorName && r.supervisorName !== 'Unassigned') {
-        supervisorSet.add(r.supervisorName);
+    interns.forEach(intern => {
+      if (intern.supervisorName && intern.supervisorName !== 'Unassigned') {
+        supervisorSet.add(intern.supervisorName);
       }
     });
     return Array.from(supervisorSet).sort();
-  }, [reportsWithDetails]);
+  }, [interns]);
 
   const filteredReports = useMemo(() => {
     if (!userProfile) return [];
