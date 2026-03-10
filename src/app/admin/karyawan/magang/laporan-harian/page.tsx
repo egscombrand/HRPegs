@@ -18,10 +18,12 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { useToast } from '@/hooks/use-toast';
+import { Form } from '@/components/ui/form';
 
 type ReportStatus = 'disetujui' | 'revisi' | 'terkirim' | 'draft';
 
-const mockReports: Record<string, { status: ReportStatus; activity: string; learning: string; obstacle: string; mentorNote?: string }> = {
+const initialMockReports: Record<string, { status: ReportStatus; activity: string; learning: string; obstacle: string; mentorNote?: string }> = {
     '2024-07-15': { status: 'disetujui', activity: 'Rapat tim desain dan finalisasi mockup.', learning: 'Belajar tentang alur kerja tim dan pentingnya design system.', obstacle: 'Tidak ada kendala berarti.' },
     '2024-07-16': { status: 'revisi', activity: 'Membuat wireframe untuk fitur login.', learning: 'Menggunakan komponen-komponen di Figma.', obstacle: 'Performa laptop agak lambat saat file besar.', mentorNote: 'Tolong detailkan lagi bagian wireframe, komponen apa saja yang dibuat?' },
     '2024-07-17': { status: 'terkirim', activity: 'Riset UX kompetitor untuk fitur dashboard.', learning: 'Menganalisis kelebihan dan kekurangan UX dari 3 aplikasi kompetitor.', obstacle: 'Akses terbatas ke beberapa fitur premium kompetitor.' },
@@ -36,10 +38,12 @@ const statusConfig: Record<ReportStatus, { label: string; color: string; icon: R
 
 
 export default function LaporanHarianPage() {
+    const [reports, setReports] = useState(initialMockReports);
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
+    const { toast } = useToast();
 
     const firstDayOfMonth = startOfMonth(currentMonth);
     const days = eachDayOfInterval({
@@ -50,8 +54,8 @@ export default function LaporanHarianPage() {
     const selectedReport = useMemo(() => {
         if (!selectedDate) return null;
         const dateString = format(selectedDate, 'yyyy-MM-dd');
-        return mockReports[dateString] ? { date: selectedDate, ...mockReports[dateString] } : null;
-    }, [selectedDate]);
+        return reports[dateString] ? { date: selectedDate, ...reports[dateString] } : null;
+    }, [selectedDate, reports]);
 
     const handleDateClick = (day: Date) => {
         setSelectedDate(day);
@@ -61,16 +65,43 @@ export default function LaporanHarianPage() {
     
     const handleCloseDialog = () => {
         setIsDialogOpen(false);
-        // Deselect date after a short delay to allow the dialog to fade out
         setTimeout(() => setSelectedDate(null), 300); 
     }
 
+    const handleSaveReport = (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        if (!selectedDate) return;
+
+        const formData = new FormData(e.currentTarget);
+        const newReportData = {
+            status: 'terkirim' as ReportStatus,
+            activity: formData.get('activity') as string,
+            learning: formData.get('learning') as string,
+            obstacle: formData.get('obstacle') as string,
+        };
+
+        const dateString = format(selectedDate, 'yyyy-MM-dd');
+
+        setReports(prev => ({
+            ...prev,
+            [dateString]: newReportData,
+        }));
+
+        toast({
+            title: "Laporan Terkirim",
+            description: `Laporan Anda untuk tanggal ${format(selectedDate, "dd MMM yyyy")} telah disimpan.`,
+        });
+
+        setIsEditing(false); // Switch back to detail view
+    };
+
+
     const statusSummary = useMemo(() => {
-        return Object.values(mockReports).reduce((acc, report) => {
+        return Object.values(reports).reduce((acc, report) => {
             acc[report.status] = (acc[report.status] || 0) + 1;
             return acc;
         }, {} as Record<ReportStatus, number>);
-    }, []);
+    }, [reports]);
 
     const renderDialogContent = () => {
         if (isEditing) {
@@ -80,23 +111,23 @@ export default function LaporanHarianPage() {
                         <DialogTitle>Laporan: {selectedDate && format(selectedDate, "eeee, dd MMMM", { locale: id })}</DialogTitle>
                         <DialogDescription>Isi semua field untuk melaporkan aktivitas harian Anda.</DialogDescription>
                     </DialogHeader>
-                    <form id="report-form" className="space-y-6 py-4">
+                    <form id="report-form" className="space-y-6 py-4" onSubmit={handleSaveReport}>
                         <div className="space-y-2">
                           <Label htmlFor="activity">Uraian Aktivitas</Label>
-                          <Textarea id="activity" defaultValue={selectedReport?.activity || ''} rows={5} placeholder="Jelaskan secara rinci pekerjaan dan tugas yang Anda lakukan hari ini..." />
+                          <Textarea id="activity" name="activity" defaultValue={selectedReport?.activity || ''} rows={5} placeholder="Jelaskan secara rinci pekerjaan dan tugas yang Anda lakukan hari ini..." />
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="learning">Pembelajaran yang Diperoleh</Label>
-                          <Textarea id="learning" defaultValue={selectedReport?.learning || ''} rows={3} placeholder="Hal atau pengetahuan baru apa yang Anda dapatkan?" />
+                          <Textarea id="learning" name="learning" defaultValue={selectedReport?.learning || ''} rows={3} placeholder="Hal atau pengetahuan baru apa yang Anda dapatkan?" />
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="obstacle">Kendala yang Dialami</Label>
-                          <Textarea id="obstacle" defaultValue={selectedReport?.obstacle || ''} rows={3} placeholder="Apa saja kesulitan yang Anda hadapi dan bagaimana Anda mencoba menyelesaikannya?" />
+                          <Textarea id="obstacle" name="obstacle" defaultValue={selectedReport?.obstacle || ''} rows={3} placeholder="Apa saja kesulitan yang Anda hadapi dan bagaimana Anda mencoba menyelesaikannya?" />
                         </div>
                     </form>
                     <DialogFooter>
                         <Button type="button" variant="ghost" onClick={() => setIsEditing(false)}>Batal</Button>
-                        <Button type="submit" form="report-form" onClick={() => { /* save logic */ setIsEditing(false); }}><Send className="mr-2 h-4 w-4"/> Kirim Laporan</Button>
+                        <Button type="submit" form="report-form"><Send className="mr-2 h-4 w-4"/> Kirim Laporan</Button>
                     </DialogFooter>
                 </>
             );
@@ -184,7 +215,7 @@ export default function LaporanHarianPage() {
                     <div className="grid grid-cols-7">
                         {days.map(day => {
                             const dateString = format(day, 'yyyy-MM-dd');
-                            const report = mockReports[dateString];
+                            const report = reports[dateString];
                             const isCurrentMonth = isSameMonth(day, currentMonth);
                             const isDateSelected = selectedDate && isSameDay(day, selectedDate);
 
