@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -18,16 +18,6 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/providers/auth-provider';
 import { useDoc, useCollection, useFirestore, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
@@ -35,6 +25,9 @@ import { doc, collection, query, where, Timestamp, serverTimestamp } from 'fireb
 import type { DailyReport, EmployeeProfile, ReportStatus } from '@/lib/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 
 
 const statusConfig: Record<ReportStatus, { label: string; color: string; icon: React.ReactNode }> = {
@@ -43,6 +36,17 @@ const statusConfig: Record<ReportStatus, { label: string; color: string; icon: R
     submitted: { label: 'Terkirim', color: 'bg-blue-500', icon: <Clock className="h-4 w-4" /> },
     draft: { label: 'Draf', color: 'bg-gray-400', icon: <FilePlus className="h-4 w-4" /> },
 };
+
+const reportSchema = z.object({
+  activity: z.string().min(10, { message: 'Uraian aktivitas harus diisi, minimal 10 karakter.' }),
+  learning: z.string().min(10, { message: 'Pembelajaran harus diisi, minimal 10 karakter.' }),
+  obstacle: z.string().min(10, { message: 'Kendala harus diisi, minimal 10 karakter.' }),
+  declaration: z.literal(true, {
+    errorMap: () => ({ message: "Anda harus menyetujui pernyataan ini." }),
+  }),
+});
+
+type ReportFormValues = z.infer<typeof reportSchema>;
 
 
 export default function LaporanHarianPage() {
@@ -56,8 +60,16 @@ export default function LaporanHarianPage() {
     const [isEditing, setIsEditing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [isConfirmOpen, setIsConfirmOpen] = useState(false);
-    const [isDeclarationChecked, setIsDeclarationChecked] = useState(false);
-    const reportFormRef = useRef<HTMLFormElement | null>(null);
+    
+    const form = useForm<ReportFormValues>({
+        resolver: zodResolver(reportSchema),
+        defaultValues: {
+            activity: '',
+            learning: '',
+            obstacle: '',
+            declaration: false,
+        }
+    });
 
     const employeeProfileRef = useMemoFirebase(() => {
         if (!firebaseUser) return null;
@@ -69,7 +81,7 @@ export default function LaporanHarianPage() {
         if (!firebaseUser) return null;
         return query(collection(firestore, 'daily_reports'), where('uid', '==', firebaseUser.uid));
     }, [firestore, firebaseUser?.uid]);
-    const { data: allFetchedReports, isLoading: isLoadingReports } = useCollection<DailyReport>(reportsQuery);
+    const { data: allFetchedReports, isLoading: isLoadingReports, mutate: mutateReports } = useCollection<DailyReport>(reportsQuery);
 
     const fetchedReports = useMemo(() => {
         if (!allFetchedReports) return null;
@@ -101,56 +113,64 @@ export default function LaporanHarianPage() {
     const handleDateClick = (day: Date) => {
         setSelectedDate(day);
         const report = reportsMap.get(format(day, 'yyyy-MM-dd'));
-        if (report && report.status === 'needs_revision') {
+        
+        form.reset({
+            activity: report?.activity || '',
+            learning: report?.learning || '',
+            obstacle: report?.obstacle || '',
+            declaration: false,
+        });
+
+        if (report && (report.status === 'needs_revision' || report.status === 'draft') && isToday(day)) {
             setIsEditing(true);
         } else {
             setIsEditing(false);
         }
-        setIsDeclarationChecked(false);
         setIsDialogOpen(true);
     };
     
     const handleCloseDialog = () => {
         setIsDialogOpen(false);
-        setIsDeclarationChecked(false);
-        setTimeout(() => setSelectedDate(null), 300); 
+        // Delay resetting selected date to allow for fade-out animation
+        setTimeout(() => {
+            setSelectedDate(null);
+            form.reset();
+        }, 300);
     }
 
-    const prepareSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        reportFormRef.current = e.currentTarget;
+    const prepareSubmit = (values: ReportFormValues) => {
         setIsConfirmOpen(true);
     };
 
     const handleConfirmSave = async () => {
-        if (!reportFormRef.current || !selectedDate || !firebaseUser || !employeeProfile) {
+        if (!selectedDate || !firebaseUser || !employeeProfile) {
             toast({ title: "Gagal Menyimpan", description: "Data tidak lengkap untuk menyimpan laporan.", variant: "destructive" });
             setIsConfirmOpen(false);
             return;
         }
         setIsSaving(true);
     
-        const formData = new FormData(reportFormRef.current);
+        const values = form.getValues();
         const dateString = format(selectedDate, 'yyyy-MM-dd');
         const docId = `${firebaseUser.uid}_${dateString}`;
         const reportRef = doc(firestore, 'daily_reports', docId);
     
         const isUpdate = reportsMap.has(dateString);
     
-        const newReportData: Partial<DailyReport> = {
+        const newReportData: Partial<Omit<DailyReport, 'id'>> = {
             uid: firebaseUser.uid,
             date: Timestamp.fromDate(selectedDate),
             status: 'submitted',
-            activity: formData.get('activity') as string,
-            learning: formData.get('learning') as string,
-            obstacle: formData.get('obstacle') as string,
-            updatedAt: serverTimestamp() as Timestamp,
+            activity: values.activity,
+            learning: values.learning,
+            obstacle: values.obstacle,
+            updatedAt: serverTimestamp(),
+            brandId: Array.isArray(employeeProfile.brandId) ? employeeProfile.brandId[0] : employeeProfile.brandId || null,
+            supervisorUid: employeeProfile.supervisorUid || null,
         };
         
         if (!isUpdate) {
-            newReportData.createdAt = serverTimestamp() as Timestamp;
-            newReportData.supervisorUid = employeeProfile.supervisorUid || null;
-            newReportData.brandId = Array.isArray(employeeProfile.brandId) ? employeeProfile.brandId[0] : employeeProfile.brandId || null;
+            newReportData.createdAt = serverTimestamp();
         }
     
         try {
@@ -159,13 +179,13 @@ export default function LaporanHarianPage() {
                 title: "Laporan Terkirim",
                 description: `Laporan Anda untuk tanggal ${format(selectedDate, "dd MMM yyyy")} telah berhasil dikirim.`,
             });
-            setIsEditing(false);
+            mutateReports();
+            handleCloseDialog();
         } catch (error: any) {
             toast({ title: "Gagal Menyimpan", description: error.message, variant: "destructive" });
         } finally {
             setIsSaving(false);
             setIsConfirmOpen(false);
-            setIsDeclarationChecked(false);
         }
     };
 
@@ -181,12 +201,8 @@ export default function LaporanHarianPage() {
         const isDateToday = selectedDate && isToday(selectedDate);
         const isDateInPast = selectedDate && !isToday(selectedDate) && isPast(selectedDate);
         const isDateInFuture = selectedDate && isFuture(selectedDate);
-
-        const handleEditClick = (e: React.MouseEvent<HTMLButtonElement>) => {
-            e.preventDefault();
-            setIsEditing(true);
-            setIsDeclarationChecked(false);
-        }
+        
+        const canEdit = isDateToday && (selectedReport?.status === 'needs_revision' || selectedReport?.status === 'draft');
 
         if (isEditing) {
             return (
@@ -195,38 +211,22 @@ export default function LaporanHarianPage() {
                         <DialogTitle>Laporan: {selectedDate && format(selectedDate, "eeee, dd MMMM", { locale: id })}</DialogTitle>
                         <DialogDescription>Isi semua field untuk melaporkan aktivitas harian Anda.</DialogDescription>
                     </DialogHeader>
-                     <form id="report-form" className="space-y-6 py-4" onSubmit={prepareSubmit}>
-                        <div className="space-y-2">
-                          <Label htmlFor="activity">Uraian Aktivitas</Label>
-                          <Textarea id="activity" name="activity" defaultValue={selectedReport?.activity || ''} rows={5} placeholder="Jelaskan secara rinci pekerjaan dan tugas yang Anda lakukan hari ini..." />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="learning">Pembelajaran yang Diperoleh</Label>
-                          <Textarea id="learning" name="learning" defaultValue={selectedReport?.learning || ''} rows={3} placeholder="Hal atau pengetahuan baru apa yang Anda dapatkan?" />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="obstacle">Kendala yang Dialami</Label>
-                          <Textarea id="obstacle" name="obstacle" defaultValue={selectedReport?.obstacle || ''} rows={3} placeholder="Apa saja kesulitan yang Anda hadapi dan bagaimana Anda mencoba menyelesaikannya?" />
-                        </div>
-                        <div className="flex items-start space-x-3 pt-2">
-                            <Checkbox 
-                                id="declaration" 
-                                checked={isDeclarationChecked} 
-                                onCheckedChange={(checked) => setIsDeclarationChecked(!!checked)} 
-                            />
-                            <div className="grid gap-1.5 leading-none">
-                                <label
-                                    htmlFor="declaration"
-                                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                                >
-                                Saya menyatakan bahwa laporan yang saya isi adalah benar dan sesuai dengan aktivitas yang saya lakukan.
-                                </label>
-                            </div>
-                        </div>
-                    </form>
+                     <Form {...form}>
+                        <form id="report-form" className="space-y-6 py-4" onSubmit={form.handleSubmit(prepareSubmit)}>
+                            <FormField control={form.control} name="activity" render={({ field }) => (<FormItem><Label>Uraian Aktivitas <span className="text-destructive">*</span></Label><FormControl><Textarea {...field} rows={5} placeholder="Jelaskan secara rinci pekerjaan dan tugas yang Anda lakukan hari ini..." /></FormControl><FormMessage /></FormItem>)} />
+                            <FormField control={form.control} name="learning" render={({ field }) => (<FormItem><Label>Pembelajaran yang Diperoleh <span className="text-destructive">*</span></Label><FormControl><Textarea {...field} rows={3} placeholder="Hal atau pengetahuan baru apa yang Anda dapatkan?" /></FormControl><FormMessage /></FormItem>)} />
+                            <FormField control={form.control} name="obstacle" render={({ field }) => (<FormItem><Label>Kendala yang Dialami <span className="text-destructive">*</span></Label><FormControl><Textarea {...field} rows={3} placeholder="Apa saja kesulitan yang Anda hadapi dan bagaimana Anda mencoba menyelesaikannya?" /></FormControl><FormMessage /></FormItem>)} />
+                            <FormField control={form.control} name="declaration" render={({ field }) => (
+                              <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm">
+                                <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange}/></FormControl>
+                                <div className="space-y-1 leading-none"><FormLabel>Saya menyatakan bahwa laporan yang saya isi adalah benar dan sesuai dengan aktivitas yang saya lakukan.</FormLabel><FormMessage /></div>
+                              </FormItem>
+                            )}/>
+                        </form>
+                     </Form>
                     <DialogFooter>
                         <Button type="button" variant="ghost" onClick={() => setIsEditing(false)}>Batal</Button>
-                        <Button type="submit" form="report-form" disabled={isSaving || !isDeclarationChecked}>
+                        <Button type="submit" form="report-form" disabled={isSaving}>
                             {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
                             <Send className="mr-2 h-4 w-4"/> Kirim Laporan
                         </Button>
@@ -262,13 +262,11 @@ export default function LaporanHarianPage() {
                          )}
                     </div>
                      <DialogFooter className="flex-col sm:flex-row sm:justify-between items-stretch sm:items-center">
-                        <div className="flex-grow">
-                            {isDateInPast && <p className="text-xs text-muted-foreground text-left">Laporan untuk tanggal yang lewat tidak dapat diubah.</p>}
-                        </div>
-                        <div className='flex gap-2 self-end'>
+                        {isDateInPast && <p className="text-xs text-muted-foreground text-left">Laporan untuk tanggal yang lewat tidak dapat diubah.</p>}
+                        <div className='flex gap-2 self-end ml-auto'>
                             <Button type="button" variant="outline" onClick={handleCloseDialog}>Tutup</Button>
-                             {selectedReport.status === 'needs_revision' && isDateToday && (
-                                <Button type="button" onClick={handleEditClick}><FilePlus className="mr-2 h-4 w-4" /> Edit Laporan</Button>
+                             {canEdit && (
+                                <Button type="button" onClick={(e) => { e.preventDefault(); setIsEditing(true);}}><FilePlus className="mr-2 h-4 w-4" /> Edit Laporan</Button>
                             )}
                         </div>
                     </DialogFooter>
@@ -301,7 +299,7 @@ export default function LaporanHarianPage() {
                      <div className="flex gap-2 self-end">
                         <Button type="button" variant="outline" onClick={handleCloseDialog}>Tutup</Button>
                         {isDateToday && (
-                            <Button type="button" onClick={(e) => { e.preventDefault(); setIsDeclarationChecked(false); setIsEditing(true); }}><FilePlus className="mr-2 h-4 w-4" /> Buat Laporan</Button>
+                            <Button type="button" onClick={(e) => { e.preventDefault(); setIsEditing(true); }}><FilePlus className="mr-2 h-4 w-4" /> Buat Laporan</Button>
                         )}
                     </div>
                 </DialogFooter>
@@ -362,9 +360,9 @@ export default function LaporanHarianPage() {
                                     className={cn(
                                         "relative h-20 p-2 text-left align-top transition-colors rounded-lg",
                                         isCurrentMonthDay ? "hover:bg-accent" : "text-muted-foreground/50 hover:bg-accent/50",
-                                        !isCurrentMonthDay && !isFutureDate && "opacity-75",
+                                        isDateInPast && "opacity-75",
                                         isDateSelected && "bg-primary/10 ring-2 ring-primary",
-                                        isFutureDate && "text-muted-foreground/30 cursor-not-allowed hover:bg-transparent"
+                                        isFutureDate && "opacity-50 cursor-not-allowed hover:bg-transparent"
                                     )}
                                 >
                                     <span className={cn("font-medium", isToday(day) && "bg-primary text-primary-foreground rounded-full h-6 w-6 flex items-center justify-center ring-2 ring-offset-2 ring-primary")}>
@@ -385,23 +383,23 @@ export default function LaporanHarianPage() {
                     </div>
                 </DialogContent>
             </Dialog>
-            <AlertDialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Konfirmasi Pengiriman Laporan</AlertDialogTitle>
-                  <AlertDialogDescription>
+            <Dialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Konfirmasi Pengiriman Laporan</DialogTitle>
+                  <DialogDescription>
                     Apakah Anda yakin ingin mengirim laporan ini? Setelah dikirim, laporan tidak dapat diubah sampai direview oleh mentor.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel disabled={isSaving}>Batal</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleConfirmSave} disabled={isSaving}>
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <Button variant="ghost" onClick={() => setIsConfirmOpen(false)} disabled={isSaving}>Batal</Button>
+                  <Button onClick={handleConfirmSave} disabled={isSaving}>
                     {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Ya, Kirim Laporan
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
         </>
     );
 }

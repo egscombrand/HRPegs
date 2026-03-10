@@ -1,9 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
-import { usePathname } from 'next/navigation';
+import * as React from 'react';
 
-// List of selectors for Radix UI components that can be in an "open" state and trap focus/scroll.
+// List of selectors for Radix UI components that can be in an "open" state.
 const OPEN_SELECTOR = [
   '[data-state="open"][role="dialog"]',
   '[data-state="open"][data-radix-popper-content-wrapper]',
@@ -14,41 +13,40 @@ const OPEN_SELECTOR = [
 
 /**
  * This component acts as a global safety net to prevent the UI from becoming unresponsive.
- * It detects situations where Radix UI components might have incorrectly left pointer-events
- * disabled on the body after closing, and forcefully resets them.
+ * It uses a MutationObserver to proactively detect situations where Radix UI components
+ * might have incorrectly left pointer-events disabled on the body after closing, and
+ * forcefully resets them.
  */
 export function RadixPointerLockGuard() {
-  const pathname = usePathname();
+  React.useEffect(() => {
+    const observer = new MutationObserver(() => {
+      // Use a short delay to allow Radix's closing animations to complete
+      // before checking the final state of the DOM.
+      setTimeout(() => {
+        const isOpenOverlay = document.querySelector(OPEN_SELECTOR);
 
-  const unlockBody = () => {
-    // Check if any Radix components are still considered "open".
-    const isOpenOverlay = document.querySelector(OPEN_SELECTOR);
+        // This is the "stuck" state: the body has pointer events disabled,
+        // but no Radix component reports itself as open.
+        if (document.body.style.pointerEvents === 'none' && !isOpenOverlay) {
+          // Force-reset the styles to make the page interactive again.
+          document.body.style.pointerEvents = '';
+          document.body.style.overflow = '';
+          document.body.removeAttribute('data-scroll-locked');
+          document.body.removeAttribute('data-radix-scroll-area-scroll-y');
+        }
+      }, 150); // 150ms should be safe enough for animations
+    });
 
-    // If the body has pointer events disabled, but no Radix component is open,
-    // it's likely a stuck state.
-    if (document.body.style.pointerEvents === 'none' && !isOpenOverlay) {
-      document.body.style.pointerEvents = '';
-      document.body.style.overflow = '';
-      // Also remove any other potential scroll-lock attributes for good measure.
-      document.body.removeAttribute('data-scroll-locked');
-      document.body.removeAttribute('data-radix-scroll-area-scroll-y');
-    }
-  };
+    // We observe the body for any style changes, which is what Radix does to lock the screen.
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ['style'],
+    });
 
-  useEffect(() => {
-    // Run the check whenever the URL pathname changes.
-    unlockBody();
-  }, [pathname]);
-
-  useEffect(() => {
-    // Also run the check whenever the window regains focus, as this can be another
-    // trigger for detecting a stuck state.
-    window.addEventListener('focus', unlockBody);
-    return () => {
-      window.removeEventListener('focus', unlockBody);
-    };
+    // Clean up the observer when the component unmounts.
+    return () => observer.disconnect();
   }, []);
 
-  // This component does not render anything.
+  // This component does not render anything to the DOM.
   return null;
 }
