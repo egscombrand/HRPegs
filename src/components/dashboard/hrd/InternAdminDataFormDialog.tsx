@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -8,16 +8,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Edit } from 'lucide-react';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { GoogleDatePicker } from '@/components/ui/google-date-picker';
 import { useAuth } from '@/providers/auth-provider';
-import { useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
+import { useFirestore, useCollection, useMemoFirebase, useDoc, setDocumentNonBlocking } from '@/firebase';
 import { doc, serverTimestamp, Timestamp, writeBatch, query, collection, where } from 'firebase/firestore';
 import type { EmployeeProfile, Brand, UserProfile, JobApplication, Job } from '@/lib/types';
-import { ROLES_INTERNAL } from '@/lib/types';
 import { addMonths } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -38,7 +37,8 @@ interface InternAdminDataFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   profile: EmployeeProfile;
-  onAdminDataChange: () => void;
+  onSuccess: () => void;
+  application: JobApplication | null;
 }
 
 const InfoRow = ({ label, value }: { label: string; value?: string | number | null }) => (
@@ -48,41 +48,42 @@ const InfoRow = ({ label, value }: { label: string; value?: string | number | nu
     </div>
 );
 
-export function InternAdminDataFormDialog({ open, onOpenChange, profile, onAdminDataChange }: InternAdminDataFormDialogProps) {
+export function InternAdminDataFormDialog({ open, onOpenChange, profile, onSuccess, application }: InternAdminDataFormDialogProps) {
   const [isSaving, setIsSaving] = useState(false);
   const { userProfile: hrdProfile } = useAuth();
   const firestore = useFirestore();
   const { toast } = useToast();
 
-  const applicationQuery = useMemoFirebase(() => {
+  const userRef = useMemoFirebase(() => {
     if (!profile) return null;
-    return query(
-      collection(firestore, 'applications'),
-      where('candidateUid', '==', profile.uid),
-      where('status', '==', 'hired')
-    );
+    return doc(firestore, 'users', profile.uid);
   }, [firestore, profile]);
-
-  const { data: applications, isLoading: isLoadingApplication } = useCollection<JobApplication>(applicationQuery);
-  const application = useMemo(() => {
-    if (!applications || applications.length === 0) return null;
-    return [...applications].sort((a,b) => (b.updatedAt?.toMillis() || 0) - (a.updatedAt?.toMillis() || 0))[0];
-  }, [applications]);
+  const { data: userProfile } = useDoc<UserProfile>(userRef);
 
   const { data: brands, isLoading: isLoadingBrands } = useCollection<Brand>(
     useMemoFirebase(() => collection(firestore, 'brands'), [firestore])
   );
   
-  const { data: supervisors, isLoading: isLoadingSupervisors } = useCollection<UserProfile>(
+  const { data: supervisors } = useCollection<UserProfile>(
     useMemoFirebase(() => query(collection(firestore, 'users'), where('role', 'in', ['manager', 'karyawan']), where('isActive', '==', true)), [firestore])
   );
   
-  const userRef = useMemoFirebase(() => {
-    if (!profile) return null;
-    return doc(firestore, 'users', profile.uid);
-  }, [firestore, profile]);
-  const { data: userProfile, isLoading: isLoadingUser } = useDoc<UserProfile>(userRef);
+  const jobRef = useMemoFirebase(() => {
+    if (!application) return null;
+    return doc(firestore, 'jobs', application.jobId);
+  }, [firestore, application]);
+  const { data: job } = useDoc<Job>(jobRef);
 
+  const isRecruited = !!application;
+  
+  const form = useForm<AdminFormValues>({
+    resolver: zodResolver(adminFormSchema),
+  });
+  
+  const { watch, setValue } = form;
+  const startDate = watch('internshipStartDate');
+  const duration = watch('contractDurationMonths');
+  
   const { finalBrandId, finalBrandName } = useMemo(() => {
     const brandMap = new Map(brands?.map(b => [b.id!, b.name]) || []);
     let id = profile.brandId || userProfile?.brandId || application?.brandId;
@@ -92,7 +93,7 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, onAdmin
     if (profile.brandName) {
         name = profile.brandName;
     } else if (singleId && brands) {
-        name = brands.find(b => b.id === singleId)?.name || 'Unknown';
+        name = brandMap.get(singleId) || 'Unknown';
     } else if (application?.brandName) {
         name = application.brandName;
     }
@@ -102,18 +103,10 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, onAdmin
   
   const compensationAmount = profile.compensationAmount ?? application?.offeredSalary;
 
-  const form = useForm<AdminFormValues>({
-    resolver: zodResolver(adminFormSchema),
-  });
-  
-  const { watch, setValue } = form;
-  const startDate = watch('internshipStartDate');
-  const duration = watch('contractDurationMonths');
-
   const filteredSupervisors = useMemo(() => {
     if (!supervisors || !finalBrandId) return [];
     return supervisors.filter(user => {
-      if (user.uid === profile.uid) return false; // Exclude self
+      if (user.uid === profile.uid) return false;
       if (!user.isActive || !['manager', 'karyawan'].includes(user.role)) return false;
       if (Array.isArray(user.brandId)) return user.brandId.includes(finalBrandId);
       return user.brandId === finalBrandId;
@@ -133,7 +126,7 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, onAdmin
   useEffect(() => {
     if (open) {
       form.reset({
-        division: profile.division || '',
+        division: profile.division || job?.division || '',
         supervisorName: profile.supervisorName || '',
         internSubtype: profile.internSubtype || 'intern_education',
         internshipStartDate: profile.internshipStartDate?.toDate() || application?.contractStartDate?.toDate() || null,
@@ -142,7 +135,7 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, onAdmin
         hrdNotes: profile.hrdNotes || application?.offerNotes || '',
       });
     }
-  }, [profile, application, open, form]);
+  }, [profile, application, job, open, form]);
 
   const onSubmit = async (values: AdminFormValues) => {
     if (!hrdProfile || !finalBrandId) return;
@@ -167,7 +160,7 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, onAdmin
         
         await batch.commit();
         toast({ title: 'Data Administrasi Disimpan' });
-        onAdminDataChange();
+        onSuccess();
         onOpenChange(false);
     } catch (error: any) {
         toast({ variant: 'destructive', title: 'Gagal menyimpan data', description: error.message });
@@ -178,7 +171,7 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, onAdmin
   
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0">
+      <DialogContent className="max-w-3xl h-[90vh] flex flex-col p-0">
         <DialogHeader className="p-6 pb-4 border-b">
           <DialogTitle>Edit Data Administrasi: {profile.fullName}</DialogTitle>
           <DialogDescription>
@@ -205,7 +198,7 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, onAdmin
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6">
                             <FormField control={form.control} name="division" render={({ field }) => (<FormItem><FormLabel>Divisi</FormLabel><FormControl><Input placeholder="e.g., Creative, Finance" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>)} />
                             <FormField control={form.control} name="supervisorName" render={({ field }) => (
-                                <FormItem><FormLabel>Supervisor / PIC</FormLabel><Select onValueChange={field.onChange} value={field.value || ''} disabled={isLoadingSupervisors}><FormControl><SelectTrigger><SelectValue placeholder="Pilih Supervisor" /></SelectTrigger></FormControl><SelectContent>{filteredSupervisors.map(s => <SelectItem key={s.uid} value={s.fullName}>{s.fullName}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
+                                <FormItem><FormLabel>Supervisor / PIC</FormLabel><Select onValueChange={field.onChange} value={field.value || ''}><FormControl><SelectTrigger><SelectValue placeholder="Pilih Supervisor" /></SelectTrigger></FormControl><SelectContent>{filteredSupervisors.map(s => <SelectItem key={s.uid} value={s.fullName}>{s.fullName}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>
                             )}/>
                             <FormField control={form.control} name="internSubtype" render={({ field }) => (
                                 <FormItem><FormLabel>Tipe Magang</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Pilih tipe magang" /></SelectTrigger></FormControl><SelectContent><SelectItem value="intern_education">Terikat Pendidikan</SelectItem><SelectItem value="intern_pre_probation">Pra-Probation</SelectItem></SelectContent></Select><FormMessage /></FormItem>
@@ -218,10 +211,44 @@ export function InternAdminDataFormDialog({ open, onOpenChange, profile, onAdmin
                     <section>
                         <h3 className="text-lg font-semibold border-b pb-2 mb-4">Informasi Kontrak Magang</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6">
-                            <FormField control={form.control} name="internshipStartDate" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Mulai Magang</FormLabel><FormControl><GoogleDatePicker value={field.value} onChange={field.onChange} /></FormControl><FormMessage /></FormItem>)} />
-                            <FormField control={form.control} name="contractDurationMonths" render={({ field }) => (<FormItem><FormLabel>Durasi (bulan)</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value === '' ? null : Number(e.target.value))} /></FormControl><FormMessage /></FormItem>)} />
+                            <FormField control={form.control} name="internshipStartDate" render={({ field }) => (
+                                <FormItem className="flex flex-col">
+                                    <FormLabel>Mulai Magang</FormLabel>
+                                    <FormControl>
+                                        <GoogleDatePicker 
+                                            value={field.value} 
+                                            onChange={field.onChange}
+                                            disabled={isRecruited}
+                                        />
+                                    </FormControl>
+                                    {isRecruited && <FormDescription>Ditentukan dari kontrak rekrutmen.</FormDescription>}
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+                            <FormField control={form.control} name="contractDurationMonths" render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Durasi (bulan)</FormLabel>
+                                    <FormControl>
+                                        <Input 
+                                            type="number" 
+                                            {...field} 
+                                            value={field.value ?? ''}
+                                            onChange={(e) => field.onChange(e.target.value === '' ? null : Number(e.target.value))}
+                                            disabled={isRecruited}
+                                        />
+                                    </FormControl>
+                                     {isRecruited && <FormDescription>Ditentukan dari kontrak rekrutmen.</FormDescription>}
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
                             <div className="md:col-span-2">
-                                <FormField control={form.control} name="internshipEndDate" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Selesai Magang (Otomatis)</FormLabel><FormControl><GoogleDatePicker value={field.value} onChange={field.onChange} disabled /></FormControl><FormMessage /></FormItem>)} />
+                                <FormField control={form.control} name="internshipEndDate" render={({ field }) => (
+                                <FormItem className="flex flex-col">
+                                    <FormLabel>Selesai Magang (Otomatis)</FormLabel>
+                                    <FormControl><GoogleDatePicker value={field.value} onChange={field.onChange} disabled /></FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                                )} />
                             </div>
                         </div>
                     </section>
