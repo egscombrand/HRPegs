@@ -28,6 +28,7 @@ type ReportSummary = {
 type ProcessedIntern = InternWithReviewStatus & {
     brandName?: string;
     reportSummary: ReportSummary;
+    evaluation?: MonthlyEvaluation;
 };
 
 export function HrdMonthlyReviewDashboard({ userProfile }: { userProfile: UserProfile }) {
@@ -92,6 +93,7 @@ export function HrdMonthlyReviewDashboard({ userProfile }: { userProfile: UserPr
                 ...intern,
                 reviewCycle,
                 reviewStatus,
+                evaluation,
                 reportSummary: summary,
                 brandName: brandDisplay,
                 supervisorName: intern.supervisorName || 'N/A',
@@ -125,16 +127,52 @@ export function HrdMonthlyReviewDashboard({ userProfile }: { userProfile: UserPr
         return counts;
     }, [filteredData]);
     
+    const internsByStatus = useMemo(() => {
+        const statusGroups: {
+            siapDireview: ProcessedIntern[],
+            akanJatuhTempo: ProcessedIntern[],
+            terlambat: ProcessedIntern[],
+            sudahDievaluasi: ProcessedIntern[],
+            semua: ProcessedIntern[]
+        } = {
+            siapDireview: [],
+            akanJatuhTempo: [],
+            terlambat: [],
+            sudahDievaluasi: [],
+            semua: filteredData,
+        };
+
+        filteredData.forEach(intern => {
+            switch (intern.reviewStatus) {
+                case 'Siap Direview':
+                    statusGroups.siapDireview.push(intern);
+                    break;
+                case 'Akan Jatuh Tempo':
+                    statusGroups.akanJatuhTempo.push(intern);
+                    break;
+                case 'Terlambat':
+                    statusGroups.terlambat.push(intern);
+                    break;
+                case 'Sudah Dievaluasi':
+                    statusGroups.sudahDievaluasi.push(intern);
+                    break;
+                default:
+                    break;
+            }
+        });
+        return statusGroups;
+    }, [filteredData]);
+
     const [activeTab, setActiveTab] = useState('siapDireview');
     const internsForTab = useMemo(() => {
         switch(activeTab) {
-            case 'siapDireview': return filteredData.filter(i => i.reviewStatus === 'Siap Direview');
-            case 'akanJatuhTempo': return filteredData.filter(i => i.reviewStatus === 'Akan Jatuh Tempo');
-            case 'terlambat': return filteredData.filter(i => i.reviewStatus === 'Terlambat');
-            case 'sudahDievaluasi': return filteredData.filter(i => i.reviewStatus === 'Sudah Dievaluasi');
-            default: return filteredData;
+            case 'siapDireview': return internsByStatus.siapDireview;
+            case 'akanJatuhTempo': return internsByStatus.akanJatuhTempo;
+            case 'terlambat': return internsByStatus.terlambat;
+            case 'sudahDievaluasi': return internsByStatus.sudahDievaluasi;
+            default: return internsByStatus.semua;
         }
-    }, [activeTab, filteredData]);
+    }, [activeTab, internsByStatus]);
     
     const handleEvaluationSuccess = () => {
       mutateEvaluations();
@@ -164,7 +202,7 @@ export function HrdMonthlyReviewDashboard({ userProfile }: { userProfile: UserPr
                 <div className="relative flex-grow min-w-[200px]"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Cari nama intern..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-8" /></div>
             </div>
             
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 <KpiCard title="Siap Direview" value={kpis.siapDireview} />
                 <KpiCard title="Akan Jatuh Tempo" value={kpis.akanJatuhTempo} />
                 <KpiCard title="Terlambat Review" value={kpis.terlambat} deltaType="inverse" />
