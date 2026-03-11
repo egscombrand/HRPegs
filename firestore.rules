@@ -85,6 +85,15 @@ service cloud.firestore {
       return request.resource.data.uid == resource.data.uid;
     }
 
+    /**
+     * WARNING: NOT SAFE FOR LIST QUERIES.
+     * Checks if the requesting user is the supervisor of the given intern.
+     */
+    function isSupervisor(internUid) {
+      let employeeProfile = get(/databases/$(database)/documents/employee_profiles/$(internUid)).data;
+      return employeeProfile.supervisorUid == request.auth.uid;
+    }
+
 
     // --- Collection Rules ---
 
@@ -119,9 +128,10 @@ service cloud.firestore {
      * /employee_profiles/{uid} (Intern/Employee Profile)
      * - An employee can read/write their own profile.
      * - HRD and Super Admins can view any profile for monitoring.
+     * - A supervisor can read their intern's profile.
      */
     match /employee_profiles/{uid} {
-      allow get: if isOwner(uid) || isHrd() || isSuperAdmin();
+      allow get: if isOwner(uid) || isHrd() || isSuperAdmin() || isSupervisor(uid);
       allow create, update: if (isOwner(uid) && request.resource.data.uid == uid) || isHrd() || isSuperAdmin();
       allow list: if isHrd() || isSuperAdmin();
       allow delete: if false;
@@ -366,18 +376,9 @@ service cloud.firestore {
     
     // --- Monthly Evaluation Rules ---
     match /monthly_evaluations/{evaluationId} {
-      // HRD/Admins can list all evaluations for their dashboards.
-      // Interns can list their own evaluations (client query must enforce `where('internUid', '==', uid)`).
       allow list: if isHrd() || isSuperAdmin() || isSignedIn();
-
-      // HRD/Admins can read any evaluation. Interns can only read their own, based on the document ID.
-      // This is safe even if the document does not exist.
-      allow get: if isHrd() || isSuperAdmin() || (isSignedIn() && evaluationId.split('_')[0] == request.auth.uid);
-
-      // Only HRD/Admins can create or update evaluations.
-      allow create, update: if isHrd() || isSuperAdmin();
-
-      // Only Super Admins can delete evaluation records.
+      allow get: if isHrd() || isSuperAdmin() || (isSignedIn() && evaluationId.split('_')[0] == request.auth.uid) || (isSignedIn() && isSupervisor(evaluationId.split('_')[0]));
+      allow create, update: if isHrd() || isSuperAdmin() || (isSignedIn() && isSupervisor(request.resource.data.internUid));
       allow delete: if isSuperAdmin();
     }
   }
