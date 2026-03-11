@@ -7,10 +7,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/providers/auth-provider';
 import { MENU_CONFIG } from '@/lib/menu-config';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Loader2, ArrowRight, FilePlus, BarChart, CheckSquare, FileClock, CheckCircle, AlertCircle, Edit, ListTodo } from 'lucide-react';
+import { Loader2, ArrowRight, FilePlus, BarChart, CheckSquare, FileClock, CheckCircle, AlertCircle, Edit, ListTodo, Target } from 'lucide-react';
 import { useDoc, useFirestore, useMemoFirebase, useCollection } from '@/firebase';
 import { doc, collection, query, where } from 'firebase/firestore';
-import type { EmployeeProfile, UserProfile, Brand, JobApplication } from '@/lib/types';
+import type { EmployeeProfile, UserProfile, Brand, JobApplication, MonthlyEvaluation } from '@/lib/types';
 import { format, differenceInDays } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
@@ -160,6 +160,27 @@ function GreetingAndAlert({ name }: { name: string }) {
     )
 }
 
+function FocusCard({ evaluation }: { evaluation: MonthlyEvaluation | null }) {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                    <Target className="h-5 w-5 text-primary" />
+                    Fokus Bulan Ini
+                </CardTitle>
+                <CardDescription>Target atau arahan dari mentor untuk bulan ini.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                {evaluation?.monthlyFocus ? (
+                    <p className="text-sm">{evaluation.monthlyFocus}</p>
+                ) : (
+                    <p className="text-sm text-muted-foreground">Mentor Anda belum menetapkan fokus untuk bulan ini.</p>
+                )}
+            </CardContent>
+        </Card>
+    );
+}
+
 export default function MagangDashboardPage() {
   const { userProfile, loading: authLoading } = useAuth();
   const firestore = useFirestore();
@@ -177,7 +198,14 @@ export default function MagangDashboardPage() {
     useMemoFirebase(() => collection(firestore, 'brands'), [firestore])
   );
 
-  const isLoading = authLoading || profileLoading || brandsLoading;
+  const monthId = useMemo(() => format(new Date(), 'yyyy-MM'), []);
+  const evalRef = useMemoFirebase(
+      () => (userProfile ? doc(firestore, 'monthly_evaluations', `${userProfile.uid}_${monthId}`) : null),
+      [firestore, userProfile, monthId]
+  );
+  const { data: monthlyEval, isLoading: isLoadingEval } = useDoc<MonthlyEvaluation>(evalRef);
+
+  const isLoading = authLoading || profileLoading || brandsLoading || isLoadingEval;
 
   if (!hasAccess || !userProfile || userProfile.employmentType !== 'magang') {
     return (
@@ -196,6 +224,7 @@ export default function MagangDashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             <div className="lg:col-span-2 space-y-6">
                 <GreetingAndAlert name={userProfile.fullName} />
+                <FocusCard evaluation={monthlyEval} />
                 <Card>
                     <CardHeader>
                         <CardTitle>Ringkasan Progres Laporan</CardTitle>

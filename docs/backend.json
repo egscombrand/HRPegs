@@ -925,13 +925,17 @@
     },
     "MonthlyEvaluation": {
       "title": "Monthly Evaluation",
-      "description": "An HRD's monthly evaluation of an intern's performance.",
+      "description": "An HRD's or Mentor's monthly evaluation of an intern's performance.",
       "type": "object",
       "properties": {
         "internUid": { "type": "string", "description": "The UID of the intern being evaluated." },
         "evaluationMonth": { "type": "string", "format": "date", "description": "The first day of the month being evaluated (e.g., '2024-07-01')." },
-        "evaluatorUid": { "type": "string", "description": "The UID of the HRD who performed the evaluation." },
-        "evaluatorName": { "type": "string", "description": "The name of the HRD evaluator." },
+        "evaluatorUid": { "type": "string", "description": "The UID of the user who performed the evaluation or set the focus." },
+        "evaluatorName": { "type": "string", "description": "The name of the user." },
+        "monthlyFocus": {
+            "type": "string",
+            "description": "A brief focus or goal for the intern for the current month, set by the mentor."
+        },
         "ratings": {
           "type": "object",
           "properties": {
@@ -945,14 +949,13 @@
             "workQuality": { "type": "string", "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"] },
             "learningAbility": { "type": "string", "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"] },
             "consistency": { "type": "string", "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"] }
-          },
-          "required": ["attendance", "discipline", "attitude", "responsibility", "communication", "initiative", "teamwork", "workQuality", "learningAbility", "consistency"]
+          }
         },
         "hrdComment": { "type": "string", "description": "General comments from HRD." },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["internUid", "evaluationMonth", "evaluatorUid", "evaluatorName", "ratings", "hrdComment", "createdAt", "updatedAt"]
+      "required": ["internUid", "evaluationMonth", "createdAt", "updatedAt"]
     }
   },
   "auth": {

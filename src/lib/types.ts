@@ -557,10 +557,11 @@ export type MonthlyEvaluation = {
   internUid: string;
   internName?: string;
   evaluationMonth: Timestamp;
-  evaluatorUid: string;
-  evaluatorName: string;
-  ratings: EvaluationCriteria;
-  hrdComment: string;
+  evaluatorUid?: string;
+  evaluatorName?: string;
+  monthlyFocus?: string;
+  ratings?: EvaluationCriteria;
+  hrdComment?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 };

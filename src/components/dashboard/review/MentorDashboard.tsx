@@ -1,14 +1,14 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
-import { useCollection, useFirestore, useMemoFirebase, updateDocumentNonBlocking, writeBatch } from '@/firebase';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useCollection, useFirestore, useMemoFirebase, updateDocumentNonBlocking, writeBatch, useDoc } from '@/firebase';
 import { collection, query, where, doc, serverTimestamp, Timestamp, getDoc } from 'firebase/firestore';
-import type { DailyReport, UserProfile } from '@/lib/types';
+import type { DailyReport, UserProfile, MonthlyEvaluation } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { format, formatDistanceToNow } from 'date-fns';
 import { id } from 'date-fns/locale';
-import { Loader2, Eye, CheckCircle, XCircle, FileClock, ThumbsUp, MessageSquareWarning, FileText } from 'lucide-react';
+import { Loader2, Eye, CheckCircle, XCircle, FileClock, ThumbsUp, MessageSquareWarning, FileText, Target, Edit } from 'lucide-react';
 import { ReviewReportDialog } from './ReviewReportDialog';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -18,6 +18,9 @@ import { BulkRevisionDialog } from './BulkRevisionDialog';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { Card, CardHeader, CardTitle, CardContent, CardFooter, CardDescription } from '@/components/ui/card';
+import { SetFocusDialog } from './SetFocusDialog';
+
 
 type ReportWithDetails = DailyReport & { internName?: string; };
 
@@ -56,64 +59,11 @@ const ReportPreview = ({ report, onReviewClick, onApproveClick, onReviseClick, i
   );
 };
 
-
-export function MentorDashboard({ userProfile }: { userProfile: UserProfile}) {
+function InternAccordionContent({ internId, internName, reports }: { internId: string; internName: string; reports: ReportWithDetails[] }) {
     const firestore = useFirestore();
     const { toast } = useToast();
-
-    const reportsQuery = useMemoFirebase(() => {
-        if (!userProfile) return null;
-        return query(collection(firestore, 'daily_reports'), where('supervisorUid', '==', userProfile.uid));
-    }, [firestore, userProfile.uid]);
-
-    const { data: reports, isLoading: isLoadingReports, mutate: mutateReports } = useCollection<DailyReport>(reportsQuery);
-
-    const internUids = useMemo(() => {
-        if (!reports) return [];
-        return Array.from(new Set(reports.map(r => r.uid)));
-    }, [reports]);
-
-    const [interns, setInterns] = useState<UserProfile[] | null>(null);
-    const [isLoadingInterns, setIsLoadingInterns] = useState(true);
-
-    useEffect(() => {
-        if (internUids.length === 0) {
-            setInterns([]);
-            setIsLoadingInterns(false);
-            return;
-        }
-
-        setIsLoadingInterns(true);
-        const fetchInterns = async () => {
-            try {
-                const internPromises = internUids.map(uid => getDoc(doc(firestore, 'users', uid)));
-                const internDocs = await Promise.all(internPromises);
-                const internProfiles = internDocs
-                    .filter(docSnap => docSnap.exists())
-                    .map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as UserProfile));
-                setInterns(internProfiles);
-            } catch (err) {
-                console.error("Failed to fetch intern profiles:", err);
-                setInterns([]); // Set to empty array on error to avoid breaking downstream logic
-            } finally {
-                setIsLoadingInterns(false);
-            }
-        };
-
-        fetchInterns();
-    }, [internUids, firestore]);
+    const { userProfile } = useAuth();
     
-    const internNameMap = useMemo(() => new Map(interns?.map(i => [i.uid, i.fullName])), [interns]);
-
-    const reportsWithDetails: ReportWithDetails[] = useMemo(() => {
-        if (!reports) return [];
-        return reports.map(report => ({
-            ...report,
-            internName: internNameMap.get(report.uid) || 'Unknown Intern',
-        }));
-    }, [reports, internNameMap]);
-
-
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [isBulkRevisionOpen, setIsBulkRevisionOpen] = useState(false);
     const [isBulkApproving, setIsBulkApproving] = useState(false);
@@ -121,39 +71,28 @@ export function MentorDashboard({ userProfile }: { userProfile: UserProfile}) {
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
     const [activeTab, setActiveTab] = useState('submitted');
     const [selectedReport, setSelectedReport] = useState<ReportWithDetails | null>(null);
+    const [focusToEdit, setFocusToEdit] = useState(false);
 
-    const groupedByIntern = useMemo(() => {
-        return reportsWithDetails.reduce((acc, report) => {
-            if (!acc[report.uid]) {
-                acc[report.uid] = {
-                    internName: report.internName || 'Unknown',
-                    reports: []
-                };
-            }
-            acc[report.uid].reports.push(report);
-            return acc;
-        }, {} as Record<string, { internName: string; reports: ReportWithDetails[] }>);
-    }, [reportsWithDetails]);
+    const monthId = useMemo(() => format(new Date(), 'yyyy-MM'), []);
+    const evalRef = useMemoFirebase(() => {
+        const evalId = `${internId}_${monthId}`;
+        return doc(firestore, 'monthly_evaluations', evalId);
+    }, [firestore, internId, monthId]);
+    const { data: monthlyEval, mutate: mutateEval } = useDoc<MonthlyEvaluation>(evalRef);
 
-    const internIds = Object.keys(groupedByIntern);
-
-    const reportsForCurrentTabAndIntern = (internId: string) => {
-        const internGroup = groupedByIntern[internId];
-        if (!internGroup) return [];
-
-        const filtered = internGroup.reports.filter(r => r.status === activeTab);
+    const reportsForCurrentTab = useMemo(() => {
+        const filtered = reports.filter(r => r.status === activeTab);
         return filtered.sort((a,b) => {
             const timeA = a.submittedAt?.toMillis() || a.createdAt.toMillis();
             const timeB = b.submittedAt?.toMillis() || b.createdAt.toMillis();
             return sortOrder === 'asc' ? timeA - timeB : timeB - timeA;
         });
-    }
+    }, [reports, activeTab, sortOrder]);
     
-    const handleSelectAllForIntern = (internId: string, checked: boolean) => {
-        const reportIds = (groupedByIntern[internId]?.reports || [])
-            .filter(r => r.status === 'submitted')
-            .map(r => r.id!);
-            
+    const allSelectedForIntern = activeTab === 'submitted' && reportsForCurrentTab.length > 0 && reportsForCurrentTab.every(r => selectedIds.has(r.id!));
+
+    const handleSelectAllForIntern = (checked: boolean) => {
+        const reportIds = reportsForCurrentTab.map(r => r.id!);
         setSelectedIds(prev => {
             const newSet = new Set(prev);
             if (checked) {
@@ -163,19 +102,16 @@ export function MentorDashboard({ userProfile }: { userProfile: UserProfile}) {
             }
             return newSet;
         });
-    }
+    };
 
     const handleSelectOne = (reportId: string, checked: boolean) => {
         setSelectedIds(prev => {
             const newSet = new Set(prev);
-            if (checked) {
-                newSet.add(reportId);
-            } else {
-                newSet.delete(reportId);
-            }
+            if (checked) newSet.add(reportId);
+            else newSet.delete(reportId);
             return newSet;
         });
-    }
+    };
 
     const handleBulkApprove = async () => {
         if (selectedIds.size === 0 || !userProfile) return;
@@ -197,7 +133,7 @@ export function MentorDashboard({ userProfile }: { userProfile: UserProfile}) {
             await batch.commit();
             toast({ title: 'Sukses', description: `${selectedIds.size} laporan telah disetujui.` });
             setSelectedIds(new Set());
-            mutateReports();
+            // Parent's mutate will be called eventually
         } catch (e: any) {
             toast({ variant: 'destructive', title: 'Gagal', description: e.message });
         } finally {
@@ -215,10 +151,9 @@ export function MentorDashboard({ userProfile }: { userProfile: UserProfile}) {
             reviewedAt: serverTimestamp(),
             reviewedByUid: userProfile.uid,
             reviewedByName: userProfile.fullName,
-            reviewerNotes: null // Clear notes on approval
+            reviewerNotes: null
         });
         toast({ title: 'Laporan Disetujui' });
-        mutateReports();
       } catch (e: any) {
         toast({ variant: 'destructive', title: 'Gagal', description: e.message });
       } finally {
@@ -226,10 +161,187 @@ export function MentorDashboard({ userProfile }: { userProfile: UserProfile}) {
       }
     };
 
-    const handleReviewSuccess = () => {
-        mutateReports();
-        setSelectedReport(null);
-    };
+    return (
+        <>
+            <Card className="mx-4 my-2">
+                <CardHeader>
+                    <CardTitle className="text-base flex items-center justify-between">
+                        <span className="flex items-center gap-2"><Target className="h-4 w-4" /> Fokus Bulan Ini</span>
+                        <Button variant="ghost" size="sm" onClick={() => setFocusToEdit(true)}>
+                            <Edit className="h-4 w-4 mr-2" /> Atur Fokus
+                        </Button>
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <p className="text-sm text-muted-foreground">
+                        {monthlyEval?.monthlyFocus || "Belum ada fokus yang ditetapkan untuk bulan ini."}
+                    </p>
+                </CardContent>
+            </Card>
+
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="px-4 mt-2">
+                <TabsList>
+                    <TabsTrigger value="submitted">Menunggu Review</TabsTrigger>
+                    <TabsTrigger value="needs_revision">Perlu Revisi</TabsTrigger>
+                    <TabsTrigger value="approved">Disetujui</TabsTrigger>
+                </TabsList>
+            </Tabs>
+            
+            <div className="p-2">
+                {activeTab === 'submitted' && (
+                    <div className="flex items-center justify-between gap-3 p-2 border-b">
+                        <div className="flex items-center gap-3">
+                            <Checkbox
+                                id={`select-all-${internId}`}
+                                checked={allSelectedForIntern}
+                                onCheckedChange={(checked) => handleSelectAllForIntern(!!checked)}
+                            />
+                            <label htmlFor={`select-all-${internId}`} className="text-sm font-medium">Pilih semua</label>
+                        </div>
+                        {selectedIds.size > 0 && (
+                            <div className="flex items-center gap-2">
+                                <Button size="sm" variant="destructive" onClick={() => setIsBulkRevisionOpen(true)}>Minta Revisi ({selectedIds.size})</Button>
+                                <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={handleBulkApprove} disabled={isBulkApproving}>
+                                    {isBulkApproving && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                                    Setujui ({selectedIds.size})
+                                </Button>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            <Accordion type="single" collapsible className="w-full space-y-1 px-2 pb-2">
+                {reportsForCurrentTab.map(report => (
+                    <AccordionItem value={report.id!} key={report.id!} className="border rounded-md bg-background">
+                        <div className="flex items-center gap-2 pr-4">
+                            {activeTab === 'submitted' && (
+                                <div className="p-4">
+                                    <Checkbox
+                                        checked={selectedIds.has(report.id!)}
+                                        onCheckedChange={(checked) => handleSelectOne(report.id!, !!checked)}
+                                        onClick={e => e.stopPropagation()}
+                                    />
+                                </div>
+                            )}
+                            <AccordionTrigger className="flex-1 hover:no-underline pl-4 data-[state=closed]:py-4">
+                                <div className="flex justify-between items-center w-full">
+                                    <div className="text-left">
+                                        <p className="font-semibold">{format(report.date.toDate(), 'eeee, dd MMM', { locale: id })}</p>
+                                        <p className="text-xs text-muted-foreground">Diajukan: {formatDistanceToNow(report.submittedAt?.toDate() || report.createdAt.toDate(), { addSuffix: true, locale: id })}</p>
+                                    </div>
+                                </div>
+                            </AccordionTrigger>
+                        </div>
+                        <AccordionContent>
+                            <ReportPreview
+                                report={report}
+                                onReviewClick={() => setSelectedReport(report)}
+                                onApproveClick={() => handleSingleApprove(report.id!)}
+                                onReviseClick={() => setSelectedReport(report)}
+                                isApproving={approvingId === report.id}
+                            />
+                        </AccordionContent>
+                    </AccordionItem>
+                ))}
+            </Accordion>
+            {reportsForCurrentTab.length === 0 && <p className="text-center text-sm text-muted-foreground py-4">Tidak ada laporan di tab ini.</p>}
+            
+            <BulkRevisionDialog 
+                open={isBulkRevisionOpen}
+                onOpenChange={setIsBulkRevisionOpen}
+                reportIds={Array.from(selectedIds)}
+                onSuccess={() => { setSelectedIds(new Set()); /* Let parent mutate */ }}
+            />
+            {selectedReport && (
+                <ReviewReportDialog 
+                    open={!!selectedReport} 
+                    onOpenChange={(isOpen) => !isOpen && setSelectedReport(null)} 
+                    report={selectedReport} 
+                    onSuccess={() => setSelectedReport(null)}
+                />
+            )}
+            <SetFocusDialog 
+                open={focusToEdit}
+                onOpenChange={setFocusToEdit}
+                internId={internId}
+                internName={internName}
+                currentFocus={monthlyEval?.monthlyFocus}
+                onSuccess={mutateEval}
+            />
+        </>
+    );
+}
+
+export function MentorDashboard({ userProfile }: { userProfile: UserProfile}) {
+    const firestore = useFirestore();
+
+    const reportsQuery = useMemoFirebase(() => {
+        if (!userProfile) return null;
+        return query(collection(firestore, 'daily_reports'), where('supervisorUid', '==', userProfile.uid));
+    }, [firestore, userProfile.uid]);
+
+    const { data: reports, isLoading: isLoadingReports } = useCollection<DailyReport>(reportsQuery);
+    
+    const [interns, setInterns] = useState<UserProfile[] | null>(null);
+    const [isLoadingInterns, setIsLoadingInterns] = useState(true);
+    
+    const internUids = useMemo(() => {
+        if (!reports) return [];
+        return Array.from(new Set(reports.map(r => r.uid)));
+    }, [reports]);
+
+    useEffect(() => {
+        if (internUids.length === 0) {
+            setInterns([]);
+            setIsLoadingInterns(false);
+            return;
+        }
+
+        setIsLoadingInterns(true);
+        const fetchInterns = async () => {
+            try {
+                const internPromises = internUids.map(uid => getDoc(doc(firestore, 'users', uid)));
+                const internDocs = await Promise.all(internPromises);
+                const internProfiles = internDocs
+                    .filter(docSnap => docSnap.exists())
+                    .map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as UserProfile));
+                setInterns(internProfiles);
+            } catch (err) {
+                console.error("Failed to fetch intern profiles:", err);
+                setInterns([]);
+            } finally {
+                setIsLoadingInterns(false);
+            }
+        };
+
+        fetchInterns();
+    }, [internUids, firestore]);
+    
+    const internNameMap = useMemo(() => new Map(interns?.map(i => [i.uid, i.fullName])), [interns]);
+
+    const reportsWithDetails: ReportWithDetails[] = useMemo(() => {
+        if (!reports) return [];
+        return reports.map(report => ({
+            ...report,
+            internName: internNameMap.get(report.uid) || 'Unknown Intern',
+        }));
+    }, [reports, internNameMap]);
+
+    const groupedByIntern = useMemo(() => {
+        return reportsWithDetails.reduce((acc, report) => {
+            if (!acc[report.uid]) {
+                acc[report.uid] = {
+                    internName: report.internName || 'Unknown',
+                    reports: []
+                };
+            }
+            acc[report.uid].reports.push(report);
+            return acc;
+        }, {} as Record<string, { internName: string; reports: ReportWithDetails[] }>);
+    }, [reportsWithDetails]);
+
+    const internIds = Object.keys(groupedByIntern);
 
     if (isLoadingReports || isLoadingInterns) {
         return <div className="h-64 flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
@@ -237,109 +349,29 @@ export function MentorDashboard({ userProfile }: { userProfile: UserProfile}) {
 
     return (
       <div className="space-y-4">
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList>
-                <TabsTrigger value="submitted">Menunggu Review</TabsTrigger>
-                <TabsTrigger value="needs_revision">Perlu Revisi</TabsTrigger>
-                <TabsTrigger value="approved">Disetujui</TabsTrigger>
-            </TabsList>
-        </Tabs>
-
         {internIds.length === 0 ? (
             <p className="text-center text-muted-foreground py-10">Tidak ada laporan yang perlu direview saat ini.</p>
         ) : (
             <Accordion type="multiple" className="w-full space-y-2" defaultValue={internIds}>
                 {internIds.map(internId => {
                     const internGroup = groupedByIntern[internId];
-                    const reportsForTab = reportsForCurrentTabAndIntern(internId);
-                    const allSelectedForIntern = activeTab === 'submitted' && reportsForTab.length > 0 && reportsForTab.every(r => selectedIds.has(r.id!));
-
-                    if (reportsForTab.length === 0) return null;
-
                     return (
                         <AccordionItem value={internId} key={internId} className="border rounded-lg bg-card">
                             <AccordionTrigger className="px-4 py-3 hover:no-underline text-lg">
                                 <div className="flex items-center gap-3">
                                     <Avatar className="h-9 w-9"><AvatarFallback>{getInitials(internGroup.internName)}</AvatarFallback></Avatar>
                                     {internGroup.internName}
-                                    <Badge variant="secondary">{reportsForTab.length} Laporan</Badge>
+                                    <Badge variant="secondary">{internGroup.reports.length} Laporan</Badge>
                                 </div>
                             </AccordionTrigger>
                             <AccordionContent className="px-1 border-t">
-                                <div className="p-2">
-                                     {activeTab === 'submitted' && (
-                                        <div className="flex items-center gap-3 p-2 border-b">
-                                            <Checkbox
-                                                id={`select-all-${internId}`}
-                                                checked={allSelectedForIntern}
-                                                onCheckedChange={(checked) => handleSelectAllForIntern(internId, !!checked)}
-                                            />
-                                            <label htmlFor={`select-all-${internId}`} className="text-sm font-medium">Pilih semua untuk {internGroup.internName}</label>
-                                        </div>
-                                     )}
-                                </div>
-                                <Accordion type="single" collapsible className="w-full space-y-1 px-2 pb-2">
-                                    {reportsForTab.map(report => (
-                                        <AccordionItem value={report.id!} key={report.id!} className="border rounded-md bg-background">
-                                            <div className="flex items-center gap-2 pr-4">
-                                                {activeTab === 'submitted' && (
-                                                    <div className="p-4">
-                                                        <Checkbox
-                                                            checked={selectedIds.has(report.id!)}
-                                                            onCheckedChange={(checked) => handleSelectOne(report.id!, !!checked)}
-                                                            onClick={e => e.stopPropagation()}
-                                                        />
-                                                    </div>
-                                                )}
-                                                <AccordionTrigger className="flex-1 hover:no-underline">
-                                                    <div className="flex justify-between items-center w-full">
-                                                        <div className="text-left">
-                                                            <p className="font-semibold">{format(report.date.toDate(), 'eeee, dd MMM', { locale: id })}</p>
-                                                            <p className="text-xs text-muted-foreground">Diajukan: {formatDistanceToNow(report.submittedAt?.toDate() || report.createdAt.toDate(), { addSuffix: true, locale: id })}</p>
-                                                        </div>
-                                                    </div>
-                                                </AccordionTrigger>
-                                            </div>
-                                            <AccordionContent>
-                                                <ReportPreview
-                                                    report={report}
-                                                    onReviewClick={() => setSelectedReport(report)}
-                                                    onApproveClick={() => handleSingleApprove(report.id!)}
-                                                    onReviseClick={() => setSelectedReport(report)}
-                                                    isApproving={approvingId === report.id}
-                                                />
-                                            </AccordionContent>
-                                        </AccordionItem>
-                                    ))}
-                                </Accordion>
-                                {reportsForTab.length === 0 && <p className="text-center text-sm text-muted-foreground py-4">Tidak ada laporan di tab ini.</p>}
+                               <InternAccordionContent internId={internId} internName={internGroup.internName} reports={internGroup.reports} />
                             </AccordionContent>
                         </AccordionItem>
                     )
                 })}
             </Accordion>
         )}
-        
-        {selectedIds.size > 0 && (
-            <div className="sticky bottom-4 z-50 flex items-center justify-center">
-                <div className="flex items-center gap-4 rounded-lg border bg-card p-3 shadow-2xl">
-                    <p className="text-sm font-medium">{selectedIds.size} laporan terpilih</p>
-                    <Separator orientation="vertical" className="h-6" />
-                    <Button size="sm" variant="destructive" onClick={() => setIsBulkRevisionOpen(true)}>Minta Revisi</Button>
-                    <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={handleBulkApprove} disabled={isBulkApproving}>
-                        {isBulkApproving && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
-                        Setujui Terpilih
-                    </Button>
-                </div>
-            </div>
-        )}
-        <BulkRevisionDialog 
-            open={isBulkRevisionOpen}
-            onOpenChange={setIsBulkRevisionOpen}
-            reportIds={Array.from(selectedIds)}
-            onSuccess={() => { setSelectedIds(new Set()); mutateReports(); }}
-        />
-        {selectedReport && (<ReviewReportDialog open={!!selectedReport} onOpenChange={(isOpen) => !isOpen && setSelectedReport(null)} report={selectedReport} onSuccess={handleReviewSuccess}/>)}
       </div>
     )
 }
