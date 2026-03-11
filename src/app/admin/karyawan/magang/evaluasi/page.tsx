@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { useAuth } from '@/providers/auth-provider';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, query, where, orderBy } from 'firebase/firestore';
+import { collection, query, where } from 'firebase/firestore';
 import type { MonthlyEvaluation, RatingScale, EvaluationCriteria } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -55,12 +55,21 @@ export default function EvaluasiPage() {
         if (!userProfile?.uid) return null;
         return query(
             collection(firestore, 'monthly_evaluations'), 
-            where('internUid', '==', userProfile.uid),
-            orderBy('evaluationMonth', 'desc')
+            where('internUid', '==', userProfile.uid)
         );
     }, [userProfile?.uid, firestore]);
 
-    const { data: evaluations, isLoading: evalsLoading } = useCollection<MonthlyEvaluation>(evaluationsQuery);
+    const { data: fetchedEvaluations, isLoading: evalsLoading } = useCollection<MonthlyEvaluation>(evaluationsQuery);
+    
+    const evaluations = useMemo(() => {
+        if (!fetchedEvaluations) return null;
+        // Sort on the client-side
+        return [...fetchedEvaluations].sort((a, b) => {
+            const timeA = a.evaluationMonth?.toMillis() || 0;
+            const timeB = b.evaluationMonth?.toMillis() || 0;
+            return timeB - timeA; // descending order
+        });
+    }, [fetchedEvaluations]);
     
     const isLoading = authLoading || evalsLoading;
 
