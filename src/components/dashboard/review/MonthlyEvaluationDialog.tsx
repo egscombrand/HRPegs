@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/providers/auth-provider';
 import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
 import { collection, query, where, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
-import type { EmployeeProfile, DailyReport, MonthlyEvaluation, EvaluationCriteria } from '@/lib/types';
+import type { EmployeeProfile, DailyReport, MonthlyEvaluation, EvaluationCriteria, UserProfile } from '@/lib/types';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Textarea } from '@/components/ui/textarea';
 import { Slider } from '@/components/ui/slider';
@@ -56,9 +56,10 @@ interface MonthlyEvaluationDialogProps {
   internProfile: EmployeeProfile;
   evaluation: MonthlyEvaluation | undefined;
   onSuccess: () => void;
+  supervisors: UserProfile[];
 }
 
-export function MonthlyEvaluationDialog({ open, onOpenChange, internData, internProfile, evaluation, onSuccess }: MonthlyEvaluationDialogProps) {
+export function MonthlyEvaluationDialog({ open, onOpenChange, internData, internProfile, evaluation, onSuccess, supervisors }: MonthlyEvaluationDialogProps) {
     const { userProfile } = useAuth();
     const firestore = useFirestore();
     const { toast } = useToast();
@@ -141,7 +142,7 @@ export function MonthlyEvaluationDialog({ open, onOpenChange, internData, intern
             <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0">
                 <DialogHeader className="p-6 pb-4 border-b">
                     <DialogTitle>Evaluasi Bulanan: {internData.internName}</DialogTitle>
-                    <DialogDescription>Untuk periode: {format(monthStart, 'MMMM yyyy', { locale: id })}</DialogDescription>
+                    <DialogDescription>Untuk periode: {format(monthStart, 'MMMM yyyy')}</DialogDescription>
                 </DialogHeader>
                 <ScrollArea className="flex-grow">
                     <div className="px-6 py-4 space-y-6">

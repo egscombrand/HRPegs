@@ -47,6 +47,16 @@ export function HrdMonthlyReviewDashboard({ userProfile }: { userProfile: UserPr
             return query(collection(firestore, 'monthly_evaluations'), where('evaluationMonth', '==', Timestamp.fromDate(monthStart)))
         }, [firestore, selectedMonth])
     );
+    
+    const { data: supervisors } = useCollection<UserProfile>(
+        useMemoFirebase(() => {
+            // This query should only run for HRD/Admins
+            if (userProfile && ['hrd', 'super-admin'].includes(userProfile.role)) {
+                return query(collection(firestore, 'users'), where('role', 'in', ['manager', 'karyawan']), where('isActive', '==', true));
+            }
+            return null; // Return null for other roles to prevent the query
+        }, [firestore, userProfile])
+    );
 
     const internMap = useMemo(() => new Map(interns?.map(i => [i.uid, i])), [interns]);
     const brandMap = useMemo(() => new Map(brands?.map(b => [b.id!, b.name])), [brands]);
@@ -154,6 +164,7 @@ export function HrdMonthlyReviewDashboard({ userProfile }: { userProfile: UserPr
                     internProfile={internMap.get(selectedInternData.internId)!}
                     evaluation={evaluationMap.get(selectedInternData.internId)}
                     onSuccess={handleEvaluationSuccess}
+                    supervisors={supervisors || []}
                 />
             )}
         </div>
