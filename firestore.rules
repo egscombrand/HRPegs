@@ -127,11 +127,12 @@ service cloud.firestore {
     /**
      * /employee_profiles/{uid} (Intern/Employee Profile)
      * - An employee can read/write their own profile.
-     * - HRD and Super Admins can view any profile for monitoring.
-     * - A supervisor can read their intern's profile.
+     * - Internal users (hrd, super_admin, managers, other employees) can view any profile.
+     * - This broad read access for internal users is necessary to allow supervisors
+     *   to check their interns' profiles without causing security rule deadlocks.
      */
     match /employee_profiles/{uid} {
-      allow get: if isOwner(uid) || isHrd() || isSuperAdmin() || isSupervisor(uid);
+      allow get: if isOwner(uid) || isInternal();
       allow create, update: if (isOwner(uid) && request.resource.data.uid == uid) || isHrd() || isSuperAdmin();
       allow list: if isHrd() || isSuperAdmin();
       allow delete: if false;
