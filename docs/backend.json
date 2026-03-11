@@ -24,14 +24,9 @@
           "description": "The role of the user within the application (super-admin, hrd, manager, kandidat, karyawan)."
         },
         "employmentType": {
-          "type": "string",
-          "description": "The type of employment for the user.",
-          "enum": ["karyawan", "magang", "training"]
-        },
-        "employmentStage": {
-          "type": "string",
-          "description": "The specific stage of employment.",
-          "enum": ["intern_education", "intern_pre_probation", "probation", "active"]
+            "type": "string",
+            "description": "The type of employment for the user.",
+            "enum": ["karyawan", "magang", "training"]
         },
         "isActive": {
           "type": "boolean",
@@ -940,27 +935,24 @@
         "ratings": {
           "type": "object",
           "properties": {
-            "attendance": { "type": "number", "minimum": 1, "maximum": 10 },
-            "discipline": { "type": "number", "minimum": 1, "maximum": 10 },
-            "attitude": { "type": "number", "minimum": 1, "maximum": 10 },
-            "responsibility": { "type": "number", "minimum": 1, "maximum": 10 },
-            "communication": { "type": "number", "minimum": 1, "maximum": 10 },
-            "initiative": { "type": "number", "minimum": 1, "maximum": 10 },
-            "teamwork": { "type": "number", "minimum": 1, "maximum": 10 },
-            "workQuality": { "type": "number", "minimum": 1, "maximum": 10 },
-            "learningAbility": { "type": "number", "minimum": 1, "maximum": 10 },
-            "consistency": { "type": "number", "minimum": 1, "maximum": 10 }
+            "attendance": { "type": "string", "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"] },
+            "discipline": { "type": "string", "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"] },
+            "attitude": { "type": "string", "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"] },
+            "responsibility": { "type": "string", "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"] },
+            "communication": { "type": "string", "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"] },
+            "initiative": { "type": "string", "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"] },
+            "teamwork": { "type": "string", "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"] },
+            "workQuality": { "type": "string", "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"] },
+            "learningAbility": { "type": "string", "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"] },
+            "consistency": { "type": "string", "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"] }
           },
           "required": ["attendance", "discipline", "attitude", "responsibility", "communication", "initiative", "teamwork", "workQuality", "learningAbility", "consistency"]
         },
-        "strengths": { "type": "string", "description": "Key strengths observed during the month." },
-        "improvements": { "type": "string", "description": "Areas for improvement." },
         "hrdComment": { "type": "string", "description": "General comments from HRD." },
-        "recommendation": { "type": "string", "description": "Recommendations for the next month." },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["internUid", "evaluationMonth", "evaluatorUid", "evaluatorName", "ratings", "strengths", "improvements", "hrdComment", "recommendation", "createdAt", "updatedAt"]
+      "required": ["internUid", "evaluationMonth", "evaluatorUid", "evaluatorName", "ratings", "hrdComment", "createdAt", "updatedAt"]
     }
   },
   "auth": {

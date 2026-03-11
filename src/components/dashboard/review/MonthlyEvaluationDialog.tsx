@@ -42,10 +42,7 @@ const evaluationSchema = z.object({
         return acc;
     }, {} as Record<keyof EvaluationCriteria, z.ZodEnum<typeof RATING_SCALE>>)
   ),
-  strengths: z.string().min(10, 'Kelebihan utama harus diisi.'),
-  improvements: z.string().min(10, 'Area perbaikan harus diisi.'),
   hrdComment: z.string().min(10, 'Komentar HRD harus diisi.'),
-  recommendation: z.string().min(10, 'Rekomendasi harus diisi.'),
 });
 
 type FormValues = z.infer<typeof evaluationSchema>;
@@ -72,7 +69,10 @@ export function MonthlyEvaluationDialog({ open, onOpenChange, internData, intern
 
     const reportsQuery = useMemoFirebase(() => {
         if (!internData.internId) return null;
-        return query(collection(firestore, 'daily_reports'), where('uid', '==', internData.internId));
+        return query(
+            collection(firestore, 'daily_reports'),
+            where('uid', '==', internData.internId)
+        );
     }, [firestore, internData.internId]);
 
     const { data: allReports, isLoading: isLoadingReports } = useCollection<DailyReport>(reportsQuery);
@@ -104,10 +104,7 @@ export function MonthlyEvaluationDialog({ open, onOpenChange, internData, intern
         if(open) {
             form.reset({
                 ratings: evaluation?.ratings || EVALUATION_CRITERIA.reduce((acc, crit) => ({...acc, [crit.key]: 'Cukup'}), {} as EvaluationCriteria),
-                strengths: evaluation?.strengths || '',
-                improvements: evaluation?.improvements || '',
                 hrdComment: evaluation?.hrdComment || '',
-                recommendation: evaluation?.recommendation || '',
             });
         }
     }, [open, evaluation, form]);
@@ -199,10 +196,7 @@ export function MonthlyEvaluationDialog({ open, onOpenChange, internData, intern
                                 </section>
                                 <section className="space-y-4">
                                     <h3 className="font-semibold">Feedback Kualitatif</h3>
-                                     <FormField control={form.control} name="strengths" render={({ field }) => (<FormItem><FormLabel>Kelebihan Utama</FormLabel><FormControl><Textarea {...field} rows={3} disabled={isReadOnly} /></FormControl><FormMessage /></FormItem>)} />
-                                     <FormField control={form.control} name="improvements" render={({ field }) => (<FormItem><FormLabel>Area Perbaikan</FormLabel><FormControl><Textarea {...field} rows={3} disabled={isReadOnly} /></FormControl><FormMessage /></FormItem>)} />
-                                     <FormField control={form.control} name="hrdComment" render={({ field }) => (<FormItem><FormLabel>Komentar HRD</FormLabel><FormControl><Textarea {...field} rows={3} disabled={isReadOnly} /></FormControl><FormMessage /></FormItem>)} />
-                                     <FormField control={form.control} name="recommendation" render={({ field }) => (<FormItem><FormLabel>Rekomendasi Bulan Berikutnya</FormLabel><FormControl><Textarea {...field} rows={3} disabled={isReadOnly} /></FormControl><FormMessage /></FormItem>)} />
+                                     <FormField control={form.control} name="hrdComment" render={({ field }) => (<FormItem><FormLabel>Komentar HRD</FormLabel><FormControl><Textarea {...field} rows={5} disabled={isReadOnly} /></FormControl><FormMessage /></FormItem>)} />
                                 </section>
                             </form>
                         </Form>

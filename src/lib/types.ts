@@ -560,10 +560,7 @@ export type MonthlyEvaluation = {
   evaluatorUid: string;
   evaluatorName: string;
   ratings: EvaluationCriteria;
-  strengths: string;
-  improvements: string;
   hrdComment: string;
-  recommendation: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 };
