@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useAuth } from '@/providers/auth-provider';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { collection, query, where } from 'firebase/firestore';
@@ -13,6 +13,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { format, formatDistanceToNow } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { ThumbsUp, Lightbulb, MessageSquare, ListTodo, Star, CheckCircle } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 
 const EVALUATION_CRITERIA: { key: keyof EvaluationCriteria, label: string }[] = [
     { key: 'attendance', label: 'Kehadiran dan ketepatan waktu' },
@@ -63,14 +65,9 @@ export default function EvaluasiPage() {
     
     const evaluations = useMemo(() => {
         if (!fetchedEvaluations) return null;
-        // Filter out evaluations that are only focus entries (no hrdComment) and sort
         return [...fetchedEvaluations]
           .filter(e => e.hrdComment)
-          .sort((a, b) => {
-            const timeA = a.evaluationMonth?.toMillis() || 0;
-            const timeB = b.evaluationMonth?.toMillis() || 0;
-            return timeB - timeA; // descending order
-        });
+          .sort((a, b) => (b.evaluationMonth?.toMillis() || 0) - (a.evaluationMonth?.toMillis() || 0));
     }, [fetchedEvaluations]);
     
     const isLoading = authLoading || evalsLoading;

@@ -15,7 +15,7 @@ import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { MonthlyEvaluationDialog } from './MonthlyEvaluationDialog';
 import { Badge } from '@/components/ui/badge';
-import { getReviewStatus, getReviewCycleForMonth } from '@/lib/recruitment/review-cycles';
+import { getReviewCycleForMonth, getReviewStatus } from '@/lib/recruitment/review-cycles';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 type ReportSummary = {
@@ -53,11 +53,11 @@ export function HrdMonthlyReviewDashboard({ userProfile }: { userProfile: UserPr
     );
     const { data: allDailyReports, isLoading: isLoadingReports } = useCollection<DailyReport>(
         useMemoFirebase(() => {
-            const [year, month] = selectedMonth.split('-');
-            const cycleStart = new Date(parseInt(year), parseInt(month) - 2, 25); // Start from previous month 25th
-            const cycleEnd = new Date(parseInt(year), parseInt(month) -1, 24); // End on current month 24th
-            return query(collection(firestore, 'daily_reports'), where('date', '>=', cycleStart), where('date', '<=', cycleEnd));
-        }, [firestore, selectedMonth])
+            if (!interns || interns.length === 0) return null;
+            const uids = interns.map(i => i.uid);
+            // Query reports only for the interns being displayed
+            return query(collection(firestore, 'daily_reports'), where('uid', 'in', uids));
+        }, [firestore, interns])
     );
 
     const brandMap = useMemo(() => new Map(brands?.map(b => [b.id!, b.name])), [brands]);
@@ -122,7 +122,7 @@ export function HrdMonthlyReviewDashboard({ userProfile }: { userProfile: UserPr
         }
         return data;
     }, [processedInterns, brandFilter, searchTerm]);
-    
+
     const internsByStatus = useMemo(() => {
         const statusGroups: {
             siapDireview: ProcessedIntern[],
@@ -156,7 +156,7 @@ export function HrdMonthlyReviewDashboard({ userProfile }: { userProfile: UserPr
         });
         return statusGroups;
     }, [filteredData]);
-
+    
     const kpis = useMemo(() => {
         return {
             siapDireview: internsByStatus.siapDireview.length,
@@ -249,7 +249,11 @@ export function HrdMonthlyReviewDashboard({ userProfile }: { userProfile: UserPr
                                             </div>
                                         </TableCell>
                                         <TableCell><Badge variant={intern.reviewStatus === 'Terlambat' ? 'destructive' : 'secondary'}>{intern.reviewStatus}</Badge></TableCell>
-                                        <TableCell className="text-right"><Button variant="outline" size="sm" onClick={() => setSelectedInternData(intern)}>Review & Evaluasi</Button></TableCell>
+                                        <TableCell className="text-right">
+                                            <Button variant="outline" size="sm" onClick={() => setSelectedInternData(intern)}>
+                                                {intern.reviewStatus === 'Sudah Dievaluasi' ? 'Lihat/Edit Evaluasi' : 'Review & Evaluasi'}
+                                            </Button>
+                                        </TableCell>
                                     </TableRow>
                                 )) : (<TableRow><TableCell colSpan={7} className="h-24 text-center">Tidak ada data intern untuk tab ini.</TableCell></TableRow>)}
                             </TableBody>
