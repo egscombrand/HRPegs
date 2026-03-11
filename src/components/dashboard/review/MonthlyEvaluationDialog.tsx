@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/providers/auth-provider';
 import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
 import { collection, query, where, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
-import type { EmployeeProfile, DailyReport, MonthlyEvaluation, EvaluationCriteria, UserProfile, RatingScale } from '@/lib/types';
+import type { EmployeeProfile, DailyReport, MonthlyEvaluation, EvaluationCriteria, UserProfile, RatingScale, InternWithReviewStatus } from '@/lib/types';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Textarea } from '@/components/ui/textarea';
 import { KpiCard } from '@/components/recruitment/KpiCard';
@@ -50,41 +50,32 @@ type FormValues = z.infer<typeof evaluationSchema>;
 interface MonthlyEvaluationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  internData: { internId: string; internName: string; month: string };
-  internProfile: EmployeeProfile;
-  evaluation: MonthlyEvaluation | undefined;
+  internData: InternWithReviewStatus;
+  evaluation?: MonthlyEvaluation | null;
   onSuccess: () => void;
-  supervisors: UserProfile[];
 }
 
-export function MonthlyEvaluationDialog({ open, onOpenChange, internData, internProfile, evaluation, onSuccess, supervisors }: MonthlyEvaluationDialogProps) {
+export function MonthlyEvaluationDialog({ open, onOpenChange, internData, evaluation, onSuccess }: MonthlyEvaluationDialogProps) {
     const { userProfile } = useAuth();
     const firestore = useFirestore();
     const { toast } = useToast();
     const [isSaving, setIsSaving] = useState(false);
 
-    const [year, monthNum] = internData.month.split('-').map(Number);
-    const monthStart = startOfMonth(new Date(year, monthNum - 1));
-    const monthEnd = endOfMonth(monthStart);
+    const { reviewCycle } = internData;
+    if (!reviewCycle) return null;
 
     const reportsQuery = useMemoFirebase(() => {
-        if (!internData.internId) return null;
+        if (!internData.uid) return null;
         return query(
             collection(firestore, 'daily_reports'),
-            where('uid', '==', internData.internId)
+            where('uid', '==', internData.uid),
+            where('date', '>=', reviewCycle.periodStart),
+            where('date', '<=', reviewCycle.periodEnd)
         );
-    }, [firestore, internData.internId]);
+    }, [firestore, internData.uid, reviewCycle]);
 
-    const { data: allReports, isLoading: isLoadingReports } = useCollection<DailyReport>(reportsQuery);
+    const { data: reports, isLoading: isLoadingReports } = useCollection<DailyReport>(reportsQuery);
     
-    const reports = useMemo(() => {
-        if (!allReports) return null;
-        return allReports.filter(report => {
-            const reportDate = report.date.toDate();
-            return reportDate >= monthStart && reportDate <= monthEnd;
-        });
-    }, [allReports, monthStart, monthEnd]);
-
     const reportSummary = useMemo(() => {
         const summary = { submitted: 0, needs_revision: 0, approved: 0 };
         if (!reports) return summary;
@@ -113,22 +104,25 @@ export function MonthlyEvaluationDialog({ open, onOpenChange, internData, intern
         if (!userProfile) return;
         setIsSaving(true);
         try {
-            const docId = `${internData.internId}_${internData.month}`;
+            const docId = `${internData.uid}_${reviewCycle.monthId}`;
             const evalRef = doc(firestore, 'monthly_evaluations', docId);
 
-            const payload: Omit<MonthlyEvaluation, 'id'> = {
-                internUid: internData.internId,
-                internName: internData.internName,
-                evaluationMonth: Timestamp.fromDate(monthStart),
+            const payload: Partial<MonthlyEvaluation> = {
+                internUid: internData.uid,
+                internName: internData.fullName,
+                evaluationMonth: Timestamp.fromDate(reviewCycle.periodStart),
                 evaluatorUid: userProfile.uid,
                 evaluatorName: userProfile.fullName,
                 ...values,
-                createdAt: evaluation?.createdAt || serverTimestamp(),
                 updatedAt: serverTimestamp(),
             };
             
+            if (!evaluation) {
+                payload.createdAt = serverTimestamp();
+            }
+            
             await setDocumentNonBlocking(evalRef, payload, { merge: true });
-            toast({ title: 'Evaluasi Disimpan', description: `Evaluasi untuk ${internData.internName} pada bulan ini telah disimpan.` });
+            toast({ title: 'Evaluasi Disimpan', description: `Evaluasi untuk ${internData.fullName} pada periode ini telah disimpan.` });
             onSuccess();
             onOpenChange(false);
         } catch (e: any) {
@@ -137,19 +131,21 @@ export function MonthlyEvaluationDialog({ open, onOpenChange, internData, intern
             setIsSaving(false);
         }
     };
-
+    
     const isReadOnly = !!evaluation;
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0">
                 <DialogHeader className="p-6 pb-4 border-b">
-                    <DialogTitle>Evaluasi Bulanan: {internData.internName}</DialogTitle>
-                    <DialogDescription>Untuk periode: {format(monthStart, 'MMMM yyyy', { locale: idLocale })}</DialogDescription>
+                    <DialogTitle>Evaluasi Bulanan: {internData.fullName}</DialogTitle>
+                    <DialogDescription>
+                        Periode Review: {format(reviewCycle.periodStart, 'dd MMM yyyy', { locale: idLocale })} - {format(reviewCycle.periodEnd, 'dd MMM yyyy', { locale: idLocale })}
+                    </DialogDescription>
                 </DialogHeader>
                 <ScrollArea className="flex-grow">
                     <div className="px-6 py-4 space-y-6">
-                        <h3 className="font-semibold">Ringkasan Laporan Harian Bulan Ini</h3>
+                        <h3 className="font-semibold">Ringkasan Laporan Harian Periode Ini</h3>
                         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                             <KpiCard title="Disetujui Mentor" value={reportSummary.approved} />
                             <KpiCard title="Menunggu Review" value={reportSummary.submitted} />

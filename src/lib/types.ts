@@ -74,7 +74,7 @@ export type EmployeeProfile = {
   hrdNotes?: string;
   compensationAmount?: number;
   contractDurationMonths?: number;
-  brandId?: string;
+  brandId?: string | string[];
   brandName?: string;
 };
 
@@ -556,7 +556,7 @@ export type MonthlyEvaluation = {
   id?: string;
   internUid: string;
   internName?: string;
-  evaluationMonth: Timestamp;
+  evaluationMonth: Timestamp; // The first day of the month being evaluated
   evaluatorUid?: string;
   evaluatorName?: string;
   monthlyFocus?: string;
@@ -565,6 +565,26 @@ export type MonthlyEvaluation = {
   createdAt: Timestamp;
   updatedAt: Timestamp;
 };
+
+export type ReviewCycle = {
+  periodStart: Date;
+  periodEnd: Date;
+  reviewDueDate: Date;
+  monthId: string;
+  isCurrent: boolean;
+};
+
+export type ReviewStatus =
+  | 'Belum Waktunya'
+  | 'Akan Jatuh Tempo'
+  | 'Siap Direview'
+  | 'Terlambat'
+  | 'Sudah Dievaluasi';
+
+export interface InternWithReviewStatus extends EmployeeProfile {
+  reviewCycle: ReviewCycle | null;
+  reviewStatus: ReviewStatus;
+}
 
 
 // --- AI ANALYSIS TYPES ---
