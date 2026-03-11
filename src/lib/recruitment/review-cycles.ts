@@ -56,7 +56,7 @@ export function getReviewCycleForMonth(
     activePeriodStart,
     activePeriodEnd,
     reviewDueDate: payrollPeriodEnd,
-    monthId: format(payrollPeriodStart, 'yyyy-MM'),
+    monthId: format(selectedDate, 'yyyy-MM'),
     isCurrent: isAfter(new Date(), payrollPeriodStart) && isBefore(new Date(), payrollPeriodEnd),
   };
 }

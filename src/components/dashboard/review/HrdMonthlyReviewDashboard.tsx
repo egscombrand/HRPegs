@@ -52,7 +52,12 @@ export function HrdMonthlyReviewDashboard({ userProfile }: { userProfile: UserPr
         }, [firestore, selectedMonth])
     );
     const { data: allDailyReports, isLoading: isLoadingReports } = useCollection<DailyReport>(
-        useMemoFirebase(() => collection(firestore, 'daily_reports'), [firestore])
+        useMemoFirebase(() => {
+            const [year, month] = selectedMonth.split('-');
+            const cycleStart = new Date(parseInt(year), parseInt(month) - 2, 25); // Start from previous month 25th
+            const cycleEnd = new Date(parseInt(year), parseInt(month) -1, 24); // End on current month 24th
+            return query(collection(firestore, 'daily_reports'), where('date', '>=', cycleStart), where('date', '<=', cycleEnd));
+        }, [firestore, selectedMonth])
     );
 
     const brandMap = useMemo(() => new Map(brands?.map(b => [b.id!, b.name])), [brands]);

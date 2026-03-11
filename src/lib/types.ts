@@ -574,7 +574,7 @@ export type ReviewCycle = {
   activePeriodStart: Date;
   activePeriodEnd: Date;
   reviewDueDate: Date;
-  monthId: string;
+  monthId: string; // "YYYY-MM"
   isCurrent: boolean;
 };
 
@@ -589,6 +589,7 @@ export type ReviewStatus =
 export interface InternWithReviewStatus extends EmployeeProfile {
   reviewCycle: ReviewCycle | null;
   reviewStatus: ReviewStatus;
+  evaluation?: MonthlyEvaluation;
 }
 
 

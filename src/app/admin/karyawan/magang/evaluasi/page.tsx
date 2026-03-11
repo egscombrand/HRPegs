@@ -55,7 +55,7 @@ export default function EvaluasiPage() {
         if (!userProfile?.uid) return null;
         return query(
             collection(firestore, 'monthly_evaluations'), 
-            where('internUid', '==', userProfile.uid)
+            where('internUid', '==', userProfile.uid),
         );
     }, [userProfile?.uid, firestore]);
 
@@ -63,8 +63,10 @@ export default function EvaluasiPage() {
     
     const evaluations = useMemo(() => {
         if (!fetchedEvaluations) return null;
-        // Sort on the client-side
-        return [...fetchedEvaluations].sort((a, b) => {
+        // Filter out evaluations that are only focus entries (no hrdComment) and sort
+        return [...fetchedEvaluations]
+          .filter(e => e.hrdComment)
+          .sort((a, b) => {
             const timeA = a.evaluationMonth?.toMillis() || 0;
             const timeB = b.evaluationMonth?.toMillis() || 0;
             return timeB - timeA; // descending order
