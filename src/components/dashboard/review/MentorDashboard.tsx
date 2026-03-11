@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useCollection, useFirestore, useMemoFirebase, updateDocumentNonBlocking, writeBatch } from '@/firebase';
-import { collection, query, where, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { collection, query, where, doc, serverTimestamp, Timestamp, getDoc } from 'firebase/firestore';
 import type { DailyReport, UserProfile } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -73,12 +73,35 @@ export function MentorDashboard({ userProfile }: { userProfile: UserProfile}) {
         return Array.from(new Set(reports.map(r => r.uid)));
     }, [reports]);
 
-    const internsQuery = useMemoFirebase(() => {
-        if (internUids.length === 0) return null;
-        return query(collection(firestore, 'users'), where('uid', 'in', internUids));
-    }, [firestore, internUids]);
+    const [interns, setInterns] = useState<UserProfile[] | null>(null);
+    const [isLoadingInterns, setIsLoadingInterns] = useState(true);
 
-    const { data: interns, isLoading: isLoadingInterns } = useCollection<UserProfile>(internsQuery);
+    useEffect(() => {
+        if (internUids.length === 0) {
+            setInterns([]);
+            setIsLoadingInterns(false);
+            return;
+        }
+
+        setIsLoadingInterns(true);
+        const fetchInterns = async () => {
+            try {
+                const internPromises = internUids.map(uid => getDoc(doc(firestore, 'users', uid)));
+                const internDocs = await Promise.all(internPromises);
+                const internProfiles = internDocs
+                    .filter(docSnap => docSnap.exists())
+                    .map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as UserProfile));
+                setInterns(internProfiles);
+            } catch (err) {
+                console.error("Failed to fetch intern profiles:", err);
+                setInterns([]); // Set to empty array on error to avoid breaking downstream logic
+            } finally {
+                setIsLoadingInterns(false);
+            }
+        };
+
+        fetchInterns();
+    }, [internUids, firestore]);
     
     const internNameMap = useMemo(() => new Map(interns?.map(i => [i.uid, i.fullName])), [interns]);
 
