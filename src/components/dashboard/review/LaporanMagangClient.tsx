@@ -23,6 +23,8 @@ import { getInitials } from '@/lib/utils';
 import { Checkbox } from '@/components/ui/checkbox';
 import { BulkRevisionDialog } from './BulkRevisionDialog';
 import { Separator } from '@/components/ui/separator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
 
 type ReportWithDetails = DailyReport & { internName?: string; supervisorName?: string; division?: string; brandName?: string; brandId?: string; };
 
