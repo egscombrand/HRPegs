@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { MonthlyEvaluationDialog } from './MonthlyEvaluationDialog';
+import { Badge } from '@/components/ui/badge';
 
 type MonthlyInternData = {
     internId: string;
