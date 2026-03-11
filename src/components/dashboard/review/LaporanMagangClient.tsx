@@ -22,6 +22,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { getInitials } from '@/lib/utils';
 import { Checkbox } from '@/components/ui/checkbox';
 import { BulkRevisionDialog } from './BulkRevisionDialog';
+import { Separator } from '@/components/ui/separator';
 
 type ReportWithDetails = DailyReport & { internName?: string; supervisorName?: string; division?: string; brandName?: string; brandId?: string; };
 
@@ -39,57 +40,7 @@ const statusColors: Record<DailyReport['status'], string> = {
     draft: 'bg-gray-400'
 };
 
-const MentorReportTable = ({ reports, onReviewClick }: { reports: ReportWithDetails[], onReviewClick: (report: ReportWithDetails) => void }) => {
-    
-    const handleQuickApprove = async (report: ReportWithDetails) => {
-        // Implement quick approve logic here
-        // This is a simplified version, you might want to show a loader
-        const reportRef = doc(useFirestore(), 'daily_reports', report.id!);
-        await updateDocumentNonBlocking(reportRef, { status: 'approved', reviewedAt: serverTimestamp() });
-    }
-
-    return (
-        <Table>
-            <TableHeader>
-                <TableRow>
-                    <TableHead className="w-24">Tanggal</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Umur Laporan</TableHead>
-                    <TableHead className="text-right">Aksi</TableHead>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                {reports.map(report => {
-                    const submittedAt = report.submittedAt?.toDate() || report.createdAt.toDate();
-                    return (
-                        <TableRow key={report.id}>
-                            <TableCell>{format(report.date.toDate(), 'dd MMM yyyy', { locale: id })}</TableCell>
-                            <TableCell>
-                                <Badge className={statusColors[report.status]}>{statusLabels[report.status]}</Badge>
-                            </TableCell>
-                            <TableCell className="text-xs text-muted-foreground">
-                                {formatDistanceToNow(submittedAt, { addSuffix: true, locale: id })}
-                            </TableCell>
-                            <TableCell className="text-right space-x-2">
-                                {report.status === 'submitted' && (
-                                    <Button size="sm" variant="outline" className="text-green-600 border-green-600 hover:bg-green-50 hover:text-green-700" onClick={() => handleQuickApprove(report)}>
-                                        <Check className="mr-2 h-4 w-4"/> Setujui
-                                    </Button>
-                                )}
-                                <Button size="sm" variant="outline" onClick={() => onReviewClick(report)}>
-                                    <Eye className="mr-2 h-4 w-4"/> {report.status === 'submitted' ? 'Review' : 'Lihat'}
-                                </Button>
-                            </TableCell>
-                        </TableRow>
-                    );
-                })}
-            </TableBody>
-        </Table>
-    )
-}
-
-
-const MentorDashboard = ({ reports, interns, onMutate, userProfile }: { reports: ReportWithDetails[], interns: EmployeeProfile[], onMutate: () => void, userProfile: UserProfile}) => {
+const MentorDashboard = ({ reports, onMutate, userProfile }: { reports: ReportWithDetails[], onMutate: () => void, userProfile: UserProfile}) => {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [isBulkRevisionOpen, setIsBulkRevisionOpen] = useState(false);
     const [isBulkApproving, setIsBulkApproving] = useState(false);
@@ -97,13 +48,10 @@ const MentorDashboard = ({ reports, interns, onMutate, userProfile }: { reports:
     const [activeTab, setActiveTab] = useState('submitted');
     const { toast } = useToast();
     const firestore = useFirestore();
-
-    const reportsForMentor = useMemo(() => {
-        return reports.filter(r => r.supervisorUid === userProfile.uid);
-    }, [reports, userProfile.uid]);
+    const [selectedReport, setSelectedReport] = useState<ReportWithDetails | null>(null);
 
     const groupedByIntern = useMemo(() => {
-        return reportsForMentor.reduce((acc, report) => {
+        return reports.reduce((acc, report) => {
             if (!acc[report.uid]) {
                 acc[report.uid] = {
                     internName: report.internName || 'Unknown',
@@ -113,7 +61,7 @@ const MentorDashboard = ({ reports, interns, onMutate, userProfile }: { reports:
             acc[report.uid].reports.push(report);
             return acc;
         }, {} as Record<string, { internName: string; reports: ReportWithDetails[] }>);
-    }, [reportsForMentor]);
+    }, [reports]);
 
     const internIds = Object.keys(groupedByIntern);
 
@@ -184,6 +132,11 @@ const MentorDashboard = ({ reports, interns, onMutate, userProfile }: { reports:
         }
     };
     
+    const handleReviewSuccess = () => {
+        onMutate();
+        setSelectedReport(null);
+    };
+
     return (
       <div className="space-y-4">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -245,10 +198,7 @@ const MentorDashboard = ({ reports, interns, onMutate, userProfile }: { reports:
                                                 <TableCell>{format(report.date.toDate(), 'eeee, dd MMM', { locale: id })}</TableCell>
                                                 <TableCell className="text-xs text-muted-foreground">{formatDistanceToNow(report.submittedAt?.toDate() || report.createdAt.toDate(), { addSuffix: true, locale: id })}</TableCell>
                                                 <TableCell className="text-right">
-                                                     <Button variant="ghost" size="sm" onClick={() => {
-                                                        const reportWithDetails = reportsWithDetails.find(r => r.id === report.id);
-                                                        if(reportWithDetails) onMutate() // This is a placeholder for review dialog opening
-                                                     }}>
+                                                     <Button variant="ghost" size="sm" onClick={() => setSelectedReport(report)}>
                                                         <Eye className="mr-2 h-4 w-4" /> Detail
                                                     </Button>
                                                 </TableCell>
@@ -282,6 +232,7 @@ const MentorDashboard = ({ reports, interns, onMutate, userProfile }: { reports:
             reportIds={Array.from(selectedIds)}
             onSuccess={() => { setSelectedIds(new Set()); onMutate(); }}
         />
+        {selectedReport && (<ReviewReportDialog open={!!selectedReport} onOpenChange={(isOpen) => !isOpen && setSelectedReport(null)} report={selectedReport} onSuccess={handleReviewSuccess}/>)}
       </div>
     )
 }
@@ -300,7 +251,17 @@ export function LaporanMagangClient() {
 
   const reportsQuery = useMemoFirebase(() => {
     if (!userProfile) return null;
-    return collection(firestore, 'daily_reports');
+
+    if (['manager', 'karyawan'].includes(userProfile.role)) {
+      return query(collection(firestore, 'daily_reports'), where('supervisorUid', '==', userProfile.uid));
+    }
+    
+    if (['hrd', 'super-admin'].includes(userProfile.role)) {
+      return collection(firestore, 'daily_reports');
+    }
+
+    // Default to a query that returns nothing for other roles
+    return query(collection(firestore, 'daily_reports'), where('uid', '==', 'nonexistent-user'));
   }, [firestore, userProfile]);
   const { data: reports, isLoading: isLoadingReports, mutate: mutateReports } = useCollection<DailyReport>(reportsQuery);
 
@@ -318,14 +279,26 @@ export function LaporanMagangClient() {
     if (!reports) return [];
     return reports.map(report => {
         const internProfile = internMap.get(report.uid);
-        return { ...report, internName: internProfile?.fullName || 'Unknown Intern', supervisorUid: report.supervisorUid || internProfile?.supervisorUid || null, supervisorName: report.supervisorName || internProfile?.supervisorName || 'Unassigned', division: internProfile?.division || 'N/A', brandName: internProfile?.brandName || 'N/A', brandId: internProfile?.brandId || 'N/A' };
+        return { 
+          ...report, 
+          internName: internProfile?.fullName || 'Unknown Intern', 
+          supervisorUid: report.supervisorUid || internProfile?.supervisorUid || null, 
+          supervisorName: report.supervisorName || internProfile?.supervisorName || 'Unassigned', 
+          division: internProfile?.division || 'N/A', 
+          brandName: internProfile?.brandName || 'N/A', 
+          brandId: internProfile?.brandId || 'N/A' 
+        };
     }).sort((a, b) => b.date.toMillis() - a.date.toMillis());
   }, [reports, internMap]);
 
   const reportsNeedingBackfill = useMemo(() => {
     if (!reportsWithDetails) return [];
-    return reportsWithDetails.filter(r => r.status === 'submitted' && !r.supervisorUid);
-  }, [reportsWithDetails]);
+    // Only HRD/Admins should see this, and only if they are viewing all reports
+    if (userProfile?.role === 'hrd' || userProfile?.role === 'super-admin') {
+        return reportsWithDetails.filter(r => r.status === 'submitted' && !r.supervisorUid);
+    }
+    return [];
+  }, [reportsWithDetails, userProfile]);
   
   const uniqueSupervisors = useMemo(() => {
     if (!interns) return [];
@@ -392,7 +365,6 @@ export function LaporanMagangClient() {
     return (
       <MentorDashboard 
         reports={reportsWithDetails}
-        interns={interns || []}
         onMutate={mutateReports}
         userProfile={userProfile}
       />
