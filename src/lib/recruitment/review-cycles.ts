@@ -11,67 +11,59 @@ import {
   differenceInDays,
   format,
 } from 'date-fns';
-import type { EmployeeProfile, MonthlyEvaluation } from '@/lib/types';
+import type { EmployeeProfile, MonthlyEvaluation, ReviewCycle, ReviewStatus } from '@/lib/types';
 
-export type ReviewCycle = {
-  periodStart: Date;
-  periodEnd: Date;
-  reviewDueDate: Date;
-  monthId: string; // YYYY-MM format based on period start
-  isCurrent: boolean;
-};
-
-export type ReviewStatus =
-  | 'Belum Waktunya'
-  | 'Akan Jatuh Tempo'
-  | 'Siap Direview'
-  | 'Terlambat'
-  | 'Sudah Dievaluasi';
-
-export interface InternWithReviewStatus extends EmployeeProfile {
-  reviewCycle: ReviewCycle | null;
-  reviewStatus: ReviewStatus;
-}
+const PAYROLL_CUTOFF_DAY = 24;
 
 /**
- * Calculates the current or next review cycle for an intern.
- * @param startDate The intern's official start date.
- * @param now The current date, for determining the active cycle.
- * @returns The current review cycle object, or null if the internship hasn't started.
+ * Calculates the review cycle for an intern based on a company-wide payroll cycle.
+ * @param internStartDate The intern's official start date.
+ * @param internEndDate The intern's official end date (optional).
+ * @param selectedDate A date within the month of interest for the review.
+ * @returns The review cycle object, or null if the intern is not active in that cycle.
  */
-export function getCurrentReviewCycle(
-  startDate: Date | null | undefined,
-  now: Date = new Date()
+export function getReviewCycleForMonth(
+  internStartDate: Date | null | undefined,
+  internEndDate: Date | null | undefined,
+  selectedDate: Date
 ): ReviewCycle | null {
-  if (!startDate) return null;
-  startDate = startOfDay(startDate);
+  if (!internStartDate) return null;
 
-  if (isAfter(startDate, now)) {
-    return null; // Internship hasn't started
-  }
+  const year = selectedDate.getFullYear();
+  const month = selectedDate.getMonth();
 
-  let periodStart = new Date(startDate);
-  let periodEnd = endOfDay(addMonths(periodStart, 1));
-  periodEnd.setDate(periodEnd.getDate() - 1); // e.g., April 9 to May 8
+  // The payroll period ends on the 24th of the selected month.
+  const payrollPeriodEnd = endOfDay(new Date(year, month, PAYROLL_CUTOFF_DAY));
+  // It starts on the 25th of the previous month.
+  const prevMonthDate = subMonths(new Date(year, month, 1), 1);
+  const payrollPeriodStart = startOfDay(new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth(), PAYROLL_CUTOFF_DAY + 1));
+  
+  const effectiveStartDate = startOfDay(internStartDate);
+  const effectiveEndDate = internEndDate ? endOfDay(internEndDate) : null;
 
-  // Find the current period
-  while (isBefore(periodEnd, now)) {
-    periodStart = addMonths(periodStart, 1);
-    periodEnd = endOfDay(addMonths(periodStart, 1));
-    periodEnd.setDate(periodEnd.getDate() - 1);
-  }
+  // Check for overlap between intern's employment and the payroll cycle
+  // No overlap if internship ends before cycle starts, or starts after cycle ends.
+  if (effectiveEndDate && isBefore(effectiveEndDate, payrollPeriodStart)) return null;
+  if (isAfter(effectiveStartDate, payrollPeriodEnd)) return null;
+
+  // Calculate the intern's active period within this payroll cycle
+  const activePeriodStart = isAfter(effectiveStartDate, payrollPeriodStart) ? effectiveStartDate : payrollPeriodStart;
+  const activePeriodEnd = (effectiveEndDate && isBefore(effectiveEndDate, payrollPeriodEnd)) ? effectiveEndDate : payrollPeriodEnd;
 
   return {
-    periodStart,
-    periodEnd,
-    reviewDueDate: periodEnd,
-    monthId: format(periodStart, 'yyyy-MM'),
-    isCurrent: true, // This function always finds the current cycle
+    payrollPeriodStart,
+    payrollPeriodEnd,
+    activePeriodStart,
+    activePeriodEnd,
+    reviewDueDate: payrollPeriodEnd,
+    monthId: format(payrollPeriodStart, 'yyyy-MM'),
+    isCurrent: isAfter(new Date(), payrollPeriodStart) && isBefore(new Date(), payrollPeriodEnd),
   };
 }
 
 /**
  * Determines the review status based on the current cycle and evaluation data.
+ * An evaluation is considered "done" only if hrdComment exists.
  * @param cycle The intern's current review cycle.
  * @param evaluation The existing evaluation for the current cycle's monthId, if any.
  * @param now The current date.
@@ -91,15 +83,18 @@ export function getReviewStatus(
     return 'Belum Waktunya';
   }
 
+  // If we are past the due date and it's not evaluated
   if (isAfter(now, cycle.reviewDueDate)) {
     return 'Terlambat';
   }
   
   const daysUntilDue = differenceInDays(cycle.reviewDueDate, now);
   
+  // If due within the next 7 days (or is today)
   if (daysUntilDue <= 7) {
     return 'Akan Jatuh Tempo';
   }
 
+  // Otherwise, it's ready to be reviewed anytime before the "due soon" window.
   return 'Siap Direview';
 }

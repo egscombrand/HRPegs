@@ -569,12 +569,15 @@ export type MonthlyEvaluation = {
 };
 
 export type ReviewCycle = {
-  periodStart: Date;
-  periodEnd: Date;
+  payrollPeriodStart: Date;
+  payrollPeriodEnd: Date;
+  activePeriodStart: Date;
+  activePeriodEnd: Date;
   reviewDueDate: Date;
   monthId: string;
   isCurrent: boolean;
 };
+
 
 export type ReviewStatus =
   | 'Belum Waktunya'

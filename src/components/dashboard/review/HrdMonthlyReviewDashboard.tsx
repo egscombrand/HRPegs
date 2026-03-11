@@ -15,7 +15,7 @@ import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { MonthlyEvaluationDialog } from './MonthlyEvaluationDialog';
 import { Badge } from '@/components/ui/badge';
-import { getReviewStatus, getCurrentReviewCycle } from '@/lib/recruitment/review-cycles';
+import { getReviewStatus, getReviewCycleForMonth } from '@/lib/recruitment/review-cycles';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 type ReportSummary = {
@@ -60,7 +60,6 @@ export function HrdMonthlyReviewDashboard({ userProfile }: { userProfile: UserPr
     
     const selectedDateForCycle = useMemo(() => {
         const [year, month] = selectedMonth.split('-');
-        // Use mid-month to avoid timezone issues with start/end of month
         return new Date(parseInt(year), parseInt(month) - 1, 15);
     }, [selectedMonth]);
 
@@ -74,7 +73,7 @@ export function HrdMonthlyReviewDashboard({ userProfile }: { userProfile: UserPr
         }, {} as Record<string, DailyReport[]>);
 
         return interns.map(intern => {
-            const reviewCycle = getCurrentReviewCycle(intern.internshipStartDate?.toDate(), nowForCycle);
+            const reviewCycle = getReviewCycleForMonth(intern.internshipStartDate?.toDate(), intern.internshipEndDate?.toDate(), nowForCycle);
             const evaluation = reviewCycle ? evaluationMap.get(`${intern.uid}_${reviewCycle.monthId}`) : undefined;
             const reviewStatus = getReviewStatus(reviewCycle, evaluation, new Date());
             
@@ -84,7 +83,7 @@ export function HrdMonthlyReviewDashboard({ userProfile }: { userProfile: UserPr
             if (reviewCycle) {
                 internReports.forEach(report => {
                     const reportDate = report.date.toDate();
-                    if (reportDate >= reviewCycle.periodStart && reportDate <= reviewCycle.periodEnd) {
+                    if (reportDate >= reviewCycle.activePeriodStart && reportDate <= reviewCycle.activePeriodEnd) {
                         summary.total++;
                         if ((summary as any)[report.status] !== undefined) {
                             (summary as any)[report.status]++;
@@ -118,20 +117,6 @@ export function HrdMonthlyReviewDashboard({ userProfile }: { userProfile: UserPr
         }
         return data;
     }, [processedInterns, brandFilter, searchTerm]);
-
-    const kpis = useMemo(() => {
-        const counts = {
-            siapDireview: 0,
-            akanJatuhTempo: 0,
-            terlambat: 0,
-        };
-        filteredData.forEach(intern => {
-            if (intern.reviewStatus === 'Siap Direview') counts.siapDireview++;
-            if (intern.reviewStatus === 'Akan Jatuh Tempo') counts.akanJatuhTempo++;
-            if (intern.reviewStatus === 'Terlambat') counts.terlambat++;
-        });
-        return counts;
-    }, [filteredData]);
     
     const internsByStatus = useMemo(() => {
         const statusGroups: {
@@ -167,6 +152,14 @@ export function HrdMonthlyReviewDashboard({ userProfile }: { userProfile: UserPr
         return statusGroups;
     }, [filteredData]);
 
+    const kpis = useMemo(() => {
+        return {
+            siapDireview: internsByStatus.siapDireview.length,
+            akanJatuhTempo: internsByStatus.akanJatuhTempo.length,
+            terlambat: internsByStatus.terlambat.length,
+        };
+    }, [internsByStatus]);
+    
     const [activeTab, setActiveTab] = useState('siapDireview');
     const internsForTab = useMemo(() => {
         switch(activeTab) {
@@ -223,12 +216,26 @@ export function HrdMonthlyReviewDashboard({ userProfile }: { userProfile: UserPr
                 <TabsContent value={activeTab} className="mt-4">
                      <div className="rounded-lg border">
                         <Table>
-                            <TableHeader><TableRow><TableHead>Nama Intern</TableHead><TableHead>Periode Review</TableHead><TableHead>Jatuh Tempo</TableHead><TableHead>Laporan Bulan Ini</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Nama Intern</TableHead>
+                                    <TableHead>Periode Payroll</TableHead>
+                                    <TableHead>Periode Aktif</TableHead>
+                                    <TableHead>Jatuh Tempo</TableHead>
+                                    <TableHead>Laporan</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead className="text-right">Aksi</TableHead>
+                                </TableRow>
+                            </TableHeader>
                             <TableBody>
                                 {internsForTab.length > 0 ? internsForTab.map(intern => (
                                     <TableRow key={intern.uid}>
-                                        <TableCell className="font-medium">{intern.fullName}</TableCell>
-                                        <TableCell>{intern.reviewCycle ? `${format(intern.reviewCycle.periodStart, 'dd MMM')} - ${format(intern.reviewCycle.periodEnd, 'dd MMM')}` : '-'}</TableCell>
+                                        <TableCell>
+                                            <div className="font-medium">{intern.fullName}</div>
+                                            <div className="text-xs text-muted-foreground">{intern.brandName}</div>
+                                        </TableCell>
+                                        <TableCell>{intern.reviewCycle ? `${format(intern.reviewCycle.payrollPeriodStart, 'dd MMM')} - ${format(intern.reviewCycle.payrollPeriodEnd, 'dd MMM')}` : '-'}</TableCell>
+                                        <TableCell>{intern.reviewCycle ? `${format(intern.reviewCycle.activePeriodStart, 'dd MMM')} - ${format(intern.reviewCycle.activePeriodEnd, 'dd MMM')}` : '-'}</TableCell>
                                         <TableCell>{intern.reviewCycle ? format(intern.reviewCycle.reviewDueDate, 'dd MMM yyyy') : '-'}</TableCell>
                                         <TableCell>
                                             <div>
@@ -239,7 +246,7 @@ export function HrdMonthlyReviewDashboard({ userProfile }: { userProfile: UserPr
                                         <TableCell><Badge variant={intern.reviewStatus === 'Terlambat' ? 'destructive' : 'secondary'}>{intern.reviewStatus}</Badge></TableCell>
                                         <TableCell className="text-right"><Button variant="outline" size="sm" onClick={() => setSelectedInternData(intern)}>Review & Evaluasi</Button></TableCell>
                                     </TableRow>
-                                )) : (<TableRow><TableCell colSpan={6} className="h-24 text-center">Tidak ada data intern untuk tab ini.</TableCell></TableRow>)}
+                                )) : (<TableRow><TableCell colSpan={7} className="h-24 text-center">Tidak ada data intern untuk tab ini.</TableCell></TableRow>)}
                             </TableBody>
                         </Table>
                     </div>

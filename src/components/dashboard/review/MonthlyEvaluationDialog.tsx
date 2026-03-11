@@ -92,7 +92,7 @@ export function MonthlyEvaluationDialog({ open, onOpenChange, internData, onSucc
 
             const payload: Partial<MonthlyEvaluation> = {
                 internUid: internData.uid,
-                evaluationMonth: Timestamp.fromDate(reviewCycle.periodStart),
+                evaluationMonth: Timestamp.fromDate(reviewCycle.payrollPeriodStart),
                 evaluatorUid: userProfile.uid,
                 evaluatorName: userProfile.fullName,
                 ...values,
@@ -124,7 +124,9 @@ export function MonthlyEvaluationDialog({ open, onOpenChange, internData, onSucc
                 <DialogHeader className="p-6 pb-4 border-b">
                     <DialogTitle>Evaluasi Bulanan: {internData.fullName}</DialogTitle>
                     <DialogDescription>
-                        Periode Review: {format(reviewCycle.periodStart, 'dd MMM yyyy', { locale: idLocale })} - {format(reviewCycle.periodEnd, 'dd MMM yyyy', { locale: idLocale })}
+                        Periode Payroll: {format(reviewCycle.payrollPeriodStart, 'dd MMM yyyy', { locale: idLocale })} - {format(reviewCycle.payrollPeriodEnd, 'dd MMM yyyy', { locale: idLocale })}
+                        <br/>
+                        Periode Aktif Intern: {format(reviewCycle.activePeriodStart, 'dd MMM yyyy', { locale: idLocale })} - {format(reviewCycle.activePeriodEnd, 'dd MMM yyyy', { locale: idLocale })}
                     </DialogDescription>
                 </DialogHeader>
                 <ScrollArea className="flex-grow">
