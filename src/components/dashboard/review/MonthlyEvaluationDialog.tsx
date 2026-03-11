@@ -70,15 +70,22 @@ export function MonthlyEvaluationDialog({ open, onOpenChange, internData, intern
     const monthEnd = endOfMonth(monthStart);
 
     const reportsQuery = useMemoFirebase(() => {
+        if (!internData.internId) return null;
         return query(
             collection(firestore, 'daily_reports'),
-            where('uid', '==', internData.internId),
-            where('date', '>=', monthStart),
-            where('date', '<=', monthEnd)
+            where('uid', '==', internData.internId)
         );
-    }, [firestore, internData.internId, monthStart, monthEnd]);
+    }, [firestore, internData.internId]);
 
-    const { data: reports, isLoading: isLoadingReports } = useCollection<DailyReport>(reportsQuery);
+    const { data: allReports, isLoading: isLoadingReports } = useCollection<DailyReport>(reportsQuery);
+    
+    const reports = useMemo(() => {
+        if (!allReports) return null;
+        return allReports.filter(report => {
+            const reportDate = report.date.toDate();
+            return reportDate >= monthStart && reportDate <= monthEnd;
+        });
+    }, [allReports, monthStart, monthEnd]);
 
     const reportSummary = useMemo(() => {
         const summary = { submitted: 0, needs_revision: 0, approved: 0 };
