@@ -927,6 +927,40 @@
           "reviewedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "date", "status", "activity", "learning", "obstacle", "createdAt", "updatedAt"]
+    },
+    "MonthlyEvaluation": {
+      "title": "Monthly Evaluation",
+      "description": "An HRD's monthly evaluation of an intern's performance.",
+      "type": "object",
+      "properties": {
+        "internUid": { "type": "string", "description": "The UID of the intern being evaluated." },
+        "evaluationMonth": { "type": "string", "format": "date", "description": "The first day of the month being evaluated (e.g., '2024-07-01')." },
+        "evaluatorUid": { "type": "string", "description": "The UID of the HRD who performed the evaluation." },
+        "evaluatorName": { "type": "string", "description": "The name of the HRD evaluator." },
+        "ratings": {
+          "type": "object",
+          "properties": {
+            "attendance": { "type": "number", "minimum": 1, "maximum": 10 },
+            "discipline": { "type": "number", "minimum": 1, "maximum": 10 },
+            "attitude": { "type": "number", "minimum": 1, "maximum": 10 },
+            "responsibility": { "type": "number", "minimum": 1, "maximum": 10 },
+            "communication": { "type": "number", "minimum": 1, "maximum": 10 },
+            "initiative": { "type": "number", "minimum": 1, "maximum": 10 },
+            "teamwork": { "type": "number", "minimum": 1, "maximum": 10 },
+            "workQuality": { "type": "number", "minimum": 1, "maximum": 10 },
+            "learningAbility": { "type": "number", "minimum": 1, "maximum": 10 },
+            "consistency": { "type": "number", "minimum": 1, "maximum": 10 }
+          },
+          "required": ["attendance", "discipline", "attitude", "responsibility", "communication", "initiative", "teamwork", "workQuality", "learningAbility", "consistency"]
+        },
+        "strengths": { "type": "string", "description": "Key strengths observed during the month." },
+        "improvements": { "type": "string", "description": "Areas for improvement." },
+        "hrdComment": { "type": "string", "description": "General comments from HRD." },
+        "recommendation": { "type": "string", "description": "Recommendations for the next month." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["internUid", "evaluationMonth", "evaluatorUid", "evaluatorName", "ratings", "strengths", "improvements", "hrdComment", "recommendation", "createdAt", "updatedAt"]
     }
   },
   "auth": {
@@ -1182,6 +1216,13 @@
         "definition": {
             "schema": { "$ref": "#/backend/entities/DailyReport" },
             "description": "Stores daily reports submitted by interns."
+        }
+      },
+      {
+        "path": "/monthly_evaluations/{evaluationId}",
+        "definition": {
+            "schema": { "$ref": "#/backend/entities/MonthlyEvaluation" },
+            "description": "Stores HRD's monthly evaluations of interns."
         }
       }
     ],
