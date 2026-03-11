@@ -43,6 +43,9 @@ const evaluationSchema = z.object({
     }, {} as Record<keyof EvaluationCriteria, z.ZodEnum<typeof RATING_SCALE>>)
   ),
   hrdComment: z.string().min(10, 'Komentar HRD harus diisi.'),
+  mainStrengths: z.string().optional(),
+  improvementAreas: z.string().optional(),
+  nextMonthRecommendation: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof evaluationSchema>;
@@ -73,6 +76,9 @@ export function MonthlyEvaluationDialog({ open, onOpenChange, internData, onSucc
             form.reset({
                 ratings: evaluation?.ratings || EVALUATION_CRITERIA.reduce((acc, crit) => ({...acc, [crit.key]: 'Cukup'}), {} as EvaluationCriteria),
                 hrdComment: evaluation?.hrdComment || '',
+                mainStrengths: evaluation?.mainStrengths || '',
+                improvementAreas: evaluation?.improvementAreas || '',
+                nextMonthRecommendation: evaluation?.nextMonthRecommendation || '',
             });
         }
     }, [open, evaluation, form]);
@@ -171,6 +177,9 @@ export function MonthlyEvaluationDialog({ open, onOpenChange, internData, onSucc
                                 <section className="space-y-4">
                                     <h3 className="font-semibold">Feedback Kualitatif</h3>
                                      <FormField control={form.control} name="hrdComment" render={({ field }) => (<FormItem><FormLabel>Komentar HRD</FormLabel><FormControl><Textarea {...field} rows={5} disabled={isReadOnly} /></FormControl><FormMessage /></FormItem>)} />
+                                     <FormField control={form.control} name="mainStrengths" render={({ field }) => (<FormItem><FormLabel>Kelebihan Utama (Opsional)</FormLabel><FormControl><Textarea {...field} rows={3} placeholder="Gunakan baris baru untuk setiap poin" disabled={isReadOnly} /></FormControl><FormMessage /></FormItem>)} />
+                                     <FormField control={form.control} name="improvementAreas" render={({ field }) => (<FormItem><FormLabel>Area Perbaikan (Opsional)</FormLabel><FormControl><Textarea {...field} rows={3} placeholder="Gunakan baris baru untuk setiap poin" disabled={isReadOnly} /></FormControl><FormMessage /></FormItem>)} />
+                                     <FormField control={form.control} name="nextMonthRecommendation" render={({ field }) => (<FormItem><FormLabel>Rekomendasi Bulan Berikutnya (Opsional)</FormLabel><FormControl><Textarea {...field} rows={3} placeholder="Gunakan baris baru untuk setiap poin" disabled={isReadOnly} /></FormControl><FormMessage /></FormItem>)} />
                                 </section>
                             </form>
                         </Form>

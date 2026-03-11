@@ -952,6 +952,9 @@
           }
         },
         "hrdComment": { "type": "string", "description": "General comments from HRD." },
+        "mainStrengths": { "type": "string", "description": "Observed main strengths during the period." },
+        "improvementAreas": { "type": "string", "description": "Areas for the intern to improve upon." },
+        "nextMonthRecommendation": { "type": "string", "description": "Recommendations or focus for the next month." },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },

@@ -561,6 +561,9 @@ export type MonthlyEvaluation = {
   monthlyFocus?: string;
   ratings?: EvaluationCriteria;
   hrdComment?: string;
+  mainStrengths?: string;
+  improvementAreas?: string;
+  nextMonthRecommendation?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 };
