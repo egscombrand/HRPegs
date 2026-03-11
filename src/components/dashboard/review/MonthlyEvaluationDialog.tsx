@@ -12,14 +12,15 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/providers/auth-provider';
 import { useFirestore, useCollection, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
 import { collection, query, where, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
-import type { EmployeeProfile, DailyReport, MonthlyEvaluation, EvaluationCriteria, UserProfile } from '@/lib/types';
+import type { EmployeeProfile, DailyReport, MonthlyEvaluation, EvaluationCriteria, UserProfile, RatingScale } from '@/lib/types';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Textarea } from '@/components/ui/textarea';
-import { Slider } from '@/components/ui/slider';
 import { KpiCard } from '@/components/recruitment/KpiCard';
 import { Loader2 } from 'lucide-react';
 import { startOfMonth, endOfMonth, format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
+import { RATING_SCALE } from '@/lib/types';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 const EVALUATION_CRITERIA: { key: keyof EvaluationCriteria, label: string }[] = [
     { key: 'attendance', label: 'Kehadiran dan ketepatan waktu' },
@@ -37,9 +38,9 @@ const EVALUATION_CRITERIA: { key: keyof EvaluationCriteria, label: string }[] = 
 const evaluationSchema = z.object({
   ratings: z.object(
     EVALUATION_CRITERIA.reduce((acc, crit) => {
-        acc[crit.key] = z.number().min(1).max(10);
+        acc[crit.key] = z.enum(RATING_SCALE);
         return acc;
-    }, {} as Record<keyof EvaluationCriteria, z.ZodNumber>)
+    }, {} as Record<keyof EvaluationCriteria, z.ZodEnum<typeof RATING_SCALE>>)
   ),
   strengths: z.string().min(10, 'Kelebihan utama harus diisi.'),
   improvements: z.string().min(10, 'Area perbaikan harus diisi.'),
@@ -71,10 +72,7 @@ export function MonthlyEvaluationDialog({ open, onOpenChange, internData, intern
 
     const reportsQuery = useMemoFirebase(() => {
         if (!internData.internId) return null;
-        return query(
-            collection(firestore, 'daily_reports'),
-            where('uid', '==', internData.internId)
-        );
+        return query(collection(firestore, 'daily_reports'), where('uid', '==', internData.internId));
     }, [firestore, internData.internId]);
 
     const { data: allReports, isLoading: isLoadingReports } = useCollection<DailyReport>(reportsQuery);
@@ -105,7 +103,7 @@ export function MonthlyEvaluationDialog({ open, onOpenChange, internData, intern
     useEffect(() => {
         if(open) {
             form.reset({
-                ratings: evaluation?.ratings || EVALUATION_CRITERIA.reduce((acc, crit) => ({...acc, [crit.key]: 5}), {}),
+                ratings: evaluation?.ratings || EVALUATION_CRITERIA.reduce((acc, crit) => ({...acc, [crit.key]: 'Cukup'}), {} as EvaluationCriteria),
                 strengths: evaluation?.strengths || '',
                 improvements: evaluation?.improvements || '',
                 hrdComment: evaluation?.hrdComment || '',
@@ -168,13 +166,34 @@ export function MonthlyEvaluationDialog({ open, onOpenChange, internData, intern
                                     <h3 className="font-semibold mb-4">Parameter Penilaian</h3>
                                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-6">
                                         {EVALUATION_CRITERIA.map(crit => (
-                                            <FormField key={crit.key} control={form.control} name={`ratings.${crit.key}`}
+                                            <FormField
+                                                key={crit.key}
+                                                control={form.control}
+                                                name={`ratings.${crit.key}`}
                                                 render={({ field }) => (
-                                                <FormItem>
-                                                    <FormLabel className="flex justify-between"><span>{crit.label}</span><span className="text-primary font-bold">{field.value}</span></FormLabel>
-                                                    <FormControl><Slider value={[field.value]} onValueChange={(vals) => field.onChange(vals[0])} min={1} max={10} step={1} disabled={isReadOnly} /></FormControl>
-                                                </FormItem>
-                                            )}/>
+                                                    <FormItem className="space-y-3">
+                                                    <FormLabel>{crit.label}</FormLabel>
+                                                    <FormControl>
+                                                        <RadioGroup
+                                                        onValueChange={field.onChange}
+                                                        value={field.value}
+                                                        className="flex flex-wrap gap-x-4 gap-y-2 pt-1"
+                                                        disabled={isReadOnly}
+                                                        >
+                                                        {RATING_SCALE.map((value) => (
+                                                            <FormItem key={value} className="flex items-center space-x-2 space-y-0">
+                                                            <FormControl>
+                                                                <RadioGroupItem value={value} />
+                                                            </FormControl>
+                                                            <FormLabel className="font-normal text-sm">{value}</FormLabel>
+                                                            </FormItem>
+                                                        ))}
+                                                        </RadioGroup>
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                                />
                                         ))}
                                     </div>
                                 </section>

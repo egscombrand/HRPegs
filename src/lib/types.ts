@@ -534,6 +534,40 @@ export type AssessmentSession = {
   completedAt?: Timestamp;
 };
 
+// --- MONTHLY EVALUATION TYPES ---
+
+export const RATING_SCALE = ['Sangat Baik', 'Baik', 'Cukup', 'Perlu Perbaikan'] as const;
+export type RatingScale = (typeof RATING_SCALE)[number];
+
+export type EvaluationCriteria = {
+  attendance: RatingScale;
+  discipline: RatingScale;
+  attitude: RatingScale;
+  responsibility: RatingScale;
+  communication: RatingScale;
+  initiative: RatingScale;
+  teamwork: RatingScale;
+  workQuality: RatingScale;
+  learningAbility: RatingScale;
+  consistency: RatingScale;
+};
+
+export type MonthlyEvaluation = {
+  id?: string;
+  internUid: string;
+  internName?: string;
+  evaluationMonth: Timestamp;
+  evaluatorUid: string;
+  evaluatorName: string;
+  ratings: EvaluationCriteria;
+  strengths: string;
+  improvements: string;
+  hrdComment: string;
+  recommendation: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+};
+
 
 // --- AI ANALYSIS TYPES ---
 
