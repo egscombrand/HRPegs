@@ -60,10 +60,21 @@ export function MonthlyEvaluationDialog({ open, onOpenChange, internData, onSucc
     const { toast } = useToast();
     const [isSaving, setIsSaving] = useState(false);
     
-    const evaluation = internData.evaluation; // Assuming this is passed within internData
+    const evaluation = internData.evaluation;
 
     const { reviewCycle, reportSummary } = internData;
-    if (!reviewCycle) return null;
+    
+    const reportsQuery = useMemoFirebase(() => {
+      if (!reviewCycle) return null;
+      return query(
+        collection(firestore, 'daily_reports'), 
+        where('uid', '==', internData.uid),
+        where('date', '>=', reviewCycle.periodStart),
+        where('date', '<=', reviewCycle.periodEnd)
+      );
+    }, [firestore, internData.uid, reviewCycle]);
+    
+    const { data: reports, isLoading: isLoadingReports } = useCollection<DailyReport>(reportsQuery);
 
     const form = useForm<FormValues>({
         resolver: zodResolver(evaluationSchema),
@@ -79,7 +90,7 @@ export function MonthlyEvaluationDialog({ open, onOpenChange, internData, onSucc
     }, [open, evaluation, form]);
 
     const onSubmit = async (values: FormValues) => {
-        if (!userProfile) return;
+        if (!userProfile || !reviewCycle) return;
         setIsSaving(true);
         try {
             const docId = `${internData.uid}_${reviewCycle.monthId}`;
@@ -109,7 +120,9 @@ export function MonthlyEvaluationDialog({ open, onOpenChange, internData, onSucc
         }
     };
     
-    const isReadOnly = !!evaluation;
+    if (!reviewCycle) return null;
+    
+    const isReadOnly = !!(evaluation && evaluation.hrdComment);
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>

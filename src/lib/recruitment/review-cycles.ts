@@ -82,7 +82,8 @@ export function getReviewStatus(
   evaluation: MonthlyEvaluation | undefined,
   now: Date = new Date()
 ): ReviewStatus {
-  if (evaluation) {
+  // An evaluation is only 'complete' if the HRD comment exists.
+  if (evaluation && evaluation.hrdComment) {
     return 'Sudah Dievaluasi';
   }
 
