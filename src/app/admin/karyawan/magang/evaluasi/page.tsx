@@ -55,16 +55,12 @@ export default function EvaluasiPage() {
         if (!userProfile?.uid) return null;
         return query(
             collection(firestore, 'monthly_evaluations'), 
-            where('internUid', '==', userProfile.uid)
+            where('internUid', '==', userProfile.uid),
+            orderBy('evaluationMonth', 'desc')
         );
     }, [userProfile?.uid, firestore]);
 
-    const { data: rawEvaluations, isLoading: evalsLoading } = useCollection<MonthlyEvaluation>(evaluationsQuery);
-    
-    const evaluations = useMemo(() => {
-        if (!rawEvaluations) return null;
-        return [...rawEvaluations].sort((a, b) => b.evaluationMonth.toDate().getTime() - a.evaluationMonth.toDate().getTime());
-    }, [rawEvaluations]);
+    const { data: evaluations, isLoading: evalsLoading } = useCollection<MonthlyEvaluation>(evaluationsQuery);
     
     const isLoading = authLoading || evalsLoading;
 
@@ -101,43 +97,32 @@ export default function EvaluasiPage() {
         <div className="space-y-6">
             <div>
                 <h1 className="text-2xl font-bold">Evaluasi & Feedback</h1>
-                <p className="text-muted-foreground">Kumpulan feedback dan evaluasi dari mentor dan HRD selama periode magang.</p>
+                <p className="text-muted-foreground">Kumpulan feedback dan evaluasi dari HRD selama periode magang.</p>
             </div>
 
             <Accordion type="single" collapsible className="w-full space-y-4" defaultValue={evaluations[0]?.id}>
                 {evaluations.map(evaluation => (
                     <AccordionItem value={evaluation.id!} key={evaluation.id} className="border rounded-xl bg-card shadow-sm">
                         <AccordionTrigger className="px-6 py-4 text-lg font-semibold hover:no-underline">
-                           Evaluasi Bulan: {format(evaluation.evaluationMonth.toDate(), 'MMMM yyyy', { locale: id })}
+                           Evaluasi Periode: {format(evaluation.evaluationMonth.toDate(), 'MMMM yyyy', { locale: id })}
                         </AccordionTrigger>
                         <AccordionContent className="px-6 pb-6">
                             <Separator className="mb-6" />
                             <div className="space-y-6">
-                                <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-muted/50 rounded-lg">
+                                <div className="flex flex-wrap items-center justify-between gap-4">
                                     <div>
-                                        <p className="text-sm font-semibold">Dievaluasi oleh: {evaluation.evaluatorName}</p>
-                                        <p className="text-xs text-muted-foreground">Pada: {evaluation.updatedAt ? formatDistanceToNow(evaluation.updatedAt.toDate(), { addSuffix: true, locale: id }) : '-'}</p>
+                                        <p className="text-sm text-muted-foreground">Periode: <span className="font-medium text-foreground">{format(evaluation.evaluationMonth.toDate(), 'MMMM yyyy', { locale: id })}</span></p>
                                     </div>
-                                    <Badge variant="default">Sudah Dievaluasi</Badge>
+                                    <p className="text-xs text-muted-foreground">Terakhir diperbarui: {evaluation.updatedAt ? formatDistanceToNow(evaluation.updatedAt.toDate(), { addSuffix: true, locale: id }) : '-'}</p>
                                 </div>
                                 
-                                {evaluation.monthlyFocus && (
-                                     <FeedbackSection
-                                        title="Fokus Bulan Ini (dari Mentor)"
-                                        content={evaluation.monthlyFocus}
-                                        icon={<ListTodo className="h-5 w-5 text-primary" />}
-                                    />
-                                )}
-                                
-                                <Separator />
-
                                 <div className="space-y-4">
                                     <h4 className="font-semibold flex items-center gap-2"><Star className="h-5 w-5 text-yellow-500" /> Penilaian Parameter</h4>
                                     <div className="grid md:grid-cols-2 gap-x-8 gap-y-3">
                                         {EVALUATION_CRITERIA.map(crit => (
                                             <div key={crit.key} className="flex justify-between items-center text-sm">
                                                 <span className="text-muted-foreground">{crit.label}</span>
-                                                <RatingDisplay rating={evaluation.ratings?.[crit.key] || 'Cukup'} />
+                                                <RatingDisplay rating={(evaluation.ratings?.[crit.key] as RatingScale) || 'Cukup'} />
                                             </div>
                                         ))}
                                     </div>
