@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useForm, type FieldErrors } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -47,24 +47,22 @@ const creatableRoles: UserRole[] = ['hrd', 'manager'];
 const allRolesForEdit: UserRole[] = ['super-admin', 'hrd', 'manager', 'karyawan', 'kandidat'];
 
 // Define the base object schema without refinement first
-const baseObjectSchema = z.object({
+const baseObjectDefinition = {
   fullName: z.string().min(2, { message: 'Full name is required.' }),
   email: z.string().email({ message: 'A valid email is required.' }),
   role: z.enum(ROLES),
   employmentType: z.enum(EMPLOYMENT_TYPES).optional(),
   isActive: z.boolean().default(true),
   brandId: brandSchema,
-  
   isDivisionManager: z.boolean().default(false),
-  managedBrandId: z.string().optional().nullable(),
   managedDivision: z.string().optional().nullable(),
-});
+};
 
 // Define the refinement logic separately
-const managerRefinement = (data: z.infer<typeof baseObjectSchema>, ctx: z.RefinementCtx) => {
+const managerRefinement = (data: z.infer<z.ZodObject<typeof baseObjectDefinition>>, ctx: z.RefinementCtx) => {
     if (data.isDivisionManager) {
-        if (!data.managedBrandId) {
-            ctx.addIssue({ path: ["managedBrandId"], message: "Brand harus dipilih." });
+        if (typeof data.brandId !== 'string' || !data.brandId) {
+            ctx.addIssue({ path: ["brandId"], message: "Pilih satu brand penempatan untuk menjadi manajer divisi." });
         }
         if (!data.managedDivision) {
             ctx.addIssue({ path: ["managedDivision"], message: "Divisi harus dipilih." });
@@ -72,13 +70,17 @@ const managerRefinement = (data: z.infer<typeof baseObjectSchema>, ctx: z.Refine
     }
 };
 
-// Now, define the final schemas by extending and/or applying the refinement
-const createSchema = baseObjectSchema.extend({
+const createObjectSchema = z.object({
+  ...baseObjectDefinition,
   password: z.string().min(8, { message: "Password must be at least 8 characters." }),
   role: z.enum(creatableRoles), // Stricter role validation for creation
-}).superRefine(managerRefinement);
+});
 
-const editSchema = baseObjectSchema.superRefine(managerRefinement);
+const editObjectSchema = z.object(baseObjectDefinition);
+
+const createSchema = createObjectSchema.superRefine(managerRefinement);
+const editSchema = editObjectSchema.superRefine(managerRefinement);
+
 
 type FormValues = z.infer<typeof createSchema> | z.infer<typeof editSchema>;
 
@@ -106,16 +108,16 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
 
   const role = form.watch('role');
   const isDivisionManager = form.watch('isDivisionManager');
-  const managedBrandId = form.watch('managedBrandId');
+  const primaryBrandId = form.watch('brandId');
 
   // Fetch divisions for the selected managed brand
   const managedDivisionsQuery = useMemoFirebase(() => {
-    if (!managedBrandId) return null;
+    if (!isDivisionManager || typeof primaryBrandId !== 'string' || !primaryBrandId) return null;
     return query(
-        collection(firestore, 'brands', managedBrandId, 'divisions'),
+        collection(firestore, 'brands', primaryBrandId, 'divisions'),
         where('isActive', '==', true)
     );
-  }, [managedBrandId, firestore]);
+  }, [isDivisionManager, primaryBrandId, firestore]);
   const { data: managedDivisions, isLoading: isLoadingManagedDivisions } = useCollection<Division>(managedDivisionsQuery);
   
   // Effect to reset form state when dialog opens or user prop changes
@@ -129,7 +131,6 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
         isActive: user.isActive,
         brandId: user.role === 'hrd' ? (Array.isArray(user.brandId) ? user.brandId : []) : (typeof user.brandId === 'string' ? user.brandId : ''),
         isDivisionManager: user.isDivisionManager || false,
-        managedBrandId: user.managedBrandId || null,
         managedDivision: user.managedDivision || null,
       } : { // Create mode
         fullName: '',
@@ -140,7 +141,6 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
         isActive: true,
         brandId: [],
         isDivisionManager: false,
-        managedBrandId: null,
         managedDivision: null,
       };
       form.reset(defaultValues as any);
@@ -160,7 +160,6 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
   // Effect to clear managed fields when user is not a manager
   useEffect(() => {
     if (!isDivisionManager) {
-      form.setValue('managedBrandId', null);
       form.setValue('managedDivision', null);
     }
   }, [isDivisionManager, form]);
@@ -168,7 +167,7 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
   // Effect to clear division when brand changes
   useEffect(() => {
       form.setValue('managedDivision', null);
-  }, [managedBrandId, form]);
+  }, [primaryBrandId, form]);
 
   async function handleCreate(values: FormValues) {
     if (!firebaseUser) throw new Error("Authentication error. Please log in again.");
@@ -204,7 +203,7 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
         isActive: values.isActive,
         brandId: values.brandId || null,
         isDivisionManager: values.isDivisionManager,
-        managedBrandId: values.isDivisionManager ? values.managedBrandId : null,
+        managedBrandId: values.isDivisionManager && typeof values.brandId === 'string' ? values.brandId : null,
         managedDivision: values.isDivisionManager ? values.managedDivision : null,
         updatedAt: serverTimestamp(),
     };
@@ -372,22 +371,17 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
                           {isDivisionManager && (
                               <div className="p-4 border rounded-lg space-y-4">
                                   <FormField
-                                    control={form.control}
-                                    name="managedBrandId"
-                                    render={({ field }) => (<FormItem><FormLabel>Brand</FormLabel><Select onValueChange={field.onChange} value={field.value ?? ''} disabled={brandsLoading}><FormControl><SelectTrigger><SelectValue placeholder="Pilih brand" /></SelectTrigger></FormControl><SelectContent>{brands?.map(b => <SelectItem key={b.id!} value={b.id!}>{b.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}
-                                  />
-                                  <FormField
                                       control={form.control}
                                       name="managedDivision"
                                       render={({ field }) => (
                                           <FormItem>
-                                              <FormLabel>Divisi</FormLabel>
-                                              <Select onValueChange={field.onChange} value={field.value ?? ''} disabled={!managedBrandId || isLoadingManagedDivisions}>
+                                              <FormLabel>Divisi yang Dikelola</FormLabel>
+                                              <Select onValueChange={field.onChange} value={field.value ?? ''} disabled={typeof primaryBrandId !== 'string' || !primaryBrandId || isLoadingManagedDivisions}>
                                                   <FormControl>
                                                       <SelectTrigger>
                                                           <SelectValue placeholder={
                                                               isLoadingManagedDivisions ? "Loading..." :
-                                                              !managedBrandId ? "Pilih brand dulu" : 
+                                                              (typeof primaryBrandId !== 'string' || !primaryBrandId) ? "Pilih brand penempatan dulu" : 
                                                               "Pilih divisi"
                                                           } />
                                                       </SelectTrigger>
