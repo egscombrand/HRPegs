@@ -7,6 +7,7 @@ import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { MENU_CONFIG } from '@/lib/menu-config';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Timer } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function LemburPage() {
   const { userProfile } = useAuth();
@@ -18,23 +19,13 @@ export default function LemburPage() {
     return [];
   }, [userProfile]);
   
-  if (!hasAccess) return null;
+  if (!hasAccess) {
+    return <DashboardLayout pageTitle="Monitoring Lembur" menuConfig={menuConfig}><Skeleton className="h-[600px] w-full" /></DashboardLayout>;
+  }
 
   return (
     <DashboardLayout pageTitle="Monitoring Lembur" menuConfig={menuConfig}>
-      <Card>
-        <CardHeader>
-          <CardTitle>Monitoring Lembur</CardTitle>
-          <CardDescription>Fitur ini sedang dalam pengembangan.</CardDescription>
-        </CardHeader>
-        <CardContent className="h-96 flex flex-col items-center justify-center text-center">
-          <Timer className="h-16 w-16 text-muted-foreground mb-4" />
-          <p className="font-semibold">Halaman Monitoring Lembur</p>
-          <p className="text-sm text-muted-foreground">Fungsionalitas untuk filter bulan, tabel rekapitulasi, dan peringkat lembur akan ada di sini.</p>
-        </CardContent>
-      </Card>
+      <p>Fitur ini sedang dalam pengembangan.</p>
     </DashboardLayout>
   );
 }
-
-    

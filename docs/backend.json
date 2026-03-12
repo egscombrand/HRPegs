@@ -860,6 +860,53 @@
         },
         "required": ["uid", "date", "minutes", "source", "createdAt"]
     },
+    "OvertimeSubmission": {
+      "title": "Overtime Submission",
+      "description": "Represents an employee's request to work overtime, including details and an approval workflow.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "UID of the user submitting the request." },
+        "fullName": { "type": "string" },
+        "brandId": { "type": "string" },
+        "division": { "type": "string" },
+        "positionTitle": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "startTime": { "type": "string", "format": "date-time" },
+        "endTime": { "type": "string", "format": "date-time" },
+        "totalDurationMinutes": { "type": "number" },
+        "overtimeType": { "type": "string", "enum": ["hari_kerja", "hari_libur", "urgent"] },
+        "tasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "description": { "type": "string" },
+              "estimatedMinutes": { "type": "number" },
+              "actualMinutes": { "type": "number" },
+              "output": { "type": "string" }
+            },
+            "required": ["description"]
+          }
+        },
+        "reason": { "type": "string" },
+        "location": { "type": "string", "enum": ["kantor", "remote", "site"] },
+        "employeeNotes": { "type": "string" },
+        "attachments": { "type": "array", "items": { "type": "string", "format": "uri" } },
+        "status": {
+          "type": "string",
+          "enum": ["draft", "pending_manager", "rejected_manager", "revision_manager", "pending_hrd", "rejected_hrd", "revision_hrd", "approved"]
+        },
+        "managerUid": { "type": "string", "description": "UID of the manager responsible for approval." },
+        "managerNotes": { "type": "string" },
+        "managerDecisionAt": { "type": "string", "format": "date-time" },
+        "hrdReviewerUid": { "type": "string" },
+        "hrdNotes": { "type": "string" },
+        "hrdDecisionAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "fullName", "brandId", "division", "date", "startTime", "endTime", "overtimeType", "tasks", "reason", "location", "status", "createdAt", "updatedAt"]
+    },
     "FieldTrackingEntry": {
         "title": "Field Tracking Entry",
         "description": "Represents a location update from an employee on field duty.",
@@ -1242,8 +1289,11 @@
         "definition": { "schema": { "$ref": "#/backend/entities/AttendanceEvent" }, "description": "Employee attendance events (tap in/out)." }
       },
       {
-        "path": "/overtime_logs/{logId}",
-        "definition": { "schema": { "$ref": "#/backend/entities/OvertimeLog" }, "description": "Employee overtime logs." }
+        "path": "/overtime_submissions/{submissionId}",
+        "definition": {
+          "schema": { "$ref": "#/backend/entities/OvertimeSubmission" },
+          "description": "Stores all employee overtime requests and their approval history."
+        }
       },
       {
         "path": "/field_tracking/{uid}/entries/{entryId}",

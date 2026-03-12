@@ -93,6 +93,17 @@ service cloud.firestore {
       let employeeProfile = get(/databases/$(database)/documents/employee_profiles/$(internUid)).data;
       return employeeProfile.supervisorUid == request.auth.uid;
     }
+    
+    /**
+     * WARNING: NOT SAFE FOR LIST QUERIES.
+     * Checks if the requesting user is the assigned division manager for a specific submission.
+     */
+    function isAssignedManager(submission) {
+      let managerData = getUserData();
+      return managerData.isDivisionManager == true && 
+             managerData.managedDivision == submission.division &&
+             managerData.managedBrandId == submission.brandId;
+    }
 
 
     // --- Collection Rules ---
@@ -301,6 +312,36 @@ service cloud.firestore {
       allow read: if isHrd() || isSuperAdmin();
       allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
       allow delete: if isHrd() || isSuperAdmin();
+    }
+    
+    match /overtime_submissions/{submissionId} {
+      function isSubmissionOwner() {
+        return request.auth.uid == resource.data.uid;
+      }
+      function isRequester() {
+        return request.auth.uid == request.resource.data.uid;
+      }
+      
+      // Allow read by owner, their manager, HR, or Super Admin
+      allow get: if isSignedIn() && (isSubmissionOwner() || isAssignedManager(resource.data) || isHrd() || isSuperAdmin());
+      allow list: if isSignedIn(); // Queries must be filtered on client-side
+
+      // Allow create by the user themselves
+      allow create: if isSignedIn() && isRequester();
+
+      // Allow update logic
+      allow update: if isSignedIn() && (
+        // Owner can update their draft
+        (isSubmissionOwner() && resource.data.status == 'draft') ||
+        // Manager can act on pending_manager requests
+        (isAssignedManager(resource.data) && resource.data.status == 'pending_manager') ||
+        // HRD can act on pending_hrd requests
+        (isHrd() && resource.data.status == 'pending_hrd') ||
+        // Super Admin can always update
+        isSuperAdmin()
+      );
+      
+      allow delete: if isSuperAdmin() || (isSubmissionOwner() && resource.data.status == 'draft');
     }
     
     // --- Assessment Rules ---
