@@ -37,6 +37,7 @@ export type UserProfile = {
   assignmentType?: 'division_lead' | 'division_pic';
   assignedBrandIds?: string[];
   assignedDivisions?: string[];
+  updatedAt?: Timestamp;
 };
 
 export type EmployeeProfile = {
@@ -82,6 +83,7 @@ export type EmployeeProfile = {
   contractDurationMonths?: number;
   brandId?: string | string[];
   brandName?: string;
+  positionTitle?: string;
 };
 
 export type Brand = {
