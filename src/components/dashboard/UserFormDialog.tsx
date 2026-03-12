@@ -221,59 +221,50 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
 
                   {role && role !== 'super-admin' && (
                     role === 'hrd' ? (
-                      <FormField
-                        control={form.control}
-                        name="brandId"
-                        render={() => (
-                          <FormItem>
-                            <div className="mb-4">
-                              <FormLabel>Brands</FormLabel>
-                              <FormDescription>
-                                Assign one or more brands to this HRD user.
-                              </FormDescription>
-                            </div>
-                            <ScrollArea className="h-24 w-full rounded-md border">
-                                <div className="grid grid-cols-2 gap-x-4 gap-y-2 p-4">
+                        <FormField
+                            control={form.control}
+                            name="brandId"
+                            render={({ field }) => (
+                            <FormItem>
+                                <div className="mb-2">
+                                <FormLabel>Brands</FormLabel>
+                                <FormDescription>
+                                    Assign one or more brands to this HRD user.
+                                </FormDescription>
+                                </div>
+                                <ScrollArea className="h-24 w-full rounded-md border">
+                                <div className="p-4 space-y-2">
                                     {brands?.map((brand) => (
-                                    <FormField
+                                    <FormItem
                                         key={brand.id}
-                                        control={form.control}
-                                        name="brandId"
-                                        render={({ field }) => {
-                                        return (
-                                            <FormItem
-                                            key={brand.id}
-                                            className="flex flex-row items-start space-x-3 space-y-0"
-                                            >
-                                            <FormControl>
-                                                <Checkbox
-                                                checked={Array.isArray(field.value) && field.value.includes(brand.id!)}
-                                                onCheckedChange={(checked) => {
-                                                    const currentValue = Array.isArray(field.value) ? field.value : [];
-                                                    return checked
-                                                    ? field.onChange([...currentValue, brand.id!])
-                                                    : field.onChange(
-                                                        currentValue.filter(
-                                                            (value) => value !== brand.id!
-                                                        )
-                                                        );
-                                                }}
-                                                />
-                                            </FormControl>
-                                            <FormLabel className="font-normal">
-                                                {brand.name}
-                                            </FormLabel>
-                                            </FormItem>
-                                        )
-                                        }}
-                                    />
+                                        className="flex flex-row items-start space-x-3 space-y-0"
+                                    >
+                                        <FormControl>
+                                        <Checkbox
+                                            checked={Array.isArray(field.value) && field.value.includes(brand.id!)}
+                                            onCheckedChange={(checked) => {
+                                            const currentValue = Array.isArray(field.value) ? field.value : [];
+                                            return checked
+                                                ? field.onChange([...currentValue, brand.id!])
+                                                : field.onChange(
+                                                    currentValue.filter(
+                                                        (value) => value !== brand.id!
+                                                    )
+                                                    );
+                                            }}
+                                        />
+                                        </FormControl>
+                                        <FormLabel className="font-normal">
+                                        {brand.name}
+                                        </FormLabel>
+                                    </FormItem>
                                     ))}
                                 </div>
-                            </ScrollArea>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                                </ScrollArea>
+                                <FormMessage />
+                            </FormItem>
+                            )}
+                        />
                     ) : (
                       <FormField
                         control={form.control}
