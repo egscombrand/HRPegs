@@ -240,22 +240,21 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
                                         className="flex flex-row items-start space-x-3 space-y-0"
                                     >
                                         <FormControl>
-                                        <Checkbox
-                                            checked={Array.isArray(field.value) && field.value.includes(brand.id!)}
-                                            onCheckedChange={(checked) => {
-                                            const currentValue = Array.isArray(field.value) ? field.value : [];
-                                            return checked
-                                                ? field.onChange([...currentValue, brand.id!])
-                                                : field.onChange(
-                                                    currentValue.filter(
+                                            <Checkbox
+                                                checked={Array.isArray(field.value) && field.value.includes(brand.id!)}
+                                                onCheckedChange={(checked) => {
+                                                const currentValue = Array.isArray(field.value) ? field.value : [];
+                                                const updatedValue = checked
+                                                    ? [...currentValue, brand.id!]
+                                                    : currentValue.filter(
                                                         (value) => value !== brand.id!
-                                                    )
                                                     );
-                                            }}
-                                        />
+                                                field.onChange(updatedValue);
+                                                }}
+                                            />
                                         </FormControl>
                                         <FormLabel className="font-normal">
-                                        {brand.name}
+                                            {brand.name}
                                         </FormLabel>
                                     </FormItem>
                                     ))}
