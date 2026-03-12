@@ -53,24 +53,18 @@
           "type": "string",
           "description": "The ID of the invite batch used to create this user account."
         },
-        "positionTitle": {
+        "isDivisionManager": {
+          "type": "boolean",
+          "description": "Indicates if the user is designated as a division manager.",
+          "default": false
+        },
+        "managedBrandId": {
           "type": "string",
-          "description": "Operational job title, e.g., 'Head of Creative'."
+          "description": "The ID of the brand for the division this user manages."
         },
-        "assignmentType": {
+        "managedDivision": {
           "type": "string",
-          "enum": ["division_lead", "division_pic"],
-          "description": "The type of operational assignment given to the user."
-        },
-        "assignedBrandIds": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "An array of brand IDs the user is responsible for."
-        },
-        "assignedDivisions": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "An array of division names the user is responsible for."
+          "description": "The name of the division this user manages."
         }
       },
       "required": [
@@ -184,7 +178,8 @@
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" },
         "supervisorUid": { "type": "string", "description": "UID of the assigned supervisor/mentor." },
-        "supervisorName": { "type": "string", "description": "Denormalized name of the supervisor." }
+        "supervisorName": { "type": "string", "description": "Denormalized name of the supervisor." },
+        "positionTitle": { "type": "string" }
       },
       "required": ["uid", "employmentType", "fullName", "phone", "email", "addressCurrent", "schoolOrCampus", "educationLevel", "internSubtype", "emergencyContactName", "emergencyContactRelation", "emergencyContactPhone"]
     },

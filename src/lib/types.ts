@@ -32,11 +32,11 @@ export type UserProfile = {
   photoUrl?: string;
   inviteBatchId?: string;
 
-  // New fields for operational roles
-  positionTitle?: string;
-  assignmentType?: 'division_lead' | 'division_pic';
-  assignedBrandIds?: string[];
-  assignedDivisions?: string[];
+  // Simplified manager fields
+  isDivisionManager?: boolean;
+  managedBrandId?: string | null;
+  managedDivision?: string | null;
+
   updatedAt?: Timestamp;
 };
 

@@ -227,7 +227,7 @@ export function UserManagementClient() {
                         <TableHead>Full Name</TableHead>
                         <TableHead>Email</TableHead>
                         <TableHead>Role</TableHead>
-                        <TableHead>Jabatan/Tugas</TableHead>
+                        <TableHead>Jabatan</TableHead>
                         <TableHead>Brand</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
@@ -246,7 +246,13 @@ export function UserManagementClient() {
                           <TableCell className="font-medium">{user.fullName}</TableCell>
                           <TableCell>{user.email}</TableCell>
                           <TableCell><Badge variant="outline" className="capitalize">{user.role.replace('_', ' ')}</Badge></TableCell>
-                          <TableCell>{user.positionTitle ? <Badge variant="secondary">{user.positionTitle}</Badge> : '-'}</TableCell>
+                          <TableCell>
+                            {user.isDivisionManager ? (
+                                <Badge variant="secondary">{`Manajer: ${user.managedDivision}`}</Badge>
+                            ) : (
+                                '-'
+                            )}
+                          </TableCell>
                           <TableCell>{brandDisplay}</TableCell>
                           <TableCell>
                             <Badge variant={user.isActive ? 'default' : 'destructive'}>

@@ -32,18 +32,16 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { UserProfile, ROLES, UserRole, Brand, EMPLOYMENT_TYPES } from '@/lib/types';
+import { UserProfile, ROLES, UserRole, Brand, EMPLOYMENT_TYPES, Division } from '@/lib/types';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { useAuth } from '@/providers/auth-provider';
 import { Checkbox } from '../ui/checkbox';
-import { collection, doc, writeBatch, serverTimestamp } from 'firebase/firestore';
-import { ScrollArea } from '../ui/scroll-area';
+import { collection, doc, writeBatch, serverTimestamp, query, where } from 'firebase/firestore';
 import { Separator } from '../ui/separator';
 
 // --- Zod Schemas for Validation ---
 const brandSchema = z.union([z.string(), z.array(z.string())]).optional();
-const assignmentTypeEnum = z.enum(['division_lead', 'division_pic']).optional();
 
 const creatableRoles: UserRole[] = ['hrd', 'manager'];
 const allRolesForEdit: UserRole[] = ['super-admin', 'hrd', 'manager', 'karyawan', 'kandidat'];
@@ -55,12 +53,22 @@ const baseSchema = z.object({
   employmentType: z.enum(EMPLOYMENT_TYPES).optional(),
   isActive: z.boolean().default(true),
   brandId: brandSchema,
-  // New assignment fields
-  positionTitle: z.string().optional(),
-  assignmentType: assignmentTypeEnum,
-  assignedBrandIds: z.array(z.string()).optional(),
-  assignedDivisions: z.string().optional(),
+  
+  // Simplified manager assignment
+  isDivisionManager: z.boolean().default(false),
+  managedBrandId: z.string().optional().nullable(),
+  managedDivision: z.string().optional().nullable(),
+}).superRefine((data, ctx) => {
+    if (data.isDivisionManager) {
+        if (!data.managedBrandId) {
+            ctx.addIssue({ path: ["managedBrandId"], message: "Brand harus dipilih." });
+        }
+        if (!data.managedDivision) {
+            ctx.addIssue({ path: ["managedDivision"], message: "Divisi harus dipilih." });
+        }
+    }
 });
+
 
 const createSchema = baseSchema.extend({
   password: z.string().min(8, { message: "Password must be at least 8 characters." }),
@@ -94,46 +102,44 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
   });
 
   const role = form.watch('role');
+  const isDivisionManager = form.watch('isDivisionManager');
+  const managedBrandId = form.watch('managedBrandId');
 
+  // Fetch divisions for the selected managed brand
+  const managedDivisionsQuery = useMemoFirebase(() => {
+    if (!managedBrandId) return null;
+    return query(
+        collection(firestore, 'brands', managedBrandId, 'divisions'),
+        where('isActive', '==', true)
+    );
+  }, [managedBrandId, firestore]);
+  const { data: managedDivisions, isLoading: isLoadingManagedDivisions } = useCollection<Division>(managedDivisionsQuery);
+  
   // Effect to reset form state when dialog opens or user prop changes
   useEffect(() => {
     if (open) {
-      let defaultValues;
-      if (mode === 'edit' && user) {
-        let defaultBrandId: string | string[] = '';
-        if (user.role === 'hrd') {
-          defaultBrandId = Array.isArray(user.brandId) ? user.brandId : [];
-        } else {
-          defaultBrandId = typeof user.brandId === 'string' ? user.brandId : '';
-        }
-        
-        defaultValues = {
-          fullName: user.fullName,
-          email: user.email,
-          role: user.role,
-          employmentType: user.employmentType || 'karyawan',
-          isActive: user.isActive,
-          brandId: defaultBrandId,
-          positionTitle: user.positionTitle || '',
-          assignmentType: user.assignmentType || undefined,
-          assignedBrandIds: user.assignedBrandIds || [],
-          assignedDivisions: (user.assignedDivisions || []).join(', '),
-        };
-      } else { // Create mode
-        defaultValues = {
-          fullName: '',
-          email: '',
-          password: '',
-          role: 'hrd',
-          employmentType: 'karyawan',
-          isActive: true,
-          brandId: [],
-          positionTitle: '',
-          assignmentType: undefined,
-          assignedBrandIds: [],
-          assignedDivisions: '',
-        };
-      }
+      const defaultValues = mode === 'edit' && user ? {
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        employmentType: user.employmentType || 'karyawan',
+        isActive: user.isActive,
+        brandId: user.role === 'hrd' ? (Array.isArray(user.brandId) ? user.brandId : []) : (typeof user.brandId === 'string' ? user.brandId : ''),
+        isDivisionManager: user.isDivisionManager || false,
+        managedBrandId: user.managedBrandId || null,
+        managedDivision: user.managedDivision || null,
+      } : { // Create mode
+        fullName: '',
+        email: '',
+        password: '',
+        role: 'hrd',
+        employmentType: 'karyawan',
+        isActive: true,
+        brandId: [],
+        isDivisionManager: false,
+        managedBrandId: null,
+        managedDivision: null,
+      };
       form.reset(defaultValues as any);
     }
   }, [user, open, mode, form]);
@@ -147,6 +153,19 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
       form.setValue('brandId', '');
     }
   }, [role, form]);
+
+  // Effect to clear managed fields when user is not a manager
+  useEffect(() => {
+    if (!isDivisionManager) {
+      form.setValue('managedBrandId', null);
+      form.setValue('managedDivision', null);
+    }
+  }, [isDivisionManager, form]);
+
+  // Effect to clear division when brand changes
+  useEffect(() => {
+      form.setValue('managedDivision', null);
+  }, [managedBrandId, form]);
 
   async function handleCreate(values: FormValues) {
     if (!firebaseUser) throw new Error("Authentication error. Please log in again.");
@@ -181,10 +200,9 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
         employmentType: values.employmentType,
         isActive: values.isActive,
         brandId: values.brandId || null,
-        positionTitle: values.positionTitle || null,
-        assignmentType: values.assignmentType || null,
-        assignedBrandIds: values.assignedBrandIds || null,
-        assignedDivisions: (values as any).assignedDivisions?.split(',').map((s: string) => s.trim()).filter(Boolean) || null,
+        isDivisionManager: values.isDivisionManager,
+        managedBrandId: values.isDivisionManager ? values.managedBrandId : null,
+        managedDivision: values.isDivisionManager ? values.managedDivision : null,
         updatedAt: serverTimestamp(),
     };
     batch.update(userRef, dataToUpdate);
@@ -334,43 +352,55 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
                   <>
                       <Separator />
                       <section className="space-y-4">
-                          <h3 className="text-lg font-semibold border-b pb-2 mb-4">Penugasan Jabatan & Tanggung Jawab</h3>
-                          <FormField control={form.control} name="positionTitle" render={({ field }) => (<FormItem><FormLabel>Jabatan</FormLabel><FormControl><Input placeholder="Contoh: Kepala Divisi Creative" {...field} value={field.value || ''} /></FormControl><FormDescription>Jabatan operasional pengguna, terpisah dari role sistem.</FormDescription><FormMessage /></FormItem>)} />
-                          <FormField control={form.control} name="assignmentType" render={({ field }) => (
-                              <FormItem><FormLabel>Tipe Penugasan</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Pilih tipe penugasan" /></SelectTrigger></FormControl><SelectContent><SelectItem value="division_lead">Division Lead</SelectItem><SelectItem value="division_pic">Division PIC</SelectItem></SelectContent></Select><FormMessage /></FormItem>
-                          )} />
+                          <h3 className="text-lg font-semibold border-b pb-2 mb-4">Penugasan Manajer Divisi</h3>
                           <FormField
                               control={form.control}
-                              name="assignedBrandIds"
+                              name="isDivisionManager"
                               render={({ field }) => (
-                                  <FormItem>
-                                      <FormLabel>Brand yang Ditangani</FormLabel>
-                                      <div className="max-h-32 w-full rounded-md border p-4 overflow-y-auto space-y-2">
-                                      {brands?.map(brand => (
-                                          <FormItem key={brand.id} className="flex flex-row items-center space-x-3 space-y-0">
-                                              <FormControl>
-                                                  <Checkbox
-                                                      checked={field.value?.includes(brand.id!)}
-                                                      onCheckedChange={(checked) => {
-                                                          const currentValues = field.value || [];
-                                                          const newBrandIds = checked
-                                                              ? [...currentValues, brand.id!]
-                                                              : currentValues.filter((value) => value !== brand.id!);
-                                                          field.onChange(newBrandIds);
-                                                      }}
-                                                  />
-                                              </FormControl>
-                                              <FormLabel className="font-normal cursor-pointer">{brand.name}</FormLabel>
-                                          </FormItem>
-                                      ))}
+                                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                                      <div className="space-y-0.5">
+                                          <FormLabel>Jadikan sebagai Manager Divisi</FormLabel>
+                                          <FormDescription>Aktifkan untuk menetapkan pengguna ini sebagai penanggung jawab sebuah divisi.</FormDescription>
                                       </div>
-                                      <FormMessage />
+                                      <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
                                   </FormItem>
                               )}
                           />
-                          <FormField control={form.control} name="assignedDivisions" render={({ field }) => (
-                            <FormItem><FormLabel>Divisi yang Ditangani</FormLabel><FormControl><Input placeholder="Contoh: Creative, Marketing" {...field} value={field.value || ''} /></FormControl><FormDescription>Pisahkan nama divisi dengan koma.</FormDescription><FormMessage /></FormItem>
-                          )} />
+                          {isDivisionManager && (
+                              <div className="p-4 border rounded-lg space-y-4">
+                                  <FormField
+                                    control={form.control}
+                                    name="managedBrandId"
+                                    render={({ field }) => (<FormItem><FormLabel>Brand</FormLabel><Select onValueChange={field.onChange} value={field.value ?? ''} disabled={brandsLoading}><FormControl><SelectTrigger><SelectValue placeholder="Pilih brand" /></SelectTrigger></FormControl><SelectContent>{brands?.map(b => <SelectItem key={b.id!} value={b.id!}>{b.name}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)}
+                                  />
+                                  <FormField
+                                      control={form.control}
+                                      name="managedDivision"
+                                      render={({ field }) => (
+                                          <FormItem>
+                                              <FormLabel>Divisi</FormLabel>
+                                              <Select onValueChange={field.onChange} value={field.value ?? ''} disabled={!managedBrandId || isLoadingManagedDivisions}>
+                                                  <FormControl>
+                                                      <SelectTrigger>
+                                                          <SelectValue placeholder={
+                                                              isLoadingManagedDivisions ? "Loading..." :
+                                                              !managedBrandId ? "Pilih brand dulu" : 
+                                                              "Pilih divisi"
+                                                          } />
+                                                      </SelectTrigger>
+                                                  </FormControl>
+                                                  <SelectContent>
+                                                      {!isLoadingManagedDivisions && managedDivisions?.map(d => (
+                                                          <SelectItem key={d.id!} value={d.name}>{d.name}</SelectItem>
+                                                      ))}
+                                                  </SelectContent>
+                                              </Select>
+                                              <FormMessage />
+                                          </FormItem>
+                                      )}
+                                  />
+                              </div>
+                          )}
                       </section>
                   </>
                 )}
