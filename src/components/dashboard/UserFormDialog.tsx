@@ -208,13 +208,13 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0">
-        <DialogHeader className="p-6 pb-4 border-b">
+        <DialogHeader className="p-6 pb-4 border-b flex-shrink-0">
           <DialogTitle>{mode === 'edit' ? 'Edit Pengguna' : 'Buat Pengguna Baru'}</DialogTitle>
           <DialogDescription>
             {mode === 'edit' ? "Ubah detail pengguna di bawah ini." : "Isi detail untuk akun pengguna baru."}
           </DialogDescription>
         </DialogHeader>
-        <ScrollArea className="flex-grow -mx-6 px-6">
+        <div className="flex-grow overflow-y-auto px-6">
           <Form {...form}>
             <form id="user-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 py-4">
 
@@ -229,37 +229,47 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
 
               <section className="space-y-4">
                 <h3 className="text-lg font-semibold border-b pb-2 mb-4">Hak Akses & Penempatan</h3>
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField
-                        control={form.control}
-                        name="role"
-                        render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Role</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value} disabled={mode === 'edit' && user?.role === 'super-admin'}>
-                                <FormControl><SelectTrigger><SelectValue placeholder="Select a role" /></SelectTrigger></FormControl>
-                                <SelectContent>
-                                    {(mode === 'create' ? creatableRoles : allRolesForEdit).map((r) => (<SelectItem key={r} value={r} className="capitalize">{r.replace(/[-_]/g, ' ')}</SelectItem>))}
-                                </SelectContent>
-                            </Select>
-                            <FormMessage />
-                        </FormItem>
-                    )}/>
-                    <FormField
-                        control={form.control}
-                        name="employmentType"
-                        render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Jenis Pekerja</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
-                                <FormControl><SelectTrigger><SelectValue placeholder="Pilih jenis pekerja" /></SelectTrigger></FormControl>
-                                <SelectContent>
-                                    {EMPLOYMENT_TYPES.map((r) => (<SelectItem key={r} value={r} className="capitalize">{r}</SelectItem>))}
-                                </SelectContent>
-                            </Select>
-                            <FormMessage />
-                        </FormItem>
-                    )}/>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="role"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Role</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={mode === 'edit' && user?.role === 'super-admin'}>
+                          <FormControl>
+                            <SelectTrigger><SelectValue placeholder="Select a role" /></SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {(mode === 'create' ? creatableRoles : allRolesForEdit).map((r) => (
+                              <SelectItem key={r} value={r} className="capitalize">{r.replace(/[-_]/g, ' ')}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="employmentType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Jenis Pekerja</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger><SelectValue placeholder="Pilih jenis pekerja" /></SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {EMPLOYMENT_TYPES.map((r) => (
+                              <SelectItem key={r} value={r} className="capitalize">{r}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
                 
                 {role && role !== 'super-admin' && (
@@ -270,30 +280,29 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Akses Brand HRD</FormLabel>
-                          <div className="h-32 w-full rounded-md border p-4 overflow-y-auto space-y-2">
+                          <FormDescription>Pilih satu atau lebih brand yang akan dikelola oleh HRD ini.</FormDescription>
+                          <div className="max-h-32 w-full rounded-md border p-4 overflow-y-auto space-y-2">
                             {brandsLoading ? (
                               <p className="text-sm text-muted-foreground">Loading brands...</p>
                             ) : (
                               brands?.map((brand) => (
-                                <FormItem key={brand.id} className="flex flex-row items-center space-x-3 space-y-0">
-                                  <FormControl>
-                                    <Checkbox
-                                      checked={Array.isArray(field.value) && field.value.includes(brand.id!)}
-                                      onCheckedChange={(checked) => {
-                                        const currentValues = Array.isArray(field.value) ? field.value : [];
-                                        const newBrandIds = checked
-                                          ? [...currentValues, brand.id!]
-                                          : currentValues.filter((value) => value !== brand.id!);
-                                        field.onChange(newBrandIds);
-                                      }}
-                                    />
-                                  </FormControl>
-                                  <FormLabel className="font-normal">{brand.name}</FormLabel>
-                                </FormItem>
+                                <div key={brand.id} className="flex items-center space-x-3">
+                                  <Checkbox
+                                    id={`brand-${brand.id}`}
+                                    checked={Array.isArray(field.value) && field.value.includes(brand.id!)}
+                                    onCheckedChange={(checked) => {
+                                      const currentValues = Array.isArray(field.value) ? field.value : [];
+                                      const newBrandIds = checked
+                                        ? [...currentValues, brand.id!]
+                                        : currentValues.filter((value) => value !== brand.id!);
+                                      field.onChange(newBrandIds);
+                                    }}
+                                  />
+                                  <label htmlFor={`brand-${brand.id}`} className="text-sm font-normal cursor-pointer">{brand.name}</label>
+                                </div>
                               ))
                             )}
                           </div>
-                          <FormDescription>Pilih satu atau lebih brand yang akan dikelola oleh HRD ini.</FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -303,9 +312,9 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
                   )
                 )}
               </section>
-
+              
               <Separator />
-
+              
               <section>
                  <h3 className="text-lg font-semibold border-b pb-2 mb-4">Status</h3>
                 <FormField control={form.control} name="isActive" render={({ field }) => (<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm"><div className="space-y-0.5"><FormLabel>Status Aktif</FormLabel><FormDescription>Nonaktifkan untuk menonaktifkan sementara akses pengguna.</FormDescription></div><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl></FormItem>)} />
@@ -313,7 +322,7 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
 
             </form>
           </Form>
-        </ScrollArea>
+        </div>
         <DialogFooter className="p-6 pt-4 border-t flex-shrink-0">
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Batal</Button>
           <Button type="submit" form="user-form" disabled={loading}>
