@@ -31,6 +31,12 @@ export type UserProfile = {
   isProfileComplete?: boolean;
   photoUrl?: string;
   inviteBatchId?: string;
+
+  // New fields for operational roles
+  positionTitle?: string;
+  assignmentType?: 'division_lead' | 'division_pic';
+  assignedBrandIds?: string[];
+  assignedDivisions?: string[];
 };
 
 export type EmployeeProfile = {

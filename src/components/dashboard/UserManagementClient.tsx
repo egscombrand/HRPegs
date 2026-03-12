@@ -100,53 +100,31 @@ export function UserManagementClient() {
 
   const usersByGroup = useMemo(() => {
     if (!users) return {};
-    const groups: { [key: string]: UserProfile[] } = {
-      'super-admin': [],
-      'hrd': [],
-      'manager': [],
-      'karyawan_aktif': [],
-      'probation': [],
-      'magang': [],
-      'kandidat': [],
-    };
+    const groups: { [key: string]: UserProfile[] } = {};
 
     users.forEach((user) => {
-      switch (user.role) {
-        case 'super-admin':
-          groups['super-admin'].push(user);
-          break;
-        case 'hrd':
-          groups['hrd'].push(user);
-          break;
-        case 'manager':
-          groups['manager'].push(user);
-          break;
-        case 'kandidat':
-          groups['kandidat'].push(user);
-          break;
-        case 'karyawan':
-          if (user.employmentType === 'magang') {
-            groups['magang'].push(user);
-          } else if (user.employmentType === 'training' || user.employmentStage === 'probation') {
-            groups['probation'].push(user);
-          } else {
-            groups['karyawan_aktif'].push(user);
-          }
-          break;
-        default:
-          if (!groups.kandidat) groups.kandidat = [];
-          groups.kandidat.push(user);
-      }
-    });
+        let groupKey = user.role;
 
-    Object.keys(groups).forEach(key => {
-      if (groups[key].length === 0) {
-        delete groups[key];
-      }
+        // Specific grouping for 'karyawan' role based on their employment stage/type
+        if (user.role === 'karyawan') {
+            if (user.employmentType === 'magang') {
+                groupKey = 'magang';
+            } else if (user.employmentType === 'training' || user.employmentStage === 'probation') {
+                groupKey = 'probation';
+            } else {
+                groupKey = 'karyawan_aktif';
+            }
+        }
+        
+        if (!groups[groupKey]) {
+            groups[groupKey] = [];
+        }
+        groups[groupKey].push(user);
     });
 
     return groups;
   }, [users]);
+
 
   const handleCreateUser = () => {
     setSelectedUser(null);
@@ -248,9 +226,10 @@ export function UserManagementClient() {
                       <TableRow>
                         <TableHead>Full Name</TableHead>
                         <TableHead>Email</TableHead>
-                        {groupKey !== 'super-admin' && groupKey !== 'kandidat' && <TableHead>Brand</TableHead>}
+                        <TableHead>Role</TableHead>
+                        <TableHead>Jabatan/Tugas</TableHead>
+                        <TableHead>Brand</TableHead>
                         <TableHead>Status</TableHead>
-                        {groupKey === 'magang' && <TableHead>Sub-Type</TableHead>}
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -261,26 +240,19 @@ export function UserManagementClient() {
                                 ? user.brandId.map(id => brandMap[id] || id).join(', ')
                                 : brandMap[user.brandId as string] || '-')
                             : '-';
-                        
-                        const employmentStageDisplay = user.employmentStage === 'intern_education' ? 'Pendidikan' : user.employmentStage === 'intern_pre_probation' ? 'Pra-Probation' : '-';
 
                         return (
                         <TableRow key={user.uid}>
                           <TableCell className="font-medium">{user.fullName}</TableCell>
                           <TableCell>{user.email}</TableCell>
-                          {groupKey !== 'super-admin' && groupKey !== 'kandidat' && (
-                            <TableCell>{brandDisplay}</TableCell>
-                          )}
+                          <TableCell><Badge variant="outline" className="capitalize">{user.role.replace('_', ' ')}</Badge></TableCell>
+                          <TableCell>{user.positionTitle ? <Badge variant="secondary">{user.positionTitle}</Badge> : '-'}</TableCell>
+                          <TableCell>{brandDisplay}</TableCell>
                           <TableCell>
                             <Badge variant={user.isActive ? 'default' : 'destructive'}>
                               {user.isActive ? 'Active' : 'Inactive'}
                             </Badge>
                           </TableCell>
-                          {groupKey === 'magang' && (
-                            <TableCell>
-                                {user.employmentStage ? (<Badge variant="outline">{employmentStageDisplay}</Badge>) : '-'}
-                            </TableCell>
-                          )}
                           <TableCell className="text-right">
                             <DropdownMenu
                               open={openMenuUid === user.uid}

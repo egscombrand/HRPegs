@@ -40,31 +40,35 @@ import { Checkbox } from '../ui/checkbox';
 import { collection, doc, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { ScrollArea } from '../ui/scroll-area';
 import { Separator } from '../ui/separator';
+import { Textarea } from '../ui/textarea';
 
 // --- Zod Schemas for Validation ---
 const brandSchema = z.union([z.string(), z.array(z.string())]).optional();
+const assignmentTypeEnum = z.enum(['division_lead', 'division_pic']).optional();
 
 const creatableRoles: UserRole[] = ['hrd', 'manager'];
 const allRolesForEdit: UserRole[] = ['super-admin', 'hrd', 'manager', 'karyawan', 'kandidat'];
 
-const createSchema = z.object({
+const baseSchema = z.object({
   fullName: z.string().min(2, { message: 'Full name is required.' }),
   email: z.string().email({ message: 'A valid email is required.' }),
-  password: z.string().min(8, { message: "Password must be at least 8 characters." }),
-  role: z.enum(creatableRoles),
-  employmentType: z.enum(EMPLOYMENT_TYPES, { required_error: 'Jenis pekerja harus dipilih.' }),
-  isActive: z.boolean().default(true),
-  brandId: brandSchema,
-});
-
-const editSchema = z.object({
-  fullName: z.string().min(2, { message: 'Full name is required.' }),
-  email: z.string().email(), // Readonly
   role: z.enum(ROLES),
   employmentType: z.enum(EMPLOYMENT_TYPES).optional(),
-  isActive: z.boolean(),
+  isActive: z.boolean().default(true),
   brandId: brandSchema,
+  // New assignment fields
+  positionTitle: z.string().optional(),
+  assignmentType: assignmentTypeEnum,
+  assignedBrandIds: z.array(z.string()).optional(),
+  assignedDivisions: z.string().optional(),
 });
+
+const createSchema = baseSchema.extend({
+  password: z.string().min(8, { message: "Password must be at least 8 characters." }),
+  role: z.enum(creatableRoles), // Stricter role validation for creation
+});
+
+const editSchema = baseSchema;
 
 type FormValues = z.infer<typeof createSchema> | z.infer<typeof editSchema>;
 
@@ -78,9 +82,9 @@ interface UserFormDialogProps {
 export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps) {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const { toast } = useToast();
-  const { firebaseUser } = useAuth();
+  const { firebaseUser, userProfile: currentUserProfile } = useAuth();
   const firestore = useFirestore();
+  const { toast } = useToast();
   const mode = user ? 'edit' : 'create';
 
   const brandsCollectionRef = useMemoFirebase(() => collection(firestore, 'brands'), [firestore]);
@@ -111,6 +115,10 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
           employmentType: user.employmentType || 'karyawan',
           isActive: user.isActive,
           brandId: defaultBrandId,
+          positionTitle: user.positionTitle || '',
+          assignmentType: user.assignmentType || undefined,
+          assignedBrandIds: user.assignedBrandIds || [],
+          assignedDivisions: (user.assignedDivisions || []).join(', '),
         };
       } else { // Create mode
         defaultValues = {
@@ -120,7 +128,11 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
           role: 'hrd',
           employmentType: 'karyawan',
           isActive: true,
-          brandId: [], // Default to array for HRD role
+          brandId: [],
+          positionTitle: '',
+          assignmentType: undefined,
+          assignedBrandIds: [],
+          assignedDivisions: '',
         };
       }
       form.reset(defaultValues as any);
@@ -163,12 +175,17 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
     const adminRoleRef = doc(firestore, 'roles_admin', user.uid);
     const hrdRoleRef = doc(firestore, 'roles_hrd', user.uid);
 
-    const dataToUpdate = {
+    const dataToUpdate: Partial<UserProfile> = {
         fullName: values.fullName,
+        nameLower: values.fullName.toLowerCase(),
         role: values.role,
         employmentType: values.employmentType,
         isActive: values.isActive,
         brandId: values.brandId || null,
+        positionTitle: values.positionTitle || null,
+        assignmentType: values.assignmentType || null,
+        assignedBrandIds: values.assignedBrandIds || null,
+        assignedDivisions: (values as any).assignedDivisions?.split(',').map((s: string) => s.trim()).filter(Boolean) || null,
         updatedAt: serverTimestamp(),
     };
     batch.update(userRef, dataToUpdate);
@@ -214,7 +231,7 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
             {mode === 'edit' ? "Ubah detail pengguna di bawah ini." : "Isi detail untuk akun pengguna baru."}
           </DialogDescription>
         </DialogHeader>
-        <div className="flex-grow overflow-y-auto">
+        <ScrollArea className="flex-grow">
           <Form {...form}>
             <form id="user-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 px-6 py-4">
 
@@ -286,21 +303,21 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
                                 <p className="text-sm text-muted-foreground">Loading brands...</p>
                                ) : (
                                 brands?.map((brand) => (
-                                    <FormItem key={brand.id} className="flex flex-row items-start space-x-3 space-y-0">
-                                        <FormControl>
-                                            <Checkbox
-                                                checked={Array.isArray(field.value) && field.value.includes(brand.id!)}
-                                                onCheckedChange={(checked) => {
-                                                    const currentValues = Array.isArray(field.value) ? field.value : [];
-                                                    const newBrandIds = checked
-                                                        ? [...currentValues, brand.id!]
-                                                        : currentValues.filter((value) => value !== brand.id!);
-                                                    field.onChange(newBrandIds);
-                                                }}
-                                            />
-                                        </FormControl>
-                                        <FormLabel className="font-normal cursor-pointer">{brand.name}</FormLabel>
-                                    </FormItem>
+                                  <FormItem key={brand.id} className="flex flex-row items-center space-x-3 space-y-0">
+                                      <FormControl>
+                                          <Checkbox
+                                              checked={Array.isArray(field.value) && field.value.includes(brand.id!)}
+                                              onCheckedChange={(checked) => {
+                                                  const currentValues = Array.isArray(field.value) ? field.value : [];
+                                                  const newBrandIds = checked
+                                                      ? [...currentValues, brand.id!]
+                                                      : currentValues.filter((value) => value !== brand.id!);
+                                                  field.onChange(newBrandIds);
+                                              }}
+                                          />
+                                      </FormControl>
+                                      <FormLabel className="font-normal cursor-pointer">{brand.name}</FormLabel>
+                                  </FormItem>
                                 ))
                                )}
                             </div>
@@ -313,6 +330,51 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
                   )
                 )}
               </section>
+
+              {currentUserProfile?.role === 'super-admin' && mode === 'edit' && user?.role !== 'super-admin' && (
+                <>
+                    <Separator />
+                    <section className="space-y-4">
+                        <h3 className="text-lg font-semibold border-b pb-2 mb-4">Penugasan Jabatan & Tanggung Jawab</h3>
+                        <FormField control={form.control} name="positionTitle" render={({ field }) => (<FormItem><FormLabel>Jabatan</FormLabel><FormControl><Input placeholder="Contoh: Kepala Divisi Creative" {...field} value={field.value || ''} /></FormControl><FormDescription>Jabatan operasional pengguna, terpisah dari role sistem.</FormDescription><FormMessage /></FormItem>)} />
+                        <FormField control={form.control} name="assignmentType" render={({ field }) => (
+                            <FormItem><FormLabel>Tipe Penugasan</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Pilih tipe penugasan" /></SelectTrigger></FormControl><SelectContent><SelectItem value="division_lead">Division Lead</SelectItem><SelectItem value="division_pic">Division PIC</SelectItem></SelectContent></Select><FormMessage /></FormItem>
+                        )} />
+                        <FormField
+                            control={form.control}
+                            name="assignedBrandIds"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Brand yang Ditangani</FormLabel>
+                                    <div className="max-h-32 w-full rounded-md border p-4 overflow-y-auto space-y-2">
+                                    {brands?.map(brand => (
+                                        <FormItem key={brand.id} className="flex flex-row items-start space-x-3 space-y-0">
+                                            <FormControl>
+                                                <Checkbox
+                                                    checked={field.value?.includes(brand.id!)}
+                                                    onCheckedChange={(checked) => {
+                                                        const currentValues = field.value || [];
+                                                        const newBrandIds = checked
+                                                            ? [...currentValues, brand.id!]
+                                                            : currentValues.filter((value) => value !== brand.id!);
+                                                        field.onChange(newBrandIds);
+                                                    }}
+                                                />
+                                            </FormControl>
+                                            <FormLabel className="font-normal cursor-pointer">{brand.name}</FormLabel>
+                                        </FormItem>
+                                    ))}
+                                    </div>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <FormField control={form.control} name="assignedDivisions" render={({ field }) => (
+                          <FormItem><FormLabel>Divisi yang Ditangani</FormLabel><FormControl><Textarea placeholder="Contoh: Creative, Marketing, Finance" {...field} value={field.value || ''} /></FormControl><FormDescription>Pisahkan nama divisi dengan koma.</FormDescription><FormMessage /></FormItem>
+                        )} />
+                    </section>
+                </>
+              )}
               
               <Separator />
               
@@ -323,7 +385,7 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
 
             </form>
           </Form>
-        </div>
+        </ScrollArea>
         <DialogFooter className="p-6 pt-4 border-t flex-shrink-0">
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Batal</Button>
           <Button type="submit" form="user-form" disabled={loading}>
