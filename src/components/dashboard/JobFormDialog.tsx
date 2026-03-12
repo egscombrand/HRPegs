@@ -4,9 +4,9 @@ import { useEffect, useState, useMemo } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { doc, collection, serverTimestamp } from 'firebase/firestore';
+import { doc, collection, serverTimestamp, query, where } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { useFirestore, setDocumentNonBlocking, useFirebaseApp } from '@/firebase';
+import { useFirestore, setDocumentNonBlocking, useFirebaseApp, useCollection, useMemoFirebase } from '@/firebase';
 import { useAuth } from '@/providers/auth-provider';
 import { Button } from '@/components/ui/button';
 import {
@@ -19,7 +19,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, UploadCloud } from 'lucide-react';
-import type { Job, Brand } from '@/lib/types';
+import type { Job, Brand, Division } from '@/lib/types';
 import { RichTextEditor } from '../ui/RichTextEditor';
 import Image from 'next/image';
 import { GoogleDatePicker } from '../ui/google-date-picker';
@@ -74,6 +74,24 @@ export function JobFormDialog({ open, onOpenChange, job, brands }: JobFormDialog
       specialRequirementsHtml: '',
     },
   });
+
+  const selectedBrandId = form.watch('brandId');
+
+  const divisionsQuery = useMemoFirebase(() => {
+    if (!selectedBrandId) return null;
+    return query(
+        collection(firestore, 'brands', selectedBrandId, 'divisions'),
+        where('isActive', '==', true)
+    );
+  }, [selectedBrandId, firestore]);
+
+  const { data: divisions, isLoading: isLoadingDivisions } = useCollection<Division>(divisionsQuery);
+  
+  useEffect(() => {
+    if(form.formState.isDirty) {
+        form.setValue('division', '');
+    }
+  }, [selectedBrandId, form]);
 
   // Clean up object URL for image preview to prevent memory leaks
   useEffect(() => {
@@ -205,13 +223,38 @@ export function JobFormDialog({ open, onOpenChange, job, brands }: JobFormDialog
                     <FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="division" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Division</FormLabel>
-                    <FormControl><Input placeholder="e.g., Engineering" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
+                <FormField
+                  control={form.control}
+                  name="division"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Division</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                        disabled={!selectedBrandId || isLoadingDivisions}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder={
+                              isLoadingDivisions ? "Loading divisions..." :
+                              !selectedBrandId ? "Select a brand first" : 
+                              "Select a division"
+                            } />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {!isLoadingDivisions && divisions && divisions.map((div) => (
+                              <SelectItem key={div.id!} value={div.name}>
+                                {div.name}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <FormField control={form.control} name="brandId" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Company / Brand</FormLabel>
