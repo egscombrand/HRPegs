@@ -46,7 +46,8 @@ const brandSchema = z.union([z.string(), z.array(z.string())]).optional();
 const creatableRoles: UserRole[] = ['hrd', 'manager'];
 const allRolesForEdit: UserRole[] = ['super-admin', 'hrd', 'manager', 'karyawan', 'kandidat'];
 
-const baseSchema = z.object({
+// Define the base object schema without refinement first
+const baseObjectSchema = z.object({
   fullName: z.string().min(2, { message: 'Full name is required.' }),
   email: z.string().email({ message: 'A valid email is required.' }),
   role: z.enum(ROLES),
@@ -54,11 +55,13 @@ const baseSchema = z.object({
   isActive: z.boolean().default(true),
   brandId: brandSchema,
   
-  // Simplified manager assignment
   isDivisionManager: z.boolean().default(false),
   managedBrandId: z.string().optional().nullable(),
   managedDivision: z.string().optional().nullable(),
-}).superRefine((data, ctx) => {
+});
+
+// Define the refinement logic separately
+const managerRefinement = (data: z.infer<typeof baseObjectSchema>, ctx: z.RefinementCtx) => {
     if (data.isDivisionManager) {
         if (!data.managedBrandId) {
             ctx.addIssue({ path: ["managedBrandId"], message: "Brand harus dipilih." });
@@ -67,15 +70,15 @@ const baseSchema = z.object({
             ctx.addIssue({ path: ["managedDivision"], message: "Divisi harus dipilih." });
         }
     }
-});
+};
 
-
-const createSchema = baseSchema.extend({
+// Now, define the final schemas by extending and/or applying the refinement
+const createSchema = baseObjectSchema.extend({
   password: z.string().min(8, { message: "Password must be at least 8 characters." }),
   role: z.enum(creatableRoles), // Stricter role validation for creation
-});
+}).superRefine(managerRefinement);
 
-const editSchema = baseSchema;
+const editSchema = baseObjectSchema.superRefine(managerRefinement);
 
 type FormValues = z.infer<typeof createSchema> | z.infer<typeof editSchema>;
 
