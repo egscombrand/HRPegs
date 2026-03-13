@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, PlusCircle, Trash2, Send } from 'lucide-react';
+import { Loader2, PlusCircle, Trash2, Send, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
 import { useFirestore, setDocumentNonBlocking } from '@/firebase';
 import { doc, serverTimestamp, Timestamp, collection } from 'firebase/firestore';
@@ -132,6 +132,11 @@ export function OvertimeSubmissionForm({ open, onOpenChange, submission, employe
         positionTitle: finalPositionTitle,
     }
   }, [userProfile, employeeProfile, brands]);
+  
+  const approvalFlow = useMemo(() => {
+      if (userProfile?.isDivisionManager) return "Langsung ke HRD";
+      return "Manager Divisi -> HRD";
+  }, [userProfile]);
 
   const totalDuration = useMemo(() => {
     if (!startTimeStr || !endTimeStr) return 0;
@@ -216,27 +221,38 @@ export function OvertimeSubmissionForm({ open, onOpenChange, submission, employe
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0">
+      <DialogContent className="max-w-5xl h-[90vh] flex flex-col p-0">
         <DialogHeader className="p-6 pb-2">
-          <DialogTitle>{mode === 'create' ? 'Buat Pengajuan Lembur' : 'Edit Pengajuan Lembur'}</DialogTitle>
+          <DialogTitle>Form Pengajuan Lembur</DialogTitle>
           <DialogDescription>
-            Lengkapi informasi berikut untuk mengajukan lembur.
+            Lengkapi informasi berikut untuk mengajukan lembur. Pengajuan akan diteruskan sesuai alur persetujuan yang berlaku.
           </DialogDescription>
         </DialogHeader>
         <div className="flex-grow overflow-y-auto px-6">
         <Form {...form}>
           <form id="overtime-form" onSubmit={form.handleSubmit(handleSubmit)} className="space-y-8 py-4">
-            <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="p-4 border rounded-lg space-y-2 text-sm">
-                    <p className="text-muted-foreground">Nama: <span className="font-semibold text-foreground">{displayInfo.fullName}</span></p>
-                    <p className="text-muted-foreground">Status: <span className="font-semibold text-foreground">{displayInfo.employmentStatus}</span></p>
-                    <p className="text-muted-foreground">Brand: <span className="font-semibold text-foreground">{displayInfo.brandName}</span></p>
-                    <p className="text-muted-foreground">Divisi: <span className="font-semibold text-foreground">{displayInfo.division}</span></p>
-                    <p className="text-muted-foreground">Jabatan: <span className="font-semibold text-foreground">{displayInfo.positionTitle}</span></p>
+                    <p className="font-semibold mb-2">Profil Anda</p>
+                    <p className="text-muted-foreground">Nama: <span className="font-medium text-foreground">{displayInfo.fullName}</span></p>
+                    <p className="text-muted-foreground">Status: <span className="font-medium text-foreground">{displayInfo.employmentStatus}</span></p>
+                    <p className="text-muted-foreground">Brand: <span className="font-medium text-foreground">{displayInfo.brandName}</span></p>
+                    <p className="text-muted-foreground">Divisi: <span className="font-medium text-foreground">{displayInfo.division}</span></p>
+                    <p className="text-muted-foreground">Jabatan: <span className="font-medium text-foreground">{displayInfo.positionTitle}</span></p>
+                </div>
+                 <div className="p-4 border rounded-lg space-y-2 text-sm">
+                    <p className="font-semibold mb-2">Informasi Persetujuan</p>
+                    <p className="text-muted-foreground">Manager Divisi:</p>
+                    <p className="font-medium text-foreground">{employeeProfile?.supervisorName || 'Belum Ditentukan'}</p>
+                    <p className="text-muted-foreground mt-2">Divisi Approval Awal:</p>
+                    <p className="font-medium text-foreground">{displayInfo.division}</p>
+                     <p className="text-muted-foreground mt-2">Alur Persetujuan:</p>
+                    <p className="font-medium text-foreground">{approvalFlow}</p>
                 </div>
                 <div className="p-4 border rounded-lg space-y-2 text-sm flex flex-col items-center justify-center">
                     <p className="text-muted-foreground">Total Estimasi Durasi:</p>
-                    <p className="font-bold text-4xl">{totalDuration > 0 ? `${totalDuration} menit` : '-'}</p>
+                    <p className="font-bold text-5xl">{totalDuration > 0 ? `${totalDuration}` : '-'}</p>
+                     <p className="font-semibold text-muted-foreground">menit</p>
                 </div>
             </section>
             
