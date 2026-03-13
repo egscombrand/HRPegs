@@ -45,8 +45,13 @@ export function DashboardLayout({
   const menuConfig = useMemo(() => {
     if (!roleKey) return [];
     
-    let baseConfig = MENU_CONFIG[roleKey] || [];
-    let finalConfig = JSON.parse(JSON.stringify(baseConfig));
+    const baseConfig = MENU_CONFIG[roleKey] || [];
+    // Perform a deep copy of the config to avoid mutating the original object.
+    // JSON.stringify/parse breaks React elements, so we do it manually.
+    let finalConfig = baseConfig.map(group => ({
+      ...group,
+      items: group.items.map(item => ({ ...item })),
+    }));
 
     if (userProfile?.isDivisionManager) {
         const managerApprovalMenu: MenuItem = {
