@@ -53,11 +53,11 @@ export function OvertimeSubmissionForm({ open, onOpenChange, submission, employe
   const { userProfile } = useAuth();
   const firestore = useFirestore();
   const { toast } = useToast();
-  const mode = submission ? 'Edit' : 'Create';
+  const mode = submission ? 'Edit' : 'Buat';
 
   const form = useForm<FormValues>({
     resolver: zodResolver(submissionSchema),
-    defaultValues: { tasks: [{ description: '', estimatedMinutes: 60 }] },
+    defaultValues: { tasks: [{ description: '', estimatedMinutes: 60, actualMinutes: null }] },
   });
 
   const { fields, append, remove } = useFieldArray({
@@ -161,7 +161,7 @@ export function OvertimeSubmissionForm({ open, onOpenChange, submission, employe
           startTime: submission.startTime,
           endTime: submission.endTime,
           overtimeType: submission.overtimeType,
-          tasks: submission.tasks || [{ description: '', estimatedMinutes: 60 }],
+          tasks: submission.tasks || [{ description: '', estimatedMinutes: 60, actualMinutes: null }],
           reason: submission.reason,
           location: submission.location,
           employeeNotes: submission.employeeNotes || '',
@@ -172,7 +172,7 @@ export function OvertimeSubmissionForm({ open, onOpenChange, submission, employe
           startTime: '17:00',
           endTime: '19:00',
           overtimeType: 'hari_kerja',
-          tasks: [{ description: '', estimatedMinutes: 60 }],
+          tasks: [{ description: '', estimatedMinutes: 60, actualMinutes: null }],
           reason: '',
           location: 'kantor',
           employeeNotes: '',
@@ -182,27 +182,45 @@ export function OvertimeSubmissionForm({ open, onOpenChange, submission, employe
   }, [open, submission, form]);
 
   const handleSubmit = async (values: FormValues) => {
-    if (!userProfile) return;
+    if (!userProfile) {
+        toast({ variant: 'destructive', title: 'Error', description: 'Authentication not found.' });
+        return;
+    };
     setIsSaving(true);
     try {
       const docRef = submission ? doc(firestore, 'overtime_submissions', submission.id!) : doc(collection(firestore, 'overtime_submissions'));
       
-      const payload: Partial<OvertimeSubmission> = {
-        ...values,
+      const payload: any = {
         date: Timestamp.fromDate(values.date),
+        startTime: values.startTime,
+        endTime: values.endTime,
+        overtimeType: values.overtimeType,
+        tasks: values.tasks.map(task => ({
+            description: task.description,
+            estimatedMinutes: task.estimatedMinutes,
+            actualMinutes: task.actualMinutes ?? null, // Ensure null instead of undefined
+        })),
+        reason: values.reason,
+        location: values.location,
+        employeeNotes: values.employeeNotes || null, // Ensure null instead of undefined
         totalDurationMinutes: totalDuration,
         status: userProfile.isDivisionManager ? 'pending_hrd' : 'pending_manager',
-        updatedAt: serverTimestamp() as Timestamp,
+        updatedAt: serverTimestamp(),
       };
 
-      if (mode === 'create') {
+      if (mode === 'Buat') {
+        const userBrandId = Array.isArray(userProfile.brandId) ? userProfile.brandId[0] : userProfile.brandId;
+        if (!userBrandId) {
+            throw new Error("Brand penempatan Anda belum diatur. Harap hubungi HRD.");
+        }
+        
         payload.uid = userProfile.uid;
         payload.fullName = userProfile.fullName;
-        payload.brandId = Array.isArray(userProfile.brandId) ? userProfile.brandId[0] : userProfile.brandId as string;
+        payload.brandId = userBrandId;
         payload.division = displayInfo.division;
         payload.positionTitle = displayInfo.positionTitle;
-        payload.managerUid = employeeProfile?.supervisorUid || 'NO_MANAGER_ASSIGNED'; // Fallback
-        payload.createdAt = serverTimestamp() as Timestamp;
+        payload.managerUid = employeeProfile?.supervisorUid || null;
+        payload.createdAt = serverTimestamp();
       }
       
       await setDocumentNonBlocking(docRef, payload, { merge: true });
@@ -220,7 +238,7 @@ export function OvertimeSubmissionForm({ open, onOpenChange, submission, employe
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl h-[90vh] flex flex-col p-0">
         <DialogHeader className="p-6 pb-2">
-          <DialogTitle>Form Pengajuan Lembur</DialogTitle>
+          <DialogTitle>{mode} Pengajuan Lembur</DialogTitle>
           <DialogDescription>
             Lengkapi informasi berikut untuk mengajukan lembur. Pengajuan akan diteruskan sesuai alur persetujuan yang berlaku.
           </DialogDescription>
@@ -238,7 +256,7 @@ export function OvertimeSubmissionForm({ open, onOpenChange, submission, employe
                     <p className="text-muted-foreground">Jabatan: <span className="font-medium text-foreground">{displayInfo.positionTitle}</span></p>
                 </div>
                  <div className="p-4 border rounded-lg space-y-2 text-sm">
-                    <p className="font-semibold mb-2">Informasi Persetujuan</p>
+                    <p className="font-semibold mb-2">Alur Persetujuan</p>
                     <p className="text-muted-foreground">Manager Divisi:</p>
                     <p className="font-medium text-foreground">{employeeProfile?.supervisorName || 'Belum Ditentukan'}</p>
                     <p className="text-muted-foreground mt-2">Divisi Approval Awal:</p>
@@ -265,7 +283,7 @@ export function OvertimeSubmissionForm({ open, onOpenChange, submission, employe
 
              <section className="space-y-4">
                 <FormLabel>Rincian Pekerjaan</FormLabel>
-                <div className="space-y-4">
+                <div className="space-y-6">
                     {fields.map((field, index) => (
                         <div key={field.id} className="p-4 border rounded-md relative space-y-4">
                             <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10" onClick={() => remove(index)}>
@@ -315,7 +333,7 @@ export function OvertimeSubmissionForm({ open, onOpenChange, submission, employe
                         </div>
                     ))}
                 </div>
-                 <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => append({ description: '', estimatedMinutes: 60 })}>
+                 <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => append({ description: '', estimatedMinutes: 60, actualMinutes: null })}>
                     <PlusCircle className="mr-2 h-4 w-4"/>
                     Tambah Tugas
                 </Button>
