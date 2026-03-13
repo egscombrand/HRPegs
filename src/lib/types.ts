@@ -36,6 +36,8 @@ export type UserProfile = {
   isDivisionManager?: boolean;
   managedBrandId?: string | null;
   managedDivision?: string | null;
+  division?: string | null;
+  positionTitle?: string | null;
 
   updatedAt?: Timestamp;
 };
@@ -751,3 +753,45 @@ export type DailyReport = {
   reviewedAt?: Timestamp | null;
   reviewerNotes?: string | null;
 };
+
+
+export type OvertimeSubmission = {
+    id?: string;
+    uid: string;
+    fullName: string;
+    brandId: string;
+    division: string;
+    positionTitle: string;
+    date: Timestamp;
+    startTime: string; // "HH:mm"
+    endTime: string; // "HH:mm"
+    totalDurationMinutes: number;
+    overtimeType: 'hari_kerja' | 'hari_libur' | 'urgent';
+    tasks: {
+        description: string;
+        estimatedMinutes?: number;
+        actualMinutes?: number;
+        output?: string;
+    }[];
+    reason: string;
+    location: 'kantor' | 'remote' | 'site';
+    employeeNotes?: string;
+    attachments?: string[];
+    status:
+      | 'draft'
+      | 'pending_manager'
+      | 'rejected_manager'
+      | 'revision_manager'
+      | 'pending_hrd'
+      | 'rejected_hrd'
+      | 'revision_hrd'
+      | 'approved';
+    managerUid?: string;
+    managerNotes?: string;
+    managerDecisionAt?: Timestamp;
+    hrdReviewerUid?: string;
+    hrdNotes?: string;
+    hrdDecisionAt?: Timestamp;
+    createdAt: Timestamp;
+    updatedAt: Timestamp;
+}

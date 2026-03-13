@@ -65,6 +65,14 @@
         "managedDivision": {
           "type": "string",
           "description": "The name of the division this user manages."
+        },
+        "division": {
+          "type": "string",
+          "description": "The name of the division the user belongs to."
+        },
+        "positionTitle": {
+          "type": "string",
+          "description": "The user's specific job title, e.g., 'Kepala Divisi Creative' or 'Staf Keuangan'."
         }
       },
       "required": [
@@ -863,7 +871,6 @@
     "OvertimeSubmission": {
       "title": "Overtime Submission",
       "description": "Represents an employee's request to work overtime, including details and an approval workflow.",
-      "type": "object",
       "properties": {
         "uid": { "type": "string", "description": "UID of the user submitting the request." },
         "fullName": { "type": "string" },

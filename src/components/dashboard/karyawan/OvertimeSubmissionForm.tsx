@@ -91,6 +91,8 @@ export function OvertimeSubmissionForm({ open, onOpenChange, submission, employe
     let finalPositionTitle = '-';
     if (employeeProfile?.positionTitle) {
       finalPositionTitle = employeeProfile.positionTitle;
+    } else if (userProfile?.positionTitle) {
+      finalPositionTitle = userProfile.positionTitle;
     } else if (userProfile?.isDivisionManager && userProfile.managedDivision) {
       finalPositionTitle = `Manager Divisi ${userProfile.managedDivision}`;
     } else {
@@ -111,7 +113,7 @@ export function OvertimeSubmissionForm({ open, onOpenChange, submission, employe
           break;
       }
       
-      const divisionName = employeeProfile?.division;
+      const divisionName = employeeProfile?.division || userProfile?.division;
       if (divisionName) {
         finalPositionTitle = `${baseTitle} ${divisionName}`;
       } else {
@@ -126,7 +128,7 @@ export function OvertimeSubmissionForm({ open, onOpenChange, submission, employe
         fullName: userProfile?.fullName || '',
         employmentStatus: statusLabel,
         brandName: employeeProfile?.brandName || (singleBrandId ? brandMap.get(singleBrandId) : 'N/A'),
-        division: employeeProfile?.division || 'N/A',
+        division: employeeProfile?.division || userProfile?.managedDivision || 'N/A',
         positionTitle: finalPositionTitle,
     }
   }, [userProfile, employeeProfile, brands]);

@@ -195,6 +195,9 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
     const adminRoleRef = doc(firestore, 'roles_admin', user.uid);
     const hrdRoleRef = doc(firestore, 'roles_hrd', user.uid);
 
+    const managedBrand = values.isDivisionManager && typeof values.brandId === 'string' ? values.brandId : null;
+    const managedDiv = values.isDivisionManager ? values.managedDivision : null;
+
     const dataToUpdate: Partial<UserProfile> = {
         fullName: values.fullName,
         nameLower: values.fullName.toLowerCase(),
@@ -203,8 +206,9 @@ export function UserFormDialog({ user, open, onOpenChange }: UserFormDialogProps
         isActive: values.isActive,
         brandId: values.brandId || null,
         isDivisionManager: values.isDivisionManager,
-        managedBrandId: values.isDivisionManager && typeof values.brandId === 'string' ? values.brandId : null,
-        managedDivision: values.isDivisionManager ? values.managedDivision : null,
+        managedBrandId: managedBrand,
+        managedDivision: managedDiv,
+        division: managedDiv, // Sync division with managedDivision
         updatedAt: serverTimestamp(),
     };
     batch.update(userRef, dataToUpdate);
