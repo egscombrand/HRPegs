@@ -22,7 +22,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Textarea } from '@/components/ui/textarea';
 
 const reviewSchema = z.object({
-    note: z.string().min(1, 'Catatan harus diisi saat menolak atau meminta revisi.'),
+    note: z.string().min(10, 'Catatan harus diisi saat menolak atau meminta revisi.'),
 });
 
 type FormValues = z.infer<typeof reviewSchema>;
@@ -65,13 +65,14 @@ export function ReviewOvertimeDialog({ open, onOpenChange, submission, onSuccess
             
             let status: OvertimeSubmission['status'] = submission.status;
             let payload: Partial<OvertimeSubmission> = {};
+            const isManagerAction = mode === 'manager';
 
-            if (mode === 'manager') {
+            if (isManagerAction) {
                 if (decision === 'approve') status = 'approved_by_manager';
                 else if (decision === 'reject') status = 'rejected_manager';
                 else if (decision === 'revise') status = 'revision_manager';
                 payload = { status, managerNotes: note || null, managerDecisionAt: serverTimestamp() };
-            } else if (mode === 'hrd') {
+            } else { // HRD action
                 if (decision === 'approve') status = 'approved';
                 else if (decision === 'reject') status = 'rejected_hrd';
                 else if (decision === 'revise') status = 'revision_hrd';
@@ -92,13 +93,24 @@ export function ReviewOvertimeDialog({ open, onOpenChange, submission, onSuccess
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+            <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
                 <DialogHeader>
-                    <DialogTitle>Review Pengajuan Lembur: {submission.fullName}</DialogTitle>
-                    <DialogDescription>{submission.positionTitle} &bull; {submission.division} &bull; {submission.brandName}</DialogDescription>
+                    <DialogTitle>Review Pengajuan Lembur</DialogTitle>
+                    <DialogDescription>Tinjau detail pengajuan dan berikan keputusan.</DialogDescription>
                 </DialogHeader>
                 <ScrollArea className="flex-grow pr-6 -mr-6">
-                    <div className="space-y-4 pr-6">
+                    <div className="space-y-6 pr-6">
+                        <Card>
+                             <CardHeader>
+                                <CardTitle className="text-lg">Detail Pengaju</CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-2">
+                                <InfoRow label="Nama" value={submission.fullName} />
+                                <InfoRow label="Posisi" value={submission.positionTitle} />
+                                <InfoRow label="Divisi" value={submission.division} />
+                                <InfoRow label="Brand" value={submission.brandName} />
+                            </CardContent>
+                        </Card>
                         <Card>
                             <CardHeader><CardTitle className="text-base">Detail Pengajuan</CardTitle></CardHeader>
                             <CardContent className="space-y-2">
@@ -120,14 +132,13 @@ export function ReviewOvertimeDialog({ open, onOpenChange, submission, onSuccess
                             <CardHeader><CardTitle className="text-base">Rincian Tugas</CardTitle></CardHeader>
                             <CardContent>
                                 <Table>
-                                    <TableHeader><TableRow><TableHead>Tugas</TableHead><TableHead>Estimasi</TableHead><TableHead>Aktual</TableHead><TableHead>Output</TableHead></TableRow></TableHeader>
+                                    <TableHeader><TableRow><TableHead>Tugas</TableHead><TableHead>Estimasi</TableHead><TableHead>Aktual</TableHead></TableRow></TableHeader>
                                     <TableBody>
                                         {submission.tasks.map((task, i) => (
                                             <TableRow key={i}>
                                                 <TableCell>{task.description}</TableCell>
                                                 <TableCell>{task.estimatedMinutes} mnt</TableCell>
                                                 <TableCell>{task.actualMinutes || '-'} mnt</TableCell>
-                                                <TableCell>{task.output || '-'}</TableCell>
                                             </TableRow>
                                         ))}
                                     </TableBody>
@@ -145,7 +156,7 @@ export function ReviewOvertimeDialog({ open, onOpenChange, submission, onSuccess
                         </Form>
                     </div>
                 </ScrollArea>
-                <DialogFooter>
+                <DialogFooter className="pt-4 border-t">
                     <Button variant="outline" onClick={() => onOpenChange(false)}>Tutup</Button>
                     <Button variant="secondary" onClick={() => handleDecision('revise')} disabled={isSaving}>Minta Revisi</Button>
                     <Button variant="destructive" onClick={() => handleDecision('reject')} disabled={isSaving}>Tolak</Button>
