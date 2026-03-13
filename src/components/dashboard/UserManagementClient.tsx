@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { collection, doc } from 'firebase/firestore';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { UserProfile, ROLES, UserRole, Brand } from '@/lib/types';
+import { UserProfile, ROLES, UserRole, Brand, EmployeeProfile } from '@/lib/types';
 import {
   Table,
   TableHeader,
@@ -83,10 +83,15 @@ export function UserManagementClient() {
     [firestore]
   );
   
-  const { data: users, isLoading, error } = useCollection<UserProfile>(usersCollectionRef);
+  const { data: users, isLoading: isLoadingUsers, error } = useCollection<UserProfile>(usersCollectionRef);
 
   const brandsCollectionRef = useMemoFirebase(() => collection(firestore, 'brands'), [firestore]);
-  const { data: brands } = useCollection<Brand>(brandsCollectionRef);
+  const { data: brands, isLoading: isLoadingBrands } = useCollection<Brand>(brandsCollectionRef);
+
+  const employeeProfilesRef = useMemoFirebase(() => collection(firestore, 'employee_profiles'), [firestore]);
+  const { data: employeeProfiles, isLoading: isLoadingProfiles } = useCollection<EmployeeProfile>(employeeProfilesRef);
+
+  const isLoading = isLoadingUsers || isLoadingBrands || isLoadingProfiles;
 
   const brandMap = useMemo(() => {
     if (!brands) return {};
@@ -97,6 +102,12 @@ export function UserManagementClient() {
         return acc;
     }, {} as Record<string, string>);
   }, [brands]);
+
+  const employeeProfileMap = useMemo(() => {
+    if (!employeeProfiles) return new Map<string, EmployeeProfile>();
+    return new Map(employeeProfiles.map(p => [p.uid, p]));
+  }, [employeeProfiles]);
+
 
   const usersByGroup = useMemo(() => {
     if (!users) return {};
@@ -227,7 +238,7 @@ export function UserManagementClient() {
                         <TableHead>Full Name</TableHead>
                         <TableHead>Email</TableHead>
                         <TableHead>Role</TableHead>
-                        <TableHead>Jabatan</TableHead>
+                        <TableHead>Jabatan/Tugas</TableHead>
                         <TableHead>Brand</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
@@ -240,6 +251,32 @@ export function UserManagementClient() {
                                 ? user.brandId.map(id => brandMap[id] || id).join(', ')
                                 : brandMap[user.brandId as string] || '-')
                             : '-';
+                        
+                        const userEmployeeProfile = employeeProfileMap.get(user.uid);
+                        let positionTitleDisplay = '-';
+
+                        if (userEmployeeProfile?.positionTitle) {
+                            positionTitleDisplay = userEmployeeProfile.positionTitle;
+                        } else if (user.isDivisionManager && user.managedDivision) {
+                            positionTitleDisplay = `Manager Divisi ${user.managedDivision}`;
+                        } else {
+                            let baseTitle = 'Staf';
+                            const stage = user.employmentStage || user.employmentType;
+                            switch (stage) {
+                                case 'intern_education': baseTitle = 'Peserta Magang'; break;
+                                case 'intern_pre_probation': baseTitle = 'Peserta Magang Pra-Probation'; break;
+                                case 'probation':
+                                case 'training': 
+                                    baseTitle = 'Staf Probation'; break;
+                                case 'karyawan':
+                                case 'active':
+                                    baseTitle = 'Staf'; break;
+                                case 'magang':
+                                    baseTitle = 'Peserta Magang'; break;
+                            }
+                            const divisionName = userEmployeeProfile?.division;
+                            positionTitleDisplay = divisionName ? `${baseTitle} ${divisionName}` : baseTitle;
+                        }
 
                         return (
                         <TableRow key={user.uid}>
@@ -247,8 +284,8 @@ export function UserManagementClient() {
                           <TableCell>{user.email}</TableCell>
                           <TableCell><Badge variant="outline" className="capitalize">{user.role.replace('_', ' ')}</Badge></TableCell>
                           <TableCell>
-                            {user.isDivisionManager ? (
-                                <Badge variant="secondary">{`Manajer: ${user.managedDivision}`}</Badge>
+                             {positionTitleDisplay !== '-' ? (
+                                <Badge variant="secondary">{positionTitleDisplay}</Badge>
                             ) : (
                                 '-'
                             )}
@@ -285,6 +322,7 @@ export function UserManagementClient() {
                                     setOpenMenuUid(null);
                                     queueMicrotask(() => handleDeleteUser(user));
                                   }}
+                                  disabled={user.role === 'super-admin'}
                                 >
                                   <Trash2 className="mr-2 h-4 w-4" />
                                   <span>Delete</span>

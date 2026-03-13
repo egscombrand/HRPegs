@@ -82,11 +82,41 @@ export function OvertimeSubmissionForm({ open, onOpenChange, submission, employe
         else if (empStage === 'intern_pre_probation') statusLabel = 'Magang (Pra-Probation)';
         else statusLabel = 'Magang';
     } else if (empType === 'training') {
-        statusLabel = 'Karyawan (Training)';
-    } else if (empStage === 'probation') {
-        statusLabel = 'Karyawan (Probation)';
-    } else if (empType === 'karyawan') {
+        if (empStage === 'probation') statusLabel = 'Karyawan (Probation)';
+        else statusLabel = 'Karyawan (Training)';
+    } else if (userProfile?.role === 'karyawan') {
         statusLabel = 'Karyawan Aktif';
+    }
+
+    let finalPositionTitle = '-';
+    if (employeeProfile?.positionTitle) {
+      finalPositionTitle = employeeProfile.positionTitle;
+    } else if (userProfile?.isDivisionManager && userProfile.managedDivision) {
+      finalPositionTitle = `Manager Divisi ${userProfile.managedDivision}`;
+    } else {
+      let baseTitle = 'Staf';
+      const stage = userProfile?.employmentStage || userProfile?.employmentType;
+      switch (stage) {
+        case 'intern_education': baseTitle = 'Peserta Magang'; break;
+        case 'intern_pre_probation': baseTitle = 'Peserta Magang Pra-Probation'; break;
+        case 'probation': 
+        case 'training':
+            baseTitle = 'Staf Probation'; break;
+        case 'karyawan':
+        case 'active': 
+            baseTitle = 'Staf'; break;
+        case 'magang': baseTitle = 'Peserta Magang'; break;
+        default:
+          if (userProfile?.role === 'manager') baseTitle = 'Manager';
+          break;
+      }
+      
+      const divisionName = employeeProfile?.division;
+      if (divisionName) {
+        finalPositionTitle = `${baseTitle} ${divisionName}`;
+      } else {
+        finalPositionTitle = baseTitle;
+      }
     }
 
     const brandId = employeeProfile?.brandId || userProfile?.brandId;
@@ -96,8 +126,8 @@ export function OvertimeSubmissionForm({ open, onOpenChange, submission, employe
         fullName: userProfile?.fullName || '',
         employmentStatus: statusLabel,
         brandName: employeeProfile?.brandName || (singleBrandId ? brandMap.get(singleBrandId) : 'N/A'),
-        division: employeeProfile?.division || userProfile?.managedDivision || 'N/A',
-        positionTitle: employeeProfile?.positionTitle || userProfile?.positionTitle || '-',
+        division: employeeProfile?.division || 'N/A',
+        positionTitle: finalPositionTitle,
     }
   }, [userProfile, employeeProfile, brands]);
 
