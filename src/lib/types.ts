@@ -783,7 +783,6 @@ export type OvertimeSubmission = {
         description: string;
         estimatedMinutes?: number;
         actualMinutes?: number;
-        output?: string;
     }[];
     reason: string;
     location: 'kantor' | 'remote' | 'site';

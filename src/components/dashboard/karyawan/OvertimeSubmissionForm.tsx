@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -24,7 +24,6 @@ const taskSchema = z.object({
   description: z.string().min(1, "Uraian tugas harus diisi."),
   estimatedMinutes: z.coerce.number().int().min(0, "Estimasi harus angka positif."),
   actualMinutes: z.coerce.number().int().min(0, "Aktual harus angka positif.").optional(),
-  output: z.string().optional(),
 });
 
 const submissionSchema = z.object({
@@ -266,14 +265,17 @@ export function OvertimeSubmissionForm({ open, onOpenChange, submission, employe
 
              <section className="space-y-4">
                 <FormLabel>Rincian Pekerjaan</FormLabel>
-                <div className="space-y-3">
+                <div className="space-y-4">
                     {fields.map((field, index) => (
-                        <div key={field.id} className="grid grid-cols-12 gap-2 items-start">
-                            <FormField control={form.control} name={`tasks.${index}.description`} render={({ field }) => (<FormItem className="col-span-12 md:col-span-5"><FormControl><Textarea rows={1} placeholder="Uraian tugas..." {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                            <FormField control={form.control} name={`tasks.${index}.estimatedMinutes`} render={({ field }) => (<FormItem className="col-span-5 md:col-span-2"><FormControl><Input type="number" placeholder="Estimasi (mnt)" {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                            <FormField control={form.control} name={`tasks.${index}.actualMinutes`} render={({ field }) => (<FormItem className="col-span-4 md:col-span-2"><FormControl><Input type="number" placeholder="Aktual (mnt)" {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                            <FormField control={form.control} name={`tasks.${index}.output`} render={({ field }) => (<FormItem className="col-span-11 md:col-span-2"><FormControl><Input placeholder="Hasil/Link" {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                            <Button type="button" variant="ghost" size="icon" className="col-span-1" onClick={() => remove(index)}><Trash2 className="h-4 w-4" /></Button>
+                        <div key={field.id} className="p-4 border rounded-md relative space-y-4">
+                            <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10" onClick={() => remove(index)}>
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
+                            <FormField control={form.control} name={`tasks.${index}.description`} render={({ field }) => (<FormItem><FormLabel>Uraian Tugas</FormLabel><FormControl><Textarea rows={2} placeholder="Deskripsikan pekerjaan yang akan dilakukan..." {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <FormField control={form.control} name={`tasks.${index}.estimatedMinutes`} render={({ field }) => (<FormItem><FormLabel>Estimasi (menit)</FormLabel><FormDescription>Perkiraan waktu untuk menyelesaikan.</FormDescription><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                <FormField control={form.control} name={`tasks.${index}.actualMinutes`} render={({ field }) => (<FormItem><FormLabel>Aktual (menit)</FormLabel><FormDescription>Diisi setelah lembur selesai.</FormDescription><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                            </div>
                         </div>
                     ))}
                 </div>
