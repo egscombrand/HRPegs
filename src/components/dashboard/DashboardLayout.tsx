@@ -47,7 +47,6 @@ export function DashboardLayout({
     
     const baseConfig = MENU_CONFIG[roleKey] || [];
     // Perform a deep copy of the config to avoid mutating the original object.
-    // JSON.stringify/parse breaks React elements, so we do it manually.
     let finalConfig = baseConfig.map(group => ({
       ...group,
       items: group.items.map(item => ({ ...item })),
@@ -55,7 +54,7 @@ export function DashboardLayout({
 
     if (userProfile?.isDivisionManager) {
         const managerApprovalMenu: MenuItem = {
-            key: 'review.overtime.manager',
+            key: 'manager.overtime_approval',
             href: '/admin/manager/persetujuan-lembur',
             label: 'Persetujuan Lembur Tim',
             icon: createElement(CheckSquare),
@@ -77,6 +76,12 @@ export function DashboardLayout({
     }
     
     const visibleKeys = new Set(navSettings.visibleMenuItems);
+
+    // If the user is a division manager, ensure their approval menu is always visible,
+    // overriding any database setting for this specific, conditional menu item.
+    if (userProfile?.isDivisionManager) {
+        visibleKeys.add('manager.overtime_approval');
+    }
     
     return finalConfig.map((group: MenuGroup) => ({
       ...group,
