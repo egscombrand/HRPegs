@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, query, where, startOfMonth, endOfMonth } from 'firebase/firestore';
+import { collection, query, where } from 'firebase/firestore';
 import type { OvertimeSubmission, UserProfile, Brand } from '@/lib/types';
 import { useAuth } from '@/providers/auth-provider';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Search } from 'lucide-react';
-import { format, formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow, startOfMonth, endOfMonth } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
 import { KpiCard } from '@/components/recruitment/KpiCard';
 import { ReviewOvertimeDialog } from './ReviewOvertimeDialog';
@@ -22,7 +22,7 @@ interface OvertimeApprovalClientProps {
   mode: 'manager' | 'hrd';
 }
 
-const statusDisplay: Record<OvertimeSubmission['status'], { label: string; className: string }> = {
+const statusDisplay: Record<string, { label: string; className: string }> = {
     draft: { label: 'Draf', className: 'bg-gray-100 text-gray-800' },
     pending_manager: { label: 'Menunggu Persetujuan Anda', className: 'bg-yellow-100 text-yellow-800' },
     rejected_manager: { label: 'Ditolak', className: 'bg-red-200 text-red-900' },
@@ -161,3 +161,4 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
         </div>
     );
 }
+    
