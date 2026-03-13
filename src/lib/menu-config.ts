@@ -150,6 +150,11 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
         title: "Manager",
         items: [
             { key: 'manager.team', href: '/admin/manager', label: 'My Team', icon: createElement(Users) },
+        ]
+    },
+    {
+        title: "Review",
+        items: [
             { key: 'review.reports', href: '/admin/review/laporan-magang', label: 'Review Laporan Magang', icon: createElement(PenSquare) },
             { key: 'manager.overtime_approval', href: '/admin/manager/persetujuan-lembur', label: 'Persetujuan Lembur Tim', icon: createElement(CheckSquare) },
             { key: 'personal.interviews.manager', href: '/admin/interviews', label: 'My Interviews', icon: createElement(Video) },
@@ -162,6 +167,11 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
         items: [
             { key: 'employee.dashboard', href: '/admin/karyawan/dashboard', label: 'Dashboard', icon: createElement(LayoutDashboard) },
             { key: 'employee.overtime', href: '/admin/karyawan/pengajuan-lembur', label: 'Pengajuan Lembur', icon: createElement(FileClock) },
+        ]
+    },
+    {
+        title: "Review",
+        items: [
             { key: 'review.reports', href: '/admin/review/laporan-magang', label: 'Review Laporan Magang', icon: createElement(PenSquare) },
         ]
     }
