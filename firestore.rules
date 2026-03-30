@@ -352,17 +352,33 @@ service cloud.firestore {
         return request.auth.uid == request.resource.data.uid;
       }
       
+      function isReportingReturn() {
+        let isOwner = request.auth.uid == resource.data.uid;
+        let isTransitionValid = (resource.data.status == 'reported' || resource.data.status == 'returned') && request.resource.data.status == 'returned';
+        
+        // Block sensitive fields from being changed by owner during return report
+        let forbiddenKeys = [
+          'uid', 'fullName', 'type', 'reason', 'startDate', 'startTime', 
+          'endDate', 'endTime', 'attachments', 'division', 'brandId',
+          'managerUid', 'managerDecisionAt', 'managerNotes',
+          'hrdUid', 'hrdDecisionAt', 'hrdNotes'
+        ];
+        
+        let changedKeys = request.resource.data.diff(resource.data).affectedKeys();
+        return isOwner && isTransitionValid && !changedKeys.hasAny(forbiddenKeys);
+      }
+      
       allow get: if isSignedIn() && (isSubmissionOwner() || isAssignedManager(resource.data) || isHrd() || isSuperAdmin());
       allow list: if isSignedIn();
 
       allow create: if isInternal() && isRequester();
 
-      allow update: if isSignedIn() && (
-        (isSubmissionOwner() && (resource.data.status == 'draft' || resource.data.status.startsWith('revision_'))) ||
-        (isAssignedManager(resource.data) && resource.data.status == 'pending_manager') ||
-        (isHrd() && (resource.data.status == 'pending_hrd' || resource.data.status == 'approved_by_manager')) ||
-        isSuperAdmin()
-      );
+      allow update: if isSignedIn() && isSubmissionOwner() && (resource.data.status in ['draft'] || resource.data.status.startsWith('revision_'));
+      allow update: if isSignedIn() && isReportingReturn();
+      allow update: if isSignedIn() && isAssignedManager(resource.data) && (resource.data.status in ['pending_manager', 'reported', 'returned']);
+      allow update: if isSignedIn() && isHrd() && (resource.data.status in ['pending_hrd', 'approved_by_manager', 'verified_manager']);
+      allow update: if isSignedIn() && isSuperAdmin();
+
       
       allow delete: if isSuperAdmin() || (isSubmissionOwner() && resource.data.status == 'draft');
     }

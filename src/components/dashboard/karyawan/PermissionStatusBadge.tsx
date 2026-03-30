@@ -15,6 +15,11 @@ export const permissionStatusDisplay: Record<PermissionRequestStatus, { label: s
     rejected_hrd: { label: 'Ditolak HRD', className: 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-200' },
     revision_hrd: { label: 'Revisi dari HRD', className: 'bg-amber-100 text-amber-800 dark:bg-amber-800 dark:text-amber-200' },
     approved: { label: 'Disetujui', className: 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-200' },
+    
+    // Non-blocking office exit statuses
+    reported: { label: 'Dilaporkan Keluar', className: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-800 dark:text-indigo-200 shadow-sm' },
+    returned: { label: 'Tercatat Kembali', className: 'bg-violet-100 text-violet-800 dark:bg-violet-800 dark:text-violet-200 shadow-sm animate-pulse' },
+    verified_manager: { label: 'Terverifikasi Manajer', className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-800 dark:text-emerald-200' },
 };
 
 interface PermissionStatusBadgeProps {

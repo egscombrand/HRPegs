@@ -11,61 +11,93 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { Loader2, FileUp, Trash2, Clock, Info, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
 import { useFirestore, setDocumentNonBlocking } from '@/firebase';
-import { doc, serverTimestamp, Timestamp, collection, writeBatch } from 'firebase/firestore';
-import { PERMISSION_TYPES, type PermissionRequest, type UserProfile, type EmployeeProfile, type Brand, type PermissionType } from '@/lib/types';
+import { doc, serverTimestamp, Timestamp, collection } from 'firebase/firestore';
+import { PERMISSION_TYPES, type PermissionRequest, type UserProfile, type EmployeeProfile, type Brand } from '@/lib/types';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { GoogleDatePicker } from '@/components/ui/google-date-picker';
-import { format, differenceInMinutes, set, addDays, startOfDay, endOfDay } from 'date-fns';
+import { format, differenceInMinutes, set, addDays, startOfDay, endOfDay, isBefore } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { Progress } from '@/components/ui/progress';
+import { cn } from '@/lib/utils';
+import { Timer, ArrowRight, ShieldCheck, User, Users, Landmark, Send } from 'lucide-react';
 
-const PERMISSION_TYPE_LABELS: Record<PermissionType, string> = {
-    izin_keluar: 'Izin Keluar Kantor',
+const PERMISSION_TYPE_LABELS = {
+    tidak_masuk: 'Izin Tidak Masuk Bekerja',
+    keluar_kantor: 'Izin Meninggalkan Kantor',
     sakit: 'Izin Sakit',
-    keperluan_mendesak: 'Izin Keperluan Mendesak',
-    duka: 'Izin Duka',
-    akademik: 'Izin Akademik',
-    lainnya: 'Izin Lainnya',
 };
 
 // Base schema for all permission requests
-const baseSchema = z.object({
+// Schema for all permission requests
+const formSchema = z.object({
   type: z.enum(PERMISSION_TYPES, { required_error: 'Jenis izin harus dipilih.' }),
   reason: z.string().min(10, "Alasan/keterangan harus diisi (minimal 10 karakter)."),
-  attachments: z.any().optional(), // Simplified for now
-});
-
-// Specific schemas for each permission type
-const izinKeluarSchema = baseSchema.extend({
-  type: z.literal('izin_keluar'),
-  date: z.date({ required_error: "Tanggal izin harus diisi." }),
-  startTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Format waktu harus HH:MM."),
-  endTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Format waktu harus HH:MM."),
-  destination: z.string().min(3, "Tujuan harus diisi."),
-});
-
-const izinAbsenSchema = baseSchema.extend({
-  type: z.enum(['sakit', 'keperluan_mendesak', 'duka', 'akademik', 'lainnya']),
   startDate: z.date({ required_error: "Tanggal mulai harus diisi." }),
   endDate: z.date({ required_error: "Tanggal selesai harus diisi." }),
-  sicknessDescription: z.string().optional(),
-  familyRelation: z.string().optional(),
-  academicActivityName: z.string().optional(),
-  otherLeaveTitle: z.string().optional(),
-});
-
-// Discriminated union for validation based on 'type'
-const formSchema = z.discriminatedUnion('type', [izinKeluarSchema, izinAbsenSchema]).superRefine((data, ctx) => {
-    if (data.type !== 'izin_keluar') {
-        if (data.endDate < data.startDate) {
+  startTime: z.string().optional(),
+  endTime: z.string().optional(),
+  attachment: z.any().optional(),
+}).superRefine((data, ctx) => {
+    // Sick leave requires an attachment
+    if (data.type === 'sakit' && !data.attachment) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Lampiran bukti pendukung wajib untuk izin sakit.",
+            path: ["attachment"]
+        });
+    }
+    
+    // Office Exit (keluar_kantor) specific validations
+    if (data.type === 'keluar_kantor') {
+        if (!data.startTime || !data.endTime) {
             ctx.addIssue({
-                path: ["endDate"],
-                message: "Tanggal selesai tidak boleh sebelum tanggal mulai.",
+                code: z.ZodIssueCode.custom,
+                path: ["endTime"],
+                message: "Jam mulai dan selesai harus diisi.",
+            });
+            return;
+        }
+
+        const [startH, startM] = data.startTime.split(':').map(Number);
+        const [endH, endM] = data.endTime.split(':').map(Number);
+        
+        // Use a dummy date for time comparison
+        const dummyDate = new Date(2000, 0, 1);
+        const start = set(dummyDate, { hours: startH, minutes: startM, seconds: 0, milliseconds: 0 });
+        const end = set(dummyDate, { hours: endH, minutes: endM, seconds: 0, milliseconds: 0 });
+        
+        const durationMinutes = differenceInMinutes(end, start);
+        
+        if (durationMinutes <= 0) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["endTime"],
+                message: "Jam selesai harus setelah jam mulai.",
+            });
+        } else if (durationMinutes > 240) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["endTime"],
+                message: "Izin meninggalkan kantor maksimal 4 jam.",
             });
         }
+    }
+    
+    // Check dates for other types
+    if (data.type !== 'keluar_kantor' && data.endDate < data.startDate) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["endDate"],
+            message: "Tanggal selesai tidak boleh sebelum tanggal mulai.",
+        });
     }
 });
 
@@ -90,27 +122,73 @@ export function PermissionRequestForm({ open, onOpenChange, submission, employee
   const { userProfile } = useAuth();
   const firestore = useFirestore();
   const { toast } = useToast();
-  const mode = submission ? 'Edit' : 'Buat';
+  
+  const isEditing = !!submission && (submission.status === 'draft' || submission.status.startsWith('revision'));
+  const isViewing = !!submission && !isEditing;
+  const isCreating = !submission;
+  const mode = isCreating ? 'Buat' : (isEditing ? 'Edit' : 'Detail');
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: { type: 'izin_keluar', reason: '' }
+    defaultValues: { type: 'tidak_masuk', reason: '', startDate: new Date(), endDate: new Date(), startTime: '09:00', endTime: '17:00' }
   });
 
   const selectedType = form.watch('type');
+  const selectedAttachment = form.watch('attachment');
+  const startTime = form.watch('startTime');
+  const endTime = form.watch('endTime');
+
+  const durationMinutes = useMemo(() => {
+    if (selectedType !== 'keluar_kantor' || !startTime || !endTime) return 0;
+    const [startH, startM] = startTime.split(':').map(Number);
+    const [endH, endM] = endTime.split(':').map(Number);
+    const start = set(new Date(), { hours: startH, minutes: startM, seconds: 0, milliseconds: 0 });
+    const end = set(new Date(), { hours: endH, minutes: endM, seconds: 0, milliseconds: 0 });
+    return differenceInMinutes(end, start);
+  }, [selectedType, startTime, endTime]);
+
+  // Proactive Time Suggestion
+  useEffect(() => {
+    if (selectedType === 'keluar_kantor' && startTime && !endTime) {
+       const [h, m] = startTime.split(':').map(Number);
+       const endH = Math.min(h + 4, 17); // Suggest +4 hours or max 17:00
+       form.setValue('endTime', `${endH.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
+    }
+  }, [selectedType, startTime, form, endTime]);
+
+  // Reset times when switching type
+  useEffect(() => {
+     if (selectedType === 'keluar_kantor') {
+        const currentStartTime = form.getValues('startTime');
+        if (!currentStartTime) form.setValue('startTime', '09:00');
+        const [h, m] = (currentStartTime || '09:00').split(':').map(Number);
+        const endH = Math.min(h + 4, 17);
+        form.setValue('endTime', `${endH.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
+     }
+  }, [selectedType, form]);
 
   useEffect(() => {
-    if(open && !submission) {
-        form.reset({
-            type: 'izin_keluar',
-            date: new Date(),
-            startTime: '12:00',
-            endTime: '13:00',
-            destination: '',
-            reason: '',
-        });
-    } else if (open && submission) {
-        // Populate form for editing (logic to be added)
+    if(open) {
+        if (!submission) {
+            form.reset({
+                type: 'tidak_masuk',
+                startDate: new Date(),
+                endDate: new Date(),
+                startTime: '09:00',
+                endTime: '17:00',
+                reason: '',
+            });
+        } else {
+            form.reset({
+                type: submission.type,
+                reason: submission.reason,
+                startDate: submission.startDate.toDate(),
+                endDate: submission.endDate.toDate(),
+                startTime: format(submission.startDate.toDate(), 'HH:mm'),
+                endTime: format(submission.endDate.toDate(), 'HH:mm'),
+                attachment: submission.attachments?.[0] || undefined,
+            });
+        }
     }
   }, [open, submission, form]);
 
@@ -118,26 +196,32 @@ export function PermissionRequestForm({ open, onOpenChange, submission, employee
     if (!userProfile || !employeeProfile) return;
     setIsSaving(true);
     try {
-        const docRef = submission ? doc(firestore, 'permission_requests', submission.id!) : doc(collection(firestore, 'permission_requests'));
-        let startDate: Date;
-        let endDate: Date;
-        let totalDurationMinutes = 0;
-
-        if (values.type === 'izin_keluar') {
-            const [startH, startM] = values.startTime.split(':').map(Number);
-            const [endH, endM] = values.endTime.split(':').map(Number);
-            startDate = set(values.date, { hours: startH, minutes: startM });
-            endDate = set(values.date, { hours: endH, minutes: endM });
-            if (endDate < startDate) {
-                endDate = addDays(endDate, 1);
-            }
-            totalDurationMinutes = differenceInMinutes(endDate, startDate);
-        } else {
-            startDate = startOfDay(values.startDate);
-            endDate = endOfDay(values.endDate);
-            // This is a rough calculation, doesn't account for work days.
-            totalDurationMinutes = differenceInMinutes(endDate, startDate);
+        let attachmentUrl = '';
+        if (values.type === 'sakit' && values.attachment instanceof File) {
+            const storage = getStorage();
+            const storageRef = ref(storage, `medical_proofs/${userProfile.uid}/${Date.now()}-${values.attachment.name}`);
+            const uploadSnapshot = await uploadBytes(storageRef, values.attachment);
+            attachmentUrl = await getDownloadURL(uploadSnapshot.ref);
         }
+
+        const docRef = submission ? doc(firestore, 'permission_requests', submission.id!) : doc(collection(firestore, 'permission_requests'));
+        let startDate = startOfDay(values.startDate);
+        let endDate = endOfDay(values.endDate);
+
+        if (values.type === 'keluar_kantor') {
+            const [startH, startM] = values.startTime?.split(':').map(Number) || [9, 0];
+            const [endH, endM] = values.endTime?.split(':').map(Number) || [17, 0];
+            startDate = set(values.startDate, { hours: startH, minutes: startM });
+            endDate = set(values.startDate, { hours: endH, minutes: endM });
+        }
+
+        const totalDurationMinutes = differenceInMinutes(endDate, startDate);
+
+        // Operational workflow logic
+        const isOfficeExit = values.type === 'keluar_kantor';
+        const initialStatus: PermissionRequest['status'] = isOfficeExit 
+            ? 'reported' 
+            : (userProfile.isDivisionManager ? 'pending_hrd' : 'pending_manager');
 
         const payload: Omit<PermissionRequest, 'id' | 'createdAt' | 'updatedAt'> = {
             uid: userProfile.uid,
@@ -150,95 +234,369 @@ export function PermissionRequestForm({ open, onOpenChange, submission, employee
             startDate: Timestamp.fromDate(startDate),
             endDate: Timestamp.fromDate(endDate),
             totalDurationMinutes: totalDurationMinutes,
-            attachments: [],
-            status: userProfile.isDivisionManager ? 'pending_hrd' : 'pending_manager',
+            attachments: attachmentUrl ? [attachmentUrl] : [],
+            status: initialStatus,
             managerUid: employeeProfile.supervisorUid || undefined,
-            // Type-specific fields
-            destination: values.type === 'izin_keluar' ? values.destination : undefined,
-            sicknessDescription: values.type === 'sakit' ? (values as any).sicknessDescription : undefined,
-            familyRelation: values.type === 'duka' ? (values as any).familyRelation : undefined,
-            academicActivityName: values.type === 'akademik' ? (values as any).academicActivityName : undefined,
-            otherLeaveTitle: values.type === 'lainnya' ? (values as any).otherLeaveTitle : undefined,
+            reportedExitAt: isOfficeExit ? serverTimestamp() as any : undefined,
         };
 
         await setDocumentNonBlocking(docRef, { ...payload, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true });
         
-        toast({ title: 'Pengajuan Terkirim' });
+        toast({ title: isEditing ? 'Perubahan Disimpan' : 'Pengajuan Terkirim' });
         onSuccess();
         onOpenChange(false);
     } catch(e: any) {
-        toast({ variant: 'destructive', title: 'Gagal Mengirim', description: e.message });
+        toast({ variant: 'destructive', title: 'Gagal Menyimpan', description: e.message });
     } finally {
         setIsSaving(false);
     }
   };
 
-  const isReadOnly = submission && submission.status !== 'draft' && !submission.status.startsWith('revision');
+  const handleReportReturn = async () => {
+    if (!submission || !userProfile) return;
+    setIsSaving(true);
+    try {
+        const docRef = doc(firestore, 'permission_requests', submission.id!);
+        await setDocumentNonBlocking(docRef, { 
+            status: 'returned', 
+            returnTapInAt: serverTimestamp(), 
+            updatedAt: serverTimestamp() 
+        }, { merge: true });
+        
+        toast({ title: 'Laporan Kembali Terkirim', description: 'Selamat kembali bekerja!' });
+        onSuccess();
+        onOpenChange(false);
+    } catch(e: any) {
+        toast({ variant: 'destructive', title: 'Gagal Mengirim Laporan', description: e.message });
+    } finally {
+        setIsSaving(false);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl h-[90vh] flex flex-col p-0">
-        <DialogHeader className="p-6 pb-4 border-b">
-          <DialogTitle>{mode} Pengajuan Izin</DialogTitle>
-          <DialogDescription>Pilih jenis izin dan lengkapi detail yang diperlukan.</DialogDescription>
+      <DialogContent className="max-w-4xl h-[90vh] p-0 overflow-hidden flex flex-col border border-slate-200 dark:border-slate-800 shadow-2xl">
+        <DialogHeader className="p-6 pb-4 bg-slate-50/80 dark:bg-slate-900/80 backdrop-blur-md border-b relative z-10">
+          <div className="flex items-center justify-between mb-1">
+            <div className="space-y-1">
+                <DialogTitle className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                    Detail Izin
+                </DialogTitle>
+                <DialogDescription className="text-sm text-muted-foreground">
+                    {isViewing ? "Informasi lengkap status pengajuan izin Anda." : "Silakan lengkapi data pengajuan izin."}
+                </DialogDescription>
+            </div>
+            {submission && <Badge variant="outline" className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700">{submission.status.replace(/_/g, ' ')}</Badge>}
+          </div>
         </DialogHeader>
-        <ScrollArea className="flex-grow">
-          <div className="p-6">
-            <Form {...form}>
-              <form id="permission-form" onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
-                <FormField
-                  control={form.control}
-                  name="type"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Jenis Izin</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="Pilih jenis izin" /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          {Object.entries(PERMISSION_TYPE_LABELS).map(([key, label]) => (
-                            <SelectItem key={key} value={key}>{label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                {selectedType === 'izin_keluar' && (
-                    <>
-                        <FormField control={form.control} name="date" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Tanggal</FormLabel><FormControl><GoogleDatePicker value={field.value} onChange={field.onChange} /></FormControl><FormMessage /></FormItem>)}/>
-                        <div className="grid grid-cols-2 gap-4">
-                            <FormField control={form.control} name="startTime" render={({ field }) => (<FormItem><FormLabel>Jam Keluar</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                            <FormField control={form.control} name="endTime" render={({ field }) => (<FormItem><FormLabel>Jam Kembali</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                        </div>
-                        <FormField control={form.control} name="destination" render={({ field }) => (<FormItem><FormLabel>Tujuan</FormLabel><FormControl><Input placeholder="Contoh: Mengambil berkas di BPN" {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                    </>
-                )}
 
-                {selectedType !== 'izin_keluar' && (
-                    <div className="grid grid-cols-2 gap-4">
-                        <FormField control={form.control} name="startDate" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Tanggal Mulai</FormLabel><FormControl><GoogleDatePicker value={field.value} onChange={field.onChange} /></FormControl><FormMessage /></FormItem>)}/>
-                        <FormField control={form.control} name="endDate" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Tanggal Selesai</FormLabel><FormControl><GoogleDatePicker value={field.value} onChange={field.onChange} /></FormControl><FormMessage /></FormItem>)}/>
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="p-8 max-w-4xl mx-auto space-y-8">
+            
+            {/* Alur Proses (Minimal & Corporate) */}
+            <section className="border border-slate-200 dark:border-slate-800 rounded-lg p-5 bg-slate-50/50 dark:bg-slate-900/50">
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Alur Proses</h3>
+                <div className="flex items-center gap-6">
+                    {[
+                        { label: 'Karyawan Lapor', done: true },
+                        { label: 'Kembali & Tap-In', done: !!submission?.returnTapInAt || submission?.status === 'returned', skip: submission?.type !== 'keluar_kantor' },
+                        { label: 'Verifikasi Manager', done: submission?.status === 'verified_manager' || submission?.status === 'approved' }
+                    ].filter(s => !s.skip).map((step, i, arr) => (
+                        <div key={i} className="flex items-center gap-3">
+                            <div className={cn(
+                                "h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold border",
+                                step.done ? "bg-emerald-500 border-emerald-600 text-white" : "bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400"
+                            )}>
+                                {step.done ? <CheckCircle2 className="h-3 w-3" /> : (i + 1)}
+                            </div>
+                            <span className={cn("text-xs font-semibold", step.done ? "text-slate-900 dark:text-slate-100" : "text-slate-400")}>
+                                {step.label}
+                            </span>
+                            {i < arr.length - 1 && <ArrowRight className="h-3 w-3 text-slate-300" />}
+                        </div>
+                    ))}
+                </div>
+                {submission?.status === 'reported' && (
+                    <div className="mt-4 p-4 bg-indigo-50/50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 rounded-lg flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                            <Info className="h-4 w-4 text-indigo-500" />
+                            <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">Anda sedang dalam status izin keluar. Silakan lapor kembali jika sudah di kantor.</p>
+                        </div>
+                        <Button 
+                            onClick={handleReportReturn}
+                            disabled={isSaving}
+                            variant="secondary"
+                            size="sm"
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white border-none h-8 font-bold text-[10px] uppercase px-4 whitespace-nowrap"
+                        >
+                            {isSaving ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <ShieldCheck className="mr-2 h-3 w-3" />}
+                            Lapor Kembali
+                        </Button>
                     </div>
                 )}
-                
-                {selectedType === 'sakit' && <FormField control={form.control} name="sicknessDescription" render={({ field }) => (<FormItem><FormLabel>Keluhan Singkat</FormLabel><FormControl><Input placeholder="Contoh: Demam dan pusing" {...field} /></FormControl><FormMessage /></FormItem>)} />}
-                {selectedType === 'duka' && <FormField control={form.control} name="familyRelation" render={({ field }) => (<FormItem><FormLabel>Hubungan Keluarga</FormLabel><FormControl><Input placeholder="Contoh: Paman, Nenek" {...field} /></FormControl><FormMessage /></FormItem>)} />}
-                {selectedType === 'akademik' && <FormField control={form.control} name="academicActivityName" render={({ field }) => (<FormItem><FormLabel>Nama Kegiatan Akademik</FormLabel><FormControl><Input placeholder="Contoh: Bimbingan Skripsi" {...field} /></FormControl><FormMessage /></FormItem>)} />}
-                {selectedType === 'lainnya' && <FormField control={form.control} name="otherLeaveTitle" render={({ field }) => (<FormItem><FormLabel>Judul Izin</FormLabel><FormControl><Input placeholder="Contoh: Izin Pernikahan" {...field} /></FormControl><FormMessage /></FormItem>)} />}
+            </section>
 
-                <FormField control={form.control} name="reason" render={({ field }) => (<FormItem><FormLabel>Keterangan / Alasan</FormLabel><FormControl><Textarea rows={4} placeholder="Jelaskan alasan pengajuan izin Anda..." {...field} /></FormControl><FormMessage /></FormItem>)}/>
-              </form>
-            </Form>
+            {isViewing ? (
+                <div className="space-y-6 animate-in fade-in duration-500">
+                    <Card className="border border-slate-200 dark:border-slate-800 shadow-none rounded-lg overflow-hidden">
+                        <CardHeader className="bg-slate-50 dark:bg-slate-900 py-3 border-b border-slate-200 dark:border-slate-800">
+                            <CardTitle className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Informasi Pengajuan</CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-5 grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-4">
+                            <InfoRow label="Nama Karyawan" value={submission!.fullName} />
+                            <InfoRow label="Divisi / Posisi" value={`${submission!.division} / ${submission!.positionTitle}`} />
+                            <InfoRow label="Jenis Izin" value={PERMISSION_TYPE_LABELS[submission!.type as keyof typeof PERMISSION_TYPE_LABELS] || submission!.type} />
+                            <InfoRow label="Alasan" value={submission!.reason} />
+                            <InfoRow label="Dibuat Pada" value={format(submission!.createdAt.toDate(), 'dd MMM yyyy HH:mm', { locale: idLocale })} />
+                        </CardContent>
+                    </Card>
+
+                    {submission!.type === 'keluar_kantor' && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <Card className="border border-slate-200 dark:border-slate-800 shadow-none rounded-lg overflow-hidden">
+                                <CardHeader className="bg-slate-50 dark:bg-slate-900 py-3 border-b border-slate-200 dark:border-slate-800">
+                                    <CardTitle className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Informasi Keluar Kantor</CardTitle>
+                                </CardHeader>
+                                <CardContent className="p-5 space-y-4">
+                                    <InfoRow label="Jam Laporan Keluar" value={submission!.reportedExitAt ? format(submission!.reportedExitAt.toDate(), 'HH:mm') : '-'} />
+                                    <InfoRow label="Perkiraan Kembali" value={format(submission!.endDate.toDate(), 'HH:mm')} />
+                                </CardContent>
+                            </Card>
+
+                            <Card className="border border-slate-200 dark:border-slate-800 shadow-none rounded-lg overflow-hidden">
+                                <CardHeader className="bg-slate-50 dark:bg-slate-900 py-3 border-b border-slate-200 dark:border-slate-800">
+                                    <CardTitle className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Informasi Kembali ke Kantor</CardTitle>
+                                </CardHeader>
+                                <CardContent className="p-5 space-y-4">
+                                    <InfoRow label="Status Kembali" value={submission!.returnTapInAt ? "Sudah Kembali" : "Belum Kembali"} />
+                                    <InfoRow label="Jam Tap-In Kembali" value={submission!.returnTapInAt ? format(submission!.returnTapInAt.toDate(), 'HH:mm') : '-'} />
+                                </CardContent>
+                            </Card>
+                        </div>
+                    )}
+
+                    {submission!.type !== 'keluar_kantor' && (
+                        <Card className="border border-slate-200 dark:border-slate-800 shadow-none rounded-lg overflow-hidden">
+                            <CardHeader className="bg-slate-50 dark:bg-slate-900 py-3 border-b border-slate-200 dark:border-slate-800">
+                                <CardTitle className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Detail Waktu</CardTitle>
+                            </CardHeader>
+                            <CardContent className="p-5 grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-4">
+                                <InfoRow label="Dari Tanggal" value={format(submission!.startDate.toDate(), 'dd MMM yyyy', { locale: idLocale })} />
+                                <InfoRow label="Sampai Tanggal" value={format(submission!.endDate.toDate(), 'dd MMM yyyy', { locale: idLocale })} />
+                                <InfoRow label="Total Durasi" value={`${submission!.totalDurationMinutes} menit`} />
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    {submission!.attachments && submission!.attachments.length > 0 && (
+                        <div className="space-y-2">
+                             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Lampiran / Dokumen</p>
+                             <Button variant="outline" size="sm" asChild className="h-10 text-xs gap-2">
+                                <a href={submission!.attachments[0]} target="_blank" rel="noopener noreferrer">
+                                    <FileUp className="h-3 w-3" /> Lihat Lampiran
+                                </a>
+                             </Button>
+                        </div>
+                    )}
+                </div>
+            ) : (
+                <Form {...form}>
+                  <form id="permission-form" onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+                    <Card className="border border-slate-200 dark:border-slate-800 shadow-none rounded-lg overflow-hidden">
+                        <CardHeader className="bg-slate-50 dark:bg-slate-900 py-3 border-b border-slate-200 dark:border-slate-800">
+                            <CardTitle className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Form Pengajuan</CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-5 space-y-6">
+                            <FormField
+                                control={form.control}
+                                name="type"
+                                render={({ field }) => (
+                                    <FormItem>
+                                    <FormLabel className="text-sm font-bold uppercase tracking-wider text-slate-500">Jenis Izin</FormLabel>
+                                    <Select onValueChange={field.onChange} value={field.value}>
+                                        <FormControl>
+                                            <SelectTrigger className="h-14 text-base transition-all focus:ring-4 focus:ring-primary/10 rounded-xl border-slate-100 dark:border-slate-800">
+                                                <SelectValue placeholder="Pilih jenis izin" />
+                                            </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                        {Object.entries(PERMISSION_TYPE_LABELS).map(([key, label]) => (
+                                            <SelectItem key={key} value={key} className="py-3 cursor-pointer">{label}</SelectItem>
+                                        ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            {selectedType === 'keluar_kantor' && (
+                                <div className="space-y-4 animate-in slide-in-from-top-4 duration-500">
+                                    <div className="flex items-center justify-between px-1">
+                                        <div className="flex items-center gap-2">
+                                            <Timer className={cn("h-4 w-4", durationMinutes > 240 ? "text-destructive animate-pulse" : "text-primary")} />
+                                            <span className="text-xs font-black uppercase tracking-widest text-slate-400">Estimasi Durasi</span>
+                                        </div>
+                                        <Badge variant={durationMinutes > 240 ? "destructive" : "secondary"} className="font-bold px-4 py-1 rounded-full text-[10px]">
+                                            {Math.floor(durationMinutes / 60)}j {durationMinutes % 60}m / 4j 0m
+                                        </Badge>
+                                    </div>
+                                    <Progress 
+                                        value={Math.min((durationMinutes / 240) * 100, 100)} 
+                                        className={cn(
+                                            "h-3 rounded-full transition-all duration-700 border border-slate-50 dark:border-slate-850",
+                                            durationMinutes > 240 ? "[&>div]:bg-destructive" : "[&>div]:bg-primary shadow-sm"
+                                        )}
+                                    />
+                                    {durationMinutes > 240 && (
+                                        <p className="text-[10px] text-destructive font-bold text-center uppercase tracking-widest animate-bounce">
+                                            ⚠️ Maksimal 4 jam untuk izin keluar
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-2">
+                                <FormField 
+                                    control={form.control} 
+                                    name="startDate" 
+                                    render={({ field }) => (
+                                        <FormItem className="flex flex-col">
+                                            <FormLabel className="text-sm font-bold uppercase tracking-wider text-slate-500">
+                                                {selectedType === 'keluar_kantor' ? 'Tanggal Izin' : 'Tanggal Mulai'}
+                                            </FormLabel>
+                                            <FormControl>
+                                                <GoogleDatePicker value={field.value} onChange={field.onChange} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+
+                                {selectedType === 'keluar_kantor' ? (
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <FormField 
+                                            control={form.control} 
+                                            name="startTime" 
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel className="text-sm font-bold uppercase tracking-wider text-slate-500">Mulai</FormLabel>
+                                                    <FormControl>
+                                                        <Input type="time" className="h-14 font-mono text-lg rounded-xl border-slate-100 dark:border-slate-800" {...field} />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField 
+                                            control={form.control} 
+                                            name="endTime" 
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel className="text-sm font-bold uppercase tracking-wider text-slate-500">Kembali</FormLabel>
+                                                    <FormControl>
+                                                        <Input type="time" className="h-14 font-mono text-lg rounded-xl border-slate-100 dark:border-slate-800" {...field} />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    </div>
+                                ) : (
+                                    <FormField 
+                                        control={form.control} 
+                                        name="endDate" 
+                                        render={({ field }) => (
+                                            <FormItem className="flex flex-col">
+                                                <FormLabel className="text-sm font-bold uppercase tracking-wider text-slate-500">Selesai</FormLabel>
+                                                <FormControl>
+                                                    <GoogleDatePicker value={field.value} onChange={field.onChange} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
+                    
+                    <Card className="border-none shadow-md bg-white dark:bg-slate-900 rounded-3xl">
+                        <CardContent className="p-8 space-y-8">
+                            <FormField 
+                                control={form.control} 
+                                name="reason" 
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="text-sm font-bold uppercase tracking-wider text-slate-500">Keterangan / Alasan</FormLabel>
+                                        <FormControl>
+                                            <Textarea 
+                                                rows={4} 
+                                                className="resize-none text-base rounded-xl border-slate-100 dark:border-slate-800 transition-all focus:ring-4 focus:ring-primary/10" 
+                                                placeholder="Jelaskan keperluan Anda secara rinci..." 
+                                                {...field} 
+                                            />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            {selectedType === 'sakit' && (
+                                <FormField
+                                  control={form.control}
+                                  name="attachment"
+                                  render={({ field: { value, onChange, ...fieldProps } }) => (
+                                    <FormItem className="space-y-4">
+                                      <FormLabel className="text-sm font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+                                          <span>Lampiran Surat Sakit</span>
+                                          <Badge variant="destructive" className="font-black text-[9px] px-3">WAJIB</Badge>
+                                      </FormLabel>
+                                      <FormControl>
+                                        <div className="relative">
+                                            <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" id="medical-attachment" onChange={(e) => onChange(e.target.files?.[0])} {...fieldProps} />
+                                            <div onClick={() => document.getElementById('medical-attachment')?.click()} className="w-full h-32 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl flex flex-col items-center justify-center gap-2 hover:border-primary/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-all cursor-pointer">
+                                                <div className={cn("h-10 w-10 rounded-full flex items-center justify-center text-white", selectedAttachment ? "bg-emerald-500" : "bg-primary")}>
+                                                    {selectedAttachment ? <CheckCircle2 className="h-5 w-5" /> : <FileUp className="h-5 w-5" />}
+                                                </div>
+                                                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                                                    {selectedAttachment ? selectedAttachment.name : "Klik untuk upload lampiran"}
+                                                </p>
+                                            </div>
+                                        </div>
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                            )}
+                        </CardContent>
+                    </Card>
+                  </form>
+                </Form>
+            )}
           </div>
         </ScrollArea>
-        <DialogFooter className="p-6 pt-4 border-t">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>Batal</Button>
-          <Button type="submit" form="permission-form" disabled={isSaving}>
-            {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Kirim Pengajuan Izin
+
+        <DialogFooter className="p-6 border-t bg-slate-50/80 dark:bg-slate-900/80 backdrop-blur-md sm:justify-between items-center gap-4">
+          <Button variant="outline" className="px-6 h-10 text-xs font-semibold uppercase tracking-wider" onClick={() => onOpenChange(false)}>
+              {isViewing ? 'Tutup' : 'Batal'}
           </Button>
+          
+          {!isViewing && (
+              <Button 
+                type="submit" 
+                form="permission-form" 
+                disabled={isSaving}
+                className={cn(
+                    "px-8 h-10 font-bold text-xs uppercase tracking-widest shadow-sm",
+                    selectedType === 'keluar_kantor' ? "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100" : "bg-primary shadow-primary/10"
+                )}
+              >
+                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                {selectedType === 'keluar_kantor' ? 'Laporkan Keluar Kantor' : 'Kirim Pengajuan Izin'}
+              </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

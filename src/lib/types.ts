@@ -773,6 +773,7 @@ export type OvertimeSubmission = {
     uid: string;
     fullName: string;
     brandId: string;
+    brandName?: string;
     division: string;
     positionTitle: string;
     date: Timestamp;
@@ -810,10 +811,15 @@ export const PERMISSION_REQUEST_STATUSES = [
   'rejected_hrd',
   'revision_hrd',
   'approved',
+  
+  // Specific to non-blocking office exits (keluar_kantor)
+  'reported', // Laporan keluar dibuat
+  'returned', // Sudah tap in kembali
+  'verified_manager', // Diverifikasi manager (final)
 ] as const;
 export type PermissionRequestStatus = (typeof PERMISSION_REQUEST_STATUSES)[number];
 
-export const PERMISSION_TYPES = ["izin_keluar", "sakit", "keperluan_mendesak", "duka", "akademik", "lainnya"] as const;
+export const PERMISSION_TYPES = ["tidak_masuk", "keluar_kantor", "sakit"] as const;
 export type PermissionType = (typeof PERMISSION_TYPES)[number];
 
 
@@ -822,6 +828,7 @@ export type PermissionRequest = {
     uid: string;
     fullName: string;
     brandId: string;
+    brandName?: string;
     division: string;
     positionTitle: string;
     type: PermissionType;
@@ -841,10 +848,42 @@ export type PermissionRequest = {
     createdAt: Timestamp;
     updatedAt: Timestamp;
 
-    // Specific fields based on type
-    destination?: string; // For 'izin_keluar'
-    sicknessDescription?: string; // For 'sakit'
-    familyRelation?: string; // For 'duka'
-    academicActivityName?: string; // For 'akademik'
-    otherLeaveTitle?: string; // For 'lainnya'
+    // Specific to 'keluar_kantor'
+    reportedExitAt?: Timestamp; // timestamp when they click "Report Exit"
+    returnTapInAt?: Timestamp; // timestamp from the next tap_in event
+    expectedReturnAt?: Timestamp; // optional estimation
 };
+
+/**
+ * Helper to check if a submission (Overtime or Permission) is in a final status.
+ */
+export function isFinalStatus(status: string): boolean {
+  return ['approved', 'rejected_manager', 'rejected_hrd', 'verified_manager'].includes(status);
+}
+
+/**
+ * Helper to check if a specific role can act on a submission based on its status.
+ */
+export function isActionableStatus(status: string, mode: 'manager' | 'hrd'): boolean {
+  if (isFinalStatus(status)) return false;
+  
+  if (mode === 'manager') {
+    // For normal flow
+    const normalActionable = status === 'pending_manager' || status === 'revision_manager';
+    // For non-blocking office exit flow
+    // A manager can verify either after reported OR after returned (tap-in detected)
+    const officeExitActionable = status === 'reported' || status === 'returned';
+    
+    return normalActionable || officeExitActionable;
+  }
+  
+  if (mode === 'hrd') {
+    // HRD can act on items approved by manager or pending hrd review
+    // Office exits DO NOT go to HRD, so we don't handle reported/returned/verified_manager here
+    return status === 'pending_hrd' || status === 'approved_by_manager' || status === 'revision_hrd';
+  }
+  
+  return false;
+}
+
+

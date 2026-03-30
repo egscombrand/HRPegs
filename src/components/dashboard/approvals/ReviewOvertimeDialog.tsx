@@ -7,8 +7,8 @@ import * as z from 'zod';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, CheckCircle, XCircle, Send } from 'lucide-react';
-import type { OvertimeSubmission } from '@/lib/types';
+import { Loader2, CheckCircle, XCircle, Send, Info } from 'lucide-react';
+import { OvertimeSubmission, isFinalStatus, isActionableStatus } from '@/lib/types';
 import { useAuth } from '@/providers/auth-provider';
 import { useFirestore, updateDocumentNonBlocking } from '@/firebase';
 import { doc, serverTimestamp } from 'firebase/firestore';
@@ -20,6 +20,7 @@ import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Textarea } from '@/components/ui/textarea';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const reviewSchema = z.object({
     note: z.string().min(10, 'Catatan harus diisi saat menolak atau meminta revisi.'),
@@ -35,10 +36,10 @@ interface ReviewOvertimeDialogProps {
   mode: 'manager' | 'hrd';
 }
 
-const InfoRow = ({ label, value }: { label: string, value: string | number }) => (
+const InfoRow = ({ label, value }: { label: string, value?: string | number }) => (
     <div className="flex justify-between text-sm">
         <p className="text-muted-foreground">{label}</p>
-        <p className="font-medium text-right">{value}</p>
+        <p className="font-medium text-right">{value ?? '-'}</p>
     </div>
 );
 
@@ -48,10 +49,18 @@ export function ReviewOvertimeDialog({ open, onOpenChange, submission, onSuccess
     const firestore = useFirestore();
     const { toast } = useToast();
 
-    const form = useForm<FormValues>({ resolver: zodResolver(reviewSchema) });
+    const form = useForm<FormValues>({ resolver: zodResolver(reviewSchema), defaultValues: { note: mode === 'manager' ? submission.managerNotes || '' : submission.hrdNotes || '' } });
     
+    const isFinal = isFinalStatus(submission.status);
+    const canAct = isActionableStatus(submission.status, mode);
+
     const handleDecision = async (decision: 'approve' | 'reject' | 'revise') => {
         if (!userProfile) return;
+
+        if (!canAct) {
+            toast({ variant: 'destructive', title: 'Aksi Ditolak', description: 'Pengajuan ini sudah final atau tidak lagi dapat diproses.' });
+            return;
+        }
 
         if (decision !== 'approve') {
             const isNoteValid = await form.trigger('note');
@@ -71,12 +80,12 @@ export function ReviewOvertimeDialog({ open, onOpenChange, submission, onSuccess
                 if (decision === 'approve') status = 'approved_by_manager';
                 else if (decision === 'reject') status = 'rejected_manager';
                 else if (decision === 'revise') status = 'revision_manager';
-                payload = { status, managerNotes: note || null, managerDecisionAt: serverTimestamp() };
+                payload = { status, managerNotes: note || null, managerDecisionAt: serverTimestamp() as any };
             } else { // HRD action
                 if (decision === 'approve') status = 'approved';
                 else if (decision === 'reject') status = 'rejected_hrd';
                 else if (decision === 'revise') status = 'revision_hrd';
-                payload = { status, hrdNotes: note || null, hrdDecisionAt: serverTimestamp() };
+                payload = { status, hrdNotes: note || null, hrdDecisionAt: serverTimestamp() as any };
             }
             
             await updateDocumentNonBlocking(submissionRef, payload);
@@ -151,19 +160,56 @@ export function ReviewOvertimeDialog({ open, onOpenChange, submission, onSuccess
                         <Form {...form}>
                             <form className="space-y-2">
                                 <FormField control={form.control} name="note" render={({ field }) => (
-                                <FormItem><FormLabel>Catatan Anda (Wajib untuk Tolak/Revisi)</FormLabel><FormControl><Textarea rows={3} placeholder="Berikan alasan atau catatan..." {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                <FormItem>
+                                    <FormLabel>Catatan {mode === 'manager' ? 'Manager' : 'HRD'} {canAct && '(Wajib untuk Tolak/Revisi)'}</FormLabel>
+                                    <FormControl>
+                                        <Textarea 
+                                            rows={3} 
+                                            placeholder={canAct ? "Berikan alasan atau catatan..." : "Tidak ada catatan."} 
+                                            {...field} 
+                                            readOnly={!canAct}
+                                            className={!canAct ? "bg-muted cursor-not-allowed" : ""}
+                                        />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>)}/>
                             </form>
                         </Form>
+
+                        {isFinal && (
+                            <Alert>
+                                <Info className="h-4 w-4" />
+                                <AlertTitle>Pengajuan Final</AlertTitle>
+                                <AlertDescription>
+                                    Pengajuan ini telah selesai diproses dan tidak dapat diubah lagi.
+                                </AlertDescription>
+                            </Alert>
+                        )}
+
+                        {!isFinal && !canAct && (
+                            <Alert variant="destructive">
+                                <Info className="h-4 w-4" />
+                                <AlertTitle>Bukan Giliran Anda</AlertTitle>
+                                <AlertDescription>
+                                    Status saat ini adalah <strong>{submission.status.replace(/_/g, ' ')}</strong>. 
+                                    Anda tidak memiliki wewenang untuk memproses pengajuan pada tahap ini.
+                                </AlertDescription>
+                            </Alert>
+                        )}
                     </div>
                 </ScrollArea>
                 <DialogFooter className="pt-4 border-t">
                     <Button variant="outline" onClick={() => onOpenChange(false)}>Tutup</Button>
-                    <Button variant="secondary" onClick={() => handleDecision('revise')} disabled={isSaving}>Minta Revisi</Button>
-                    <Button variant="destructive" onClick={() => handleDecision('reject')} disabled={isSaving}>Tolak</Button>
-                    <Button onClick={() => handleDecision('approve')} disabled={isSaving}>
-                        {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCircle className="mr-2 h-4 w-4" />}
-                        Setujui
-                    </Button>
+                    {canAct && (
+                        <>
+                            <Button variant="secondary" onClick={() => handleDecision('revise')} disabled={isSaving}>Minta Revisi</Button>
+                            <Button variant="destructive" onClick={() => handleDecision('reject')} disabled={isSaving}>Tolak</Button>
+                            <Button onClick={() => handleDecision('approve')} disabled={isSaving}>
+                                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCircle className="mr-2 h-4 w-4" />}
+                                Setujui
+                            </Button>
+                        </>
+                    )}
                 </DialogFooter>
             </DialogContent>
         </Dialog>

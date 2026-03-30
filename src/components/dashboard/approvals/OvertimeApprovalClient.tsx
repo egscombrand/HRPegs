@@ -14,7 +14,7 @@ import { format, formatDistanceToNow, startOfMonth } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
 import { KpiCard } from '@/components/recruitment/KpiCard';
 import { ReviewOvertimeDialog } from './ReviewOvertimeDialog';
-import { OVERTIME_SUBMISSION_STATUSES } from '@/lib/types';
+import { OVERTIME_SUBMISSION_STATUSES, isFinalStatus } from '@/lib/types';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { OvertimeApprovalStatusBadge } from './OvertimeApprovalStatusBadge';
 
@@ -37,8 +37,9 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
         if (mode === 'manager' && userProfile.isDivisionManager) {
             return query(q, where('division', '==', userProfile.managedDivision), where('brandId', '==', userProfile.managedBrandId));
         } else if (mode === 'hrd') {
-            // For HRD, we fetch submissions that have been approved by managers or are pending HRD action
-            return query(q, where('status', 'in', ['approved_by_manager', 'pending_hrd', 'approved', 'rejected_hrd', 'revision_hrd']));
+            // For HRD, we fetch all relevant submissions to show history
+            // Previously was limited to a subset of statuses
+            return q;
         }
         
         // Fallback query that returns nothing if conditions are not met
@@ -146,7 +147,9 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
                                         <TableCell className="text-xs text-muted-foreground">{formatDistanceToNow(s.createdAt.toDate(), { addSuffix: true, locale: idLocale })}</TableCell>
                                         <TableCell><OvertimeApprovalStatusBadge status={s.status} mode={mode} /></TableCell>
                                         <TableCell className="text-right">
-                                            <Button variant="outline" size="sm" onClick={() => setSelectedSubmission(s)}>Review</Button>
+                                            <Button variant="outline" size="sm" onClick={() => setSelectedSubmission(s)}>
+                                                {isFinalStatus(s.status) ? 'Detail' : 'Review'}
+                                            </Button>
                                         </TableCell>
                                     </TableRow>
                                 )) : <TableRow><TableCell colSpan={5} className="h-24 text-center">Tidak ada pengajuan yang ditemukan.</TableCell></TableRow>}

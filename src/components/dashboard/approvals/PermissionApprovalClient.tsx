@@ -13,7 +13,7 @@ import { Search } from 'lucide-react';
 import { format, formatDistanceToNow, startOfMonth } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
 import { KpiCard } from '@/components/recruitment/KpiCard';
-import { PERMISSION_REQUEST_STATUSES } from '@/lib/types';
+import { PERMISSION_REQUEST_STATUSES, isFinalStatus } from '@/lib/types';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { PermissionStatusBadge } from '@/components/dashboard/karyawan/PermissionStatusBadge';
 import { ReviewPermissionDialog } from './ReviewPermissionDialog';
@@ -26,7 +26,7 @@ export function PermissionApprovalClient({ mode }: PermissionApprovalClientProps
     const { userProfile } = useAuth();
     const firestore = useFirestore();
 
-    const [statusFilter, setStatusFilter] = useState<PermissionRequest['status'] | 'all'>(mode === 'manager' ? 'pending_manager' : 'pending_hrd');
+    const [statusFilter, setStatusFilter] = useState<PermissionRequest['status'] | 'all' | 'pending'>(mode === 'manager' ? 'pending' : 'pending_hrd');
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedSubmission, setSelectedSubmission] = useState<PermissionRequest | null>(null);
 
@@ -37,7 +37,7 @@ export function PermissionApprovalClient({ mode }: PermissionApprovalClientProps
         if (mode === 'manager' && userProfile.isDivisionManager) {
             return query(q, where('division', '==', userProfile.managedDivision), where('brandId', '==', userProfile.managedBrandId));
         } else if (mode === 'hrd') {
-            return query(q, where('status', 'in', ['approved_by_manager', 'pending_hrd', 'approved', 'rejected_hrd', 'revision_hrd']));
+            return q;
         }
         
         return query(collection(firestore, 'permission_requests'), where('uid', '==', 'NO_RESULTS'));
@@ -50,7 +50,13 @@ export function PermissionApprovalClient({ mode }: PermissionApprovalClientProps
         return submissions.filter(s => {
             let statusMatch = true;
             if (statusFilter !== 'all') {
-                if (mode === 'hrd' && statusFilter === 'pending_hrd') {
+                if (statusFilter === 'pending') {
+                    if (mode === 'manager') {
+                        statusMatch = s.status === 'pending_manager' || s.status === 'reported' || s.status === 'returned';
+                    } else {
+                        statusMatch = s.status === 'pending_hrd' || s.status === 'approved_by_manager';
+                    }
+                } else if (mode === 'hrd' && statusFilter === 'pending_hrd') {
                     statusMatch = s.status === 'pending_hrd' || s.status === 'approved_by_manager';
                 } else {
                     statusMatch = s.status === statusFilter;
@@ -70,16 +76,32 @@ export function PermissionApprovalClient({ mode }: PermissionApprovalClientProps
       const isManagerView = mode === 'manager';
 
       return submissions.reduce((acc, s) => {
-        if (isManagerView && s.status === 'pending_manager') acc.pending++;
-        if (!isManagerView && (s.status === 'pending_hrd' || s.status === 'approved_by_manager')) acc.pending++;
+        const isOfficeExit = s.type === 'keluar_kantor';
         
+        // Pending logic
+        if (isManagerView) {
+            if (isOfficeExit) {
+                if (s.status === 'reported' || s.status === 'returned') acc.pending++;
+            } else {
+                if (s.status === 'pending_manager') acc.pending++;
+            }
+        } else {
+            if (!isOfficeExit && (s.status === 'pending_hrd' || s.status === 'approved_by_manager')) acc.pending++;
+        }
+        
+        // Revision logic
         if (isManagerView && s.status === 'revision_manager') acc.revision++;
         if (!isManagerView && s.status === 'revision_hrd') acc.revision++;
 
         const decisionDate = isManagerView ? s.managerDecisionAt?.toDate() : s.hrdDecisionAt?.toDate();
         if (decisionDate && decisionDate >= monthStart) {
-          if ((isManagerView && s.status === 'approved_by_manager') || (!isManagerView && s.status === 'approved')) acc.approved++;
-          if ((isManagerView && s.status === 'rejected_manager') || (!isManagerView && s.status === 'rejected_hrd')) acc.rejected++;
+          if (isManagerView) {
+              if (s.status === 'approved_by_manager' || s.status === 'verified_manager') acc.approved++;
+              if (s.status === 'rejected_manager') acc.rejected++;
+          } else {
+              if (s.status === 'approved') acc.approved++;
+              if (s.status === 'rejected_hrd') acc.rejected++;
+          }
         }
         return acc;
       }, { pending: 0, revision: 0, approved: 0, rejected: 0 });
@@ -106,6 +128,7 @@ export function PermissionApprovalClient({ mode }: PermissionApprovalClientProps
                                 <SelectTrigger className="w-full sm:w-[220px]"><SelectValue placeholder="All Statuses" /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="all">Semua Status</SelectItem>
+                                    <SelectItem value="pending" className="font-bold">Butuh Tindakan</SelectItem>
                                     {PERMISSION_REQUEST_STATUSES.map(s => (
                                         <SelectItem key={s} value={s}>{s.replace(/_/g, ' ')}</SelectItem>
                                     ))}
@@ -132,7 +155,9 @@ export function PermissionApprovalClient({ mode }: PermissionApprovalClientProps
                                         <TableCell className="text-xs text-muted-foreground">{formatDistanceToNow(s.createdAt.toDate(), { addSuffix: true, locale: idLocale })}</TableCell>
                                         <TableCell><PermissionStatusBadge status={s.status} /></TableCell>
                                         <TableCell className="text-right">
-                                            <Button variant="outline" size="sm" onClick={() => setSelectedSubmission(s)}>Review</Button>
+                                            <Button variant="outline" size="sm" onClick={() => setSelectedSubmission(s)}>
+                                                {isFinalStatus(s.status) ? 'Detail' : 'Review'}
+                                            </Button>
                                         </TableCell>
                                     </TableRow>
                                 )) : <TableRow><TableCell colSpan={6} className="h-24 text-center">Tidak ada pengajuan yang ditemukan.</TableCell></TableRow>}
