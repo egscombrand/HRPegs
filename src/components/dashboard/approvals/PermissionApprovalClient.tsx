@@ -15,6 +15,7 @@ import { id as idLocale } from 'date-fns/locale';
 import { KpiCard } from '@/components/recruitment/KpiCard';
 import { PERMISSION_REQUEST_STATUSES, isFinalStatus } from '@/lib/types';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { PermissionStatusBadge } from '@/components/dashboard/karyawan/PermissionStatusBadge';
 import { ReviewPermissionDialog } from './ReviewPermissionDialog';
 
@@ -104,7 +105,12 @@ export function PermissionApprovalClient({ mode }: PermissionApprovalClientProps
                 if (s.status === 'pending_manager') acc.pending++;
             }
         } else {
-            if (!isOfficeExit && (s.status === 'pending_hrd' || s.status === 'approved_by_manager')) acc.pending++;
+            // HRD Pending: other types needing HRD, or office exits having been verified by manager
+            if (isOfficeExit) {
+                if (s.status === 'verified_manager') acc.pending++;
+            } else {
+                if (s.status === 'pending_hrd' || s.status === 'approved_by_manager') acc.pending++;
+            }
         }
         
         // Revision logic
@@ -117,7 +123,7 @@ export function PermissionApprovalClient({ mode }: PermissionApprovalClientProps
               if (s.status === 'approved_by_manager' || s.status === 'verified_manager') acc.approved++;
               if (s.status === 'rejected_manager') acc.rejected++;
           } else {
-              if (s.status === 'approved') acc.approved++;
+              if (s.status === 'approved' || s.status === 'closed') acc.approved++;
               if (s.status === 'rejected_hrd') acc.rejected++;
           }
         }
@@ -188,7 +194,19 @@ export function PermissionApprovalClient({ mode }: PermissionApprovalClientProps
                                     <TableRow key={s.id}>
                                         <TableCell>
                                             <div className="font-medium">{s.fullName}</div>
-                                            <div className="text-xs text-muted-foreground">{s.positionTitle === 'N/A' ? 'Anggota Tim' : s.positionTitle}</div>
+                                            <div className="text-xs text-muted-foreground flex items-center gap-1">
+                                                {s.positionTitle === 'N/A' ? 'Anggota Tim' : s.positionTitle}
+                                                {s.type === 'keluar_kantor' && s.needsManagerAttention && (
+                                                    <Badge variant="outline" className="px-1 py-0 h-4 text-[8px] bg-rose-50 text-rose-600 border-rose-200">
+                                                        Deviasi Durasi
+                                                    </Badge>
+                                                )}
+                                                {s.type === 'keluar_kantor' && s.exceededFourHours && (
+                                                    <Badge variant="outline" className="px-1 py-0 h-4 text-[8px] bg-amber-50 text-amber-600 border-amber-200">
+                                                        &gt; 4 Jam
+                                                    </Badge>
+                                                )}
+                                            </div>
                                         </TableCell>
                                         <TableCell className="capitalize">{s.type.replace(/_/g, ' ')}</TableCell>
                                         <TableCell>{format(s.startDate.toDate(), 'dd MMM yyyy', { locale: idLocale })}</TableCell>

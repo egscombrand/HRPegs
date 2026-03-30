@@ -82,11 +82,11 @@ const formSchema = z.object({
                 path: ["endTime"],
                 message: "Jam selesai harus setelah jam mulai.",
             });
-        } else if (durationMinutes > 240) {
+        } else if (durationMinutes > 1440) {
             ctx.addIssue({
                 code: z.ZodIssueCode.custom,
                 path: ["endTime"],
-                message: "Izin meninggalkan kantor maksimal 4 jam.",
+                message: "Izin meninggalkan kantor maksimal 24 jam.",
             });
         }
     }
@@ -253,7 +253,10 @@ export function PermissionRequestForm({ open, onOpenChange, submission, employee
             attachments: attachmentUrl ? [attachmentUrl] : [],
             status: initialStatus,
             managerUid: employeeProfile.supervisorUid || null,
-            reportedExitAt: isOfficeExit ? serverTimestamp() as any : null,
+            // Plan fields for office exit
+            reportedExitAt: isOfficeExit ? Timestamp.fromDate(startDate) : null,
+            expectedReturnAt: isOfficeExit ? Timestamp.fromDate(endDate) : null,
+            estimatedDurationMinutes: isOfficeExit ? totalDurationMinutes : undefined,
         };
 
         await setDocumentNonBlocking(docRef, { ...payload, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true });
@@ -272,10 +275,23 @@ export function PermissionRequestForm({ open, onOpenChange, submission, employee
     if (!submission || !userProfile) return;
     setIsSaving(true);
     try {
+        const now = new Date();
+        const startAt = submission.reportedExitAt?.toDate() || submission.startDate.toDate();
+        const expectedAt = submission.expectedReturnAt?.toDate() || submission.endDate.toDate();
+        const actualDuration = differenceInMinutes(now, startAt);
+        const isLate = isBefore(expectedAt, now);
+        const isOverFourHours = actualDuration > 240;
+
         const docRef = doc(firestore, 'permission_requests', submission.id!);
         await setDocumentNonBlocking(docRef, { 
             status: 'returned', 
-            returnTapInAt: serverTimestamp(), 
+            actualReturnAt: Timestamp.fromDate(now),
+            returnSource: 'manual_button',
+            actualDurationMinutes: actualDuration,
+            exceededEstimatedReturn: isLate,
+            exceededFourHours: isOverFourHours,
+            overtimeReturnMinutes: isLate ? differenceInMinutes(now, expectedAt) : 0,
+            needsManagerAttention: isLate || isOverFourHours,
             updatedAt: serverTimestamp() 
         }, { merge: true });
         
@@ -315,7 +331,7 @@ export function PermissionRequestForm({ open, onOpenChange, submission, employee
                 <div className="flex items-center gap-6">
                     {[
                         { label: 'Karyawan Lapor', done: true },
-                        { label: 'Kembali & Tap-In', done: !!submission?.returnTapInAt || submission?.status === 'returned', skip: submission?.type !== 'keluar_kantor' },
+                        { label: 'Kembali & Tap-In', done: !!submission?.actualReturnAt || submission?.status === 'returned', skip: submission?.type !== 'keluar_kantor' },
                         { label: 'Verifikasi Manager', done: submission?.status === 'verified_manager' || submission?.status === 'approved' }
                     ].filter(s => !s.skip).map((step, i, arr) => (
                         <div key={i} className="flex items-center gap-3">
@@ -384,8 +400,8 @@ export function PermissionRequestForm({ open, onOpenChange, submission, employee
                                     <CardTitle className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Informasi Kembali ke Kantor</CardTitle>
                                 </CardHeader>
                                 <CardContent className="p-5 space-y-4">
-                                    <InfoRow label="Status Kembali" value={submission!.returnTapInAt ? "Sudah Kembali" : "Belum Kembali"} />
-                                    <InfoRow label="Jam Tap-In Kembali" value={submission!.returnTapInAt ? format(submission!.returnTapInAt.toDate(), 'HH:mm') : '-'} />
+                                    <InfoRow label="Status Kembali" value={submission!.actualReturnAt ? "Sudah Kembali" : "Belum Kembali"} />
+                                    <InfoRow label="Jam Tap-In Kembali" value={submission!.actualReturnAt ? format(submission!.actualReturnAt.toDate(), 'HH:mm') : '-'} />
                                 </CardContent>
                             </Card>
                         </div>
@@ -450,25 +466,17 @@ export function PermissionRequestForm({ open, onOpenChange, submission, employee
                                 <div className="space-y-4 animate-in slide-in-from-top-4 duration-500">
                                     <div className="flex items-center justify-between px-1">
                                         <div className="flex items-center gap-2">
-                                            <Timer className={cn("h-4 w-4", durationMinutes > 240 ? "text-destructive animate-pulse" : "text-primary")} />
-                                            <span className="text-xs font-black uppercase tracking-widest text-slate-400">Estimasi Durasi</span>
+                                            <Timer className="h-4 w-4 text-indigo-500" />
+                                            <span className="text-xs font-black uppercase tracking-widest text-slate-400">Estimasi Durasi Izin</span>
                                         </div>
-                                        <Badge variant={durationMinutes > 240 ? "destructive" : "secondary"} className="font-bold px-4 py-1 rounded-full text-[10px]">
-                                            {Math.floor(durationMinutes / 60)}j {durationMinutes % 60}m / 4j 0m
+                                        <Badge variant="secondary" className="font-bold px-4 py-1 rounded-full text-[10px] bg-indigo-50 text-indigo-600 border-indigo-100">
+                                            {Math.floor(durationMinutes / 60)}j {durationMinutes % 60}m
                                         </Badge>
                                     </div>
                                     <Progress 
                                         value={Math.min((durationMinutes / 240) * 100, 100)} 
-                                        className={cn(
-                                            "h-3 rounded-full transition-all duration-700 border border-slate-50 dark:border-slate-850",
-                                            durationMinutes > 240 ? "[&>div]:bg-destructive" : "[&>div]:bg-primary shadow-sm"
-                                        )}
+                                        className="h-2 rounded-full transition-all duration-700 border-none bg-slate-100 dark:bg-slate-800 [&>div]:bg-indigo-500 shadow-none"
                                     />
-                                    {durationMinutes > 240 && (
-                                        <p className="text-[10px] text-destructive font-bold text-center uppercase tracking-widest animate-bounce">
-                                            ⚠️ Maksimal 4 jam untuk izin keluar
-                                        </p>
-                                    )}
                                 </div>
                             )}
 

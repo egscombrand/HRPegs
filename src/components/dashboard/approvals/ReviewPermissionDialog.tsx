@@ -11,9 +11,9 @@ import { Loader2, CheckCircle, ArrowRight, ShieldCheck } from 'lucide-react';
 import { PermissionRequest, isFinalStatus, isActionableStatus } from '@/lib/types';
 import { useAuth } from '@/providers/auth-provider';
 import { useFirestore, updateDocumentNonBlocking, useCollection } from '@/firebase';
-import { doc, serverTimestamp, query, collection, where, limit, orderBy } from 'firebase/firestore';
+import { doc, serverTimestamp, query, collection, where, limit, orderBy, Timestamp } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
+import { format, differenceInMinutes, isBefore } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -79,7 +79,41 @@ export function ReviewPermissionDialog({ open, onOpenChange, submission, onSucce
     }, [isOfficeExit, submission.status, submission.reportedExitAt, submission.uid, firestore, mode, userProfile]);
 
     const { data: returnEvents } = useCollection<any>(returnEventsQuery as any);
-    const detectedReturnAt = returnEvents?.[0]?.tsServer || submission.returnTapInAt;
+    const detectedReturnAt = returnEvents?.[0]?.tsServer || submission.actualReturnAt;
+
+    const syncReturnFromAttendance = async () => {
+        if (!detectedReturnAt || submission.status !== 'reported' || !isOfficeExit || isSaving) return;
+        
+        setIsSaving(true);
+        try {
+            const submissionRef = doc(firestore, 'permission_requests', submission.id!);
+            const now = typeof detectedReturnAt === 'object' && 'toDate' in detectedReturnAt ? (detectedReturnAt as any).toDate() : new Date(detectedReturnAt);
+            const startAt = submission.reportedExitAt?.toDate() || submission.startDate.toDate();
+            const expectedAt = submission.expectedReturnAt?.toDate() || submission.endDate.toDate();
+            
+            const actualDuration = differenceInMinutes(now, startAt);
+            const isLate = isBefore(expectedAt, now);
+            const isOverFourHours = actualDuration > 240;
+
+            await updateDocumentNonBlocking(submissionRef, {
+                status: 'returned',
+                actualReturnAt: Timestamp.fromDate(now),
+                returnSource: 'attendance_auto',
+                returnDetectedFromAttendance: true,
+                actualDurationMinutes: actualDuration,
+                exceededEstimatedReturn: isLate,
+                exceededFourHours: isOverFourHours,
+                overtimeReturnMinutes: isLate ? differenceInMinutes(now, expectedAt) : 0,
+                needsManagerAttention: isLate || isOverFourHours,
+                updatedAt: serverTimestamp()
+            });
+            onSuccess();
+        } catch (e: any) {
+            console.error("Auto-sync return failed:", e);
+        } finally {
+            setIsSaving(false);
+        }
+    };
 
     const handleDecision = async (decision: 'approve' | 'reject' | 'revise') => {
         if (!userProfile) return;
@@ -112,16 +146,29 @@ export function ReviewPermissionDialog({ open, onOpenChange, submission, onSucce
                     else if (decision === 'reject') status = 'rejected_manager';
                     else if (decision === 'revise') status = 'revision_manager';
                 }
-                payload = { status, managerNotes: note || null, managerDecisionAt: serverTimestamp() as any };
+                payload = { status, managerReviewNote: note || null, managerDecisionAt: serverTimestamp() as any };
             } else {
-                if (decision === 'approve') status = 'approved';
+                if (decision === 'approve') status = 'closed'; // Final HRD
                 else if (decision === 'reject') status = 'rejected_hrd';
                 else if (decision === 'revise') status = 'revision_hrd';
-                payload = { status, hrdNotes: note || null, hrdDecisionAt: serverTimestamp() as any };
+                payload = { status, hrdReviewNote: note || null, hrdDecisionAt: serverTimestamp() as any };
             }
             
-            if (isManagerAction && isOfficeExit && detectedReturnAt && !submission.returnTapInAt) {
-                payload.returnTapInAt = detectedReturnAt;
+            if (isManagerAction && isOfficeExit && detectedReturnAt && !submission.actualReturnAt) {
+                const now = typeof detectedReturnAt === 'object' && 'toDate' in detectedReturnAt ? (detectedReturnAt as any).toDate() : new Date(detectedReturnAt);
+                const startAt = submission.reportedExitAt?.toDate() || submission.startDate.toDate();
+                const expectedAt = submission.expectedReturnAt?.toDate() || submission.endDate.toDate();
+                const actualDuration = differenceInMinutes(now, startAt);
+                const isLate = isBefore(expectedAt, now);
+                const isOverFourHours = actualDuration > 240;
+
+                payload.actualReturnAt = Timestamp.fromDate(now);
+                payload.returnSource = 'attendance_auto';
+                payload.returnDetectedFromAttendance = true;
+                payload.actualDurationMinutes = actualDuration;
+                payload.exceededEstimatedReturn = isLate;
+                payload.exceededFourHours = isOverFourHours;
+                payload.overtimeReturnMinutes = isLate ? differenceInMinutes(now, expectedAt) : 0;
             }
 
             await updateDocumentNonBlocking(submissionRef, payload);
@@ -197,24 +244,81 @@ export function ReviewPermissionDialog({ open, onOpenChange, submission, onSucce
                         </Card>
 
                         {isOfficeExit && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-6">
                                 <Card className="border border-slate-200 dark:border-slate-800 shadow-none rounded-lg overflow-hidden">
-                                    <CardHeader className="bg-slate-50 dark:bg-slate-900 py-3 border-b border-slate-200 dark:border-slate-800">
-                                        <CardTitle className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Informasi Keluar Kantor</CardTitle>
+                                    <CardHeader className="bg-slate-100 dark:bg-slate-900/50 py-3 border-b flex flex-row items-center justify-between">
+                                        <CardTitle className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Rencana vs Realisasi</CardTitle>
+                                        <div className="flex items-center gap-2">
+                                            {submission.status === 'reported' && detectedReturnAt && (
+                                                <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={syncReturnFromAttendance} disabled={isSaving}>
+                                                    <ShieldCheck className="h-3 w-3 mr-1 text-emerald-500" /> Sync Return
+                                                </Button>
+                                            )}
+                                            {submission.returnSource && (
+                                                <Badge variant="secondary" className="text-[9px] uppercase tracking-tighter">
+                                                    Source: {submission.returnSource.replace('_', ' ')}
+                                                </Badge>
+                                            )}
+                                        </div>
                                     </CardHeader>
-                                    <CardContent className="p-5 space-y-4">
-                                        <InfoRow label="Jam Laporan Keluar" value={submission.reportedExitAt ? format(submission.reportedExitAt.toDate(), 'HH:mm') : '-'} />
-                                        <InfoRow label="Perkiraan Kembali" value={format(submission.endDate.toDate(), 'HH:mm')} />
+                                    <CardContent className="p-0">
+                                        <div className="grid grid-cols-1 md:grid-cols-2">
+                                            <div className="p-5 border-b md:border-b-0 md:border-r space-y-4">
+                                                <h4 className="text-[10px] font-bold text-slate-400 uppercase">A. RENCANA IZIN KELUAR</h4>
+                                                <InfoRow label="Jam Keluar" value={submission.reportedExitAt ? format(submission.reportedExitAt.toDate(), 'HH:mm') : '-'} />
+                                                <InfoRow label="Estimasi Kembali" value={submission.expectedReturnAt ? format(submission.expectedReturnAt.toDate(), 'HH:mm') : '-'} />
+                                                <InfoRow label="Estimasi Durasi" value={submission.estimatedDurationMinutes ? `${submission.estimatedDurationMinutes} menit` : '-'} />
+                                            </div>
+                                            <div className="p-5 space-y-4 bg-slate-50/30 dark:bg-slate-900/10">
+                                                <h4 className="text-[10px] font-bold text-slate-400 uppercase">B. REALISASI KEMBALI</h4>
+                                                <InfoRow label="Jam Kembali Aktual" value={submission.actualReturnAt ? format(submission.actualReturnAt.toDate(), 'HH:mm') : (detectedReturnAt ? (typeof detectedReturnAt === 'object' && 'toDate' in detectedReturnAt ? format((detectedReturnAt as any).toDate(), 'HH:mm') : format(new Date(detectedReturnAt as any), 'HH:mm')) : '-')} />
+                                                <InfoRow label="Durasi Aktual" value={submission.actualDurationMinutes ? `${submission.actualDurationMinutes} menit` : '-'} />
+                                                <div className="flex justify-between items-center text-sm pt-1">
+                                                    <p className="text-muted-foreground">Bukti Kembali</p>
+                                                    {submission.actualReturnAt || detectedReturnAt ? (
+                                                        <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200">Terdeteksi</Badge>
+                                                    ) : (
+                                                        <Badge variant="outline" className="text-slate-400 border-slate-200">Belum Ada</Badge>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
                                     </CardContent>
                                 </Card>
 
-                                <Card className="border border-slate-200 dark:border-slate-800 shadow-none rounded-lg overflow-hidden">
-                                    <CardHeader className="bg-slate-50 dark:bg-slate-900 py-3 border-b border-slate-200 dark:border-slate-800">
-                                        <CardTitle className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Informasi Kembali ke Kantor</CardTitle>
+                                <Card className="border-amber-100 dark:border-amber-900/30 bg-amber-50/30 dark:bg-amber-900/10 shadow-none rounded-lg overflow-hidden">
+                                     <CardHeader className="py-3 border-b border-amber-100 dark:border-amber-900/30">
+                                        <CardTitle className="text-[10px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-500">Analisis Monitoring</CardTitle>
                                     </CardHeader>
-                                    <CardContent className="p-5 space-y-4">
-                                        <InfoRow label="Status Kembali" value={detectedReturnAt ? "Sudah Kembali" : "Belum Kembali"} />
-                                        <InfoRow label="Jam Tap-In Kembali" value={detectedReturnAt ? (typeof detectedReturnAt === 'object' && 'toDate' in detectedReturnAt ? format((detectedReturnAt as any).toDate(), 'HH:mm') : format(new Date(detectedReturnAt as any), 'HH:mm')) : '-'} />
+                                    <CardContent className="p-5 grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-4">
+                                        <div className="flex justify-between items-center text-sm">
+                                            <p className="text-muted-foreground">Sesuai Estimasi?</p>
+                                            <div className="flex items-center gap-1.5">
+                                                {submission.actualReturnAt && !submission.exceededEstimatedReturn ? (
+                                                    <><CheckCircle className="h-3 w-3 text-emerald-500" /> <span className="font-semibold text-emerald-600 text-xs">Ya</span></>
+                                                ) : submission.exceededEstimatedReturn ? (
+                                                    <span className="font-bold text-rose-500 text-xs">Terlambat (+{submission.overtimeReturnMinutes}m)</span>
+                                                ) : <span className="text-slate-400 text-xs">-</span>}
+                                            </div>
+                                        </div>
+                                        <div className="flex justify-between items-center text-sm">
+                                            <p className="text-muted-foreground">Batas 4 Jam</p>
+                                            <div className="flex items-center gap-1.5">
+                                                {submission.actualReturnAt && !submission.exceededFourHours ? (
+                                                    <span className="font-semibold text-emerald-600 text-xs">Aman (&le; 4j)</span>
+                                                ) : submission.exceededFourHours ? (
+                                                    <span className="font-bold text-amber-600 text-xs">Melebihi 4 Jam</span>
+                                                ) : <span className="text-slate-400 text-xs">-</span>}
+                                            </div>
+                                        </div>
+                                        {submission.needsManagerAttention && (
+                                            <div className="md:col-span-2 pt-2 border-t border-amber-100 dark:border-amber-900/30 flex items-center gap-2">
+                                                <div className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
+                                                <p className="text-[11px] font-bold text-rose-600 dark:text-rose-400 uppercase italic">
+                                                    Perhatian: Membutuhkan verifikasi khusus dari Manager atas deviasi durasi.
+                                                </p>
+                                            </div>
+                                        )}
                                     </CardContent>
                                 </Card>
                             </div>

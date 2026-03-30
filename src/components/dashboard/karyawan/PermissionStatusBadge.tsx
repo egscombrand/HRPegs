@@ -18,8 +18,9 @@ export const permissionStatusDisplay: Record<PermissionRequestStatus, { label: s
     
     // Non-blocking office exit statuses
     reported: { label: 'Dilaporkan Keluar', className: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-800 dark:text-indigo-200 shadow-sm' },
-    returned: { label: 'Tercatat Kembali', className: 'bg-violet-100 text-violet-800 dark:bg-violet-800 dark:text-violet-200 shadow-sm animate-pulse' },
-    verified_manager: { label: 'Terverifikasi Manajer', className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-800 dark:text-emerald-200' },
+    returned: { label: 'Sudah Kembali', className: 'bg-violet-100 text-violet-800 dark:bg-violet-800 dark:text-violet-200 shadow-sm animate-pulse' },
+    verified_manager: { label: 'Terverifikasi Manajer', className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-800 dark:text-emerald-200 border-emerald-200 shadow-sm' },
+    closed: { label: 'Selesai (Arsip)', className: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200 opacity-60 border-slate-200' },
 };
 
 interface PermissionStatusBadgeProps {

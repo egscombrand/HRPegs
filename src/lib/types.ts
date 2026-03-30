@@ -815,7 +815,8 @@ export const PERMISSION_REQUEST_STATUSES = [
   // Specific to non-blocking office exits (keluar_kantor)
   'reported', // Laporan keluar dibuat
   'returned', // Sudah tap in kembali
-  'verified_manager', // Diverifikasi manager (final)
+  'verified_manager', // Diverifikasi manager
+  'closed', // Selesai / Diarsipkan HRD
 ] as const;
 export type PermissionRequestStatus = (typeof PERMISSION_REQUEST_STATUSES)[number];
 
@@ -849,9 +850,27 @@ export type PermissionRequest = {
     updatedAt: Timestamp;
 
     // Specific to 'keluar_kantor'
-    reportedExitAt?: Timestamp | null; // timestamp when they click "Report Exit"
-    returnTapInAt?: Timestamp | null; // timestamp from the next tap_in event
-    expectedReturnAt?: Timestamp | null; // optional estimation
+    reportedExitAt?: Timestamp | null; // Jam keluar rencana
+    expectedReturnAt?: Timestamp | null; // Estimasi jam kembali
+    estimatedDurationMinutes?: number; // Estimasi durasi rencana
+
+    // Realisasi Kembali
+    actualReturnAt?: Timestamp | null; // Jam kembali aktual
+    returnSource?: 'attendance_auto' | 'manual_button'; // Sumber deteksi
+    returnDetectedFromAttendance?: boolean; // Apakah deteksi via absen?
+    
+    // Analisis & Monitoring
+    actualDurationMinutes?: number; // Total durasi nyata
+    exceededEstimatedReturn?: boolean; // Apakah terlambat dari estimasi?
+    exceededFourHours?: boolean; // Apakah lebih dari 4 jam?
+    overtimeReturnMinutes?: number; // Selisih menit keterlambatan
+    
+    needsManagerAttention?: boolean; // Perlu perhatian manager
+    needsHrdNote?: boolean; // Perlu catatan HRD
+
+    // Review Notes
+    managerReviewNote?: string | null;
+    hrdReviewNote?: string | null;
 };
 
 /**
