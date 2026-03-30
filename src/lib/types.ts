@@ -820,8 +820,9 @@ export const PERMISSION_REQUEST_STATUSES = [
 ] as const;
 export type PermissionRequestStatus = (typeof PERMISSION_REQUEST_STATUSES)[number];
 
-export const PERMISSION_TYPES = ["tidak_masuk", "keluar_kantor", "sakit"] as const;
+export const PERMISSION_TYPES = ["tidak_masuk", "keluar_kantor", "sakit", "cuti"] as const;
 export type PermissionType = (typeof PERMISSION_TYPES)[number];
+
 
 
 export type PermissionRequest = {

@@ -28,25 +28,40 @@ export async function POST(req: NextRequest) {
     const decodedToken = await admin.auth().verifyIdToken(idToken);
     
     const db = admin.firestore();
-    const adminRoleDoc = await db.collection('roles_admin').doc(decodedToken.uid).get();
-    const hrdRoleDoc = await db.collection('roles_hrd').doc(decodedToken.uid).get();
+    
+    // Check authority from the main 'users' collection
+    const userDoc = await db.collection('users').doc(decodedToken.uid).get();
+    // Using exists() to be consistent with other routes in this project
+    if (typeof (userDoc as any).exists === 'function' ? !(userDoc as any).exists() : !userDoc.exists) {
+        console.error(`User doc not found for UID: ${decodedToken.uid}`);
+        return NextResponse.json({ error: 'User profile not found.' }, { status: 403 });
+    }
 
-    if (!adminRoleDoc.exists && !hrdRoleDoc.exists) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    const userData = userDoc.data();
+    const role = userData?.role;
+    const authorizedRoles = ['super-admin', 'hrd'];
+
+    if (!authorizedRoles.includes(role)) {
+        console.error(`Unauthorized access attempt by UID: ${decodedToken.uid} with role: ${role}`);
+        return NextResponse.json({ error: 'Forbidden: Insufficient permissions.' }, { status: 403 });
     }
 
     const body = await req.json();
+    console.log("Generating invites for body:", body);
+    
     const parseResult = generateSchema.safeParse(body);
-
     if (!parseResult.success) {
-      return NextResponse.json({ error: 'Invalid request body.', details: parseResult.error.flatten() }, { status: 400 });
+      return NextResponse.json({ 
+        error: 'Invalid request body.', 
+        details: parseResult.error.flatten() 
+      }, { status: 400 });
     }
     
     const { brandId, employmentType, quantity } = parseResult.data;
     
     const brandDoc = await db.collection('brands').doc(brandId).get();
-    if (!brandDoc.exists) {
-        return NextResponse.json({ error: 'Brand not found.' }, { status: 404 });
+    if (typeof (brandDoc as any).exists === 'function' ? !(brandDoc as any).exists() : !brandDoc.exists) {
+        return NextResponse.json({ error: `Brand ${brandId} not found.` }, { status: 404 });
     }
     const brandName = brandDoc.data()?.name || 'Unknown Brand';
     
@@ -61,28 +76,46 @@ export async function POST(req: NextRequest) {
         totalSlots: quantity,
         claimedSlots: 0,
         createdBy: decodedToken.uid,
-        createdAt: now,
-        updatedAt: now,
+        createdAt: now as any,
+        updatedAt: now as any,
     };
     
+    console.log(`Writing batch ${batchId} to Firestore...`);
     await batchRef.set(batchData);
 
+    // Omit Timestamp objects from JSON as they can cause serialization errors in some environments
+    const { createdAt, updatedAt, ...restOfData } = batchData;
+
     return NextResponse.json(
-        { message: 'Invite batch generated successfully.', ...batchData },
+        { 
+            message: 'Invite batch generated successfully.', 
+            id: batchId, 
+            ...restOfData,
+            createdAt: now.toDate().toISOString(),
+            updatedAt: now.toDate().toISOString()
+        },
         { status: 201 }
     );
 
+
   } catch (error: any) {
-    console.error("Generate invites error:", error);
-    if (error.code && error.code.startsWith('auth/')) {
-        let message = 'Authentication error. Please try logging out and in again.';
-        if (error.code === 'auth/id-token-expired') {
-            message = 'Your session has expired. Please log in again.';
-        }
-        return NextResponse.json({ error: message }, { status: 401 });
+    console.error("CRITICAL: Generate invites error:", error);
+    
+    // Improved diagnostic messages for the user
+    let userFriendlyError = 'Terjadi kesalahan sistem saat mencoba membuat batch undangan.';
+    if (error.message?.includes('The default Firebase app does not exist') || error.message?.includes('projectId')) {
+        userFriendlyError = 'Konfigurasi Firebase Admin SDK belum lengkap atau tidak valid di .env.local.';
+    } else if (error.message?.includes('privateKey')) {
+        userFriendlyError = 'FIREBASE_PRIVATE_KEY tidak valid atau format penulisan (\\n) salah.';
     }
-    return NextResponse.json({ error: 'An unexpected server error occurred.' }, { status: 500 });
+
+    return NextResponse.json({ 
+        error: userFriendlyError,
+        message: error.message
+    }, { status: 500 });
   }
 }
+
+
 
     

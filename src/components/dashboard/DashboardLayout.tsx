@@ -12,18 +12,23 @@ import { doc } from 'firebase/firestore';
 import type { NavigationSetting } from '@/lib/types';
 import { MENU_CONFIG, ALL_MENU_GROUPS } from '@/lib/menu-config';
 import { CheckSquare, FileHeart } from 'lucide-react';
+import { isActiveEmployeeEligibleForLeave, canUserReview } from '@/lib/auth-eligibility';
+
 
 type DashboardLayoutProps = {
   children: React.ReactNode;
   pageTitle: string;
   actionArea?: ReactNode;
+  menuConfig?: MenuGroup[];
 };
 
 export function DashboardLayout({ 
   children, 
   pageTitle, 
-  actionArea
+  actionArea,
+  menuConfig: manualMenuConfig
 }: DashboardLayoutProps) {
+
   const { userProfile } = useAuth();
   const firestore = useFirestore();
 
@@ -82,25 +87,52 @@ export function DashboardLayout({
         }
     }
     
-    if (isLoadingSettings || !navSettings?.visibleMenuItems) {
-      return finalConfig;
-    }
-    
-    const visibleKeys = new Set(navSettings.visibleMenuItems);
+    // 1. Initial State: use either manual override or default role menu
+    let currentConfig = manualMenuConfig || finalConfig;
 
-    // If the user is a division manager, ensure their approval menus are always visible,
-    // overriding any database setting for these specific, conditional menu items.
-    if (userProfile?.isDivisionManager) {
-        visibleKeys.add('manager.overtime_approval');
-        visibleKeys.add('manager.permission_approval');
-    }
-    
-    return finalConfig.map((group: MenuGroup) => ({
+    // 2. Perform Dynamic Authority Checks
+    const leaveStatus = isActiveEmployeeEligibleForLeave(userProfile);
+    const userCanReview = canUserReview(userProfile);
+
+    // 3. Apply Hard Eligibility/Authority Filters
+    // This part runs ALWAYS, even if DB settings are missing/broken.
+    currentConfig = currentConfig.map((group: MenuGroup) => ({
       ...group,
-      items: group.items.filter(item => visibleKeys.has(item.key))
-    })).filter((group: MenuGroup) => group.items.length > 0);
+      items: group.items.filter(item => {
+          // Leave Eligibility (Staff must be active/loyal)
+          if (item.key === 'employee.leave') {
+              return leaveStatus.isEligible;
+          }
+          
+          // Review Authority (Only for Managers, HRD, and Appointed Division Managers)
+          const reviewKeys = ['review.reports', 'manager.overtime_approval', 'manager.permission_approval', 'hrd.permission_approval', 'hrd.overtime_approval'];
+          if (reviewKeys.includes(item.key) && !userCanReview) {
+              return false;
+          }
+          
+          return true;
+      })
+    })).filter((group) => {
+        // Double security: if the group is specifically "Review" and they aren't a reviewer, nix it.
+        if (group.title === 'Review' && !userCanReview) {
+            return false;
+        }
+        return group.items.length > 0;
+    });
 
-  }, [roleKey, userProfile, navSettings, isLoadingSettings]);
+
+    // 4. Apply Database Visibility Restrictions
+    // If Admin has unchecked certain items in the 'Menu Visibility Settings' panel.
+    if (!isLoadingSettings && navSettings?.visibleMenuItems) {
+        const visibleKeys = new Set(navSettings.visibleMenuItems);
+        currentConfig = currentConfig.map(group => ({
+            ...group,
+            items: group.items.filter(item => visibleKeys.has(item.key))
+        })).filter(group => group.items.length > 0);
+    }
+
+    return currentConfig;
+  }, [roleKey, userProfile, navSettings, isLoadingSettings, manualMenuConfig]);
 
   return (
     <SidebarProvider>
@@ -116,4 +148,5 @@ export function DashboardLayout({
         </SidebarInset>
     </SidebarProvider>
   );
+
 }

@@ -9,11 +9,8 @@ export async function GET(
   req: NextRequest,
   { params }: { params: { code: string } }
 ) {
-  if (!admin.apps.length) {
-    return NextResponse.json({ error: 'Firebase Admin SDK not initialized.' }, { status: 500 });
-  }
-
   const { code } = params;
+
   if (!code) {
     return NextResponse.json({ error: 'Kode undangan tidak ditemukan.' }, { status: 400 });
   }
@@ -44,8 +41,18 @@ export async function GET(
 
   } catch (error: any) {
     console.error('Error validating invite batch:', error);
+    
+    // Check if the error is actually a configuration issue
+    if (error.message?.includes('The default Firebase app does not exist') || error.message?.includes('projectId')) {
+        return NextResponse.json({ 
+            error: 'Kesalahan Konfigurasi Server: Firebase Admin SDK belum siap.',
+            details: 'Periksa variabel FIREBASE_* di .env.local' 
+        }, { status: 500 });
+    }
+    
     return NextResponse.json({ error: 'Terjadi kesalahan pada server saat validasi kode.' }, { status: 500 });
   }
 }
+
 
     

@@ -15,7 +15,7 @@ import { Loader2, FileUp, Trash2, Clock, Info, CheckCircle2, AlertCircle } from 
 import { useAuth } from '@/providers/auth-provider';
 import { useFirestore, setDocumentNonBlocking } from '@/firebase';
 import { doc, serverTimestamp, Timestamp, collection } from 'firebase/firestore';
-import { PERMISSION_TYPES, type PermissionRequest, type UserProfile, type EmployeeProfile, type Brand } from '@/lib/types';
+import { PERMISSION_TYPES, type PermissionRequest, type UserProfile, type EmployeeProfile, type Brand, type PermissionType } from '@/lib/types';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { GoogleDatePicker } from '@/components/ui/google-date-picker';
 import { format, differenceInMinutes, set, addDays, startOfDay, endOfDay, isBefore } from 'date-fns';
@@ -33,10 +33,12 @@ const PERMISSION_TYPE_LABELS = {
     tidak_masuk: 'Izin Tidak Masuk Bekerja',
     keluar_kantor: 'Izin Meninggalkan Kantor',
     sakit: 'Izin Sakit',
+    cuti: 'Izin Cuti Tahunan',
 };
 
 // Base schema for all permission requests
 // Schema for all permission requests
+
 const formSchema = z.object({
   type: z.enum(PERMISSION_TYPES, { required_error: 'Jenis izin harus dipilih.' }),
   reason: z.string().min(10, "Alasan/keterangan harus diisi (minimal 10 karakter)."),
@@ -111,13 +113,14 @@ interface PermissionRequestFormProps {
   employeeProfile: EmployeeProfile | null;
   brands: Brand[];
   onSuccess: () => void;
+  defaultType?: PermissionType;
 }
 
 const InfoRow = ({ label, value }: { label: string; value: string | number }) => (
     <div className="flex justify-between text-sm"><p className="text-muted-foreground">{label}</p><p className="font-medium text-right">{value}</p></div>
 );
 
-export function PermissionRequestForm({ open, onOpenChange, submission, employeeProfile, brands, onSuccess }: PermissionRequestFormProps) {
+export function PermissionRequestForm({ open, onOpenChange, submission, employeeProfile, brands, onSuccess, defaultType }: PermissionRequestFormProps) {
   const [isSaving, setIsSaving] = useState(false);
   const { userProfile } = useAuth();
   const firestore = useFirestore();
@@ -140,7 +143,7 @@ export function PermissionRequestForm({ open, onOpenChange, submission, employee
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: { 
-        type: 'tidak_masuk', 
+        type: defaultType || 'tidak_masuk', 
         reason: '', 
         startDate: new Date(), 
         endDate: new Date(), 
@@ -445,7 +448,11 @@ export function PermissionRequestForm({ open, onOpenChange, submission, employee
                                 render={({ field }) => (
                                     <FormItem>
                                     <FormLabel className="text-sm font-bold uppercase tracking-wider text-slate-500">Jenis Izin</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value}>
+                                    <Select 
+                                        onValueChange={field.onChange} 
+                                        value={field.value} 
+                                        disabled={!!defaultType || isViewing}
+                                    >
                                         <FormControl>
                                             <SelectTrigger className="h-14 text-base transition-all focus:ring-4 focus:ring-primary/10 rounded-xl border-slate-100 dark:border-slate-800">
                                                 <SelectValue placeholder="Pilih jenis izin" />
@@ -457,6 +464,7 @@ export function PermissionRequestForm({ open, onOpenChange, submission, employee
                                         ))}
                                         </SelectContent>
                                     </Select>
+
                                     <FormMessage />
                                     </FormItem>
                                 )}

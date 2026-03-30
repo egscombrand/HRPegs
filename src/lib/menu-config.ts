@@ -93,6 +93,7 @@ export const ALL_MENU_GROUPS: MenuGroup[] = [
             { key: 'employee.profile.magang', href: '/admin/karyawan/magang/profile', label: 'Profil Magang', icon: createElement(User) },
             { key: 'employee.overtime', href: '/admin/karyawan/pengajuan-lembur', label: 'Pengajuan Lembur', icon: createElement(FileClock) },
             { key: 'employee.permission', href: '/admin/karyawan/pengajuan-izin', label: 'Pengajuan Izin', icon: createElement(FileHeart) },
+            { key: 'employee.leave', href: '/admin/karyawan/pengajuan-cuti', label: 'Pengajuan Cuti', icon: createElement(CalendarOff) },
             { key: 'employee.dashboard.training', href: '/admin/karyawan/dashboard-training', label: 'Dashboard Training', icon: createElement(LayoutDashboard) },
         ]
     },
@@ -169,10 +170,12 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
             { key: 'employee.dashboard', href: '/admin/karyawan/dashboard', label: 'Dashboard', icon: createElement(LayoutDashboard) },
             { key: 'employee.overtime', href: '/admin/karyawan/pengajuan-lembur', label: 'Pengajuan Lembur', icon: createElement(FileClock) },
             { key: 'employee.permission', href: '/admin/karyawan/pengajuan-izin', label: 'Pengajuan Izin', icon: createElement(FileHeart) },
+            { key: 'employee.leave', href: '/admin/karyawan/pengajuan-cuti', label: 'Pengajuan Cuti', icon: createElement(CalendarOff) },
         ]
     },
     REVIEW_ITEMS,
   ],
+
   'karyawan-magang': [
       {
         title: "Internship",

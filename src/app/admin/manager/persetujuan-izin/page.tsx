@@ -8,20 +8,19 @@ import { MENU_CONFIG } from '@/lib/menu-config';
 import { PermissionApprovalClient } from '@/components/dashboard/approvals/PermissionApprovalClient';
 import { useRouter } from 'next/navigation';
 
+import { canUserReview } from '@/lib/auth-eligibility';
+
 export default function PersetujuanIzinManagerPage() {
   const { userProfile, loading } = useAuth();
   const router = useRouter();
 
-  // Loosen the role guard to allow 'karyawan' role to access the page initially
-  const hasAccess = useRoleGuard(['manager', 'karyawan']); 
+  // Initial role-based check
+  const hasAccess = useRoleGuard(['manager', 'hrd', 'super-admin', 'karyawan']); 
   
   useEffect(() => {
-    // Post-load check to ensure only authorized users stay
+    // Standardized review authority check
     if (!loading && userProfile) {
-      const isManagerRole = userProfile.role === 'manager';
-      const isDivisionManager = !!userProfile.isDivisionManager;
-      
-      if (!isManagerRole && !isDivisionManager) {
+      if (!canUserReview(userProfile)) {
         router.replace('/admin');
       }
     }
@@ -41,9 +40,10 @@ export default function PersetujuanIzinManagerPage() {
     return <DashboardLayout pageTitle="Persetujuan Izin" menuConfig={menuConfig}><Skeleton className="h-[600px] w-full" /></DashboardLayout>;
   }
 
-  // Final check before rendering content
-  if (!userProfile || (!userProfile.isDivisionManager && userProfile.role !== 'manager')) {
-      return <DashboardLayout pageTitle="Akses Ditolak" menuConfig={menuConfig}><p>Anda tidak memiliki izin untuk mengakses halaman ini.</p></DashboardLayout>;
+  // Final authority check
+  const authorized = canUserReview(userProfile);
+  if (!authorized && !loading) {
+      return <DashboardLayout pageTitle="Akses Ditolak" menuConfig={menuConfig}><p className="py-20 text-center text-muted-foreground">Anda tidak memiliki otoritas sebagai reviewer.</p></DashboardLayout>;
   }
 
   return (

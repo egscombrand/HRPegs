@@ -31,7 +31,7 @@ export function AdminGuard({
       return;
     }
 
-    if (!ROLES_INTERNAL.includes(userProfile.role)) {
+    if (!ROLES_INTERNAL.includes(userProfile.role as any)) {
       // Logged in, but is a candidate. Redirect to candidate portal.
       router.replace('/careers/login');
     }
@@ -44,7 +44,7 @@ export function AdminGuard({
   }
 
   // For all other /admin/* routes, show a loader while we verify the user's role.
-  if (loading || !userProfile || !ROLES_INTERNAL.includes(userProfile.role)) {
+  if (loading || !userProfile || !ROLES_INTERNAL.includes(userProfile.role as any)) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin" />

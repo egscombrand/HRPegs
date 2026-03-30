@@ -12,8 +12,6 @@ import { Badge } from '@/components/ui/badge';
 export default function KaryawanDashboardPage() {
   const { userProfile } = useAuth();
   const hasAccess = useRoleGuard('karyawan');
-  const menuConfig = useMemo(() => MENU_CONFIG['karyawan'] || [], []);
-
   if (!hasAccess || !userProfile) {
     return (
       <div className="flex h-screen w-full items-center justify-center p-4">
@@ -23,7 +21,8 @@ export default function KaryawanDashboardPage() {
   }
 
   return (
-    <DashboardLayout pageTitle="Dashboard Karyawan" menuConfig={menuConfig}>
+    <DashboardLayout pageTitle="Dashboard Karyawan">
+
         <Card>
             <CardHeader>
                 <CardTitle>Halo, {userProfile.fullName}!</CardTitle>
