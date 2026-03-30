@@ -150,32 +150,52 @@
       "properties": {
         "uid": { "type": "string", "description": "Matches Firebase Auth UID." },
         "employmentType": { "type": "string", "enum": ["magang", "training", "karyawan"] },
-        "internSubtype": { "type": "string", "enum": ["intern_education", "intern_pre_probation"] },
+        "employmentStatus": { "type": "string", "enum": ["active", "probation", "resigned", "terminated"] },
+        "employeeNumber": { "type": "string" },
+        "joinDate": { "type": "string", "format": "date" },
+        "positionTitle": { "type": "string" },
+        "division": { "type": "string" },
+        "brandId": { "type": "string" },
+        "brandName": { "type": "string" },
+        "workLocation": { "type": "string" },
+        "managerUid": { "type": "string" },
+        "managerName": { "type": "string" },
         "fullName": { "type": "string" },
         "nickName": { "type": "string" },
         "phone": { "type": "string" },
         "email": { "type": "string", "format": "email" },
+        "nik": { "type": "string" },
         "gender": { "type": "string", "enum": ["Laki-laki", "Perempuan", "Lainnya"] },
         "birthPlace": { "type": "string" },
         "birthDate": { "type": "string", "format": "date" },
-        "addressCurrent": { "type": "string" },
-        "schoolOrCampus": { "type": "string" },
-        "major": { "type": "string" },
-        "educationLevel": { "type": "string", "enum": ["SMA/SMK", "D3", "S1", "S2", "Lainnya"] },
-        "expectedEndDate": { "type": "string", "format": "date" },
-        "internshipStartDate": { "type": "string", "format": "date" },
-        "internshipEndDate": { "type": "string", "format": "date" },
+        "maritalStatus": { "type": "string", "enum": ["Belum Kawin", "Kawin", "Cerai Hidup", "Cerai Mati"] },
+        "religion": { "type": "string" },
+        "address": { "$ref": "#/backend/entities/Address" },
+        "bankName": { "type": "string" },
+        "bankAccountNumber": { "type": "string" },
+        "bankAccountHolderName": { "type": "string" },
+        "npwp": { "type": "string" },
+        "bpjsKesehatan": { "type": "string" },
+        "bpjsKetenagakerjaan": { "type": "string" },
         "emergencyContactName": { "type": "string" },
         "emergencyContactRelation": { "type": "string" },
         "emergencyContactPhone": { "type": "string" },
         "documents": {
           "type": "object",
           "properties": {
-            "idCardUrl": { "type": "string", "format": "uri" },
-            "studentCardUrl": { "type": "string", "format": "uri" },
-            "cvUrl": { "type": "string", "format": "uri" }
+            "photoUrl": { "type": "string", "format": "uri" },
+            "ktpUrl": { "type": "string", "format": "uri" },
+            "kkUrl": { "type": "string", "format": "uri" },
+            "npwpUrl": { "type": "string", "format": "uri" },
+            "bankProofUrl": { "type": "string", "format": "uri" },
+            "ijazahUrl": { "type": "string", "format": "uri" },
+            "cvUrl": { "type": "string", "format": "uri" },
+            "certificateUrls": { "type": "array", "items": { "type": "string", "format": "uri" } }
           }
         },
+        "hrdNotes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
         "completeness": {
           "type": "object",
           "properties": {
@@ -183,13 +203,9 @@
             "completedAt": { "type": "string", "format": "date-time" }
           }
         },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "updatedAt": { "type": "string", "format": "date-time" },
-        "supervisorUid": { "type": "string", "description": "UID of the assigned supervisor/mentor." },
-        "supervisorName": { "type": "string", "description": "Denormalized name of the supervisor." },
-        "positionTitle": { "type": "string" }
+        "internSubtype": { "type": "string", "enum": ["intern_education", "intern_pre_probation"] }
       },
-      "required": ["uid", "employmentType", "fullName", "phone", "email", "addressCurrent", "schoolOrCampus", "educationLevel", "internSubtype", "emergencyContactName", "emergencyContactRelation", "emergencyContactPhone"]
+      "required": ["uid", "employmentType", "fullName", "phone", "email"]
     },
     "NavigationSetting": {
       "title": "Navigation Setting",
@@ -709,9 +725,9 @@
         "assessmentId": { "type": "string" },
         "order": { "type": "number" },
         "text": { "type": "string" },
-        "choices": { 
-          "type": "array", 
-          "items": { 
+        "choices": {
+          "type": "array",
+          "items": {
             "type": "object",
             "properties": {
               "text": { "type": "string" },
@@ -901,7 +917,7 @@
         "attachments": { "type": "array", "items": { "type": "string", "format": "uri" } },
         "status": {
           "type": "string",
-          "enum": ["draft", "pending_manager", "rejected_manager", "revision_manager", "pending_hrd", "rejected_hrd", "revision_hrd", "approved"]
+          "enum": ["draft", "pending_manager", "rejected_manager", "revision_manager", "approved_by_manager", "pending_hrd", "rejected_hrd", "revision_hrd", "approved"]
         },
         "managerUid": { "type": "string", "description": "UID of the manager responsible for approval." },
         "managerNotes": { "type": "string" },
@@ -913,6 +929,47 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "fullName", "brandId", "division", "date", "startTime", "endTime", "overtimeType", "tasks", "reason", "location", "status", "createdAt", "updatedAt"]
+    },
+    "PermissionRequest": {
+        "title": "Permission Request",
+        "description": "Represents an employee's request for various types of leave or permission.",
+        "type": "object",
+        "properties": {
+            "uid": { "type": "string" },
+            "fullName": { "type": "string" },
+            "brandId": { "type": "string" },
+            "division": { "type": "string" },
+            "positionTitle": { "type": "string" },
+            "type": {
+                "type": "string",
+                "enum": ["cuti", "sakit", "keluar_kantor", "tidak_masuk", "duka", "akademik", "lainnya"]
+            },
+            "reason": { "type": "string", "description": "The main reason/description for the permission request." },
+            "startDate": { "type": "string", "format": "date-time" },
+            "endDate": { "type": "string", "format": "date-time" },
+            "totalDurationMinutes": { "type": "number" },
+            "attachments": { "type": "array", "items": { "type": "string", "format": "uri" } },
+            "attachmentStatus": { "type": "string", "enum": ["provided", "not_provided", "verification_needed"] },
+            "status": {
+              "type": "string",
+              "enum": ["draft", "pending_manager", "rejected_manager", "revision_manager", "approved_by_manager", "pending_hrd", "rejected_hrd", "revision_hrd", "approved", "reported", "returned", "verified_manager", "closed"]
+            },
+            "managerUid": { "type": "string" },
+            "managerNotes": { "type": "string" },
+            "managerDecisionAt": { "type": "string", "format": "date-time" },
+            "hrdReviewerUid": { "type": "string" },
+            "hrdNotes": { "type": "string" },
+            "hrdDecisionAt": { "type": "string", "format": "date-time" },
+            "createdAt": { "type": "string", "format": "date-time" },
+            "updatedAt": { "type": "string", "format": "date-time" },
+            "destination": { "type": "string", "description": "For 'keluar_kantor': The location/destination." },
+            "sicknessDescription": { "type": "string", "description": "For 'sakit': A brief description of the illness." },
+            "familyRelation": { "type": "string", "description": "For 'duka': The relationship to the deceased." },
+            "academicActivityName": { "type": "string", "description": "For 'akademik': The name of the academic event." },
+            "academicInstitution": { "type": "string" },
+            "otherLeaveTitle": { "type": "string", "description": "For 'lainnya': The custom title for the leave." }
+        },
+        "required": ["uid", "fullName", "brandId", "division", "type", "reason", "startDate", "endDate", "totalDurationMinutes", "status", "createdAt", "updatedAt"]
     },
     "FieldTrackingEntry": {
         "title": "Field Tracking Entry",
@@ -928,42 +985,6 @@
             "updatedAt": { "type": "string", "format": "date-time" }
         },
         "required": ["uid", "lat", "lng", "status", "updatedAt"]
-    },
-    "LeaveRequest": {
-        "title": "Leave Request",
-        "description": "Represents an employee's request for leave.",
-        "type": "object",
-        "properties": {
-            "uid": { "type": "string" },
-            "brandId": { "type": "string" },
-            "type": { "type": "string", "enum": ["annual", "sick", "unpaid", "maternity", "paternity"] },
-            "startDate": { "type": "string", "format": "date" },
-            "endDate": { "type": "string", "format": "date" },
-            "days": { "type": "number" },
-            "reason": { "type": "string" },
-            "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
-            "requestedAt": { "type": "string", "format": "date-time" },
-            "decidedAt": { "type": "string", "format": "date-time" },
-            "decidedBy": { "type": "string", "description": "UID of the decider" }
-        },
-        "required": ["uid", "type", "startDate", "endDate", "days", "reason", "status", "requestedAt"]
-    },
-    "PermissionRequest": {
-        "title": "Permission Request",
-        "description": "Represents an employee's request for a short permission (e.g., leaving early).",
-        "type": "object",
-        "properties": {
-            "uid": { "type": "string" },
-            "brandId": { "type": "string" },
-            "date": { "type": "string", "format": "date" },
-            "startTime": { "type": "string", "format": "time" },
-            "endTime": { "type": "string", "format": "time" },
-            "reason": { "type": "string" },
-            "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
-            "requestedAt": { "type": "string", "format": "date-time" },
-            "decidedBy": { "type": "string", "description": "UID of the decider" }
-        },
-        "required": ["uid", "date", "startTime", "endTime", "reason", "status", "requestedAt"]
     },
     "TrainingVideo": {
         "title": "Training Video",
@@ -1302,16 +1323,15 @@
         }
       },
       {
+        "path": "/permission_requests/{requestId}",
+        "definition": {
+          "schema": { "$ref": "#/backend/entities/PermissionRequest" },
+          "description": "Stores all employee permission/leave requests and their approval history."
+        }
+      },
+      {
         "path": "/field_tracking/{uid}/entries/{entryId}",
         "definition": { "schema": { "$ref": "#/backend/entities/FieldTrackingEntry" }, "description": "Location entries for an employee on field duty." }
-      },
-      {
-        "path": "/leave_requests/{requestId}",
-        "definition": { "schema": { "$ref": "#/backend/entities/LeaveRequest" }, "description": "Employee leave requests." }
-      },
-      {
-        "path": "/permission_requests/{requestId}",
-        "definition": { "schema": { "$ref": "#/backend/entities/PermissionRequest" }, "description": "Employee permission requests (short leave)." }
       },
       {
         "path": "/training_videos/{videoId}",
@@ -1339,3 +1359,5 @@
     "reasoning": "The Firestore structure is designed to provide a secure and scalable foundation for the HRP Starter application. It emphasizes authorization independence, clarity, and adherence to Firestore best practices.\n\nThe design leverages path-based ownership for user profiles, ensuring that only the user (or a super_admin) can access their data.  This is achieved by placing user documents at `/users/{userId}`. This structure inherently provides authorization independence; security rules can validate `request.auth.uid` against `@{userId}` path segment without needing to perform costly and brittle `get()` operations to check ownership.\n\nThe application requirements include a seeding process that creates initial user accounts with specific roles.  The `users/{userId}` collection stores user profiles (fullName, email, role, isActive, createdAt) and facilitates role-based access control. The `super_admin` role has read/write access to all collections, which is achieved in security rules by checking for the existence of a document in a dedicated `/roles_admin/{userId}` collection.\n\nQAPs (Rules Are Not Filters): List operations are inherently safe due to the structure.  A regular user can only read their own document in `users/{userId}`, so listing the entire collection would return no documents (without super-admin privileges).  The super-admin role, indicated by membership in `/roles_admin/{userId}`, grants broad access and bypasses the filtering constraints imposed on other users.\n\nAuthorization Independence: Achieved by storing all necessary authorization information directly within the user document at `/users/{userId}` (specifically, the `role` field) and leveraging path-based ownership. The super admin role is checked for via existence of a document, avoiding document `get()` calls.\n\n"
   }
 }
+
+    

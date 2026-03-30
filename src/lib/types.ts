@@ -51,10 +51,10 @@ export type EmployeeProfile = {
   employmentStatus?: 'active' | 'probation' | 'resigned' | 'terminated';
   employeeNumber?: string;
   joinDate?: Timestamp;
-  positionTitle: string;
-  division: string;
-  brandId: string;
-  brandName: string;
+  positionTitle?: string;
+  division?: string;
+  brandId?: string | string[];
+  brandName?: string;
   workLocation?: string; // Office Site ID or 'Remote'
   managerUid?: string;
   managerName?: string;
@@ -71,6 +71,7 @@ export type EmployeeProfile = {
   maritalStatus?: 'Belum Kawin' | 'Kawin' | 'Cerai Hidup' | 'Cerai Mati';
   religion?: string;
   address?: Address;
+  addressCurrent?: string; // Legacy
 
   // --- Administrasi (User Managed) ---
   bankName?: string;
@@ -604,6 +605,7 @@ export type EvaluationCriteria = {
 export type MonthlyEvaluation = {
   id?: string;
   internUid: string;
+  internName?: string;
   evaluationMonth: Timestamp; // The first day of the month being evaluated
   evaluatorUid?: string;
   evaluatorName?: string;
@@ -851,7 +853,7 @@ export const PERMISSION_REQUEST_STATUSES = [
 ] as const;
 export type PermissionRequestStatus = (typeof PERMISSION_REQUEST_STATUSES)[number];
 
-export const PERMISSION_TYPES = ["tidak_masuk", "keluar_kantor", "sakit", "cuti", "duka", "akademik", "lainnya"] as const;
+export const PERMISSION_TYPES = ["cuti", "sakit", "keluar_kantor", "tidak_masuk", "duka", "akademik", "lainnya"] as const;
 export type PermissionType = (typeof PERMISSION_TYPES)[number];
 
 
@@ -881,41 +883,32 @@ export type PermissionRequest = {
     createdAt: Timestamp;
     updatedAt: Timestamp;
 
-    // Specific to 'keluar_kantor'
+    // --- Detail Izin Keluar Kantor ---
+    destination?: string; // For 'keluar_kantor': The location/destination.
     reportedExitAt?: Timestamp | null; // Jam keluar rencana
     expectedReturnAt?: Timestamp | null; // Estimasi jam kembali
     estimatedDurationMinutes?: number; // Estimasi durasi rencana
-
-    // Realisasi Kembali
+    
+    // --- Realisasi Kembali (Izin Keluar Kantor) ---
     actualReturnAt?: Timestamp | null; // Jam kembali aktual
     returnSource?: 'attendance_auto' | 'manual_button'; // Sumber deteksi
     returnDetectedFromAttendance?: boolean; // Apakah deteksi via absen?
-    
-    // Analisis & Monitoring
     actualDurationMinutes?: number; // Total durasi nyata
     exceededEstimatedReturn?: boolean; // Apakah terlambat dari estimasi?
     exceededFourHours?: boolean; // Apakah lebih dari 4 jam?
     overtimeReturnMinutes?: number; // Selisih menit keterlambatan
     
+    // Flags & Reviewer Notes
     needsManagerAttention?: boolean; // Perlu perhatian manager
     needsHrdNote?: boolean; // Perlu catatan HRD
-
-    // Review Notes
     managerReviewNote?: string | null;
     hrdReviewNote?: string | null;
 
-    // --- Jenis Izin Spesifik ---
-    // Izin Sakit
+    // --- Field Spesifik per Jenis Izin ---
     sicknessDescription?: string;
-
-    // Izin Duka
     familyRelation?: string;
-    
-    // Izin Akademik
     academicActivityName?: string;
     academicInstitution?: string;
-
-    // Izin Lainnya
     otherLeaveTitle?: string;
 };
 
@@ -949,3 +942,5 @@ export function isActionableStatus(status: string, mode: 'manager' | 'hrd'): boo
   
   return false;
 }
+
+    

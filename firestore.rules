@@ -143,8 +143,20 @@ service cloud.firestore {
      *   to check their interns' profiles without causing security rule deadlocks.
      */
     match /employee_profiles/{uid} {
+        function isUpdatingOwnAllowedFields() {
+          let allowedFields = [
+            'nickName', 'phone', 'birthPlace', 'birthDate', 'gender', 'maritalStatus', 'religion',
+            'address', 'bankName', 'bankAccountNumber', 'bankAccountHolderName',
+            'npwp', 'bpjsKesehatan', 'bpjsKetenagakerjaan',
+            'emergencyContactName', 'emergencyContactRelation', 'emergencyContactPhone',
+            'documents', 'updatedAt'
+          ];
+          return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedFields);
+        }
+
       allow get: if isOwner(uid) || isInternal();
-      allow create, update: if (isOwner(uid) && request.resource.data.uid == uid) || isHrd() || isSuperAdmin();
+      allow create: if isOwner(uid) || isHrd() || isSuperAdmin();
+      allow update: if (isOwner(uid) && isUpdatingOwnAllowedFields()) || isHrd() || isSuperAdmin();
       allow list: if isHrd() || isSuperAdmin();
       allow delete: if false;
     }
@@ -356,11 +368,10 @@ service cloud.firestore {
         let isOwner = request.auth.uid == resource.data.uid;
         let isTransitionValid = resource.data.status == 'reported' && request.resource.data.status == 'returned';
         let allowedKeys = [
-            'status', 'actualReturnAt', 'returnSource',
+            'status', 'actualReturnAt', 'returnSource', 'returnDetectedFromAttendance',
             'actualDurationMinutes', 'exceededEstimatedReturn', 'exceededFourHours',
             'overtimeReturnMinutes', 'needsManagerAttention', 'updatedAt'
         ];
-        
         let changedKeys = request.resource.data.diff(resource.data).affectedKeys();
         return isOwner && isTransitionValid && changedKeys.hasOnly(allowedKeys);
       }
@@ -467,3 +478,5 @@ service cloud.firestore {
     }
   }
 }
+
+    
