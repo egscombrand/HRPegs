@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
@@ -6,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { UploadCloud, Loader2, ArrowRight, Info, Edit, FileQuestion, HelpCircle, Sparkles, ArrowLeft } from 'lucide-react';
+import { UploadCloud, Loader2, ArrowRight, Info, Edit, FileQuestion, HelpCircle, Sparkles, ArrowLeft, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel, SelectSeparator } from '@/components/ui/select';
@@ -57,7 +58,16 @@ const HRP_FIELD_GROUPS: Record<string, HRPField[]> = {
         { value: "bpjsKetenagakerjaan", label: "No. BPJS Ketenagakerjaan" },
         { value: "bankAccountNumber", label: "No. Rekening Bank" },
     ],
+    "Riwayat Pendidikan dan Pelatihan": [
+        { value: 'education', label: 'Pendidikan Terakhir' },
+        { value: 'certification', label: 'Sertifikasi' },
+    ],
+    "Riwayat Karier dan Kinerja": [
+        { value: 'promotion', label: 'Riwayat Promosi' },
+        { value: 'performanceReview', label: 'Riwayat Penilaian Kinerja' },
+    ],
 };
+
 
 const HRP_FIELDS: HRPField[] = Object.values(HRP_FIELD_GROUPS).flat();
 const REQUIRED_HRP_FIELDS = HRP_FIELDS.filter(f => f.required);
@@ -361,7 +371,7 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
                         {step === 2 && (
                             !isMappingComplete ? (
                                 <TooltipProvider>
-                                    <Tooltip delayDuration={100}>
+                                    <Tooltip>
                                         <TooltipTrigger asChild>
                                             <div className="inline-block">
                                                 <Button disabled={true}>
@@ -371,7 +381,6 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
                                         </TooltipTrigger>
                                         <TooltipContent>
                                             <p>Harap petakan semua field wajib (*).</p>
-                                            <p className="font-medium text-destructive">Belum dipetakan: {unmappedRequiredFields.map(f => `"${f.label}"`).join(', ')}</p>
                                         </TooltipContent>
                                     </Tooltip>
                                 </TooltipProvider>
