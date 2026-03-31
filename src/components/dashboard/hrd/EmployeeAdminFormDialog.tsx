@@ -38,7 +38,7 @@ const adminFormSchema = z.object({
 type AdminFormValues = z.infer<typeof adminFormSchema>;
 
 interface EmployeeAdminFormDialogProps {
-  profile: EmployeeProfile;
+  profile: EmployeeProfile | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
@@ -71,37 +71,55 @@ export function EmployeeAdminFormDialog({ open, onOpenChange, profile, onSuccess
   );
 
   useEffect(() => {
-    if (open && profile) {
-      form.reset({
-        fullName: profile.fullName,
-        email: profile.email,
-        role: user?.role || 'karyawan',
-        employmentType: profile.employmentType || user?.employmentType || 'karyawan',
-        employmentStage: user?.employmentStage || 'active',
-        employmentStatus: profile.employmentStatus || 'active',
-        employeeNumber: profile.employeeNumber || '',
-        positionTitle: profile.positionTitle || '',
-        division: profile.division || '',
-        brandId: profile.brandId || user?.brandId as string || '',
-        joinDate: profile.joinDate?.toDate(),
-        managerUid: profile.managerUid || '',
-      });
+    if (open) {
+      if (profile) {
+        form.reset({
+          fullName: profile.fullName,
+          email: profile.email,
+          role: user?.role || 'karyawan',
+          employmentType: profile.employmentType || user?.employmentType || 'karyawan',
+          employmentStage: user?.employmentStage || 'active',
+          employmentStatus: profile.employmentStatus || 'active',
+          employeeNumber: profile.employeeNumber || '',
+          positionTitle: profile.positionTitle || '',
+          division: profile.division || '',
+          brandId: profile.brandId || user?.brandId as string || '',
+          joinDate: profile.joinDate?.toDate(),
+          managerUid: profile.managerUid || '',
+        });
+      } else {
+        // Reset for create mode
+        form.reset({
+          fullName: '',
+          email: '',
+          role: 'karyawan',
+          employmentType: 'karyawan',
+          employmentStage: 'probation',
+          employmentStatus: 'probation',
+          employeeNumber: '',
+          positionTitle: '',
+          division: '',
+          brandId: '',
+          joinDate: new Date(),
+          managerUid: '',
+        });
+      }
     }
   }, [open, profile, user, form]);
 
   const onSubmit = async (values: AdminFormValues) => {
-    if (!hrdProfile || !user) return;
+    if (!hrdProfile || !profile) return;
     setIsSaving(true);
     
     const batch = writeBatch(firestore);
-    const employeeProfileRef = doc(firestore, 'employee_profiles', user.uid);
-    const userRef = doc(firestore, 'users', user.uid);
+    const employeeProfileRef = doc(firestore, 'employee_profiles', profile.uid);
+    const userRef = doc(firestore, 'users', profile.uid);
 
     const supervisor = supervisors?.find(s => s.uid === values.managerUid);
     const brand = brands?.find(b => b.id === values.brandId);
 
     const employeePayload = {
-      uid: user.uid,
+      uid: profile.uid,
       fullName: values.fullName,
       email: values.email,
       employmentType: values.employmentType,
@@ -189,3 +207,5 @@ export function EmployeeAdminFormDialog({ open, onOpenChange, profile, onSuccess
     </Dialog>
   );
 }
+
+    
