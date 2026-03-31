@@ -24,7 +24,7 @@ function ProfileSkeleton() {
 }
 
 export default function EmployeeProfilePage() {
-  const { userProfile, loading: authLoading } = useAuth();
+  const { userProfile, loading: authLoading, refreshUserProfile } = useAuth();
   const firestore = useFirestore();
   const [editMode, setEditMode] = useState(false);
 
@@ -45,6 +45,7 @@ export default function EmployeeProfilePage() {
   const handleSaveSuccess = () => {
     setEditMode(false);
     mutate(); // Re-fetch the employee profile data
+    refreshUserProfile(); // Re-fetch the user profile in auth context
   };
   
   const initialProfileData = useMemo(() => {
@@ -69,7 +70,7 @@ export default function EmployeeProfilePage() {
     );
   }
 
-  // If the employee profile document doesn't exist at all, force edit mode.
+  // If the employee profile is incomplete, force edit mode.
   const isProfileIncomplete = !employeeProfile?.completeness?.isComplete;
 
   return (
