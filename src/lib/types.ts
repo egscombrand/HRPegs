@@ -50,79 +50,90 @@ export type EmployeeProfile = {
   id?: string;
   uid: string;
   
-  // --- Kepegawaian (HR Managed) ---
-  employmentType: 'magang' | 'training' | 'karyawan';
-  employmentStatus?: EmploymentStatus;
-  employeeNumber?: string;
-  joinDate?: Timestamp;
-  positionTitle?: string;
-  division?: string;
-  brandId?: string;
-  brandName?: string;
-  workLocation?: string; // Office Site ID or 'Remote'
-  supervisorUid?: string;
-  supervisorName?: string;
-  
-  // --- Identitas (User Managed) ---
+  // --- Data Pribadi ---
   fullName: string;
   nickName?: string;
   phone: string;
   email: string;
-  nik?: string;
   gender?: 'Laki-laki' | 'Perempuan' | 'Lainnya';
   birthPlace?: string;
   birthDate?: string; // YYYY-MM-DD
   maritalStatus?: 'Belum Kawin' | 'Kawin' | 'Cerai Hidup' | 'Cerai Mati';
   religion?: string;
   address?: Address;
+  contact?: {
+    phone: string;
+    email: string;
+  };
   
-  // --- Administrasi (User Managed) ---
-  bankName?: string;
-  bankAccountNumber?: string;
-  bankAccountHolderName?: string;
+  // --- Informasi Pekerjaan ---
+  employeeNumber?: string; // NIK
+  positionTitle?: string; // Jabatan/Posisi
+  division?: string; // Departemen/Bagian
+  joinDate?: Timestamp;
+  employmentType?: EmploymentType;
+  employmentStatus?: EmploymentStatus;
+  brandId?: string;
+  brandName?: string;
+  workLocation?: string; // Office Site ID or 'Remote'
+  managerUid?: string; // Atasan langsung
+  managerName?: string;
+  
+  // --- Data Administratif ---
+  nik?: string; // No KTP/SIM
   hasNpwp?: boolean;
   npwp?: string;
   hasBpjsKesehatan?: boolean;
   bpjsKesehatan?: string;
   hasBpjsKetenagakerjaan?: boolean;
   bpjsKetenagakerjaan?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  bankAccountHolderName?: string;
+  
+  // --- Riwayat Pendidikan & Pelatihan ---
+  education?: Education[];
+  certifications?: Certification[];
+  
+  // --- Riwayat Karir & Kinerja ---
+  careerHistory?: {
+      date: Timestamp;
+      event: 'promotion' | 'assessment' | 'award' | 'sanction';
+      description: string;
+      notes?: string;
+  }[];
+
+  // --- Kehadiran & Cuti (Biasanya di koleksi terpisah, tapi bisa ada summary di sini) ---
+  leaveBalance?: {
+      annual: number;
+      sick: number;
+  };
+
+  // --- Data Penggajian (Hanya untuk HRD) ---
+  payroll?: {
+      baseSalary?: number;
+      allowances?: Record<string, number>;
+  };
+  
+  // --- Kontak Darurat ---
   emergencyContactName: string;
   emergencyContactRelation: string;
   emergencyContactPhone: string;
   
-  // --- Dokumen ---
-  documents?: {
-    photoUrl?: string;
-    ktpUrl?: string;
-    kkUrl?: string;
-    npwpUrl?: string;
-    bankProofUrl?: string;
-    ijazahUrl?: string;
-    cvUrl?: string;
-    certificateUrls?: string[];
-  };
-
-  // --- Legacy Intern Fields (To be integrated or phased out) ---
+  // --- Legacy Intern Fields ---
   internSubtype?: 'intern_education' | 'intern_pre_probation';
-  schoolOrCampus?: string;
-  major?: string;
-  educationLevel?: 'SMA/SMK' | 'D3' | 'S1' | 'S2' | 'Lainnya';
-  expectedEndDate?: string;
-  internshipStartDate?: Timestamp | null;
-  internshipEndDate?: Timestamp | null;
 
   // --- Metadata ---
+  dataSource?: 'register' | 'import' | 'manual';
+  dataCompleteness?: 'lengkap' | 'sebagian' | 'belum_lengkap';
   completeness?: {
     isComplete: boolean;
     completedAt?: Timestamp;
   };
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
-  managerUid?: string | null; // Atasan langsung
   hrdNotes?: string;
-  compensationAmount?: number;
-  contractDurationMonths?: number;
-  addressCurrent?: string; // To be deprecated in favor of address object
+  additionalFields?: Record<string, any>;
 };
 
 
@@ -948,5 +959,3 @@ export function isActionableStatus(status: string, mode: 'manager' | 'hrd'): boo
   
   return false;
 }
-
-    

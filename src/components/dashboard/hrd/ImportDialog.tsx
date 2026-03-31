@@ -9,16 +9,17 @@ import { Button } from '@/components/ui/button';
 import { UploadCloud, Loader2, ArrowRight, Info, Edit, FileQuestion, HelpCircle, Sparkles } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel, SelectSeparator } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Input } from '@/components/ui/input';
 
 interface ImportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onImportSuccess?: () => void; // Made optional as full flow not implemented
+  onImportSuccess?: () => void;
 }
 
 type HRPField = {
@@ -29,30 +30,42 @@ type HRPField = {
 };
 
 const HRP_FIELD_GROUPS: Record<string, HRPField[]> = {
-    "Identitas Dasar (Wajib)": [
-        { value: "fullName", label: "Nama Lengkap", required: true, description: "Nama lengkap karyawan sesuai KTP." },
-        { value: "email", label: "Email", required: true, description: "Email unik untuk setiap karyawan." },
-        { value: "phone", label: "No. HP", required: true, description: "Nomor telepon aktif." },
+    "Data Pribadi": [
+        { value: "fullName", label: "Nama Lengkap", required: true },
+        { value: "birthPlace", label: "Tempat Lahir" },
+        { value: "birthDate", label: "Tanggal Lahir" },
+        { value: "gender", label: "Jenis Kelamin" },
+        { value: "maritalStatus", label: "Status Pernikahan" },
+        { value: "address", label: "Alamat" },
+        { value: "phone", label: "Kontak (No. HP)" },
+        { value: "email", label: "Kontak (Email)", required: true },
     ],
-    "Informasi Kepegawaian (Wajib)": [
-        { value: "positionTitle", label: "Jabatan/Posisi", required: true, description: "Jabatan atau posisi karyawan." },
-        { value: "division", label: "Departemen/Bagian", required: true, description: "Divisi atau departemen tempat karyawan bekerja." },
-        { value: "brandName", label: "Nama Brand", required: true, description: "Nama brand atau perusahaan penempatan." },
-        { value: "joinDate", label: "Tanggal Bergabung", required: true, description: "Format YYYY-MM-DD." },
-        { value: "employmentStatus", label: "Status Kerja", required: true, description: "Contoh: active, probation, resigned." },
+    "Informasi Pekerjaan": [
+        { value: "employeeNumber", label: "Nomor Induk Karyawan (NIK)", required: true },
+        { value: "positionTitle", label: "Jabatan/Posisi", required: true },
+        { value: "division", label: "Departemen/Bagian", required: true },
+        { value: "joinDate", label: "Tanggal Mulai Bekerja", required: true },
+        { value: "employmentType", label: "Jenis Kontrak Kerja", required: true },
+        { value: "employmentStatus", label: "Status Kerja", required: true },
+        { value: "brandName", label: "Nama Brand", required: true },
+        { value: "managerName", label: "Nama Manajer Divisi" },
     ],
-    "Informasi Kepegawaian (Opsional)": [
-        { value: "employeeNumber", label: "Nomor Induk Karyawan (NIK)", description: "NIK internal perusahaan." },
-        { value: "managerName", label: "Nama Manajer Divisi", description: "Nama atasan langsung." },
-    ],
-    "Data Administratif (Opsional)": [
-        { value: "nik", label: "Nomor KTP/SIM" },
+    "Data Administratif": [
+        { value: "nik", label: "No. KTP/SIM" },
         { value: "npwp", label: "NPWP" },
-        { value: "bpjsKesehatan", label: "Nomor BPJS Kesehatan" },
-        { value: "bpjsKetenagakerjaan", label: "Nomor BPJS Ketenagakerjaan" },
-        { value: "bankAccountNumber", label: "Nomor Rekening Bank" },
+        { value: "bpjsKesehatan", label: "No. BPJS Kesehatan" },
+        { value: "bpjsKetenagakerjaan", label: "No. BPJS Ketenagakerjaan" },
+        { value: "bankAccountNumber", label: "No. Rekening Bank" },
     ],
+    "Riwayat Pendidikan & Pelatihan": [
+        { value: "education", label: "Pendidikan Terakhir" },
+        { value: "certification", label: "Sertifikasi" },
+    ],
+    "Lainnya": [
+        { value: "additionalInfo", label: "Info Tambahan (Teks)" },
+    ]
 };
+
 
 const HRP_FIELDS: HRPField[] = Object.values(HRP_FIELD_GROUPS).flat();
 const REQUIRED_HRP_FIELDS = HRP_FIELDS.filter(f => f.required).map(f => f.value);
@@ -98,6 +111,7 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
     const [step, setStep] = useState(1);
     const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
     const [columnMapping, setColumnMapping] = useState<Record<string, string | undefined>>({});
+    const [customFieldNames, setCustomFieldNames] = useState<Record<string, string>>({});
     const { toast } = useToast();
 
     const resetState = () => {
@@ -106,6 +120,7 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
         setStep(1);
         setCsvHeaders([]);
         setColumnMapping({});
+        setCustomFieldNames({});
     };
     
     const handleClose = (isOpen: boolean) => {
@@ -157,7 +172,7 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
     };
     
     const { mappedRequiredFields, isMappingComplete, mappingSummary } = useMemo(() => {
-        const mappedValues = new Set(Object.values(columnMapping).filter((v): v is string => !!v));
+        const mappedValues = new Set(Object.values(columnMapping).filter((v): v is string => !!v && !v.startsWith('__custom__')));
         const requiredCount = REQUIRED_HRP_FIELDS.length;
         const mappedRequiredCount = REQUIRED_HRP_FIELDS.filter(field => mappedValues.has(field)).length;
         const complete = mappedRequiredCount === requiredCount;
@@ -182,11 +197,22 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
 
     const handleMappingChange = (csvHeader: string, hrpField: string | undefined) => {
         setColumnMapping(prev => ({...prev, [csvHeader]: hrpField}));
+        if (hrpField !== '__custom__') {
+          setCustomFieldNames(prev => {
+            const newNames = { ...prev };
+            delete newNames[csvHeader];
+            return newNames;
+          });
+        }
+    };
+    
+    const handleCustomFieldNameChange = (csvHeader: string, customName: string) => {
+      setCustomFieldNames(prev => ({...prev, [csvHeader]: customName }));
     }
 
     return (
         <Dialog open={open} onOpenChange={handleClose}>
-            <DialogContent className={cn("sm:max-w-xl transition-all duration-300", step === 2 && "sm:max-w-4xl")}>
+            <DialogContent className={cn("sm:max-w-xl transition-all duration-300", step === 2 && "sm:max-w-5xl")}>
                 <DialogHeader>
                     <DialogTitle>
                       {step === 1 ? 'Import Data Karyawan' : 'Tahap 2: Pemetaan Kolom'}
@@ -194,7 +220,7 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
                     <DialogDescription>
                        {step === 1 
                          ? 'Unggah file CSV untuk menambah atau memperbarui data karyawan secara massal.'
-                         : 'Sesuaikan kolom dari file Anda (kiri) dengan field yang ada di sistem HRP (kanan).'
+                         : 'Sesuaikan kolom dari file Anda dengan field yang ada di sistem HRP.'
                        }
                     </DialogDescription>
                 </DialogHeader>
@@ -229,41 +255,55 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
                                 Kolom di kiri adalah header dari file Anda. Pilih field tujuan yang sesuai di HRP pada dropdown di kanan. Field dengan tanda <span className="text-destructive font-bold">*</span> wajib untuk dipetakan.
                             </AlertDescription>
                         </Alert>
-                        <div className="rounded-md border h-80 overflow-y-auto">
+                        <div className="rounded-md border h-96 overflow-y-auto">
                             <Table>
                                 <TableHeader className="sticky top-0 bg-muted z-10">
                                     <TableRow>
-                                        <TableHead className="w-[45%] font-bold">Kolom dari File Anda</TableHead>
+                                        <TableHead className="w-[40%] font-bold">Kolom dari File Anda</TableHead>
                                         <TableHead className="w-[45%] font-bold">Petakan ke Field Sistem HRP</TableHead>
-                                        <TableHead className="w-[10%] text-center font-bold">Status</TableHead>
+                                        <TableHead className="w-[15%] text-center font-bold">Status</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {csvHeaders.map(header => {
                                         const mappedValue = columnMapping[header];
                                         const isAutoSuggested = !!suggestMapping(header) && mappedValue === suggestMapping(header);
+                                        const isCustom = mappedValue === '__custom__';
+
                                         return (
                                         <TableRow key={header}>
-                                            <TableCell className="font-medium text-muted-foreground">{header}</TableCell>
+                                            <TableCell className="font-semibold bg-slate-50 dark:bg-slate-900">{header}</TableCell>
                                             <TableCell>
-                                                <Select onValueChange={(value) => handleMappingChange(header, value === '__skip__' ? undefined : value)} value={mappedValue || ''}>
-                                                    <SelectTrigger>
-                                                        <SelectValue placeholder="Pilih field tujuan..." />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="__skip__">(Jangan Impor Kolom Ini)</SelectItem>
-                                                        {Object.entries(HRP_FIELD_GROUPS).map(([group, fields]) => (
-                                                            <SelectGroup key={group}>
-                                                                <SelectLabel>{group}</SelectLabel>
-                                                                {fields.map(field => (
-                                                                    <SelectItem key={field.value} value={field.value}>
-                                                                        {field.label} {field.required && <span className="text-destructive">*</span>}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectGroup>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
+                                                <div className="space-y-2">
+                                                    <Select onValueChange={(value) => handleMappingChange(header, value === '__skip__' ? undefined : value)} value={mappedValue || ''}>
+                                                        <SelectTrigger>
+                                                            <SelectValue placeholder="Pilih field tujuan..." />
+                                                        </SelectTrigger>
+                                                        <SelectContent portalled={true}>
+                                                            <SelectItem value="__skip__">(Jangan Impor Kolom Ini)</SelectItem>
+                                                            <SelectSeparator />
+                                                            {Object.entries(HRP_FIELD_GROUPS).map(([group, fields]) => (
+                                                                <SelectGroup key={group}>
+                                                                    <SelectLabel>{group}</SelectLabel>
+                                                                    {fields.map(field => (
+                                                                        <SelectItem key={field.value} value={field.value}>
+                                                                            {field.label} {field.required && <span className="text-destructive">*</span>}
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </SelectGroup>
+                                                            ))}
+                                                             <SelectSeparator />
+                                                             <SelectItem value="__custom__">Buat Field Baru...</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                     {isCustom && (
+                                                        <Input 
+                                                            placeholder="Masukkan nama field baru..."
+                                                            value={customFieldNames[header] || ''}
+                                                            onChange={(e) => handleCustomFieldNameChange(header, e.target.value)}
+                                                        />
+                                                     )}
+                                                </div>
                                             </TableCell>
                                             <TableCell className="text-center">
                                                 {isAutoSuggested ? <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">Otomatis</Badge> : (mappedValue ? <Badge variant="default">Dipilih</Badge> : <Badge variant="outline">Belum</Badge>)}
