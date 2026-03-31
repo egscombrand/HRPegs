@@ -1,12 +1,12 @@
 'use client';
 
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, type FieldErrors } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { UploadCloud, Loader2, ArrowRight, Info, Edit, FileQuestion, HelpCircle, Sparkles, ArrowLeft, AlertCircle as AlertCircleIcon, CheckCircle, FileUp, XCircle, RefreshCw } from 'lucide-react';
+import { UploadCloud, Loader2, ArrowRight, Info, Edit, FileQuestion, HelpCircle, Sparkles, ArrowLeft, AlertCircle, CheckCircle, FileUp, XCircle, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel, SelectSeparator } from '@/components/ui/select';
@@ -205,7 +205,7 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
         }
         setIsProcessing(true);
         try {
-            const idToken = await firebaseUser.getIdToken();
+            const idToken = await firebaseUser.getIdToken(true); // Force refresh token
             const response = await fetch('/api/admin/import-employees', {
                 method: 'POST',
                 headers: {
@@ -397,14 +397,14 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
                         <div className="space-y-4">
                             <h3 className="text-lg font-semibold">Ringkasan Hasil Impor</h3>
                             <div className="grid grid-cols-2 gap-4">
-                                <KpiCard title="Berhasil Dibuat" value={importResult?.created || 0} />
-                                <KpiCard title="Berhasil Diperbarui" value={importResult?.updated || 0} />
-                                <KpiCard title="Gagal / Dilewati" value={importResult?.failed || 0} deltaType='inverse' />
-                                <KpiCard title="Total Diproses" value={csvData.rows.length} />
+                                <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Berhasil Dibuat</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{importResult?.created || 0}</p></CardContent></Card>
+                                <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Berhasil Diperbarui</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{importResult?.updated || 0}</p></CardContent></Card>
+                                <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Gagal/Dilewati</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold text-destructive">{importResult?.failed || 0}</p></CardContent></Card>
+                                <Card><CardHeader className="pb-2"><CardTitle className="text-sm">Total Diproses</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold">{csvData.rows.length}</p></CardContent></Card>
                             </div>
                             {importResult && importResult.errors.length > 0 && (
                                 <Alert variant="destructive">
-                                    <AlertCircleIcon className="h-4 w-4" />
+                                    <AlertCircle className="h-4 w-4" />
                                     <AlertTitle>Detail Kegagalan</AlertTitle>
                                     <AlertDescription>
                                         <ScrollArea className="h-24">
@@ -423,13 +423,12 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
                     {step > 1 && step < 4 && (
                         <div className="text-xs text-muted-foreground">
                             {step === 2 && (
-                                <>
-                                {!isMappingComplete ? (
+                                !isMappingComplete ? (
                                     <Alert variant="warning" className="text-xs">
-                                        <AlertCircleIcon className="h-4 w-4" />
+                                        <AlertCircle className="h-4 w-4" />
                                         <AlertTitle>Rekomendasi Belum Lengkap</AlertTitle>
                                         <AlertDescription>
-                                            Anda tetap dapat melanjutkan, tetapi disarankan untuk memetakan: {unmappedRequiredFields.map(f => `"${f.label}"`).join(', ')}.
+                                            Harap petakan: {unmappedRequiredFields.map(f => `"${f.label}"`).join(', ')}.
                                         </AlertDescription>
                                     </Alert>
                                 ) : (
@@ -437,8 +436,7 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
                                         <CheckCircle className="h-4 w-4" />
                                         <span>Semua field rekomendasi telah dipetakan.</span>
                                     </div>
-                                )}
-                                </>
+                                )
                             )}
                         </div>
                     )}
