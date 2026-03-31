@@ -1,59 +1,56 @@
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';
+import { useForm, type FieldErrors } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { UploadCloud, Loader2, ArrowRight, Info, Edit, FileQuestion } from 'lucide-react';
+import { UploadCloud, Loader2, ArrowRight, Info, Edit, FileQuestion, HelpCircle, Sparkles } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { FormControl } from '@/components/ui/form';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface ImportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onImportSuccess: () => void;
+  onImportSuccess?: () => void; // Made optional as full flow not implemented
 }
 
 type HRPField = {
     value: string;
     label: string;
     required?: boolean;
+    description?: string;
 };
 
 const HRP_FIELD_GROUPS: Record<string, HRPField[]> = {
-    "Data Pribadi": [
-        { value: "fullName", label: "Nama Lengkap", required: true },
-        { value: "birthPlace", label: "Tempat Lahir" },
-        { value: "birthDate", label: "Tanggal Lahir" },
-        { value: "gender", label: "Jenis Kelamin" },
-        { value: "maritalStatus", label: "Status Pernikahan" },
-        { value: "address", label: "Alamat" },
-        { value: "phone", label: "Kontak (No. HP)" },
-        { value: "email", label: "Kontak (Email)", required: true },
+    "Identitas Dasar (Wajib)": [
+        { value: "fullName", label: "Nama Lengkap", required: true, description: "Nama lengkap karyawan sesuai KTP." },
+        { value: "email", label: "Email", required: true, description: "Email unik untuk setiap karyawan." },
+        { value: "phone", label: "No. HP", required: true, description: "Nomor telepon aktif." },
     ],
-    "Informasi Pekerjaan": [
-        { value: "employeeNumber", label: "Nomor Induk Karyawan (NIK)" },
-        { value: "positionTitle", label: "Jabatan/Posisi", required: true },
-        { value: "division", label: "Departemen/Bagian", required: true },
-        { value: "joinDate", label: "Tanggal Mulai Bekerja (YYYY-MM-DD)" },
-        { value: "employmentType", label: "Jenis Kontrak Kerja", required: true },
-        { value: "managerName", label: "Nama Manajer Divisi" },
+    "Informasi Kepegawaian (Wajib)": [
+        { value: "positionTitle", label: "Jabatan/Posisi", required: true, description: "Jabatan atau posisi karyawan." },
+        { value: "division", label: "Departemen/Bagian", required: true, description: "Divisi atau departemen tempat karyawan bekerja." },
+        { value: "brandName", label: "Nama Brand", required: true, description: "Nama brand atau perusahaan penempatan." },
+        { value: "joinDate", label: "Tanggal Bergabung", required: true, description: "Format YYYY-MM-DD." },
+        { value: "employmentStatus", label: "Status Kerja", required: true, description: "Contoh: active, probation, resigned." },
     ],
-    "Data Administratif": [
-        { value: "nik", label: "Nomor KTP/SIM", required: false },
-        { value: "npwp", label: "NPWP", required: false },
-        { value: "bpjsKesehatan", label: "Nomor BPJS Kesehatan", required: false },
-        { value: "bpjsKetenagakerjaan", label: "Nomor BPJS Ketenagakerjaan", required: false },
-        { value: "bankAccountNumber", label: "Nomor Rekening Bank", required: false },
+    "Informasi Kepegawaian (Opsional)": [
+        { value: "employeeNumber", label: "Nomor Induk Karyawan (NIK)", description: "NIK internal perusahaan." },
+        { value: "managerName", label: "Nama Manajer Divisi", description: "Nama atasan langsung." },
     ],
-    "Pendidikan & Riwayat": [
-        { value: "education", label: "Pendidikan Terakhir" },
-        { value: "certification", label: "Sertifikasi" },
-        { value: "workHistory", label: "Riwayat Karier" },
+    "Data Administratif (Opsional)": [
+        { value: "nik", label: "Nomor KTP/SIM" },
+        { value: "npwp", label: "NPWP" },
+        { value: "bpjsKesehatan", label: "Nomor BPJS Kesehatan" },
+        { value: "bpjsKetenagakerjaan", label: "Nomor BPJS Ketenagakerjaan" },
+        { value: "bankAccountNumber", label: "Nomor Rekening Bank" },
     ],
 };
 
@@ -75,14 +72,13 @@ const suggestMapping = (header: string): string => {
         division: ['divisi', 'division', 'departemen', 'department'],
         positionTitle: ['jabatan', 'posisi', 'jabatandikantor', 'position'],
         managerName: ['manager', 'atasan', 'supervisor', 'pic'],
-        joinDate: ['join', 'masuk', 'tanggalbergabung', 'joindate', 'hiredate'],
+        joinDate: ['join', 'masuk', 'tanggalbergabung', 'joindate', 'hiredate', 'tglmasuk'],
         employmentStatus: ['status', 'employmentstatus', 'statuskerja'],
         nik: ['ktp', 'noktp', 'nomorktp', 'identitynumber'],
         npwp: ['npwp', 'nomornpwp'],
         bpjsKesehatan: ['bpjskesehatan'],
         bpjsKetenagakerjaan: ['bpjsketenagakerjaan', 'bpjstk'],
         bankAccountNumber: ['rekening', 'norek', 'bankaccount'],
-        employmentType: ['jenis', 'tipe', 'kontrak', 'type'],
     };
 
     for (const hrpField in keywordMap) {
@@ -230,7 +226,7 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
                            <Info className="h-4 w-4" />
                             <AlertTitle>Petunjuk Pemetaan</AlertTitle>
                             <AlertDescription>
-                                Kolom di kiri adalah header dari file Anda. Pilih field tujuan yang sesuai di sistem HRP pada dropdown di kanan. Field dengan tanda <span className="text-destructive font-bold">*</span> wajib untuk dipetakan.
+                                Kolom di kiri adalah header dari file Anda. Pilih field tujuan yang sesuai di HRP pada dropdown di kanan. Field dengan tanda <span className="text-destructive font-bold">*</span> wajib untuk dipetakan.
                             </AlertDescription>
                         </Alert>
                         <div className="rounded-md border h-80 overflow-y-auto">
@@ -250,12 +246,10 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
                                         <TableRow key={header}>
                                             <TableCell className="font-medium text-muted-foreground">{header}</TableCell>
                                             <TableCell>
-                                                <Select value={mappedValue} onValueChange={(value) => handleMappingChange(header, value === '__skip__' ? undefined : value)}>
-                                                    <FormControl>
-                                                        <SelectTrigger>
-                                                            <SelectValue placeholder="Pilih field tujuan..." />
-                                                        </SelectTrigger>
-                                                    </FormControl>
+                                                <Select onValueChange={(value) => handleMappingChange(header, value === '__skip__' ? undefined : value)} value={mappedValue || ''}>
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Pilih field tujuan..." />
+                                                    </SelectTrigger>
                                                     <SelectContent>
                                                         <SelectItem value="__skip__">(Jangan Impor Kolom Ini)</SelectItem>
                                                         {Object.entries(HRP_FIELD_GROUPS).map(([group, fields]) => (
@@ -303,9 +297,18 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
                     {step === 2 && (
                         <>
                            <Button variant="ghost" onClick={() => setStep(1)}>Kembali</Button>
-                           <Button disabled={!isMappingComplete} title={!isMappingComplete ? 'Harap petakan semua field wajib (*)' : ''}>
-                                Lanjut ke Preview <ArrowRight className="ml-2 h-4 w-4" />
-                            </Button>
+                           <TooltipProvider>
+                             <Tooltip>
+                               <TooltipTrigger asChild>
+                                 <div className="inline-block"> {/* Wrapper div for tooltip on disabled button */}
+                                   <Button disabled={!isMappingComplete} onClick={() => toast({ title: "Fitur dalam pengembangan", description: "Pratinjau dan validasi data akan muncul di sini." })}>
+                                       Lanjut ke Preview <ArrowRight className="ml-2 h-4 w-4" />
+                                   </Button>
+                                 </div>
+                               </TooltipTrigger>
+                               {!isMappingComplete && <TooltipContent><p>Harap petakan semua field wajib (*).</p></TooltipContent>}
+                             </Tooltip>
+                           </TooltipProvider>
                         </>
                     )}
                 </DialogFooter>
