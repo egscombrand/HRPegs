@@ -3,13 +3,12 @@
 import { useState, useCallback, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { UploadCloud, Loader2, ArrowRight, CheckCircle } from 'lucide-react';
+import { UploadCloud, Loader2, ArrowRight, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Info } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 interface ImportDialogProps {
@@ -34,28 +33,29 @@ const HRP_FIELDS = [
 const REQUIRED_HRP_FIELDS = HRP_FIELDS.filter(f => f.required).map(f => f.value);
 
 const normalizeHeader = (header: string) => header.toLowerCase().replace(/[\s_]+/g, '');
-const normalizeLabel = (label: string) => label.toLowerCase().split('(')[0].trim().replace(/[\s_]+/g, '');
 
 const suggestMapping = (header: string): string => {
     const normalizedHeader = normalizeHeader(header);
     if (!normalizedHeader) return '';
 
-    // Direct match
-    let bestMatch = HRP_FIELDS.find(field => normalizeLabel(field.label) === normalizedHeader);
-    if (bestMatch) return bestMatch.value;
-    
-    // Keyword matching
-    const keywordMap: Record<string, string> = {
-        'nama': 'fullName', 'email': 'email', 'telepon': 'phone', 'hp': 'phone',
-        'nik': 'employeeNumber', 'brand': 'brandName', 'perusahaan': 'brandName',
-        'divisi': 'division', 'jabatan': 'positionTitle', 'posisi': 'positionTitle',
-        'manager': 'managerName', 'atasan': 'managerName', 'join': 'joinDate',
-        'masuk': 'joinDate', 'status': 'employmentStatus'
+    const keywordMap: Record<string, string[]> = {
+        fullName: ['nama', 'namalengkap', 'fullname'],
+        email: ['email', 'emailkantor', 'emailaddress'],
+        phone: ['telepon', 'hp', 'nohp', 'phone'],
+        employeeNumber: ['nik', 'nomorinduk'],
+        brandName: ['brand', 'perusahaan', 'company'],
+        division: ['divisi', 'division'],
+        positionTitle: ['jabatan', 'posisi', 'jabatandikantor', 'position'],
+        managerName: ['manager', 'atasan', 'supervisor'],
+        joinDate: ['join', 'masuk', 'tanggalbergabung'],
+        employmentStatus: ['status', 'employmentstatus', 'statuskerja'],
     };
 
-    for (const keyword in keywordMap) {
-        if (normalizedHeader.includes(keyword)) {
-            return keywordMap[keyword];
+    for (const hrpField in keywordMap) {
+        for (const keyword of keywordMap[hrpField]) {
+            if (normalizedHeader.includes(keyword)) {
+                return hrpField;
+            }
         }
     }
 
@@ -196,7 +196,7 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
                            <Info className="h-4 w-4" />
                             <AlertTitle>Instruksi Pemetaan</AlertTitle>
                             <AlertDescription>
-                                Kolom di kiri adalah header dari file Anda. Pilih field tujuan yang sesuai di HRP pada dropdown di kanan. Field dengan tanda <span className="text-destructive font-bold">*</span> wajib untuk dipetakan.
+                                Kolom di kiri adalah header dari file Anda. Pilih field tujuan yang sesuai di sistem HRP pada dropdown di kanan. Field dengan tanda <span className="text-destructive font-bold">*</span> wajib untuk dipetakan.
                             </AlertDescription>
                         </Alert>
                         <div className="rounded-md border h-80 overflow-y-auto">
@@ -204,7 +204,7 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
                                 <TableHeader className="sticky top-0 bg-muted z-10">
                                     <TableRow>
                                         <TableHead className="w-[45%]">Kolom dari File Anda</TableHead>
-                                        <TableHead className="w-[45%]">Field Tujuan di HRP</TableHead>
+                                        <TableHead className="w-[45%]">Petakan ke Field Sistem HRP</TableHead>
                                         <TableHead className="w-[10%] text-center">Status</TableHead>
                                     </TableRow>
                                 </TableHeader>
