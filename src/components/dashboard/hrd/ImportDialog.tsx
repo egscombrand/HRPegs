@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { UploadCloud, Loader2, ArrowRight, Info, Edit, FileQuestion, HelpCircle, Sparkles, ArrowLeft, AlertCircle, CheckCircle, FileUp, XCircle, RefreshCw } from 'lucide-react';
+import { UploadCloud, Loader2, ArrowRight, Info, Edit, FileQuestion, HelpCircle, Sparkles, ArrowLeft, AlertCircle as AlertCircleIcon, CheckCircle, FileUp, XCircle, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel, SelectSeparator } from '@/components/ui/select';
@@ -160,30 +160,31 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
         reader.readAsText(selectedFile);
     };
     
-    const { isMappingComplete, unmappedRequiredFields, mappingSummary } = useMemo(() => {
-        const mappedValues = new Set(Object.values(columnMapping).filter((v): v is string => !!v && !v.startsWith('__')));
+    const { unmappedRequiredFields, mappingSummary } = useMemo(() => {
+        const mappedValues = new Set(Object.values(columnMapping).filter((v): v is string => !!v && v !== '__skip__' && v !== '__custom__'));
         const mappedRecommended = RECOMMENDED_HRP_FIELDS.filter(field => mappedValues.has(field.value));
         const unmappedRecommended = RECOMMENDED_HRP_FIELDS.filter(field => !mappedValues.has(field.value));
         const autoDetectedCount = csvData.headers.filter(header => suggestMapping(header) && columnMapping[header] === suggestMapping(header)).length;
-        const unmappedCount = csvData.headers.filter(header => !columnMapping[header]).length;
-        const skippedCount = csvData.headers.filter(header => columnMapping[header] === '__skip__').length;
-        const mappedManuallyCount = Object.values(columnMapping).filter(v => v && !suggestMapping(Object.keys(columnMapping).find(k => columnMapping[k] === v) || '')).length;
+        const skippedCount = Object.values(columnMapping).filter(v => v === undefined || v === '__skip__').length;
+        const mappedManuallyCount = Object.values(columnMapping).filter(v => v && v !== '__skip__' && v !== '__custom__' && !suggestMapping(Object.keys(columnMapping).find(k => columnMapping[k] === v) || '')).length;
+
 
         return {
-            isMappingComplete: unmappedRecommended.length === 0,
             unmappedRequiredFields: unmappedRecommended,
             mappingSummary: {
                 autoDetected: autoDetectedCount,
                 mappedManually: mappedManuallyCount,
-                unmapped: unmappedCount,
+                unmapped: Object.keys(columnMapping).filter(k => !columnMapping[k]).length,
                 skipped: skippedCount,
-                recommendedProgress: `${mappedRecommended.length}/${RECOMMENDED_HRP_FIELDS.length}`,
+                requiredProgress: `${mappedRecommended.length}/${RECOMMENDED_HRP_FIELDS.length}`,
             }
         };
     }, [columnMapping, csvData.headers]);
 
-    const handleMappingChange = (csvHeader: string, hrpField: string | undefined) => {
-        setColumnMapping(prev => ({...prev, [csvHeader]: hrpField}));
+    const isMappingComplete = unmappedRequiredFields.length === 0;
+
+    const handleMappingChange = (csvHeader: string, hrpField: string) => {
+        setColumnMapping(prev => ({...prev, [csvHeader]: hrpField === '__skip__' ? undefined : hrpField}));
         if (hrpField !== '__custom__') {
           setCustomFieldNames(prev => {
             const newNames = { ...prev };
@@ -222,7 +223,7 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
                 throw new Error(result.error || 'Terjadi kesalahan di server.');
             }
             setImportResult(result);
-            setStep(4); // Move to results step
+            setStep(4);
             onImportSuccess?.();
         } catch (e: any) {
             toast({ variant: 'destructive', title: 'Gagal Mengimpor Data', description: e.message });
@@ -253,7 +254,6 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
                     </DialogDescription>
                 </DialogHeader>
                 
-                {/* --- STEP 1: UPLOAD --- */}
                 {step === 1 && (
                      <div className="p-6">
                        <label 
@@ -275,7 +275,6 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
                     </div>
                 )}
                 
-                {/* --- STEP 2: MAPPING --- */}
                 {step === 2 && (
                     <div className="flex-grow overflow-y-auto px-6">
                         <div className="py-4 space-y-4">
@@ -283,7 +282,7 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
                                 <Info className="h-4 w-4" />
                                 <AlertTitle>Petunjuk Pemetaan</AlertTitle>
                                 <AlertDescription>
-                                    Kolom di kiri adalah header asli dari file Anda. Pilih field tujuan yang sesuai di HRP pada dropdown di kanan. Field yang ditandai <strong className="text-destructive">*</strong> disarankan untuk dipetakan.
+                                    Kolom di kiri adalah header dari file Anda. Pilih field tujuan yang sesuai di HRP pada dropdown di kanan. Field yang ditandai <strong className="text-destructive">*</strong> disarankan untuk dipetakan.
                                 </AlertDescription>
                             </Alert>
                              <div className="rounded-md border max-h-[55vh]">
@@ -308,11 +307,9 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
                                                 <TableCell>
                                                     <div className="space-y-2">
                                                         <Select onValueChange={(value) => handleMappingChange(header, value)} value={mappedValue || '__skip__'}>
-                                                            <FormControl>
-                                                                <SelectTrigger>
-                                                                    <SelectValue placeholder="(Jangan Impor Kolom Ini)" />
-                                                                </SelectTrigger>
-                                                            </FormControl>
+                                                            <SelectTrigger>
+                                                                <SelectValue placeholder="(Jangan Impor Kolom Ini)" />
+                                                            </SelectTrigger>
                                                             <SelectContent>
                                                                 <SelectItem value="__skip__">(Jangan Impor Kolom Ini)</SelectItem>
                                                                 <SelectSeparator />
@@ -352,7 +349,6 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
                     </div>
                 )}
                 
-                {/* --- STEP 3: PREVIEW --- */}
                 {step === 3 && (
                      <div className="flex-grow overflow-y-auto px-6">
                         <div className="py-4 space-y-4">
@@ -396,7 +392,6 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
                     </div>
                 )}
 
-                {/* --- STEP 4: RESULTS --- */}
                 {step === 4 && (
                     <div className="p-6">
                         <div className="space-y-4">
@@ -409,7 +404,7 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
                             </div>
                             {importResult && importResult.errors.length > 0 && (
                                 <Alert variant="destructive">
-                                    <AlertCircle className="h-4 w-4" />
+                                    <AlertCircleIcon className="h-4 w-4" />
                                     <AlertTitle>Detail Kegagalan</AlertTitle>
                                     <AlertDescription>
                                         <ScrollArea className="h-24">
@@ -424,14 +419,26 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
                     </div>
                 )}
                 
-                {/* --- FOOTER --- */}
-                <DialogFooter className={cn("justify-between items-center p-6 pt-2 border-t flex-shrink-0", step === 1 && "justify-end")}>
-                    {step > 1 && (
+                <DialogFooter className={cn( "justify-between items-center p-6 pt-2 border-t flex-shrink-0", step === 1 && "justify-end" )}>
+                    {step > 1 && step < 4 && (
                         <div className="text-xs text-muted-foreground">
                             {step === 2 && (
-                                <div className="flex items-center gap-4">
-                                    <span>Field Disarankan Terpenuhi: <strong>{mappingSummary.requiredProgress}</strong></span>
-                                </div>
+                                <>
+                                {!isMappingComplete ? (
+                                    <Alert variant="warning" className="text-xs">
+                                        <AlertCircleIcon className="h-4 w-4" />
+                                        <AlertTitle>Rekomendasi Belum Lengkap</AlertTitle>
+                                        <AlertDescription>
+                                            Anda tetap dapat melanjutkan, tetapi disarankan untuk memetakan: {unmappedRequiredFields.map(f => `"${f.label}"`).join(', ')}.
+                                        </AlertDescription>
+                                    </Alert>
+                                ) : (
+                                    <div className="flex items-center gap-2 text-green-600">
+                                        <CheckCircle className="h-4 w-4" />
+                                        <span>Semua field rekomendasi telah dipetakan.</span>
+                                    </div>
+                                )}
+                                </>
                             )}
                         </div>
                     )}
@@ -439,18 +446,7 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
                         {step > 1 && step < 4 && <Button variant="ghost" onClick={() => setStep(s => s - 1)}><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Button>}
                         {step < 4 && <DialogClose asChild><Button variant="outline">Batal</Button></DialogClose>}
                         {step === 1 && <Button onClick={handleNextStep} disabled={!selectedFile}>Lanjut ke Pemetaan Kolom <ArrowRight className="ml-2 h-4 w-4" /></Button>}
-                        {step === 2 && <Button onClick={() => setStep(3)} disabled={!isMappingComplete}>
-                            <TooltipProvider><Tooltip><TooltipTrigger asChild>{!isMappingComplete ? (<span className="flex items-center">Lanjut ke Preview <ArrowRight className="ml-2 h-4 w-4" /></span>) : <span>Lanjut ke Preview <ArrowRight className="ml-2 h-4 w-4" /></span>}</TooltipTrigger><TooltipContent><p>Harap petakan semua field wajib (*).</p></TooltipContent></Tooltip></TooltipProvider>
-                            {!isMappingComplete && (
-                                <Alert variant="destructive" className="mt-2 text-xs">
-                                <AlertCircle className="h-4 w-4" />
-                                <AlertTitle>Wajib</AlertTitle>
-                                <AlertDescription>
-                                    Wajib dipetakan: {unmappedRequiredFields.map(f => f.label).join(', ')}.
-                                </AlertDescription>
-                                </Alert>
-                            )}
-                        </Button>}
+                        {step === 2 && <Button onClick={() => setStep(3)}>Lanjut ke Preview <ArrowRight className="ml-2 h-4 w-4" /></Button>}
                         {step === 3 && <Button onClick={handleImportFinal} disabled={isProcessing}>{isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Import Final</Button>}
                         {step === 4 && <Button onClick={() => handleClose(false)}>Selesai</Button>}
                     </div>
@@ -459,191 +455,3 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
         </Dialog>
     );
 }
-```
-  </change>
-  <change>
-    <file>src/app/api/admin/import-employees/route.ts</file>
-    <content><![CDATA['use server';
-
-import { NextRequest, NextResponse } from 'next/server';
-import admin from '@/lib/firebase/admin';
-import { Timestamp, FieldValue } from 'firebase-admin/firestore';
-import type { EmployeeProfile, UserProfile } from '@/lib/types';
-import { HRP_FIELDS } from '@/lib/hrp-fields';
-
-async function verifyAdmin(req: NextRequest) {
-    const authorization = req.headers.get('Authorization');
-    if (!authorization?.startsWith('Bearer ')) {
-        return { error: 'Unauthorized: Missing token.', status: 401 };
-    }
-    const idToken = authorization.split('Bearer ')[1];
-    try {
-        const decodedToken = await admin.auth().verifyIdToken(idToken);
-        const userDoc = await admin.firestore().collection('users').doc(decodedToken.uid).get();
-        if (!userDoc.exists() || !['super-admin', 'hrd'].includes(userDoc.data()?.role)) {
-            return { error: 'Forbidden.', status: 403 };
-        }
-        return { uid: decodedToken.uid };
-    } catch (error) {
-        return { error: 'Invalid token.', status: 401 };
-    }
-}
-
-export async function POST(req: NextRequest) {
-    const authResult = await verifyAdmin(req);
-    if (authResult.error) {
-        return NextResponse.json({ error: authResult.error }, { status: authResult.status });
-    }
-
-    const { rows, mapping, customFields } = await req.json();
-
-    const db = admin.firestore();
-    const batch = db.batch();
-    const results = { created: 0, updated: 0, skipped: 0, failed: 0, errors: [] as string[] };
-    
-    // Reverse mapping for easier lookup
-    const headerToHrpField: Record<string, string> = {};
-    for (const header in mapping) {
-        const hrpField = mapping[header];
-        if (hrpField && hrpField !== '__skip__') {
-            headerToHrpField[header] = hrpField;
-        }
-    }
-
-    // Process rows in chunks to avoid overwhelming the system
-    for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
-        const email = row[Object.keys(headerToHrpField).find(h => headerToHrpField[h] === 'email')!];
-
-        if (!email) {
-            results.failed++;
-            results.errors.push(`Baris ${i + 2}: Email tidak ditemukan atau tidak dipetakan. Baris ini dilewati.`);
-            continue;
-        }
-
-        try {
-            const userRecord = await admin.auth().getUserByEmail(email).catch(() => null);
-            if (!userRecord) {
-                results.failed++;
-                results.errors.push(`Baris ${i + 2}: Pengguna dengan email ${email} tidak ditemukan di sistem otentikasi. Baris ini dilewati.`);
-                continue;
-            }
-
-            const employeeProfileRef = db.collection('employee_profiles').doc(userRecord.uid);
-            const userRef = db.collection('users').doc(userRecord.uid);
-            const existingProfileSnap = await employeeProfileRef.get();
-
-            const payload: Partial<EmployeeProfile> & { additionalFields: Record<string, any> } = { additionalFields: {} };
-            let hasData = false;
-
-            for (const header in row) {
-                const hrpFieldKey = headerToHrpField[header];
-                if (hrpFieldKey) {
-                    const value = row[header];
-                    if (value) {
-                        hasData = true;
-                        if (hrpFieldKey === '__custom__') {
-                           const customFieldName = customFields[header];
-                           if (customFieldName) {
-                               payload.additionalFields[customFieldName] = value;
-                           }
-                        } else {
-                           (payload as any)[hrpFieldKey] = value;
-                        }
-                    }
-                }
-            }
-
-            if (!hasData) {
-                results.skipped++;
-                continue;
-            }
-            
-            payload.updatedAt = serverTimestamp() as any;
-
-            if (existingProfileSnap.exists) {
-                batch.set(employeeProfileRef, payload, { merge: true });
-                results.updated++;
-            } else {
-                payload.uid = userRecord.uid;
-                payload.createdAt = serverTimestamp() as any;
-                batch.set(employeeProfileRef, payload);
-                results.created++;
-            }
-            
-            // Also update the main user document with critical info if available
-            const userUpdatePayload: Partial<UserProfile> = {};
-            if(payload.positionTitle) userUpdatePayload.positionTitle = payload.positionTitle;
-            if(payload.division) userUpdatePayload.division = payload.division;
-            if(payload.brandId) userUpdatePayload.brandId = payload.brandId;
-            if(Object.keys(userUpdatePayload).length > 0) {
-                 batch.update(userRef, userUpdatePayload);
-            }
-
-        } catch (e: any) {
-            results.failed++;
-            results.errors.push(`Baris ${i + 2} (${email}): ${e.message}`);
-        }
-    }
-
-    try {
-        await batch.commit();
-        return NextResponse.json(results);
-    } catch (e: any) {
-        return NextResponse.json({ error: 'Gagal menyimpan data ke database.', details: e.message }, { status: 500 });
-    }
-}
-```
-  </change>
-  <change>
-    <file>src/lib/hrp-fields.ts</file>
-    <content><![CDATA['use client';
-
-export type HRPField = {
-    value: string;
-    label: string;
-    required?: boolean;
-    description?: string;
-};
-
-export const HRP_FIELD_GROUPS: Record<string, HRPField[]> = {
-    "Identitas & Kontak": [
-        { value: "fullName", label: "Nama Lengkap", required: true, description: "Nama lengkap karyawan sesuai KTP." },
-        { value: "email", label: "Email", required: true, description: "Email utama untuk komunikasi." },
-        { value: "phone", label: "Kontak (No. HP)" },
-        { value: "birthPlace", label: "Tempat Lahir", description: "Kota tempat karyawan dilahirkan." },
-        { value: "birthDate", label: "Tanggal Lahir", description: "Format: YYYY-MM-DD" },
-        { value: "gender", label: "Jenis Kelamin", description: "Laki-laki atau Perempuan." },
-        { value: "maritalStatus", label: "Status Pernikahan" },
-        { value: "address", label: "Alamat", description: "Alamat lengkap saat ini." },
-    ],
-    "Informasi Kepegawaian": [
-        { value: "employeeNumber", label: "Nomor Induk Karyawan (NIK)", required: true, description: "Nomor identifikasi unik internal perusahaan." },
-        { value: "positionTitle", label: "Jabatan/Posisi", required: true },
-        { value: "division", label: "Departemen/Bagian", required: true },
-        { value: "brandName", label: "Nama Brand", required: true },
-        { value: "managerName", label: "Nama Manajer Divisi" },
-        { value: "joinDate", label: "Tanggal Mulai Bekerja", required: true, description: "Format: YYYY-MM-DD" },
-        { value: "employmentType", label: "Jenis Kontrak Kerja", description: "Contoh: Tetap, Kontrak, Harian." },
-        { value: "employmentStatus", label: "Status Kerja", required: true, description: "Contoh: active, probation, resigned." },
-    ],
-    "Data Administratif": [
-        { value: "nik", label: "No. KTP/SIM", required: true, description: "Nomor Induk Kependudukan 16 digit." },
-        { value: "npwp", label: "NPWP" },
-        { value: "bpjsKesehatan", label: "No. BPJS Kesehatan" },
-        { value: "bpjsKetenagakerjaan", label: "No. BPJS Ketenagakerjaan" },
-        { value: "bankAccountNumber", label: "No. Rekening Bank" },
-        { value: "bankName", label: "Nama Bank" },
-    ],
-    "Riwayat Pendidikan & Karier (Opsional)": [
-        { value: 'education', label: 'Pendidikan Terakhir' },
-        { value: 'certification', label: 'Sertifikasi' },
-        { value: 'promotion', label: 'Riwayat Promosi' },
-        { value: 'performanceReview', label: 'Riwayat Penilaian Kinerja' },
-    ],
-};
-
-export const HRP_FIELDS: HRPField[] = Object.values(HRP_FIELD_GROUPS).flat();
-export const RECOMMENDED_HRP_FIELDS = HRP_FIELDS.filter(f => f.required);
-
-    
