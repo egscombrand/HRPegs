@@ -276,6 +276,3 @@ export default function KaryawanDataPage() {
         </>
     );
 }
-```
-</change>
-```
