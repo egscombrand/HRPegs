@@ -20,14 +20,8 @@ async function verifyAdmin(req: NextRequest) {
         }
         return { uid: decodedToken.uid };
     } catch (error: any) {
-        console.error("Authentication error during import:", error);
-        const tokenErrorCodes = [
-            'auth/id-token-expired',
-            'auth/invalid-id-token',
-            'auth/id-token-revoked'
-        ];
-        if (tokenErrorCodes.includes(error.code)) {
-            return { error: 'Sesi Anda telah berakhir. Silakan muat ulang halaman dan coba lagi.', status: 401 };
+        if (error.code === 'auth/id-token-expired' || error.code === 'auth/invalid-id-token') {
+             return { error: 'Sesi Anda telah berakhir, silakan muat ulang halaman dan coba lagi.', status: 401 };
         }
         return { error: `Verifikasi token gagal: ${error.message}`, status: 401 };
     }
@@ -42,10 +36,8 @@ export async function POST(req: NextRequest) {
     const { rows, mapping, customFields } = await req.json();
 
     const db = admin.firestore();
-    const batch = db.batch();
     const results = { created: 0, updated: 0, skipped: 0, failed: 0, errors: [] as string[] };
     
-    // Reverse mapping for easier lookup
     const headerToHrpField: Record<string, string> = {};
     for (const header in mapping) {
         const hrpField = mapping[header];
@@ -54,29 +46,50 @@ export async function POST(req: NextRequest) {
         }
     }
 
-    // Process rows in chunks to avoid overwhelming the system
-    for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
-        const email = row[Object.keys(headerToHrpField).find(h => headerToHrpField[h] === 'email')!];
+    const findHeaderByHrpField = (field: string) => Object.keys(headerToHrpField).find(h => headerToHrpField[h] === field);
 
-        if (!email) {
-            results.failed++;
-            results.errors.push(`Baris ${i + 2}: Email tidak ditemukan atau tidak dipetakan. Baris ini dilewati.`);
-            continue;
-        }
+    const employeeProfilesRef = db.collection('employee_profiles');
+    const usersRef = db.collection('users');
 
+    const processingPromises = rows.map(async (row: Record<string, any>, index: number) => {
         try {
-            const userRecord = await admin.auth().getUserByEmail(email).catch(() => null);
-            if (!userRecord) {
-                results.failed++;
-                results.errors.push(`Baris ${i + 2}: Pengguna dengan email ${email} tidak ditemukan di sistem otentikasi. Baris ini dilewati.`);
-                continue;
+            const fullNameHeader = findHeaderByHrpField('fullName');
+            if (!fullNameHeader || !row[fullNameHeader]) {
+                results.skipped++;
+                return;
+            }
+            
+            const employeeNumberHeader = findHeaderByHrpField('employeeNumber');
+            const emailHeader = findHeaderByHrpField('email');
+            
+            const employeeNumber = employeeNumberHeader ? row[employeeNumberHeader] : null;
+            const email = emailHeader ? row[emailHeader] : null;
+
+            let existingProfileSnap: admin.firestore.DocumentSnapshot | null = null;
+            let userRecord: admin.auth.UserRecord | null = null;
+            let foundBy: 'nik' | 'email' | 'none' = 'none';
+
+            // 1. Try to find by Employee Number (NIK)
+            if (employeeNumber) {
+                const querySnapshot = await employeeProfilesRef.where('employeeNumber', '==', employeeNumber).limit(1).get();
+                if (!querySnapshot.empty) {
+                    existingProfileSnap = querySnapshot.docs[0];
+                    foundBy = 'nik';
+                }
             }
 
-            const employeeProfileRef = db.collection('employee_profiles').doc(userRecord.uid);
-            const userRef = db.collection('users').doc(userRecord.uid);
-            const existingProfileSnap = await employeeProfileRef.get();
-
+            // 2. If not found by NIK, try by email
+            if (!existingProfileSnap && email) {
+                userRecord = await admin.auth().getUserByEmail(email).catch(() => null);
+                if (userRecord) {
+                    const profileByUid = await employeeProfilesRef.doc(userRecord.uid).get();
+                    if (profileByUid.exists) {
+                        existingProfileSnap = profileByUid;
+                        foundBy = 'email';
+                    }
+                }
+            }
+            
             const payload: Partial<EmployeeProfile> & { additionalFields: Record<string, any> } = { additionalFields: {} };
             let hasData = false;
 
@@ -84,7 +97,7 @@ export async function POST(req: NextRequest) {
                 const hrpFieldKey = headerToHrpField[header];
                 if (hrpFieldKey) {
                     const value = row[header];
-                    if (value) {
+                    if (value !== undefined && value !== null && value !== '') {
                         hasData = true;
                         if (hrpFieldKey === '__custom__') {
                            const customFieldName = customFields[header];
@@ -97,43 +110,40 @@ export async function POST(req: NextRequest) {
                     }
                 }
             }
-
+            
             if (!hasData) {
                 results.skipped++;
-                continue;
+                return;
             }
             
-            payload.updatedAt = serverTimestamp() as any;
-
-            if (existingProfileSnap.exists) {
-                batch.set(employeeProfileRef, payload, { merge: true });
+            const batch = db.batch();
+            
+            if (existingProfileSnap) { // --- UPDATE ---
+                const docRef = existingProfileSnap.ref;
+                batch.set(docRef, { ...payload, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
                 results.updated++;
-            } else {
-                payload.uid = userRecord.uid;
-                payload.createdAt = serverTimestamp() as any;
-                batch.set(employeeProfileRef, payload);
+            } else { // --- CREATE ---
+                const newDocRef = employeeProfilesRef.doc(userRecord ? userRecord.uid : undefined); // Use UID if found, else generate new ID
+                const uid = userRecord ? userRecord.uid : newDocRef.id;
+                batch.set(newDocRef, { 
+                    ...payload, 
+                    uid: uid,
+                    createdAt: FieldValue.serverTimestamp(),
+                    updatedAt: FieldValue.serverTimestamp()
+                });
                 results.created++;
             }
             
-            // Also update the main user document with critical info if available
-            const userUpdatePayload: Partial<UserProfile> = {};
-            if(payload.positionTitle) userUpdatePayload.positionTitle = payload.positionTitle;
-            if(payload.division) userUpdatePayload.division = payload.division;
-            if(payload.brandId) userUpdatePayload.brandId = payload.brandId;
-            if(Object.keys(userUpdatePayload).length > 0) {
-                 batch.update(userRef, userUpdatePayload);
-            }
+            await batch.commit();
 
         } catch (e: any) {
             results.failed++;
-            results.errors.push(`Baris ${i + 2} (${email}): ${e.message}`);
+            results.errors.push(`Baris ${index + 2}: ${e.message}`);
         }
-    }
+    });
 
-    try {
-        await batch.commit();
-        return NextResponse.json(results);
-    } catch (e: any) {
-        return NextResponse.json({ error: 'Gagal menyimpan data ke database.', details: e.message }, { status: 500 });
-    }
+    await Promise.all(processingPromises);
+
+    return NextResponse.json(results);
 }
+```

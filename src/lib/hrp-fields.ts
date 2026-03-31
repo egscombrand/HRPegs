@@ -10,7 +10,7 @@ export type HRPField = {
 export const HRP_FIELD_GROUPS: Record<string, HRPField[]> = {
     "Identitas & Kontak": [
         { value: "fullName", label: "Nama Lengkap", required: true, description: "Nama lengkap karyawan sesuai KTP." },
-        { value: "email", label: "Email", required: true, description: "Email utama untuk komunikasi." },
+        { value: "email", label: "Email", description: "Email utama untuk komunikasi." },
         { value: "phone", label: "Kontak (No. HP)" },
         { value: "birthPlace", label: "Tempat Lahir", description: "Kota tempat karyawan dilahirkan." },
         { value: "birthDate", label: "Tanggal Lahir", description: "Format: YYYY-MM-DD" },
@@ -20,16 +20,16 @@ export const HRP_FIELD_GROUPS: Record<string, HRPField[]> = {
     ],
     "Informasi Kepegawaian": [
         { value: "employeeNumber", label: "Nomor Induk Karyawan (NIK)", required: true, description: "Nomor identifikasi unik internal perusahaan." },
-        { value: "positionTitle", label: "Jabatan/Posisi", required: true },
-        { value: "division", label: "Departemen/Bagian", required: true },
-        { value: "brandName", label: "Nama Brand", required: true },
+        { value: "positionTitle", label: "Jabatan/Posisi" },
+        { value: "division", label: "Departemen/Bagian" },
+        { value: "brandName", label: "Nama Brand" },
         { value: "managerName", label: "Nama Manajer Divisi" },
-        { value: "joinDate", label: "Tanggal Mulai Bekerja", required: true, description: "Format: YYYY-MM-DD" },
+        { value: "joinDate", label: "Tanggal Mulai Bekerja", description: "Format: YYYY-MM-DD" },
         { value: "employmentType", label: "Jenis Kontrak Kerja", description: "Contoh: Tetap, Kontrak, Harian." },
-        { value: "employmentStatus", label: "Status Kerja", required: true, description: "Contoh: active, probation, resigned." },
+        { value: "employmentStatus", label: "Status Kerja", description: "Contoh: active, probation, resigned." },
     ],
     "Data Administratif": [
-        { value: "nik", label: "No. KTP/SIM", required: true, description: "Nomor Induk Kependudukan 16 digit." },
+        { value: "nik", label: "No. KTP/SIM", description: "Nomor Induk Kependudukan 16 digit." },
         { value: "npwp", label: "NPWP" },
         { value: "bpjsKesehatan", label: "No. BPJS Kesehatan" },
         { value: "bpjsKetenagakerjaan", label: "No. BPJS Ketenagakerjaan" },

@@ -13,12 +13,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGr
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { HRP_FIELD_GROUPS, RECOMMENDED_HRP_FIELDS } from '@/lib/hrp-fields';
 import { useAuth } from '@/providers/auth-provider';
+import { useRouter } from 'next/navigation';
 
 interface ImportDialogProps {
   open: boolean;
@@ -98,7 +99,8 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
     const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
     const { toast } = useToast();
-    const { firebaseUser } = useAuth();
+    const { firebaseUser, auth } = useAuth();
+    const router = useRouter();
 
     const resetState = () => {
         setSelectedFile(null);
@@ -161,32 +163,12 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
         reader.readAsText(selectedFile);
     };
     
-    const { unmappedRequiredFields, mappingSummary } = useMemo(() => {
+    const unmappedRequiredFields = useMemo(() => {
         const mappedValues = new Set(Object.values(columnMapping).filter((v): v is string => !!v && v !== '__skip__' && v !== '__custom__'));
-        const mappedRecommended = RECOMMENDED_HRP_FIELDS.filter(field => mappedValues.has(field.value));
-        const unmappedRecommended = RECOMMENDED_HRP_FIELDS.filter(field => !mappedValues.has(field.value));
-        const autoDetectedCount = csvData.headers.filter(header => suggestMapping(header) && columnMapping[header] === suggestMapping(header)).length;
-        
-        const manualAndCustom = Object.keys(columnMapping).filter(header => {
-            const val = columnMapping[header];
-            if (!val || val === '__skip__') return false;
-            // It's manual if it has a value but doesn't match the suggestion
-            return suggestMapping(header) !== val;
-        });
+        return RECOMMENDED_HRP_FIELDS.filter(field => !mappedValues.has(field.value));
+    }, [columnMapping]);
 
-        return {
-            unmappedRequiredFields: unmappedRecommended,
-            mappingSummary: {
-                autoDetected: autoDetectedCount,
-                mappedManually: manualAndCustom.length,
-                unmapped: Object.keys(columnMapping).length - Object.values(columnMapping).filter(Boolean).length,
-                skipped: Object.values(columnMapping).filter(v => v === '__skip__' || v === undefined).length,
-                requiredProgress: `${mappedRecommended.length}/${RECOMMENDED_HRP_FIELDS.length}`,
-            }
-        };
-    }, [columnMapping, csvData.headers]);
-
-    const isMappingComplete = unmappedRequiredFields.length === 0;
+    const isMappingSufficient = RECOMMENDED_HRP_FIELDS.filter(f => f.value === 'fullName' || f.value === 'employeeNumber').some(f => Object.values(columnMapping).includes(f.value));
 
     const handleMappingChange = (csvHeader: string, hrpField: string) => {
         setColumnMapping(prev => ({...prev, [csvHeader]: hrpField === '__skip__' ? undefined : hrpField}));
@@ -210,7 +192,7 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
         }
         setIsProcessing(true);
         try {
-            const idToken = await firebaseUser.getIdToken(true); // Force refresh token
+            const idToken = await firebaseUser.getIdToken(true);
             const response = await fetch('/api/admin/import-employees', {
                 method: 'POST',
                 headers: {
@@ -224,6 +206,12 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
                 }),
             });
             const result = await response.json();
+             if (response.status === 401) {
+                toast({ variant: 'destructive', title: 'Sesi Habis', description: result.error || "Sesi Anda telah berakhir. Silakan login kembali." });
+                if (auth) await auth.signOut();
+                router.push('/admin/login');
+                return;
+            }
             if (!response.ok) {
                 throw new Error(result.error || 'Terjadi kesalahan di server.');
             }
@@ -287,7 +275,7 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
                                 <Info className="h-4 w-4" />
                                 <AlertTitle>Petunjuk Pemetaan</AlertTitle>
                                 <AlertDescription>
-                                    Kolom di kiri adalah header dari file Anda. Pilih field tujuan yang sesuai di sistem HRP pada dropdown di kanan. Field yang ditandai <strong className="text-destructive">*</strong> disarankan untuk dipetakan.
+                                    Kolom di kiri adalah header dari file Anda. Pilih field tujuan yang sesuai di sistem HRP pada dropdown di kanan. Field yang ditandai <span className="text-destructive font-bold">*</span> disarankan untuk dipetakan agar data lebih lengkap.
                                 </AlertDescription>
                             </Alert>
                              <div className="rounded-md border max-h-[55vh]">
@@ -373,7 +361,7 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
                                                     if (isSkipped) return null;
                                                     const hrpField = mappedField === '__custom__'
                                                         ? customFieldNames[header]
-                                                        : RECOMMENDED_HRP_FIELDS.find(f => f.value === mappedField)?.label;
+                                                        : RECOMMENDED_HRP_FIELDS.find(f => f.value === mappedField)?.label || HRP_FIELD_GROUPS[Object.keys(HRP_FIELD_GROUPS).find(g => HRP_FIELD_GROUPS[g].some(f => f.value === mappedField))!]?.find(f => f.value === mappedField)?.label;
                                                     return <TableHead key={header}>{hrpField || header}</TableHead>;
                                                 })}
                                             </TableRow>
@@ -425,30 +413,24 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
                 )}
                 
                 <DialogFooter className={cn( "justify-between items-center p-6 pt-2 border-t flex-shrink-0", step === 1 && "justify-end" )}>
-                    {step > 1 && step < 4 && (
-                        <div className="text-xs text-muted-foreground">
-                            {step === 2 && (
-                                !isMappingComplete ? (
-                                    <Alert variant="warning" className="text-xs p-2">
-                                        <div className="flex items-start gap-2">
-                                            <AlertCircle className="h-4 w-4" />
-                                            <div>
-                                                <AlertTitle className="text-xs font-semibold">Saran</AlertTitle>
-                                                <AlertDescription>
-                                                    Petakan field: {unmappedRequiredFields.map(f => `"${f.label}"`).join(', ')}.
-                                                </AlertDescription>
-                                            </div>
+                    {step === 2 && (
+                        <div>
+                            {unmappedRequiredFields.length > 0 && (
+                                <Alert variant="warning" className="text-xs p-2">
+                                    <div className="flex items-start gap-2">
+                                        <AlertCircle className="h-4 w-4" />
+                                        <div>
+                                            <AlertTitle className="text-xs font-semibold">Saran Pemetaan</AlertTitle>
+                                            <AlertDescription>
+                                                Petakan field ini untuk data lebih lengkap: {unmappedRequiredFields.map(f => `"${f.label}"`).join(', ')}.
+                                            </AlertDescription>
                                         </div>
-                                    </Alert>
-                                ) : (
-                                    <div className="flex items-center gap-2 text-green-600">
-                                        <CheckCircle className="h-4 w-4" />
-                                        <span>Semua field rekomendasi telah dipetakan.</span>
                                     </div>
-                                )
+                                </Alert>
                             )}
                         </div>
                     )}
+                    {step > 3 && <div></div>}
                     <div className="flex items-center gap-2">
                         {step > 1 && step < 4 && <Button variant="ghost" onClick={() => setStep(s => s - 1)}><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Button>}
                         {step < 4 && <DialogClose asChild><Button variant="outline">Batal</Button></DialogClose>}
@@ -457,14 +439,14 @@ export function ImportDialog({ open, onOpenChange, onImportSuccess }: ImportDial
                             <TooltipProvider>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
-                                        <Button onClick={() => setStep(3)}>
+                                        <Button onClick={() => setStep(3)} disabled={!isMappingSufficient}>
                                             Lanjut ke Preview
                                             <ArrowRight className="ml-2 h-4 w-4" />
                                         </Button>
                                     </TooltipTrigger>
-                                    {!isMappingComplete && (
+                                    {!isMappingSufficient && (
                                         <TooltipContent>
-                                            <p>Beberapa field penting belum dipetakan. Anda tetap bisa lanjut.</p>
+                                            <p>Wajib petakan minimal "Nama Lengkap" atau "NIK".</p>
                                         </TooltipContent>
                                     )}
                                 </Tooltip>
