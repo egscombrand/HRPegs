@@ -180,7 +180,7 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
         title: "Internship",
         items: [
             { key: 'employee.dashboard.magang', href: '/admin/karyawan/dashboard-magang', label: 'Dashboard Magang', icon: createElement(LayoutDashboard) },
-            { key: 'employee.profile', href: '/admin/karyawan/profile', label: 'Data Diri Karyawan', icon: createElement(User) },
+            { key: 'employee.profile', href: '/admin/karyawan/magang/profile', label: 'Data Diri Karyawan', icon: createElement(User) },
             { key: 'employee.overtime', href: '/admin/karyawan/pengajuan-lembur', label: 'Pengajuan Lembur', icon: createElement(FileClock) },
             { key: 'employee.permission', href: '/admin/karyawan/pengajuan-izin', label: 'Pengajuan Izin', icon: createElement(FileHeart) },
         ]
@@ -225,5 +225,3 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
     }
   ]
 };
-
-    
