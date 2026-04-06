@@ -140,7 +140,7 @@ function FileUploadField({
                         <Input 
                             type="file" 
                             onChange={handleFileUpload} 
-                            className="flex-1 text-xs" 
+                            className="flex-1 text-xs cursor-pointer file:cursor-pointer file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 file:mr-4 file:px-4 file:py-2 file:rounded-full file:border-0" 
                             accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
                             disabled={isUploading}
                         />
@@ -213,7 +213,7 @@ export function SkillsForm({ initialData, onSaveSuccess, onBack }: SkillsFormPro
             <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
                 <Card>
                     <CardHeader>
-                        <CardTitle>Pengumpulan Dokumen CV & Ijazah</CardTitle>
+                        <CardTitle>Unggah Dokumen Wajib</CardTitle>
                         <CardDescription>Lampirkan dokumen pendukung lamaran Anda. Ukuran file maksimal 2MB per file atau lampirkan link Google Drive jika ukuran file lebih besar.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
@@ -253,6 +253,12 @@ export function SkillsForm({ initialData, onSaveSuccess, onBack }: SkillsFormPro
                         <CardDescription>Sebutkan sertifikasi profesional atau kursus yang relevan dan lampirkan bukti foto/sertifikat.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
+                         <Alert className="bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800">
+                            <Info className="h-4 w-4 text-blue-600" />
+                            <AlertDescription className="text-xs text-blue-700 dark:text-blue-300">
+                                Punya banyak sertifikat? Masukkan semua file ke dalam satu folder Google Drive, lalu bagikan link folder tersebut pada salah satu kolom "Link External".
+                            </AlertDescription>
+                        </Alert>
                         <div className="space-y-6">
                             {certFields.map((field, index) => (
                                 <div key={field.id} className="space-y-4 p-5 border rounded-xl relative bg-muted/20">
@@ -268,7 +274,7 @@ export function SkillsForm({ initialData, onSaveSuccess, onBack }: SkillsFormPro
                                         <FormField control={form.control} name={`certifications.${index}.expirationDate`} render={({ field }) => (<FormItem><FormLabel>Tgl Kedaluwarsa</FormLabel><FormControl><Input {...field} value={field.value ?? ''} placeholder="YYYY-MM" /></FormControl><FormMessage /></FormItem>)} />
                                         
                                         <FileUploadField 
-                                            label="Bukti Sertifikat" 
+                                            label="Bukti Sertifikat (File/Link)" 
                                             value={form.watch(`certifications.${index}.imageUrl`)} 
                                             onChange={(url) => form.setValue(`certifications.${index}.imageUrl`, url)}
                                             userId={firebaseUser?.uid || ''}
