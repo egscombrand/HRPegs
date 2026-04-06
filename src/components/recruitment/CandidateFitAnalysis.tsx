@@ -85,7 +85,7 @@ export function CandidateFitAnalysis({ profile, job, application }: CandidateFit
   const { toast } = useToast();
 
   const handleAnalyze = async () => {
-    if (!application.cvUrl) {
+    if (!profile.cvUrl) {
       toast({
         variant: 'destructive',
         title: 'CV Tidak Ditemukan',
@@ -133,7 +133,7 @@ export function CandidateFitAnalysis({ profile, job, application }: CandidateFit
             </CardTitle>
             <CardDescription>Analisis kesesuaian kandidat berdasarkan CV dengan kualifikasi khusus (didukung oleh AI).</CardDescription>
           </div>
-           <Button onClick={handleAnalyze} disabled={isLoading || !application.cvUrl}>
+           <Button onClick={handleAnalyze} disabled={isLoading || !profile.cvUrl}>
             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
             {isLoading ? 'Menganalisis...' : 'Lakukan Analisis'}
           </Button>

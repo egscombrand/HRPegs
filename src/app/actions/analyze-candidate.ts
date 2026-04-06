@@ -36,7 +36,7 @@ export async function getCandidateAnalysis(applicationId: string): Promise<Candi
         const profile = profileSnap.data() as Profile;
 
         // 2. Extract text from CV (uses caching mechanism)
-        const { cvText, ...cvMeta } = await extractCvText(application);
+        const { cvText, ...cvMeta } = await extractCvText(application, profile);
 
         // 3. Prepare structured profile data as supplemental info
         const candidateProfileJson = {

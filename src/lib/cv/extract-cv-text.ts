@@ -1,6 +1,6 @@
 'use server';
 
-import type { JobApplication } from '@/lib/types';
+import type { JobApplication, Profile } from '@/lib/types';
 import admin from '@/lib/firebase/admin';
 import { Timestamp } from 'firebase-admin/firestore';
 import pdf from 'pdf-parse';
@@ -19,7 +19,10 @@ const CACHE_STALE_DAYS = 30;
  * @param application The job application object containing the cvUrl.
  * @returns The extracted text and metadata.
  */
-export async function extractCvText(application: JobApplication): Promise<{ cvText: string; source: string; charCount: number; fileName: string; }> {
+export async function extractCvText(
+    application: JobApplication,
+    profile: Profile
+): Promise<{ cvText: string; source: string; charCount: number; fileName: string; }> {
     const db = admin.firestore();
     const appRef = db.collection('applications').doc(application.id!);
     
@@ -32,16 +35,17 @@ export async function extractCvText(application: JobApplication): Promise<{ cvTe
                 cvText: application.cvText,
                 source: application.cvTextSource || 'cached',
                 charCount: application.cvCharCount || application.cvText.length,
-                fileName: application.cvFileName || 'cv.pdf',
+                fileName: application.cvFileName || profile.cvFileName || 'cv.pdf',
             };
         }
     }
     
     // 2. Validate URL
-    if (!application.cvUrl) {
+    const cvUrl = profile.cvUrl; // Prioritize profile URL
+    if (!cvUrl) {
         throw new Error('CV URL is missing.');
     }
-    const url = new URL(application.cvUrl);
+    const url = new URL(cvUrl);
     if (!ALLOWED_DOMAINS.includes(url.hostname)) {
         throw new Error('CV URL domain is not allowed for security reasons.');
     }
@@ -51,7 +55,7 @@ export async function extractCvText(application: JobApplication): Promise<{ cvTe
     let source: JobApplication['cvTextSource'] = 'unknown';
 
     try {
-        const response = await fetch(application.cvUrl);
+        const response = await fetch(cvUrl);
         if (!response.ok) {
             throw new Error(`Failed to fetch CV: ${response.statusText}`);
         }
@@ -76,11 +80,14 @@ export async function extractCvText(application: JobApplication): Promise<{ cvTe
     }
     
     // 4. Cache the result in Firestore (don't block the return)
-    const cacheData = {
+    const cacheData: Partial<JobApplication> = {
         cvText,
         cvTextSource: source,
         cvCharCount: cvText.length,
         cvTextExtractedAt: Timestamp.now(),
+        // Also backfill the cvUrl to the application if it's missing
+        cvUrl: application.cvUrl || cvUrl,
+        cvFileName: application.cvFileName || profile.cvFileName || 'cv.pdf',
     };
 
     appRef.update(cacheData).catch(err => {
@@ -91,6 +98,6 @@ export async function extractCvText(application: JobApplication): Promise<{ cvTe
         cvText,
         source,
         charCount: cvText.length,
-        fileName: application.cvFileName || 'cv.pdf',
+        fileName: profile.cvFileName || application.cvFileName || 'cv.pdf',
     };
 }
