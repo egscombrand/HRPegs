@@ -494,6 +494,7 @@ export default function ApplicationDetailPage() {
   const handleStageChange = async (newStage: JobApplication['status'], reason: string) => {
     if (!application || !userProfile) return false;
     
+    // 'offered' is now handled by onSendOfferClick, not here.
     if (newStage === 'offered') {
         setIsOfferDialogOpen(true);
         return false;
@@ -521,7 +522,7 @@ export default function ApplicationDetailPage() {
 
     try {
         await updateDoc(applicationRef!, updatePayload);
-        mutateApplication(); // Re-fetch data
+        mutateApplication();
         toast({ title: 'Status Diperbarui', description: `Kandidat dipindahkan ke tahap "${statusDisplayLabels[newStage]}".` });
         return true;
     } catch (error: any) {
@@ -727,7 +728,7 @@ export default function ApplicationDetailPage() {
                 <ProfileView profile={profile} />
             </div>
             <div className="lg:sticky lg:top-24 space-y-6">
-                <CandidateDocumentsCard application={application} onVerificationChange={mutateApplication}/>
+                <CandidateDocumentsCard profile={profile} />
                 <ApplicationNotes application={application} onNoteAdded={mutateApplication} />
             </div>
           </div>
