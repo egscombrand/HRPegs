@@ -88,6 +88,7 @@ function ApplicationCard({ application }: { application: JobApplication }) {
   const isHired = application.status === 'hired' && application.internalAccessEnabled === true;
   const isOffered = application.status === 'offered';
   const isInterviewStage = application.status === 'interview';
+  const isAssessmentStage = application.status === 'tes_kepribadian';
 
   if (isOffered) {
     const salaryLabel = application.jobType === 'internship' ? 'Uang Saku' : 'Gaji';
@@ -174,6 +175,37 @@ function ApplicationCard({ application }: { application: JobApplication }) {
             </CardFooter>
         </Card>
     );
+  }
+
+  if (isAssessmentStage) {
+    return (
+        <Card className="flex flex-col border-yellow-500/50">
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
+                <div>
+                    <CardTitle className="text-xl">Langkah Selanjutnya: {application.jobPosition}</CardTitle>
+                    <CardDescription>
+                    Anda diundang untuk menyelesaikan tes kepribadian sebagai bagian dari proses seleksi.
+                    </CardDescription>
+                </div>
+                <Badge className="w-fit bg-yellow-500/80 text-yellow-900">Menunggu Tes</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="flex-grow space-y-4">
+             <div className="p-4 rounded-md border-dashed border-yellow-400 bg-yellow-50 dark:bg-yellow-900/30 text-yellow-900 dark:text-yellow-100">
+                <h3 className="font-bold text-lg mb-2 flex items-center gap-2"><BrainCircuit className="h-5 w-5" /> Tes Kepribadian</h3>
+                <p className="text-sm">Hasil tes ini merupakan bagian penting dari proses seleksi kami. Silakan selesaikan tes ini untuk melanjutkan ke tahap berikutnya. Tes ini tidak memiliki batas waktu, namun kami sarankan untuk menyelesaikannya sesegera mungkin.</p>
+            </div>
+          </CardContent>
+          <CardFooter className="bg-muted/50 p-4 border-t flex justify-end">
+            <Button asChild>
+              <Link href={`/careers/portal/assessment/personality?applicationId=${application.id}`}>
+                Mulai Tes Kepribadian <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          </CardFooter>
+        </Card>
+      );
   }
 
   return (
