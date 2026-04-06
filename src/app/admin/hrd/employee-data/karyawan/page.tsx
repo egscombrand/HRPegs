@@ -226,7 +226,7 @@ export default function KaryawanDataPage() {
                                                             <Button variant="ghost" size="icon" className="h-8 w-8"><MoreHorizontal className="h-4 w-4" /></Button>
                                                         </DropdownMenuTrigger>
                                                         <DropdownMenuContent align="end">
-                                                            <DropdownMenuItem onSelect={() => handleEditClick(profile)}><Pencil className="mr-2 h-4 w-4" /> Edit</DropdownMenuItem>
+                                                            <DropdownMenuItem onSelect={() => handleEditClick(profile)}><Edit className="mr-2 h-4 w-4" /> Edit</DropdownMenuItem>
                                                             <DropdownMenuItem className="text-destructive" onSelect={() => handleDeleteClick(profile)}><Trash2 className="mr-2 h-4 w-4" /> Hapus</DropdownMenuItem>
                                                         </DropdownMenuContent>
                                                     </DropdownMenu>
