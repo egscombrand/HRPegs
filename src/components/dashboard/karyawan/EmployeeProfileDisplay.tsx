@@ -72,23 +72,6 @@ export function EmployeeProfileDisplay({
       
       <div className="grid lg:grid-cols-3 gap-6 items-start">
         <div className="lg:col-span-2 space-y-6">
-             <Card className="border-primary/20 bg-primary/5">
-                <CardHeader>
-                    <SectionTitle icon={<Briefcase className="h-5 w-5" />}>Informasi Kepegawaian (Dikelola HRD)</SectionTitle>
-                </CardHeader>
-                <CardContent className="space-y-1">
-                    <InfoRow label="Nomor Induk" value={employeeProfile.employeeNumber} />
-                    <InfoRow label="Jabatan" value={employeeProfile.positionTitle} />
-                    <InfoRow label="Divisi" value={employeeProfile.division} />
-                    <InfoRow label="Brand" value={employeeProfile.brandName} />
-                    <InfoRow label="Atasan Langsung" value={employeeProfile.managerName} />
-                    <Separator className="my-3"/>
-                    <InfoRow label="Tanggal Bergabung" value={employeeProfile.joinDate ? format(employeeProfile.joinDate.toDate(), 'dd MMMM yyyy') : '-'} />
-                    <InfoRow label="Tipe Karyawan" value={employeeProfile.employmentType} />
-                    <InfoRow label="Status" value={employeeProfile.employmentStatus} />
-                </CardContent>
-            </Card>
-
             <Card>
                 <CardHeader>
                     <SectionTitle icon={<User className="h-5 w-5" />}>Identitas Pribadi</SectionTitle>
@@ -110,7 +93,7 @@ export function EmployeeProfileDisplay({
                     <CardDescription>Dapat diubah oleh Anda melalui tombol "Edit Profil".</CardDescription>
                 </CardHeader>
                 <CardContent>
-                   <p className="text-sm text-muted-foreground">{typeof employeeProfile.address === 'string' ? employeeProfile.address : 'Belum diisi.'}</p>
+                   <p className="text-sm text-muted-foreground">{typeof employeeProfile.addressCurrent === 'string' ? employeeProfile.addressCurrent : 'Belum diisi.'}</p>
                 </CardContent>
             </Card>
              <Card>
