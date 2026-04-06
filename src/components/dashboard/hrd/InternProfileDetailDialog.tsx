@@ -11,7 +11,7 @@ import { id } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useCollection, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
 import { collection, query, where, doc } from 'firebase/firestore';
-import { Loader2, Edit } from 'lucide-react';
+import { Loader2, Edit, Banknote } from 'lucide-react';
 import { InternAdminDataFormDialog } from './InternAdminDataFormDialog';
 
 
@@ -171,6 +171,17 @@ export function InternProfileDetailDialog({ profile, open, onOpenChange, onAdmin
 
               <Separator />
 
+              <div>
+                  <SectionTitle>Informasi Finansial</SectionTitle>
+                   <dl className="space-y-1">
+                      <InfoRow label="Nama Bank" value={profile.bankName} />
+                      <InfoRow label="Nomor Rekening" value={profile.bankAccountNumber} />
+                      <InfoRow label="Nama Pemilik Rekening" value={profile.bankAccountHolderName} />
+                  </dl>
+              </div>
+
+              <Separator />
+              
               <div>
                   <SectionTitle>Pendidikan</SectionTitle>
                    <dl className="space-y-1">

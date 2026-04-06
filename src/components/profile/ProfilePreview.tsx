@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Edit, User, Home, BookOpen, Briefcase, Sparkles, Building, Info as InfoIcon, Eye, EyeOff } from 'lucide-react';
+import { Edit, User, Home, BookOpen, Briefcase, Sparkles, Building, Info as InfoIcon, Eye, EyeOff, Banknote } from 'lucide-react';
 import type {
   Profile,
   Address,
@@ -19,6 +19,7 @@ import type {
   WorkExperience,
   OrganizationalExperience,
   Certification,
+  EmployeeProfile
 } from '@/lib/types';
 import { format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
@@ -30,14 +31,33 @@ const maskNik = (nik?: string): string => {
 };
 
 const InfoRow = ({ label, value }: { label: string; value?: string | number | null }) => (
-  <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 py-1">
+  <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 py-1.5">
     <dt className="text-sm font-medium text-muted-foreground">{label}</dt>
     <dd className="text-sm col-span-2">{value || '-'}</dd>
   </div>
 );
 
-const AddressView = ({ title, address }: { title: string; address?: Partial<Address> }) => {
-    if (!address || !address.street) return <p className="text-sm text-muted-foreground">Belum diisi.</p>;
+const SectionTitle = ({ children, icon }: { children: React.ReactNode, icon: React.ReactNode }) => (
+    <h3 className="text-lg font-semibold tracking-tight flex items-center gap-3 mb-4 text-primary">
+        {icon}
+        {children}
+    </h3>
+);
+
+const AddressView = ({ title, address }: { title: string; address?: Partial<Address> | string }) => {
+    if (!address) return <p className="text-sm text-muted-foreground">Belum diisi.</p>;
+
+    if (typeof address === 'string') {
+        return (
+            <div>
+                <h4 className="font-medium text-sm mb-1">{title}</h4>
+                <p className="text-sm text-muted-foreground">{address}</p>
+            </div>
+        )
+    }
+
+    if (!address.street) return <p className="text-sm text-muted-foreground">Belum diisi.</p>;
+    
     return (
          <div>
             <h4 className="font-medium text-sm mb-1">{title}</h4>
@@ -65,6 +85,7 @@ const WorkExperienceView = ({ item }: { item: WorkExperience }) => (
         <p className="capitalize text-xs">{item.jobType}</p>
         <p className="text-muted-foreground text-xs">{item.startDate} - {item.isCurrent ? 'Sekarang' : item.endDate}</p>
         {item.description && <p className="mt-2 text-xs">{item.description}</p>}
+        {!item.isCurrent && item.reasonForLeaving && <p className="mt-1 text-sm italic text-muted-foreground">Alasan berhenti: {item.reasonForLeaving}</p>}
     </div>
 );
 
@@ -88,10 +109,10 @@ export function ProfilePreview({
   profile,
   onEditRequest,
 }: {
-  profile: Profile;
+  profile: Profile & Partial<EmployeeProfile>;
   onEditRequest: (step: number) => void;
 }) {
-  const isProfileComplete = profile.profileStatus === 'completed';
+  const isProfileComplete = profile.profileStatus === 'completed' || profile.completeness?.isComplete === true;
   const nextStep = profile.profileStep || 1;
   const [isNikVisible, setIsNikVisible] = React.useState(false);
 
@@ -163,6 +184,19 @@ export function ProfilePreview({
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <AddressView title="Alamat KTP" address={profile.addressKtp} />
             {profile.isDomicileSameAsKtp ? <p className="text-sm text-muted-foreground self-center">Alamat domisili sama dengan alamat KTP.</p> : <AddressView title="Alamat Domisili" address={profile.addressDomicile} />}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-3"><Banknote className="h-5 w-5 text-primary" />Informasi Finansial</CardTitle>
+        </CardHeader>
+        <CardContent>
+            <dl className="space-y-1">
+                <InfoRow label="Nama Bank" value={profile.bankName} />
+                <InfoRow label="Nomor Rekening" value={profile.bankAccountNumber} />
+                <InfoRow label="Nama Pemilik Rekening" value={profile.bankAccountHolderName} />
+            </dl>
         </CardContent>
       </Card>
 

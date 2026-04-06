@@ -23,6 +23,7 @@ import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { GoogleDatePicker } from '@/components/ui/google-date-picker';
 import { Label } from '@/components/ui/label';
+import { ProfilePreview } from '@/components/profile/ProfilePreview';
 
 
 const profileSchema = z.object({
@@ -46,6 +47,10 @@ const profileSchema = z.object({
   emergencyContactRelation: z.string().min(2, "Hubungan kontak darurat harus diisi."),
   emergencyContactPhone: z.string().min(10, "Nomor telepon darurat tidak valid."),
   
+  bankName: z.string().optional(),
+  bankAccountNumber: z.string().optional(),
+  bankAccountHolderName: z.string().optional(),
+
   internshipStartDate: z.date().optional().nullable(),
   internshipEndDate: z.date().optional().nullable(),
 });
@@ -104,6 +109,9 @@ function ProfileForm({ initialProfile, onSaveSuccess }: { initialProfile: Partia
       emergencyContactName: values.emergencyContactName,
       emergencyContactRelation: values.emergencyContactRelation,
       emergencyContactPhone: values.emergencyContactPhone,
+      bankName: values.bankName || null,
+      bankAccountNumber: values.bankAccountNumber || null,
+      bankAccountHolderName: values.bankAccountHolderName || null,
       internshipStartDate: values.internshipStartDate ? Timestamp.fromDate(values.internshipStartDate) : null,
       internshipEndDate: values.internshipEndDate ? Timestamp.fromDate(values.internshipEndDate) : null,
       uid: firebaseUser.uid,
@@ -175,6 +183,17 @@ function ProfileForm({ initialProfile, onSaveSuccess }: { initialProfile: Partia
                     </section>
                     
                     <Separator />
+
+                    <section>
+                        <h3 className="text-lg font-semibold border-b pb-2 mb-4">Informasi Finansial (Uang Saku)</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <FormField control={form.control} name="bankName" render={({ field }) => (<FormItem><FormLabel>Nama Bank</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
+                            <FormField control={form.control} name="bankAccountNumber" render={({ field }) => (<FormItem><FormLabel>Nomor Rekening</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
+                            <FormField control={form.control} name="bankAccountHolderName" render={({ field }) => (<FormItem><FormLabel>Nama Pemilik Rekening</FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
+                        </div>
+                    </section>
+
+                    <Separator />
                     
                     <section>
                         <h3 className="text-lg font-semibold border-b pb-2 mb-4">Domisili</h3>
@@ -205,88 +224,6 @@ function ProfileForm({ initialProfile, onSaveSuccess }: { initialProfile: Partia
         </CardContent>
     </Card>
   )
-}
-
-function ProfilePreview({ profile, onEdit }: { profile: EmployeeProfile, onEdit: () => void }) {
-    const InfoRow = ({ label, value }: { label: string; value?: string | number | null }) => (
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 py-1.5">
-        <dt className="text-sm font-medium text-muted-foreground">{label}</dt>
-        <dd className="text-sm col-span-2">{value || '-'}</dd>
-      </div>
-    );
-    const SectionTitle = ({ children }: { children: React.ReactNode }) => (
-        <h3 className="text-lg font-semibold tracking-tight border-b pb-2 mb-4">{children}</h3>
-    );
-
-    return (
-         <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                    <CardTitle>Profil Magang Anda</CardTitle>
-                    <CardDescription>Data ini digunakan oleh HRD untuk keperluan administrasi.</CardDescription>
-                </div>
-                <Button variant="outline" onClick={onEdit}><Edit className="mr-2 h-4 w-4"/>Edit Profil</Button>
-            </CardHeader>
-            <CardContent className="space-y-6">
-                {(profile.internshipStartDate || profile.internshipEndDate) && (
-                    <Card className="bg-primary/5 text-primary-foreground border-primary/20">
-                        <CardHeader>
-                            <CardTitle className="text-lg text-primary">Periode Magang Anda</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="flex items-center justify-around text-center">
-                                <div>
-                                    <p className="text-xs text-primary/80">Mulai Magang</p>
-                                    <p className="font-bold text-xl text-primary">{profile.internshipStartDate ? format(profile.internshipStartDate.toDate(), 'dd MMM yyyy', { locale: id }) : 'TBA'}</p>
-                                </div>
-                                <div className="h-12 w-px bg-primary/20" />
-                                <div>
-                                    <p className="text-xs text-primary/80">Selesai Magang</p>
-                                    <p className="font-bold text-xl text-primary">{profile.internshipEndDate ? format(profile.internshipEndDate.toDate(), 'dd MMM yyyy', { locale: id }) : 'TBA'}</p>
-                                </div>
-                            </div>
-                            {!profile.internshipStartDate && (
-                                <p className="text-xs text-center text-primary/70 mt-3">Periode resmi magang Anda akan diatur dan ditampilkan di sini oleh HRD.</p>
-                            )}
-                        </CardContent>
-                    </Card>
-                )}
-                
-                <Separator />
-                
-                <div>
-                    <SectionTitle>Identitas</SectionTitle>
-                    <dl className="space-y-1">
-                        <InfoRow label="Nama Lengkap" value={profile.fullName} />
-                        <InfoRow label="Nama Panggilan" value={profile.nickName} />
-                        <InfoRow label="Telepon" value={profile.phone} />
-                        <InfoRow label="Jenis Kelamin" value={profile.gender} />
-                        <InfoRow label="Tempat, Tanggal Lahir" value={`${profile.birthPlace || ''}, ${profile.birthDate ? format(new Date(profile.birthDate), 'dd MMMM yyyy', {locale: id}) : '-'}`} />
-                    </dl>
-                </div>
-                <Separator/>
-                <div>
-                    <SectionTitle>Status Magang</SectionTitle>
-                     <dl className="space-y-1">
-                        <InfoRow label="Tipe Magang" value={profile.internSubtype === 'intern_education' ? 'Magang Terikat Pendidikan' : 'Magang Pra-Probation'} />
-                        <InfoRow label="Asal Sekolah/Kampus" value={profile.schoolOrCampus} />
-                        <InfoRow label="Jurusan" value={profile.major} />
-                        <InfoRow label="Jenjang Pendidikan" value={profile.educationLevel} />
-                    </dl>
-                </div>
-                <Separator/>
-                 <div>
-                    <SectionTitle>Domisili & Kontak Darurat</SectionTitle>
-                    <dl className="space-y-1">
-                        <InfoRow label="Alamat Domisili" value={profile.addressCurrent} />
-                        <InfoRow label="Nama Kontak Darurat" value={profile.emergencyContactName} />
-                        <InfoRow label="Hubungan" value={profile.emergencyContactRelation} />
-                        <InfoRow label="Telepon Darurat" value={profile.emergencyContactPhone} />
-                    </dl>
-                </div>
-            </CardContent>
-        </Card>
-    )
 }
 
 function InternProfilePageContent() {
@@ -327,7 +264,6 @@ function InternProfilePageContent() {
         const latestEducation = recruitmentProfile?.education?.[0];
         const addressToUse = recruitmentProfile?.isDomicileSameAsKtp ? recruitmentProfile?.addressKtp : recruitmentProfile?.addressDomicile;
 
-        // Merge data with priority: existing employee data > recruitment data > auth data
         return {
             fullName: employeeProfile?.fullName || recruitmentProfile?.fullName || userProfile.fullName,
             email: userProfile.email,
@@ -340,7 +276,6 @@ function InternProfilePageContent() {
             schoolOrCampus: employeeProfile?.schoolOrCampus || latestEducation?.institution,
             major: employeeProfile?.major || latestEducation?.fieldOfStudy,
             educationLevel: employeeProfile?.educationLevel || latestEducation?.level,
-            // Keep existing specific intern data
             internSubtype: employeeProfile?.internSubtype,
             expectedEndDate: employeeProfile?.expectedEndDate,
             internshipStartDate: employeeProfile?.internshipStartDate,
@@ -348,6 +283,9 @@ function InternProfilePageContent() {
             emergencyContactName: employeeProfile?.emergencyContactName,
             emergencyContactRelation: employeeProfile?.emergencyContactRelation,
             emergencyContactPhone: employeeProfile?.emergencyContactPhone,
+            bankName: employeeProfile?.bankName,
+            bankAccountNumber: employeeProfile?.bankAccountNumber,
+            bankAccountHolderName: employeeProfile?.bankAccountHolderName,
         };
     }, [employeeProfile, recruitmentProfile, userProfile]);
 
@@ -367,7 +305,7 @@ function InternProfilePageContent() {
     return showForm ? (
         <ProfileForm initialProfile={combinedInitialProfile} onSaveSuccess={handleSaveSuccess} />
     ) : (
-        <ProfilePreview profile={employeeProfile!} onEdit={() => router.push('/admin/karyawan/magang/profile?mode=edit')} />
+        <ProfilePreview profile={employeeProfile as EmployeeProfile} onEditRequest={() => router.push('/admin/karyawan/magang/profile?mode=edit')} />
     );
 }
 
