@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -202,6 +201,8 @@ export default function JobDetailPage() {
         );
     }
 
+    const isDeadlinePassed = job.applyDeadline && job.applyDeadline.toDate() < new Date();
+
     return (
         <>
             <header className="border-b bg-background">
@@ -299,8 +300,8 @@ export default function JobDetailPage() {
                                             <Calendar className="h-3 w-3"/> Lamar sebelum {format(job.applyDeadline.toDate(), 'dd MMM yyyy')}
                                         </p>
                                     )}
-                                    <Button size="lg" onClick={handleApplyClick} className="w-full">
-                                        Lamar Sekarang
+                                    <Button size="lg" onClick={handleApplyClick} className="w-full" disabled={isDeadlinePassed}>
+                                        {isDeadlinePassed ? 'Pendaftaran Ditutup' : 'Lamar Sekarang'}
                                     </Button>
                                 </CardFooter>
                             </Card>
@@ -329,12 +330,10 @@ export default function JobDetailPage() {
                         Lamar sebelum {format(job.applyDeadline.toDate(), 'dd MMM yyyy')}
                     </p>
                 )}
-                <Button size="lg" onClick={handleApplyClick} className="w-full">
-                    Lamar Sekarang
+                <Button size="lg" onClick={handleApplyClick} className="w-full" disabled={isDeadlinePassed}>
+                    {isDeadlinePassed ? 'Pendaftaran Ditutup' : 'Lamar Sekarang'}
                 </Button>
             </div>
         </>
     );
 }
-
-    
