@@ -227,7 +227,7 @@ service cloud.firestore {
         allow list: if isSignedIn();
 
         // GET: Allow if the user is an admin, the document owner, or an assigned panelist.
-        allow get: if isHrd() || isSuperAdmin() || resource.data.candidateUid == request.auth.uid || request.auth.uid in resource.data.allPanelistIds;
+        allow get: if isHrd() || isSuperAdmin() || (resource != null && (resource.data.candidateUid == request.auth.uid || request.auth.uid in resource.data.allPanelistIds));
 
         // CREATE: A user can create an application only if they are the owner.
         allow create: if isCreatingOwn() && (request.resource.data.status == "draft" || request.resource.data.status == "submitted");
