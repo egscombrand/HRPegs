@@ -1,5 +1,5 @@
 
-'use server';
+'use client';
 
 import { NextRequest, NextResponse } from 'next/server';
 import admin from '@/lib/firebase/admin';
@@ -227,7 +227,7 @@ export async function POST(req: NextRequest) {
       // Check if application is in the personality test stage
       if (appDoc.exists && appDoc.data()?.status === 'tes_kepribadian') {
         await appRef.update({
-          status: 'verification',
+          status: 'screening',
           updatedAt: Timestamp.now(),
         });
       }
@@ -244,5 +244,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to process assessment results. ' + error.message }, { status: 500 });
   }
 }
-
-    

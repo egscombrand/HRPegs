@@ -5,8 +5,8 @@ import { useMemo, useState } from 'react';
 import { useRouter } from '@/navigation';
 import { useParams } from 'next/navigation';
 import { useAuth } from '@/providers/auth-provider';
-import { useCollection, useFirestore, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
-import { collection, query, where, limit, doc, getDocs, getDoc, serverTimestamp } from 'firebase/firestore';
+import { useCollection, useFirestore, useMemoFirebase, setDocumentNonBlocking, getDoc } from '@/firebase';
+import { collection, query, where, limit, doc, getDocs, serverTimestamp } from 'firebase/firestore';
 import type { Job, JobApplication, JobApplicationStatus } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -106,7 +106,6 @@ export default function JobApplyPage() {
                 return;
             }
         }
-        // --- END PRE-APPLICATION CHECKS ---
         
         // 3. Check profile completeness and documents
         const profileRef = doc(firestore, 'profiles', userProfile.uid);
@@ -140,8 +139,8 @@ export default function JobApplyPage() {
 
         // 5. Construct and submit application data
         const applicationRef = doc(firestore, 'applications', applicationId);
-        const initialStatus = 'submitted';
-        const toastMessage = `Lamaran Anda untuk posisi ${job.position} telah berhasil dikirim.`;
+        const initialStatus = 'tes_kepribadian';
+        const toastMessage = `Lamaran Anda untuk posisi ${job.position} telah berhasil dikirim. Anda akan diarahkan untuk mengerjakan tes kepribadian.`;
 
         const applicationData: Omit<JobApplication, 'id'> = {
             candidateUid: userProfile.uid,
@@ -168,7 +167,7 @@ export default function JobApplyPage() {
             description: toastMessage,
         });
 
-        router.push('/careers/portal/applications');
+        router.push(`/careers/portal/assessment/personality?applicationId=${applicationId}`);
 
     } catch (error: any) {
         console.error("Application submission error:", error);
