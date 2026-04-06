@@ -5,14 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Edit, User, Home, BookOpen, Briefcase, Sparkles, Building, Info as InfoIcon, File, Banknote, ShieldAlert, FileText } from 'lucide-react';
-import type { UserProfile, EmployeeProfile, Address } from '@/lib/types';
+import { Edit, User, Home, Briefcase, Banknote, ShieldAlert } from 'lucide-react';
+import type { UserProfile, EmployeeProfile } from '@/lib/types';
 import { format } from 'date-fns';
-import { id as idLocale } from 'date-fns/locale';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { InfoIcon } from 'lucide-react';
 
 const InfoRow = ({ label, value }: { label: string; value?: string | number | null; className?: string }) => (
-  <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 py-2 border-b">
+  <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 py-1.5">
     <dt className="text-sm font-medium text-muted-foreground">{label}</dt>
     <dd className="text-sm col-span-2 font-semibold">{value || '-'}</dd>
   </div>
@@ -24,20 +24,6 @@ const SectionTitle = ({ children, icon }: { children: React.ReactNode, icon: Rea
         {children}
     </h3>
 );
-
-const AddressView = ({ title, address }: { title: string; address?: Partial<Address> }) => {
-    if (!address || !address.street) return <div className="text-sm text-muted-foreground italic">Belum diisi.</div>;
-    return (
-         <div className="space-y-1 text-sm">
-            <p className="font-semibold">{title}</p>
-            <div className="text-muted-foreground">
-                <p>{address.street}, RT {address.rt}/RW {address.rw}</p>
-                <p>{address.village}, {address.district}</p>
-                <p>{address.city}, {address.province} {address.postalCode}</p>
-            </div>
-        </div>
-    )
-};
 
 export function EmployeeProfileDisplay({
   employeeProfile,
@@ -110,28 +96,8 @@ export function EmployeeProfileDisplay({
                 </CardHeader>
                 <CardContent className="space-y-1">
                     <InfoRow label="Nama Panggilan" value={employeeProfile.nickName} />
-                    <InfoRow label="Tempat, Tgl Lahir" value={`${employeeProfile.birthPlace || '-'}, ${employeeProfile.birthDate ? format(new Date(employeeProfile.birthDate), 'dd MMM yyyy', {locale: idLocale}) : '-'}`} />
+                    <InfoRow label="Tempat, Tgl Lahir" value={`${employeeProfile.birthPlace || '-'}, ${employeeProfile.birthDate ? format(new Date(employeeProfile.birthDate), 'dd MMM yyyy') : '-'}`} />
                     <InfoRow label="Jenis Kelamin" value={employeeProfile.gender} />
-                    <InfoRow label="Status Pernikahan" value={employeeProfile.maritalStatus} />
-                    <InfoRow label="Agama" value={employeeProfile.religion} />
-                </CardContent>
-            </Card>
-            
-            <Card>
-                <CardHeader>
-                    <SectionTitle icon={<Banknote className="h-5 w-5" />}>Administrasi & Finansial</SectionTitle>
-                    <CardDescription>Dapat diubah oleh Anda melalui tombol "Edit Profil".</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-1">
-                    <InfoRow label="Nomor KTP (NIK)" value={employeeProfile.nik} />
-                    <Separator className="my-3"/>
-                    <InfoRow label="NPWP" value={employeeProfile.npwp || (employeeProfile.hasNpwp ? 'Belum diisi' : 'Tidak memiliki')} />
-                    <InfoRow label="BPJS Kesehatan" value={employeeProfile.bpjsKesehatan || (employeeProfile.hasBpjsKesehatan ? 'Belum diisi' : 'Tidak memiliki')} />
-                    <InfoRow label="BPJS Ketenagakerjaan" value={employeeProfile.bpjsKetenagakerjaan || (employeeProfile.hasBpjsKetenagakerjaan ? 'Belum diisi' : 'Tidak memiliki')} />
-                    <Separator className="my-3"/>
-                    <InfoRow label="Nama Bank" value={employeeProfile.bankName} />
-                    <InfoRow label="No. Rekening" value={employeeProfile.bankAccountNumber} />
-                    <InfoRow label="Nama Pemilik Rekening" value={employeeProfile.bankAccountHolderName} />
                 </CardContent>
             </Card>
 
@@ -140,11 +106,24 @@ export function EmployeeProfileDisplay({
         <div className="lg:sticky lg:top-24 space-y-6">
             <Card>
                 <CardHeader>
-                    <SectionTitle icon={<Home className="h-5 w-5" />}>Alamat</SectionTitle>
+                    <SectionTitle icon={<Home className="h-5 w-5" />}>Alamat Domisili</SectionTitle>
                     <CardDescription>Dapat diubah oleh Anda melalui tombol "Edit Profil".</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <AddressView title="Alamat Sesuai KTP & Domisili" address={employeeProfile.address} />
+                   <p className="text-sm text-muted-foreground">{typeof employeeProfile.address === 'string' ? employeeProfile.address : 'Belum diisi.'}</p>
+                </CardContent>
+            </Card>
+             <Card>
+                <CardHeader>
+                    <SectionTitle icon={<Banknote className="h-5 w-5" />}>Informasi Finansial</SectionTitle>
+                    <CardDescription>Dapat diubah oleh Anda melalui tombol "Edit Profil".</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <dl className="space-y-1">
+                        <InfoRow label="Nama Bank" value={employeeProfile.bankName} />
+                        <InfoRow label="No. Rekening" value={employeeProfile.bankAccountNumber} />
+                        <InfoRow label="Nama Pemilik" value={employeeProfile.bankAccountHolderName} />
+                    </dl>
                 </CardContent>
             </Card>
             <Card>
