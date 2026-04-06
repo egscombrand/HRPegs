@@ -1,3 +1,4 @@
+
 'use server';
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -77,12 +78,20 @@ export async function POST(req: NextRequest) {
             }
 
             if (!existingProfileSnap && email) {
-                userRecord = await admin.auth().getUserByEmail(email).catch(() => null);
-                if (userRecord) {
-                    const profileByUid = await employeeProfilesRef.doc(userRecord.uid).get();
-                    if (profileByUid.exists) {
-                        existingProfileSnap = profileByUid;
+                try {
+                    userRecord = await admin.auth().getUserByEmail(email);
+                    if (userRecord) {
+                        const profileByUid = await employeeProfilesRef.doc(userRecord.uid).get();
+                        if (profileByUid.exists) {
+                            existingProfileSnap = profileByUid;
+                        }
                     }
+                } catch (authError: any) {
+                    if (authError.code !== 'auth/user-not-found') {
+                        console.warn(`Auth lookup for ${email} failed, but continuing import:`, authError.message);
+                    }
+                    // If user not found in Auth, proceed to create profile without UID link for now
+                    userRecord = null;
                 }
             }
             
@@ -120,17 +129,20 @@ export async function POST(req: NextRequest) {
                     uid = userRecord.uid;
                     newDocRef = employeeProfilesRef.doc(uid);
                 } else {
-                    // Generate a new document reference with an auto-generated ID
                     newDocRef = employeeProfilesRef.doc();
                     uid = newDocRef.id;
                 }
                 
-                batch.set(newDocRef, { 
+                const finalPayload = {
+                    employmentType: 'karyawan' as const,
+                    employmentStatus: 'active' as const,
                     ...payload, 
                     uid: uid,
                     createdAt: FieldValue.serverTimestamp(),
                     updatedAt: FieldValue.serverTimestamp()
-                });
+                };
+                
+                batch.set(newDocRef, finalPayload);
                 results.created++;
             }
             
