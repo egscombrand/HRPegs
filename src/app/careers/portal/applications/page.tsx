@@ -48,7 +48,7 @@ function ApplicationCard({ application }: { application: JobApplication }) {
       if (decision === 'rejected') {
         payload.status = 'rejected';
       }
-      await updateDocumentNonBlocking(appRef, payload, { merge: true });
+      await updateDocumentNonBlocking(appRef, payload);
       toast({ title: 'Keputusan Terkirim', description: `Anda telah berhasil ${decision === 'accepted' ? 'menerima' : 'menolak'} penawaran ini.` });
     } catch (error: any) {
       console.error('Failed to submit decision:', error);
@@ -365,18 +365,23 @@ export default function ApplicationsPage() {
                 </div>
             ) : (
                 <Card className="h-64 flex flex-col items-center justify-center text-center">
-                     <CardHeader>
-                        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-                            <Briefcase className="h-6 w-6 text-muted-foreground" />
+                    <CardHeader>
+                        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                            <ClipboardCheck className="h-6 w-6 text-primary" />
                         </div>
-                        <CardTitle className="mt-4">Anda Belum Pernah Melamar</CardTitle>
+                        <CardTitle className="mt-4">Belum Ada Lamaran Aktif</CardTitle>
                     </CardHeader>
-                    <CardContent>
-                        <p className="text-muted-foreground">Semua lamaran Anda akan muncul di sini.</p>
+                    <CardContent className="max-w-xs mx-auto">
+                        <p className="text-muted-foreground text-sm">
+                            Selesaikan langkah pendaftaran Anda (Profil, Lamar Kerja, & Tes) melalui Dashboard untuk mulai diproses.
+                        </p>
                     </CardContent>
-                    <CardFooter>
-                        <Button asChild>
-                            <Link href="/careers/portal/jobs">Cari Lowongan Sekarang</Link>
+                    <CardFooter className="flex flex-col gap-2">
+                        <Button asChild className="w-full">
+                            <Link href="/careers/portal">Ke Dashboard Utama <ArrowRight className="ml-2 h-4 w-4" /></Link>
+                        </Button>
+                        <Button asChild variant="outline" className="w-full">
+                            <Link href="/careers/portal/jobs">Cari Lowongan</Link>
                         </Button>
                     </CardFooter>
                 </Card>

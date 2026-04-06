@@ -202,7 +202,7 @@ export type Job = {
   };
 };
 
-export const ORDERED_RECRUITMENT_STAGES = ['screening', 'interview', 'offered', 'hired', 'rejected', 'draft'] as const;
+export const ORDERED_RECRUITMENT_STAGES = ['draft', 'submitted', 'tes_kepribadian', 'screening', 'interview', 'offered', 'hired', 'rejected'] as const;
 export type JobApplicationStatus = (typeof ORDERED_RECRUITMENT_STAGES)[number];
 
 
