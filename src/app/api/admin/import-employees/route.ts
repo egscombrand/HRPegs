@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import admin from '@/lib/firebase/admin';
-import { Timestamp, FieldValue } from 'firebase-admin/firestore';
+import { Timestamp, FieldValue, doc, collection } from 'firebase-admin/firestore';
 import type { EmployeeProfile, UserProfile } from '@/lib/types';
 import { HRP_FIELDS } from '@/lib/hrp-fields';
 
@@ -47,16 +47,17 @@ export async function POST(req: NextRequest) {
     }
 
     const findHeaderByHrpField = (field: string) => Object.keys(headerToHrpField).find(h => headerToHrpField[h] === field);
-
     const employeeProfilesRef = db.collection('employee_profiles');
     
-    // Use Promise.all to process rows concurrently for better performance
-    const processingPromises = rows.map(async (row: Record<string, any>, index: number) => {
+    // Process rows sequentially to avoid Firestore race conditions with lookups
+    for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
         try {
             const fullNameHeader = findHeaderByHrpField('fullName');
             if (!fullNameHeader || !row[fullNameHeader]) {
                 results.skipped++;
-                return;
+                results.errors.push(`Baris ${i + 2}: Dilewati karena nama lengkap tidak ada.`);
+                continue;
             }
             
             const employeeNumberHeader = findHeaderByHrpField('employeeNumber');
@@ -68,7 +69,6 @@ export async function POST(req: NextRequest) {
             let existingProfileSnap: admin.firestore.DocumentSnapshot | null = null;
             let userRecord: admin.auth.UserRecord | null = null;
             
-            // 1. Try to find by Employee Number (NIK)
             if (employeeNumber) {
                 const querySnapshot = await employeeProfilesRef.where('employeeNumber', '==', employeeNumber).limit(1).get();
                 if (!querySnapshot.empty) {
@@ -76,7 +76,6 @@ export async function POST(req: NextRequest) {
                 }
             }
 
-            // 2. If not found by NIK, try by email
             if (!existingProfileSnap && email) {
                 userRecord = await admin.auth().getUserByEmail(email).catch(() => null);
                 if (userRecord) {
@@ -92,7 +91,7 @@ export async function POST(req: NextRequest) {
 
             for (const header in row) {
                 const hrpFieldKey = headerToHrpField[header];
-                if (hrpFieldKey && hrpFieldKey !== '__custom__') { // Ignore custom for now
+                if (hrpFieldKey && hrpFieldKey !== '__custom__') {
                     const value = row[header];
                     if (value !== undefined && value !== null && value !== '') {
                         hasData = true;
@@ -103,7 +102,8 @@ export async function POST(req: NextRequest) {
             
             if (!hasData) {
                 results.skipped++;
-                return;
+                results.errors.push(`Baris ${i + 2}: Tidak ada data untuk diimpor.`);
+                continue;
             }
             
             const batch = db.batch();
@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
                 batch.set(docRef, { ...payload, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
                 results.updated++;
             } else { // --- CREATE ---
-                const uid = userRecord ? userRecord.uid : doc(collection(firestore, 'employee_profiles')).id;
+                const uid = userRecord ? userRecord.uid : doc(collection(db, 'employee_profiles')).id;
                 const newDocRef = employeeProfilesRef.doc(uid);
                 batch.set(newDocRef, { 
                     ...payload, 
@@ -128,11 +128,9 @@ export async function POST(req: NextRequest) {
 
         } catch (e: any) {
             results.failed++;
-            results.errors.push(`Baris ${index + 2}: ${e.message}`);
+            results.errors.push(`Baris ${i + 2}: ${e.message}`);
         }
-    });
-
-    await Promise.all(processingPromises);
+    }
 
     return NextResponse.json(results);
 }
