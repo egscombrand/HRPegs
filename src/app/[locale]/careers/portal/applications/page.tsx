@@ -20,7 +20,7 @@ import { statusDisplayLabels } from '@/components/recruitment/ApplicationStatusB
 import { useToast } from '@/hooks/use-toast';
 
 
-function ApplicationCard({ application }: { application: JobApplication }) {
+function ApplicationCard({ application, hasCompletedTest }: { application: JobApplication, hasCompletedTest: boolean }) {
   const [now, setNow] = useState(new Date());
   const [isDeciding, setIsDeciding] = React.useState(false);
   const { firebaseUser } = useAuth();
@@ -48,7 +48,7 @@ function ApplicationCard({ application }: { application: JobApplication }) {
       if (decision === 'rejected') {
         payload.status = 'rejected';
       }
-      await updateDocumentNonBlocking(appRef, payload, { merge: true });
+      await updateDocumentNonBlocking(appRef, payload);
       toast({ title: 'Keputusan Terkirim', description: `Anda telah berhasil ${decision === 'accepted' ? 'menerima' : 'menolak'} penawaran ini.` });
     } catch (error: any) {
       console.error('Failed to submit decision:', error);
@@ -89,6 +89,7 @@ function ApplicationCard({ application }: { application: JobApplication }) {
   const isOffered = application.status === 'offered';
   const isInterviewStage = application.status === 'interview';
   const isAssessmentStage = application.status === 'tes_kepribadian';
+  const isProcessing = ['screening', 'verification', 'document_submission', 'interview'].includes(application.status);
 
   if (isOffered) {
     const salaryLabel = application.jobType === 'internship' ? 'Uang Saku' : 'Gaji';
@@ -246,6 +247,24 @@ function ApplicationCard({ application }: { application: JobApplication }) {
                 <p className="text-sm leading-relaxed">
                     Kami menghargai kesabaran Anda. Mengingat tingginya antusiasme dan jumlah aplikasi yang masuk, proses peninjauan ini dapat memakan waktu <strong>2 hingga 3 minggu</strong>. Harap periksa halaman ini secara berkala untuk melihat pembaruan status. Hanya kandidat yang memenuhi kualifikasi yang akan dihubungi untuk tahap selanjutnya.
                 </p>
+                {isProcessing && !hasCompletedTest && (
+                  <>
+                    <Separator className="my-3 bg-blue-300/50 dark:bg-blue-700/50" />
+                    <div>
+                        <p className="font-bold text-blue-900 dark:text-blue-200">
+                            Untuk mempercepat proses, selesaikan tes kepribadian Anda.
+                        </p>
+                        <p className="text-xs mt-1">
+                            Hasil tes akan digunakan untuk semua lamaran Anda.
+                        </p>
+                        <Button asChild size="sm" className="mt-3">
+                            <Link href="/careers/portal/assessment/personality">
+                               Lanjut ke Tes Kepribadian <ArrowRight className="ml-2 h-4 w-4" />
+                            </Link>
+                        </Button>
+                    </div>
+                  </>
+                )}
             </div>
         )}
 
@@ -324,6 +343,18 @@ export default function ApplicationsPage() {
 
     const { data: applications, isLoading: applicationsLoading, error } = useCollection<JobApplication>(applicationsQuery);
 
+    const sessionsQuery = useMemoFirebase(() => {
+      if (!uid) return null;
+      return query(
+        collection(firestore, 'assessment_sessions'),
+        where('candidateUid', '==', uid),
+        where('status', '==', 'submitted')
+      );
+    }, [uid, firestore]);
+    const { data: submittedSessions, isLoading: sessionsLoading } = useCollection<AssessmentSession>(sessionsQuery);
+
+    const hasCompletedTest = useMemo(() => (submittedSessions?.length ?? 0) > 0, [submittedSessions]);
+
     const sortedApplications = useMemo(() => {
         if (!applications) return [];
         return [...applications].sort((a, b) => {
@@ -333,7 +364,7 @@ export default function ApplicationsPage() {
         });
     }, [applications]);
 
-    const isLoading = authLoading || applicationsLoading;
+    const isLoading = authLoading || applicationsLoading || sessionsLoading;
 
     if (error) {
         return (
@@ -360,6 +391,7 @@ export default function ApplicationsPage() {
                         <ApplicationCard 
                             key={app.id} 
                             application={app} 
+                            hasCompletedTest={hasCompletedTest}
                         />
                     ))}
                 </div>

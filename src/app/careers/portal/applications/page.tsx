@@ -20,7 +20,7 @@ import { statusDisplayLabels } from '@/components/recruitment/ApplicationStatusB
 import { useToast } from '@/hooks/use-toast';
 
 
-function ApplicationCard({ application }: { application: JobApplication }) {
+function ApplicationCard({ application, hasCompletedTest }: { application: JobApplication, hasCompletedTest: boolean }) {
   const [now, setNow] = useState(new Date());
   const [isDeciding, setIsDeciding] = React.useState(false);
   const { firebaseUser } = useAuth();
@@ -89,6 +89,7 @@ function ApplicationCard({ application }: { application: JobApplication }) {
   const isOffered = application.status === 'offered';
   const isInterviewStage = application.status === 'interview';
   const isAssessmentStage = application.status === 'tes_kepribadian';
+  const isProcessing = ['screening', 'verification', 'document_submission', 'interview'].includes(application.status);
 
   if (isOffered) {
     const salaryLabel = application.jobType === 'internship' ? 'Uang Saku' : 'Gaji';
@@ -246,6 +247,24 @@ function ApplicationCard({ application }: { application: JobApplication }) {
                 <p className="text-sm leading-relaxed">
                     Kami menghargai kesabaran Anda. Mengingat tingginya antusiasme dan jumlah aplikasi yang masuk, proses peninjauan ini dapat memakan waktu <strong>2 hingga 3 minggu</strong>. Harap periksa halaman ini secara berkala untuk melihat pembaruan status. Hanya kandidat yang memenuhi kualifikasi yang akan dihubungi untuk tahap selanjutnya.
                 </p>
+                {isProcessing && !hasCompletedTest && (
+                  <>
+                    <Separator className="my-3 bg-blue-300/50 dark:bg-blue-700/50" />
+                    <div>
+                        <p className="font-bold text-blue-900 dark:text-blue-200">
+                            Untuk mempercepat proses, selesaikan tes kepribadian Anda.
+                        </p>
+                        <p className="text-xs mt-1">
+                            Hasil tes akan digunakan untuk semua lamaran Anda.
+                        </p>
+                        <Button asChild size="sm" className="mt-3">
+                            <Link href="/careers/portal/assessment/personality">
+                               Lanjut ke Tes Kepribadian <ArrowRight className="ml-2 h-4 w-4" />
+                            </Link>
+                        </Button>
+                    </div>
+                  </>
+                )}
             </div>
         )}
 
@@ -324,6 +343,18 @@ export default function ApplicationsPage() {
 
     const { data: applications, isLoading: applicationsLoading, error } = useCollection<JobApplication>(applicationsQuery);
 
+    const sessionsQuery = useMemoFirebase(() => {
+      if (!uid) return null;
+      return query(
+        collection(firestore, 'assessment_sessions'),
+        where('candidateUid', '==', uid),
+        where('status', '==', 'submitted')
+      );
+    }, [uid, firestore]);
+    const { data: submittedSessions, isLoading: sessionsLoading } = useCollection<AssessmentSession>(sessionsQuery);
+
+    const hasCompletedTest = useMemo(() => (submittedSessions?.length ?? 0) > 0, [submittedSessions]);
+
     const sortedApplications = useMemo(() => {
         if (!applications) return [];
         return [...applications].sort((a, b) => {
@@ -333,7 +364,7 @@ export default function ApplicationsPage() {
         });
     }, [applications]);
 
-    const isLoading = authLoading || applicationsLoading;
+    const isLoading = authLoading || applicationsLoading || sessionsLoading;
 
     if (error) {
         return (
@@ -360,28 +391,24 @@ export default function ApplicationsPage() {
                         <ApplicationCard 
                             key={app.id} 
                             application={app} 
+                            hasCompletedTest={hasCompletedTest}
                         />
                     ))}
                 </div>
             ) : (
                 <Card className="h-64 flex flex-col items-center justify-center text-center">
-                    <CardHeader>
-                        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                            <ClipboardCheck className="h-6 w-6 text-primary" />
+                     <CardHeader>
+                        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                            <Briefcase className="h-6 w-6 text-muted-foreground" />
                         </div>
-                        <CardTitle className="mt-4">Belum Ada Lamaran Aktif</CardTitle>
+                        <CardTitle className="mt-4">Anda Belum Pernah Melamar</CardTitle>
                     </CardHeader>
-                    <CardContent className="max-w-xs mx-auto">
-                        <p className="text-muted-foreground text-sm">
-                            Selesaikan langkah pendaftaran Anda (Profil, Lamar Kerja, & Tes) melalui Dashboard untuk mulai diproses.
-                        </p>
+                    <CardContent>
+                        <p className="text-muted-foreground">Semua lamaran Anda akan muncul di sini.</p>
                     </CardContent>
-                    <CardFooter className="flex flex-col gap-2">
-                        <Button asChild className="w-full">
-                            <Link href="/careers/portal">Ke Dashboard Utama <ArrowRight className="ml-2 h-4 w-4" /></Link>
-                        </Button>
-                        <Button asChild variant="outline" className="w-full">
-                            <Link href="/careers/portal/jobs">Cari Lowongan</Link>
+                    <CardFooter>
+                        <Button asChild>
+                            <Link href="/careers/portal/jobs">Cari Lowongan Sekarang</Link>
                         </Button>
                     </CardFooter>
                 </Card>
