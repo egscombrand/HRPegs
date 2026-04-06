@@ -5,11 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Edit, User, Home, Briefcase, Banknote, ShieldAlert } from 'lucide-react';
+import { Edit, User, Home, Banknote, ShieldAlert } from 'lucide-react';
 import type { UserProfile, EmployeeProfile } from '@/lib/types';
 import { format } from 'date-fns';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { InfoIcon } from 'lucide-react';
 
 const InfoRow = ({ label, value }: { label: string; value?: string | number | null; className?: string }) => (
   <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 py-1.5">
@@ -34,7 +32,6 @@ export function EmployeeProfileDisplay({
   userProfile: UserProfile;
   onEdit: () => void;
 }) {
-  const isDataIncomplete = !employeeProfile.managerName || !employeeProfile.division || !employeeProfile.positionTitle;
   const isProfileComplete = employeeProfile?.completeness?.isComplete;
 
   return (
@@ -59,16 +56,6 @@ export function EmployeeProfileDisplay({
           </div>
         </CardHeader>
       </Card>
-
-      {isDataIncomplete && (
-        <Alert variant="destructive">
-            <InfoIcon className="h-4 w-4" />
-            <AlertTitle>Data Kepegawaian Belum Lengkap</AlertTitle>
-            <AlertDescription>
-                Informasi jabatan, divisi, atau atasan Anda belum diatur. Beberapa fitur seperti pengajuan izin mungkin belum berfungsi. Harap hubungi HRD.
-            </AlertDescription>
-        </Alert>
-      )}
       
       <div className="grid lg:grid-cols-3 gap-6 items-start">
         <div className="lg:col-span-2 space-y-6">
