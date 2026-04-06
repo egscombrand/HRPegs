@@ -109,14 +109,17 @@ export default function JobApplyPage() {
         }
         // --- END PRE-APPLICATION CHECKS ---
         
-        // 3. Check profile completeness
-        if (!userProfile.isProfileComplete) {
+        // 3. Check profile completeness and documents
+        const profileRef = doc(firestore, 'profiles', userProfile.uid);
+        const profileSnap = await getDoc(profileRef);
+
+        if (!profileSnap.exists() || !profileSnap.data().cvUrl || !profileSnap.data().ijazahUrl) {
             toast({
                 variant: 'destructive',
-                title: 'Profil Belum Lengkap',
-                description: 'Silakan lengkapi Data Diri dan Pendidikan Anda sebelum melamar.',
+                title: 'Dokumen Belum Lengkap',
+                description: 'Anda harus melengkapi profil dan mengunggah CV serta Ijazah sebelum melamar.',
             });
-            router.push('/careers/portal/profile');
+            router.push('/careers/portal/profile?step=5');
             setIsApplying(false);
             return;
         }
