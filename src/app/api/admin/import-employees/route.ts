@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import admin from '@/lib/firebase/admin';
-import { Timestamp, FieldValue, doc, collection } from 'firebase-admin/firestore';
+import { Timestamp, FieldValue } from 'firebase-admin/firestore';
 import type { EmployeeProfile, UserProfile } from '@/lib/types';
 import { HRP_FIELDS } from '@/lib/hrp-fields';
 
@@ -20,7 +20,7 @@ async function verifyAdmin(req: NextRequest) {
         }
         return { uid: decodedToken.uid };
     } catch (error: any) {
-        if (error.code === 'auth/id-token-expired' || error.code === 'auth/invalid-id-token') {
+         if (error.code === 'auth/id-token-expired' || error.code === 'auth/invalid-id-token') {
              return { error: 'Sesi Anda telah berakhir, silakan muat ulang halaman dan coba lagi.', status: 401 };
         }
         return { error: `Verifikasi token gagal: ${error.message}`, status: 401 };
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
             const fullNameHeader = findHeaderByHrpField('fullName');
             if (!fullNameHeader || !row[fullNameHeader]) {
                 results.skipped++;
-                results.errors.push(`Baris ${i + 2}: Dilewati karena nama lengkap tidak ada.`);
+                results.errors.push(`Baris ${i + 2}: Dilewati karena nama lengkap tidak ada atau tidak dipetakan.`);
                 continue;
             }
             
@@ -113,8 +113,18 @@ export async function POST(req: NextRequest) {
                 batch.set(docRef, { ...payload, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
                 results.updated++;
             } else { // --- CREATE ---
-                const uid = userRecord ? userRecord.uid : doc(collection(db, 'employee_profiles')).id;
-                const newDocRef = employeeProfilesRef.doc(uid);
+                let uid;
+                let newDocRef;
+
+                if (userRecord) {
+                    uid = userRecord.uid;
+                    newDocRef = employeeProfilesRef.doc(uid);
+                } else {
+                    // Generate a new document reference with an auto-generated ID
+                    newDocRef = employeeProfilesRef.doc();
+                    uid = newDocRef.id;
+                }
+                
                 batch.set(newDocRef, { 
                     ...payload, 
                     uid: uid,
