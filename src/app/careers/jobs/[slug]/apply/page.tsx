@@ -1,3 +1,4 @@
+
 // This file path is for the new non-locale structure.
 // The content is taken from the original [locale] equivalent.
 'use client';
@@ -6,7 +7,7 @@ import { useMemo, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/providers/auth-provider';
 import { useCollection, useFirestore, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
-import { collection, query, where, limit, doc, getDoc, getDocs, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, limit, doc, getDocs, serverTimestamp } from 'firebase/firestore';
 import type { Job, JobApplication, JobApplicationStatus } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -194,6 +195,8 @@ export default function JobApplyPage() {
   if (isLoadingJob || !job) {
       return <JobApplySkeleton />
   }
+  
+  const isDeadlinePassed = job.applyDeadline && job.applyDeadline.toDate() < new Date();
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
@@ -213,9 +216,9 @@ export default function JobApplyPage() {
                          <Button onClick={() => router.back()} variant="outline">
                             Kembali
                         </Button>
-                        <Button onClick={handleApply} disabled={isApplying}>
+                        <Button onClick={handleApply} disabled={isApplying || isDeadlinePassed}>
                             {isApplying && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Kirim Lamaran
+                            {isDeadlinePassed ? 'Pendaftaran Ditutup' : 'Kirim Lamaran'}
                         </Button>
                     </div>
                 </CardContent>
