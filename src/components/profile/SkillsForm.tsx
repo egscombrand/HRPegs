@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from '@/components/ui/button';
-import { Loader2, X, PlusCircle, Trash2, FileUp, Eye, Globe } from 'lucide-react';
+import { Loader2, X, PlusCircle, Trash2, FileUp, Eye, Globe, Info } from 'lucide-react';
 import { Separator } from '../ui/separator';
 import { useAuth } from '@/providers/auth-provider';
 import { useFirestore, setDocumentNonBlocking } from '@/firebase';
@@ -140,7 +140,7 @@ function FileUploadField({
                         <Input 
                             type="file" 
                             onChange={handleFileUpload} 
-                            className="flex-1 text-xs cursor-pointer file:cursor-pointer file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 file:mr-4 file:px-4 file:py-2 file:rounded-full file:border-0" 
+                            className="flex-1 text-xs cursor-pointer file:cursor-pointer file:rounded-full file:border-0 file:bg-primary file:text-primary-foreground file:px-4 file:py-2 file:mr-4 hover:file:bg-primary/90" 
                             accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
                             disabled={isUploading}
                         />
