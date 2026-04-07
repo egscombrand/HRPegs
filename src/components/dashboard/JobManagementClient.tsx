@@ -117,7 +117,7 @@ export function JobManagementClient() {
   
   const assignableUsers = useMemo(() => {
     if (!users) return [];
-    return users.filter(u => u.role === 'manager' || u.role === 'karyawan');
+    return users.filter(u => u.role === 'manager' || u.employmentType === 'karyawan');
   }, [users]);
 
   const brandMap = useMemo(() => {
@@ -329,10 +329,10 @@ export function JobManagementClient() {
                   </TableCell>
                   <TableCell>
                     <Popover>
-                        <PopoverTrigger asChild>
-                            <TooltipProvider>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <PopoverTrigger asChild>
                                         <div className="flex items-center -space-x-2 cursor-pointer">
                                             {assignedUsers.length > 0 ? (
                                                 <>
@@ -351,15 +351,15 @@ export function JobManagementClient() {
                                                 <div className="text-muted-foreground text-center w-full">-</div>
                                             )}
                                         </div>
-                                    </TooltipTrigger>
-                                    {assignedUsers.length > 0 &&
-                                        <TooltipContent>
-                                            <p>{assignedUsers.map(u => u.fullName).join(', ')}</p>
-                                        </TooltipContent>
-                                    }
-                                </Tooltip>
-                            </TooltipProvider>
-                        </PopoverTrigger>
+                                    </PopoverTrigger>
+                                </TooltipTrigger>
+                                {assignedUsers.length > 0 &&
+                                    <TooltipContent>
+                                        <p>{assignedUsers.map(u => u.fullName).join(', ')}</p>
+                                    </TooltipContent>
+                                }
+                            </Tooltip>
+                        </TooltipProvider>
                         <PopoverContent className="w-auto p-0" align="start">
                             <JobQuickViewPanel job={job} assignedUsers={assignedUsers} />
                         </PopoverContent>
@@ -414,6 +414,7 @@ export function JobManagementClient() {
                         <DropdownMenuItem
                           className="text-destructive focus:text-destructive focus:bg-destructive/10"
                           onSelect={(e) => { e.preventDefault(); setOpenMenuId(null); queueMicrotask(() => handleDelete(job)); }}
+                          disabled={userProfile?.role !== 'super-admin'}
                         >
                           <Trash2 className="mr-2 h-4 w-4" />
                           Delete
