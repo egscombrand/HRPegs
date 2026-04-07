@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { formatDistanceToNow } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { Loader2, BellRing, BellOff } from 'lucide-react';
+import { Loader2, BellOff, Briefcase } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 
@@ -64,7 +64,6 @@ export function NotificationPanel() {
     }
   }
 
-
   return (
     <div className="flex flex-col h-full">
         <div className="p-4 border-b">
@@ -91,30 +90,44 @@ export function NotificationPanel() {
                 </div>
             )}
             <div className="p-2 space-y-1">
-                {notifications?.map(notif => (
-                    <Link
-                        key={notif.id}
-                        href={getLinkHref(notif)}
-                        className={cn(
-                            "block p-3 rounded-md transition-colors hover:bg-accent",
-                            !notif.isRead && "bg-blue-50 dark:bg-blue-900/20"
-                        )}
-                        onClick={() => !notif.isRead && handleMarkAsRead(notif.id!)}
-                    >
-                        <div className="flex items-start gap-3">
-                            {!notif.isRead && (
-                                <div className="h-2 w-2 rounded-full bg-primary mt-1.5 shrink-0"></div>
+                {notifications?.map(notif => {
+                    const jobTitle = notif.type === 'recruitment_assignment'
+                        ? notif.message.split('"')[1] || 'sebuah lowongan'
+                        : '';
+                    
+                    return (
+                        <Link
+                            key={notif.id}
+                            href={getLinkHref(notif)}
+                            className={cn(
+                                "block rounded-md transition-colors hover:bg-accent",
+                                !notif.isRead && "bg-blue-50 dark:bg-blue-900/20"
                             )}
-                            <div className={cn("flex-grow", notif.isRead && "pl-5")}>
-                                <div className="flex justify-between items-center">
-                                    <p className="font-semibold text-sm">{notif.title}</p>
-                                    <p className="text-xs text-muted-foreground">{formatDistanceToNow(notif.createdAt.toDate(), { addSuffix: true, locale: idLocale })}</p>
+                            onClick={() => !notif.isRead && handleMarkAsRead(notif.id!)}
+                        >
+                            <div className="flex items-start gap-3 p-3">
+                                <div className="relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted mt-1">
+                                <Briefcase className="h-4 w-4 text-muted-foreground" />
+                                {!notif.isRead && (
+                                    <span className="absolute top-0 right-0 flex h-2.5 w-2.5">
+                                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75"></span>
+                                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary"></span>
+                                    </span>
+                                )}
                                 </div>
-                                <p className="text-sm text-muted-foreground">{notif.message}</p>
+                                <div className="flex-grow">
+                                <p className="text-xs font-semibold text-muted-foreground">{notif.title}</p>
+                                <p className="text-sm text-foreground mt-1">
+                                    Anda ditugaskan ke: <span className="font-semibold">{jobTitle}</span>
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-1.5">
+                                    {formatDistanceToNow(notif.createdAt.toDate(), { addSuffix: true, locale: idLocale })}
+                                </p>
+                                </div>
                             </div>
-                        </div>
-                    </Link>
-                ))}
+                        </Link>
+                    )
+                })}
             </div>
         </ScrollArea>
     </div>
