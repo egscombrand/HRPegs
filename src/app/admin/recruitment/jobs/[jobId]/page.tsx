@@ -47,7 +47,7 @@ export default function RecruitmentApplicantsPage() {
     useMemoFirebase(() =>
       query(
         collection(firestore, 'users'),
-        where('role', 'in', ['manager', 'karyawan']),
+        where('role', 'in', ['manager', 'karyawan', 'hrd', 'super-admin']),
         where('isActive', '==', true)
       ),
     [firestore]
@@ -132,6 +132,7 @@ export default function RecruitmentApplicantsPage() {
             <AssignedUsersCard 
                 job={job} 
                 allUsers={assignableUsers}
+                allBrands={brands || []}
                 onUpdate={mutateJob} 
             />
         )}
