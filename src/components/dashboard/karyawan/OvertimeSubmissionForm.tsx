@@ -52,7 +52,7 @@ interface OvertimeSubmissionFormProps {
   onSuccess: () => void;
 }
 
-const InfoRow = ({ label, value }: { label: string, value: string | number }) => (
+const InfoRow = ({ label, value }: { label: string, value: string | number | null | undefined }) => (
     <div className="flex justify-between text-sm">
         <p className="text-muted-foreground">{label}</p>
         <p className="font-medium text-right">{value}</p>
@@ -247,7 +247,7 @@ export function OvertimeSubmissionForm({ open, onOpenChange, submission, employe
         payload.brandId = userBrandId;
         payload.division = displayInfo.division;
         payload.positionTitle = displayInfo.positionTitle;
-        payload.managerUid = employeeProfile?.supervisorUid || null;
+        payload.managerUid = employeeProfile?.managerUid || employeeProfile?.supervisorUid || null;
         payload.createdAt = serverTimestamp();
       }
       
@@ -262,7 +262,7 @@ export function OvertimeSubmissionForm({ open, onOpenChange, submission, employe
     }
   };
 
-  const isReadOnly = submission && submission.status !== 'draft' && !submission.status.startsWith('revision');
+  const isReadOnly = !!(submission && submission.status !== 'draft' && !submission.status.startsWith('revision'));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -285,7 +285,7 @@ export function OvertimeSubmissionForm({ open, onOpenChange, submission, employe
                 </Card>
                 <Card className="p-4 space-y-2 text-sm">
                     <p className="font-semibold mb-2">Alur Persetujuan</p>
-                    <InfoRow label="Manager Divisi" value={employeeProfile?.supervisorName || 'Belum Ditentukan'} />
+                    <InfoRow label="Manager Divisi" value={employeeProfile?.managerName || employeeProfile?.supervisorName || 'Belum Ditentukan'} />
                     <InfoRow label="Divisi Approval" value={displayInfo.division} />
                      <div className="flex justify-between text-sm pt-2 border-t mt-2">
                         <p className="text-muted-foreground">Alur</p>

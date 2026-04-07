@@ -11,7 +11,7 @@ async function verifySuperAdmin(req: NextRequest) {
     try {
         const decodedToken = await admin.auth().verifyIdToken(idToken);
         const userDoc = await admin.firestore().collection('users').doc(decodedToken.uid).get();
-        if (!userDoc.exists() || userDoc.data()?.role !== 'super-admin') {
+        if (!userDoc.exists || userDoc.data()?.role !== 'super-admin') {
             return { error: 'Forbidden: Only super-admins can delete users.', status: 403 };
         }
         return { uid: decodedToken.uid };

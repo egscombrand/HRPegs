@@ -79,6 +79,8 @@ export type EmployeeProfile = {
   workLocation?: string; // Office Site ID or 'Remote'
   managerUid?: string; // Atasan langsung
   managerName?: string;
+  supervisorUid?: string; // Used for interns, synonymous with managerUid
+  supervisorName?: string;
   
   // --- Data Administratif ---
   nik?: string; // No KTP/SIM

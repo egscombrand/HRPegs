@@ -44,13 +44,13 @@ export default function CandidateDashboardPage() {
     let highestApp: JobApplication | null = null;
     let highestStageIndex = -1;
 
-    nonRejectedApps.forEach(app => {
+    for (const app of nonRejectedApps) {
       const currentIndex = ORDERED_RECRUITMENT_STAGES.indexOf(app.status);
       if (currentIndex > highestStageIndex) {
         highestStageIndex = currentIndex;
         highestApp = app;
       }
-    });
+    }
 
     return { highestStatus: highestApp?.status || null, highestStatusApplication: highestApp };
   }, [applications]);

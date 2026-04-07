@@ -227,7 +227,7 @@ export function PermissionRequestForm({ open, onOpenChange, submission, employee
             totalDurationMinutes: finalDurationMinutes,
             attachments: attachmentUrl ? [attachmentUrl] : [],
             status: submission?.status === 'draft' || isCreating ? initialStatus : submission.status,
-            managerUid: employeeProfile.supervisorUid || null,
+            managerUid: employeeProfile.managerUid || employeeProfile.supervisorUid || null,
             attachmentStatus: values.attachment ? 'provided' : (values.type === 'sakit' && durationMinutes / 1440 <= 1 ? 'verification_needed' : 'not_provided'),
             ...getSpecificFields(values),
         };

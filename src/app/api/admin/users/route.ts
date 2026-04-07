@@ -23,7 +23,7 @@ async function verifyAdmin(req: NextRequest) {
     try {
         const decodedToken = await admin.auth().verifyIdToken(idToken);
         const userDoc = await admin.firestore().collection('users').doc(decodedToken.uid).get();
-        if (!userDoc.exists() || !['super-admin', 'hrd'].includes(userDoc.data()?.role)) {
+        if (!userDoc.exists || !['super-admin', 'hrd'].includes(userDoc.data()?.role)) {
             return { error: 'Forbidden: Insufficient permissions.', status: 403 };
         }
         return { uid: decodedToken.uid, role: userDoc.data()?.role };

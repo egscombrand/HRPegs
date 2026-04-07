@@ -16,7 +16,7 @@ async function verifyAdmin(req: NextRequest) {
         const decodedToken = await admin.auth().verifyIdToken(idToken);
         const userDocSnapshot = await admin.firestore().collection('users').doc(decodedToken.uid).get();
 
-        if (!userDocSnapshot.exists()) {
+        if (!userDocSnapshot.exists) {
             return { error: 'Forbidden: User profile not found.', status: 403 };
         }
         
