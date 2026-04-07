@@ -102,15 +102,15 @@ export function JobManagementClient() {
   const brandsRef = useMemoFirebase(() => collection(firestore, 'brands'), [firestore]);
   const { data: brands, isLoading: isLoadingBrands, error: brandsError } = useCollection<Brand>(brandsRef);
 
-  const usersToFilterQuery = useMemoFirebase(() =>
+  const usersQuery = useMemoFirebase(() =>
     query(
       collection(firestore, 'users'),
-      where('role', 'in', ['manager', 'karyawan']),
+      where('role', 'in', ['hrd', 'super-admin', 'manager', 'karyawan']),
       where('isActive', '==', true)
     ),
     [firestore]
   );
-  const { data: users, isLoading: isLoadingUsers, error: usersError } = useCollection<UserProfile>(usersToFilterQuery);
+  const { data: users, isLoading: isLoadingUsers, error: usersError } = useCollection<UserProfile>(usersQuery);
 
   const isLoading = isLoadingJobs || isLoadingBrands || isLoadingUsers;
   const error = jobsError || brandsError || usersError;
