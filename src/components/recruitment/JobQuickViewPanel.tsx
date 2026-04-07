@@ -16,7 +16,7 @@ import { Skeleton } from '../ui/skeleton';
 import { Loader2 } from 'lucide-react';
 
 interface JobQuickViewPanelProps {
-  job: Job & { brandName: string };
+  job: Job & { brandName?: string };
   assignedUsers: UserProfile[];
 }
 
@@ -68,15 +68,8 @@ export function JobQuickViewPanel({ job, assignedUsers }: JobQuickViewPanelProps
   }, [applications]);
 
   return (
-    <div className="w-80 p-4 space-y-4">
-        <div>
-            <h3 className="font-bold">{job.position}</h3>
-            <p className="text-sm text-muted-foreground">{job.brandName}</p>
-        </div>
-        
-        <Separator />
-
-        <div className="space-y-2">
+    <div className="p-6 space-y-6">
+        <div className="space-y-3">
             <h4 className="font-semibold text-xs uppercase text-muted-foreground flex items-center gap-2"><Users className="h-4 w-4" /> Tim Rekrutmen</h4>
             <div className="flex flex-wrap gap-2">
                 {assignedUsers.map(user => (
@@ -96,7 +89,7 @@ export function JobQuickViewPanel({ job, assignedUsers }: JobQuickViewPanelProps
         <div className="space-y-3">
             <h4 className="font-semibold text-xs uppercase text-muted-foreground flex items-center gap-2"><Briefcase className="h-4 w-4" /> Ringkasan Kandidat</h4>
             {isLoading ? <div className="h-24 flex items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div> :
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-3">
                 <StatCard title="Total" value={summary.total} icon={<Users className="h-5 w-5" />} />
                 <StatCard title="Screening" value={summary.screening} icon={<CheckCircle className="h-5 w-5" />} />
                 <StatCard title="Interview" value={summary.interview} icon={<FileText className="h-5 w-5" />} />

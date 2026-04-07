@@ -35,9 +35,10 @@ import Link from 'next/link';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { getInitials } from '@/lib/utils';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { JobQuickViewPanel } from '../recruitment/JobQuickViewPanel';
-
+import { ScrollArea } from '../ui/scroll-area';
+import { Separator } from '../ui/separator';
 
 function JobTableSkeleton() {
   return (
@@ -94,6 +95,7 @@ export function JobManagementClient() {
   const [brandFilter, setBrandFilter] = useState('all');
   const [jobFilter, setJobFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
+  const [isQuickViewOpen, setIsQuickViewOpen] = useState(false);
 
 
   const jobsRef = useMemoFirebase(() => collection(firestore, 'jobs'), [firestore]);
@@ -117,7 +119,7 @@ export function JobManagementClient() {
   
   const assignableUsers = useMemo(() => {
     if (!users) return [];
-    return users.filter(u => u.role === 'manager' || u.employmentType === 'karyawan');
+    return users.filter(u => u.role === 'manager' || (u.role === 'karyawan' && u.employmentType === 'karyawan'));
   }, [users]);
 
   const brandMap = useMemo(() => {
@@ -328,42 +330,41 @@ export function JobManagementClient() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Popover>
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <PopoverTrigger asChild>
-                                    <div className="flex items-center -space-x-2 cursor-pointer">
-                                        {assignedUsers.length > 0 ? (
-                                            <>
-                                            {assignedUsers.slice(0, 2).map(user => (
-                                                <Avatar key={user.uid} className="h-7 w-7 border-2 border-background">
-                                                    <AvatarFallback>{getInitials(user.fullName)}</AvatarFallback>
-                                                </Avatar>
-                                            ))}
-                                            {assignedUsers.length > 2 && (
-                                                <Avatar className="h-7 w-7 border-2 border-background bg-muted">
-                                                    <AvatarFallback>+{assignedUsers.length - 2}</AvatarFallback>
-                                                </Avatar>
-                                            )}
-                                            </>
-                                        ) : (
-                                            <div className="text-muted-foreground text-center w-full">-</div>
-                                        )}
-                                    </div>
-                                   </PopoverTrigger>
-                                </TooltipTrigger>
-                                {assignedUsers.length > 0 &&
-                                <TooltipContent>
-                                    <p>{assignedUsers.map(u => u.fullName).join(', ')}</p>
-                                </TooltipContent>
-                                }
-                            </Tooltip>
-                        </TooltipProvider>
-                        <PopoverContent className="w-auto p-0" align="end">
-                            <JobQuickViewPanel job={job} assignedUsers={assignedUsers} />
-                        </PopoverContent>
-                    </Popover>
+                      <TooltipProvider>
+                          <Tooltip>
+                              <TooltipTrigger asChild>
+                                  <div
+                                      className="flex items-center -space-x-2 cursor-pointer"
+                                      onClick={() => {
+                                          setSelectedJob(job);
+                                          setIsQuickViewOpen(true);
+                                      }}
+                                  >
+                                      {assignedUsers.length > 0 ? (
+                                          <>
+                                              {assignedUsers.slice(0, 2).map(user => (
+                                                  <Avatar key={user.uid} className="h-7 w-7 border-2 border-background">
+                                                      <AvatarFallback>{getInitials(user.fullName)}</AvatarFallback>
+                                                  </Avatar>
+                                              ))}
+                                              {assignedUsers.length > 2 && (
+                                                  <Avatar className="h-7 w-7 border-2 border-background bg-muted">
+                                                      <AvatarFallback>+{assignedUsers.length - 2}</AvatarFallback>
+                                                  </Avatar>
+                                              )}
+                                          </>
+                                      ) : (
+                                          <div className="text-muted-foreground text-center w-full">-</div>
+                                      )}
+                                  </div>
+                              </TooltipTrigger>
+                              {assignedUsers.length > 0 && (
+                                  <TooltipContent>
+                                      <p>{assignedUsers.map(u => u.fullName).join(', ')}</p>
+                                  </TooltipContent>
+                              )}
+                          </Tooltip>
+                      </TooltipProvider>
                   </TableCell>
                   <TableCell>
                     {job.applyDeadline?.toDate ? format(job.applyDeadline.toDate(), 'dd MMM yyyy') : '-'}
@@ -461,6 +462,26 @@ export function JobManagementClient() {
           onSuccess={mutateJobs}
         />
       )}
+
+      <Sheet open={isQuickViewOpen} onOpenChange={setIsQuickViewOpen}>
+        <SheetContent className="w-full sm:max-w-md p-0 flex flex-col">
+            {selectedJob && (
+                <>
+                    <SheetHeader className="p-6 pb-4">
+                        <SheetTitle>{selectedJob.position}</SheetTitle>
+                        <SheetDescription>{brandMap.get(selectedJob.brandId)}</SheetDescription>
+                    </SheetHeader>
+                    <Separator />
+                    <ScrollArea className="flex-1">
+                        <JobQuickViewPanel
+                            job={selectedJob}
+                            assignedUsers={(selectedJob.assignedUserIds || []).map(uid => userProfileMap.get(uid)).filter((u): u is UserProfile => !!u)}
+                        />
+                    </ScrollArea>
+                </>
+            )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
