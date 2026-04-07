@@ -38,9 +38,9 @@ export function PanelistPickerSimple({
       const singleBrandId = Array.isArray(user.brandId) ? user.brandId[0] : user.brandId;
       const brandName = singleBrandId ? brandMap.get(singleBrandId) : null;
       
-      const displayDetail = brandName || user.division || user.positionTitle || user.role;
+      const jobInfo = user.positionTitle || user.division || user.role;
       
-      return { ...user, brandDisplay: displayDetail };
+      return { ...user, brandName, jobInfo };
     });
   }, [allUsers, brandMap]);
 
@@ -85,7 +85,7 @@ export function PanelistPickerSimple({
                   <Badge key={user.uid} variant="secondary" className="gap-1">
                     {user.fullName}
                     <button type="button" aria-label={`Remove ${user.fullName}`} onMouseDown={handleMouseDown} onClick={() => handleToggle(user.uid)}>
-                      <X className="h-3 w-3 cursor-pointer" />
+                      <X className="ml-1 h-3 w-3 cursor-pointer" />
                     </button>
                   </Badge>
                 ))}
@@ -139,7 +139,10 @@ export function PanelistPickerSimple({
                   <p className="font-medium text-sm">{user.fullName}</p>
                   <p className="text-xs text-muted-foreground">{user.email}</p>
                 </div>
-                <Badge variant="outline" className="text-xs">{user.brandDisplay}</Badge>
+                 <div className="text-right flex-shrink-0">
+                    <p className="font-semibold text-xs">{user.brandName || 'No Brand'}</p>
+                    <p className="text-xs text-muted-foreground capitalize">{user.jobInfo}</p>
+                </div>
               </div>
             );
           })}
