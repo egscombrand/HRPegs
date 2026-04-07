@@ -15,6 +15,7 @@ import { Briefcase, Eye } from 'lucide-react';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import type { Job, JobApplication } from '@/lib/types';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 function MyTasksSkeleton() {
     return (
@@ -62,9 +63,9 @@ export default function MyRecruitmentTasksPage() {
     );
   }, [userProfile?.uid, firestore]);
 
-  const { data: assignedJobs, isLoading: isLoadingJobs } = useCollection<Job>(assignedJobsQuery);
+  const { data: assignedJobs, isLoading: isLoadingJobs, error: jobsError } = useCollection<Job>(assignedJobsQuery);
 
-  const { data: allApplications, isLoading: isLoadingApps } = useCollection<JobApplication>(
+  const { data: allApplications, isLoading: isLoadingApps, error: appsError } = useCollection<JobApplication>(
       useMemoFirebase(() => collection(firestore, 'applications'), [firestore])
   );
 
@@ -85,10 +86,19 @@ export default function MyRecruitmentTasksPage() {
   }, [assignedJobs, applicantCounts]);
 
   const isLoading = authLoading || isLoadingJobs || isLoadingApps;
+  const error = jobsError || appsError;
 
   return (
     <DashboardLayout pageTitle="Tugas Rekrutmen Saya" menuConfig={menuConfig}>
-        {isLoading ? <MyTasksSkeleton /> : (
+        {isLoading ? <MyTasksSkeleton /> : error ? (
+             <Alert variant="destructive">
+                <AlertTitle>Gagal Memuat Tugas</AlertTitle>
+                <AlertDescription>
+                    Terjadi kesalahan saat mengambil data lowongan yang ditugaskan kepada Anda. Silakan coba lagi nanti.
+                    <p className="mt-2 text-xs font-mono">{error.message}</p>
+                </AlertDescription>
+            </Alert>
+        ) : (
             <Card>
                 <CardHeader>
                 <CardTitle>Tugas Rekrutmen Anda</CardTitle>

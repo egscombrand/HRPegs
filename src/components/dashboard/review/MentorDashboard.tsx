@@ -59,7 +59,7 @@ const ReportPreview = ({ report, onReviewClick, onApproveClick, onReviseClick, i
   );
 };
 
-function InternAccordionContent({ internId, internName, reports }: { internId: string; internName: string; reports: ReportWithDetails[] }) {
+function InternAccordionContent({ internId, internName, reports: allReports, onMutate }: { internId: string; internName: string; reports: ReportWithDetails[], onMutate: () => void }) {
     const firestore = useFirestore();
     const { toast } = useToast();
     const { userProfile } = useAuth();
@@ -80,14 +80,15 @@ function InternAccordionContent({ internId, internName, reports }: { internId: s
     }, [firestore, internId, monthId]);
     const { data: monthlyEval, mutate: mutateEval } = useDoc<MonthlyEvaluation>(evalRef);
 
+    const reports = useMemo(() => allReports.sort((a,b) => {
+        const timeA = a.submittedAt?.toMillis() || a.createdAt.toMillis();
+        const timeB = b.submittedAt?.toMillis() || b.createdAt.toMillis();
+        return sortOrder === 'asc' ? timeA - timeB : timeB - timeA;
+    }), [allReports, sortOrder]);
+
     const reportsForCurrentTab = useMemo(() => {
-        const filtered = reports.filter(r => r.status === activeTab);
-        return filtered.sort((a,b) => {
-            const timeA = a.submittedAt?.toMillis() || a.createdAt.toMillis();
-            const timeB = b.submittedAt?.toMillis() || b.createdAt.toMillis();
-            return sortOrder === 'asc' ? timeA - timeB : timeB - timeA;
-        });
-    }, [reports, activeTab, sortOrder]);
+        return reports.filter(r => r.status === activeTab);
+    }, [reports, activeTab]);
     
     const allSelectedForIntern = activeTab === 'submitted' && reportsForCurrentTab.length > 0 && reportsForCurrentTab.every(r => selectedIds.has(r.id!));
 
@@ -133,7 +134,7 @@ function InternAccordionContent({ internId, internName, reports }: { internId: s
             await batch.commit();
             toast({ title: 'Sukses', description: `${selectedIds.size} laporan telah disetujui.` });
             setSelectedIds(new Set());
-            // Parent's mutate will be called eventually
+            onMutate();
         } catch (e: any) {
             toast({ variant: 'destructive', title: 'Gagal', description: e.message });
         } finally {
@@ -154,11 +155,16 @@ function InternAccordionContent({ internId, internName, reports }: { internId: s
             reviewerNotes: null
         });
         toast({ title: 'Laporan Disetujui' });
+        onMutate();
       } catch (e: any) {
         toast({ variant: 'destructive', title: 'Gagal', description: e.message });
       } finally {
         setApprovingId(null);
       }
+    };
+
+    const handleSuccess = () => {
+        onMutate(); // Trigger parent refetch
     };
 
     return (
@@ -251,14 +257,14 @@ function InternAccordionContent({ internId, internName, reports }: { internId: s
                 open={isBulkRevisionOpen}
                 onOpenChange={setIsBulkRevisionOpen}
                 reportIds={Array.from(selectedIds)}
-                onSuccess={() => { setSelectedIds(new Set()); /* Let parent mutate */ }}
+                onSuccess={() => { setSelectedIds(new Set()); onMutate(); }}
             />
             {selectedReport && (
                 <ReviewReportDialog 
                     open={!!selectedReport} 
                     onOpenChange={(isOpen) => !isOpen && setSelectedReport(null)} 
                     report={selectedReport} 
-                    onSuccess={() => setSelectedReport(null)}
+                    onSuccess={() => {setSelectedReport(null); onMutate();}}
                 />
             )}
             <SetFocusDialog 
@@ -281,7 +287,7 @@ export function MentorDashboard({ userProfile }: { userProfile: UserProfile}) {
         return query(collection(firestore, 'daily_reports'), where('supervisorUid', '==', userProfile.uid));
     }, [firestore, userProfile.uid]);
 
-    const { data: reports, isLoading: isLoadingReports } = useCollection<DailyReport>(reportsQuery);
+    const { data: reports, isLoading: isLoadingReports, mutate } = useCollection<DailyReport>(reportsQuery);
     
     const [interns, setInterns] = useState<UserProfile[] | null>(null);
     const [isLoadingInterns, setIsLoadingInterns] = useState(true);
@@ -301,11 +307,20 @@ export function MentorDashboard({ userProfile }: { userProfile: UserProfile}) {
         setIsLoadingInterns(true);
         const fetchInterns = async () => {
             try {
-                const internPromises = internUids.map(uid => getDoc(doc(firestore, 'users', uid)));
-                const internDocs = await Promise.all(internPromises);
-                const internProfiles = internDocs
+                // Firestore 'in' queries are limited to 30 items
+                const internChunks: string[][] = [];
+                for (let i = 0; i < internUids.length; i += 30) {
+                    internChunks.push(internUids.slice(i, i + 30));
+                }
+
+                const internPromises = internChunks.map(chunk => getDocs(query(collection(firestore, 'users'), where('uid', 'in', chunk))));
+                const internDocSnapshots = await Promise.all(internPromises);
+                
+                const internProfiles = internDocSnapshots
+                    .flatMap(snap => snap.docs)
                     .filter(docSnap => docSnap.exists())
-                    .map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as UserProfile));
+                    .map(docSnap => ({ ...docSnap.data() } as UserProfile));
+
                 setInterns(internProfiles);
             } catch (err) {
                 console.error("Failed to fetch intern profiles:", err);
@@ -365,7 +380,7 @@ export function MentorDashboard({ userProfile }: { userProfile: UserProfile}) {
                                 </div>
                             </AccordionTrigger>
                             <AccordionContent className="px-1 border-t">
-                               <InternAccordionContent internId={internId} internName={internGroup.internName} reports={internGroup.reports} />
+                               <InternAccordionContent internId={internId} internName={internGroup.internName} reports={internGroup.reports} onMutate={mutate}/>
                             </AccordionContent>
                         </AccordionItem>
                     )
