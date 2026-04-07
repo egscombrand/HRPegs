@@ -95,16 +95,22 @@ export function JobManagementClient() {
   const brandsRef = useMemoFirebase(() => collection(firestore, 'brands'), [firestore]);
   const { data: brands, isLoading: isLoadingBrands, error: brandsError } = useCollection<Brand>(brandsRef);
 
-  const usersRef = useMemoFirebase(() => collection(firestore, 'users'), [firestore]);
-  const { data: users, isLoading: isLoadingUsers, error: usersError } = useCollection<UserProfile>(usersRef);
+  const usersToFilterQuery = useMemoFirebase(() =>
+    query(
+      collection(firestore, 'users'),
+      where('role', 'in', ['manager', 'karyawan']),
+      where('isActive', '==', true)
+    ),
+    [firestore]
+  );
+  const { data: users, isLoading: isLoadingUsers, error: usersError } = useCollection<UserProfile>(usersToFilterQuery);
 
   const isLoading = isLoadingJobs || isLoadingBrands || isLoadingUsers;
   const error = jobsError || brandsError || usersError;
   
   const assignableUsers = useMemo(() => {
     if (!users) return [];
-    // Filter out candidates
-    return users.filter(u => u.role !== 'kandidat' && u.isActive);
+    return users.filter(u => u.employmentType === 'karyawan' || u.role === 'manager');
   }, [users]);
 
   const brandMap = useMemo(() => {
@@ -410,6 +416,7 @@ export function JobManagementClient() {
           onOpenChange={setIsAssignUsersOpen}
           job={selectedJob}
           allUsers={assignableUsers || []}
+          allBrands={brands || []}
           currentUser={userProfile}
           onSuccess={mutateJobs}
         />

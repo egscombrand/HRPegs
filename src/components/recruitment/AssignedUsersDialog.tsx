@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -6,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
-import type { Job, UserProfile } from '@/lib/types';
+import type { Job, UserProfile, Brand } from '@/lib/types';
 import { useAuth } from '@/providers/auth-provider';
 import { PanelistPickerSimple } from './PanelistPickerSimple';
 import { useRouter } from 'next/navigation';
@@ -17,10 +16,11 @@ interface AssignedUsersDialogProps {
   job: Job | null;
   currentUser: UserProfile;
   allUsers: UserProfile[];
+  allBrands: Brand[];
   onSuccess: () => void;
 }
 
-export function AssignedUsersDialog({ open, onOpenChange, job, currentUser, allUsers, onSuccess }: AssignedUsersDialogProps) {
+export function AssignedUsersDialog({ open, onOpenChange, job, currentUser, allUsers, allBrands, onSuccess }: AssignedUsersDialogProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const { toast } = useToast();
@@ -83,7 +83,7 @@ export function AssignedUsersDialog({ open, onOpenChange, job, currentUser, allU
         <div className="py-4">
             <PanelistPickerSimple
                 allUsers={allUsers}
-                allBrands={[]} // Not needed for this picker context
+                allBrands={allBrands}
                 selectedIds={selectedUserIds}
                 onChange={setSelectedUserIds}
             />

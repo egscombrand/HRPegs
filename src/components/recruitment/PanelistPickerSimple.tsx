@@ -35,13 +35,12 @@ export function PanelistPickerSimple({
 
   const usersWithDetails = React.useMemo(() => {
     return allUsers.map(user => {
-      let brandDisplay = user.division || user.positionTitle || user.role;
-      if (user.role === 'hrd' && Array.isArray(user.brandId)) {
-        brandDisplay = user.brandId.map(id => brandMap.get(id)).filter(Boolean).join(', ') || 'All Brands';
-      } else if (typeof user.brandId === 'string' && user.brandId) {
-        brandDisplay = brandMap.get(user.brandId) || brandDisplay;
-      }
-      return { ...user, brandDisplay };
+      const singleBrandId = Array.isArray(user.brandId) ? user.brandId[0] : user.brandId;
+      const brandName = singleBrandId ? brandMap.get(singleBrandId) : null;
+      
+      const displayDetail = brandName || user.division || user.positionTitle || user.role;
+      
+      return { ...user, brandDisplay: displayDetail };
     });
   }, [allUsers, brandMap]);
 
