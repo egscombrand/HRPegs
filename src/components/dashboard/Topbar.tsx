@@ -1,8 +1,9 @@
+
 'use client';
 
 import React from 'react';
 import { useAuth } from '@/providers/auth-provider';
-import { useAuth as useFirebaseAuth } from '@/firebase';
+import { useAuth as useFirebaseAuth, useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { LogOut, Search, Bell } from 'lucide-react';
@@ -13,6 +14,11 @@ import { ThemeToggle } from '../ui/ThemeToggle';
 import { Input } from '../ui/input';
 import { SidebarTrigger } from '../ui/sidebar';
 import { Badge } from '../ui/badge';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { NotificationPanel } from './NotificationPanel';
+import { collection, query, where } from 'firebase/firestore';
+import type { Notification } from '@/lib/types';
+
 
 function UserNav() {
     const { userProfile } = useAuth();
@@ -70,6 +76,20 @@ interface TopbarProps {
 }
 
 export function Topbar({ pageTitle, actionArea }: TopbarProps) {
+    const { userProfile } = useAuth();
+    const firestore = useFirestore();
+
+    const unreadNotifsQuery = useMemoFirebase(() => {
+        if (!userProfile?.uid) return null;
+        return query(
+            collection(firestore, 'users', userProfile.uid, 'notifications'), 
+            where('isRead', '==', false)
+        );
+    }, [userProfile?.uid, firestore]);
+    const { data: unreadNotifications } = useCollection<Notification>(unreadNotifsQuery);
+    const unreadCount = unreadNotifications?.length || 0;
+
+
     return (
         <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background px-4 sm:px-6">
             <SidebarTrigger />
@@ -91,12 +111,28 @@ export function Topbar({ pageTitle, actionArea }: TopbarProps) {
                 </div>
                 {actionArea && <div className="hidden lg:block">{actionArea}</div>}
                 <ThemeToggle />
-                <Button variant="outline" size="icon" className="h-10 w-10">
-                    <Bell className="h-5 w-5" />
-                    <span className="sr-only">Notifications</span>
-                </Button>
+
+                <Popover>
+                    <PopoverTrigger asChild>
+                        <Button variant="outline" size="icon" className="h-10 w-10 relative">
+                            <Bell className="h-5 w-5" />
+                            {unreadCount > 0 && (
+                                <span className="absolute top-1 right-1 flex h-4 w-4">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-4 w-4 bg-primary text-xs text-primary-foreground items-center justify-center">{unreadCount > 9 ? '9+' : unreadCount}</span>
+                                </span>
+                            )}
+                            <span className="sr-only">Notifications</span>
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80 h-[50vh] p-0" align="end">
+                       <NotificationPanel />
+                    </PopoverContent>
+                </Popover>
+
                 <UserNav />
             </div>
         </header>
     )
 }
+    
