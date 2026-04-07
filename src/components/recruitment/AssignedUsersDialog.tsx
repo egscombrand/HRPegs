@@ -49,6 +49,7 @@ export function AssignedUsersDialog({ open, onOpenChange, job, currentUser, allU
             body: JSON.stringify({ userIds: selectedUserIds }),
         });
 
+        // If the token is truly expired, server should send 401. This is correct.
         if (response.status === 401) {
             toast({ variant: 'destructive', title: 'Sesi Habis', description: "Sesi Anda telah berakhir. Silakan login kembali." });
             await auth.signOut();
@@ -56,9 +57,19 @@ export function AssignedUsersDialog({ open, onOpenChange, job, currentUser, allU
             return;
         }
 
+        // If it's another error (e.g., 500, 403, 400), don't log out.
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Gagal menyimpan perubahan.');
+            let errorMsg = 'Gagal menyimpan data. Silakan coba lagi.';
+            try {
+                // Try to parse JSON, but don't fail if it's not JSON.
+                const errorData = await response.json();
+                errorMsg = errorData.error || errorMsg;
+            } catch (e) {
+                // The response was not JSON, which is the original problem.
+                // We've caught it and can now display a user-friendly message.
+                console.error("API did not return JSON. Status:", response.status);
+            }
+            throw new Error(errorMsg);
         }
 
         toast({ title: 'Tim Rekrutmen Diperbarui', description: 'Pengguna yang ditugaskan ke lowongan ini telah diperbarui.' });

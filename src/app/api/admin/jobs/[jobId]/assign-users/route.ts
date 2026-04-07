@@ -20,10 +20,11 @@ async function verifyAdmin(req: NextRequest) {
         }
         return { uid: decodedToken.uid };
     } catch (error: any) {
-        if (error.code === 'auth/id-token-expired') {
+        if (error.code === 'auth/id-token-expired' || error.code === 'auth/invalid-id-token') {
             return { error: 'Sesi Anda telah berakhir, silakan muat ulang halaman dan coba lagi.', status: 401 };
         }
-        return { error: 'Invalid token.', status: 401 };
+        console.error("Token verification failed unexpectedly:", error);
+        return { error: `Verifikasi token gagal: ${error.message}`, status: 500 };
     }
 }
 
