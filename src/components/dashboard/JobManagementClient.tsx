@@ -98,7 +98,7 @@ export function JobManagementClient() {
   const usersToFilterQuery = useMemoFirebase(() =>
     query(
       collection(firestore, 'users'),
-      where('role', 'in', ['manager', 'karyawan']),
+      where('role', 'in', ['manager', 'karyawan', 'hrd', 'super-admin']),
       where('isActive', '==', true)
     ),
     [firestore]
