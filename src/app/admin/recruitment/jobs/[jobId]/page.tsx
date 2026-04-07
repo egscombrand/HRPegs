@@ -43,20 +43,23 @@ export default function RecruitmentApplicantsPage() {
   );
   const { data: applications, isLoading: isLoadingApps, error } = useCollection<JobApplication>(applicationsQuery);
 
-  const { data: usersToFilter, isLoading: isLoadingUsers } = useCollection<UserProfile>(
-    useMemoFirebase(() =>
-      query(
-        collection(firestore, 'users'),
-        where('role', 'in', ['manager', 'karyawan', 'hrd', 'super-admin']),
-        where('isActive', '==', true)
-      ),
-    [firestore]
-  ));
+  const usersQuery = useMemoFirebase(() => {
+    if (!userProfile || !['super-admin', 'hrd'].includes(userProfile.role)) {
+        return null;
+    }
+    return query(
+      collection(firestore, 'users'),
+      where('role', 'in', ['manager', 'karyawan', 'hrd', 'super-admin']),
+      where('isActive', '==', true)
+    );
+  }, [firestore, userProfile]);
+
+  const { data: usersToFilter, isLoading: isLoadingUsers } = useCollection<UserProfile>(usersQuery);
 
   const assignableUsers = useMemo(() => {
     if (!usersToFilter) return [];
     // Filter out interns and trainees from the 'karyawan' role
-    return usersToFilter.filter(u => u.role === 'manager' || u.employmentType === 'karyawan');
+    return usersToFilter.filter(u => u.role === 'manager' || (u.role === 'karyawan' && u.employmentType === 'karyawan'));
   }, [usersToFilter]);
 
   const brandsQuery = useMemoFirebase(() => collection(firestore, 'brands'), [firestore]);
