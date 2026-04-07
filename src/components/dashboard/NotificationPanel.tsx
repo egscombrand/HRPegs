@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useAuth } from '@/providers/auth-provider';
@@ -93,27 +92,27 @@ export function NotificationPanel() {
             )}
             <div className="p-2 space-y-1">
                 {notifications?.map(notif => (
-                    <Link key={notif.id} href={getLinkHref(notif)} passHref>
-                        <a 
-                            className={cn(
-                                "block p-3 rounded-md transition-colors hover:bg-accent",
-                                !notif.isRead && "bg-blue-50 dark:bg-blue-900/20"
+                    <Link
+                        key={notif.id}
+                        href={getLinkHref(notif)}
+                        className={cn(
+                            "block p-3 rounded-md transition-colors hover:bg-accent",
+                            !notif.isRead && "bg-blue-50 dark:bg-blue-900/20"
+                        )}
+                        onClick={() => !notif.isRead && handleMarkAsRead(notif.id!)}
+                    >
+                        <div className="flex items-start gap-3">
+                            {!notif.isRead && (
+                                <div className="h-2 w-2 rounded-full bg-primary mt-1.5 shrink-0"></div>
                             )}
-                            onClick={() => !notif.isRead && handleMarkAsRead(notif.id!)}
-                        >
-                            <div className="flex items-start gap-3">
-                                {!notif.isRead && (
-                                    <div className="h-2 w-2 rounded-full bg-primary mt-1.5 shrink-0"></div>
-                                )}
-                                <div className={cn("flex-grow", notif.isRead && "pl-5")}>
-                                    <div className="flex justify-between items-center">
-                                        <p className="font-semibold text-sm">{notif.title}</p>
-                                        <p className="text-xs text-muted-foreground">{formatDistanceToNow(notif.createdAt.toDate(), { addSuffix: true, locale: idLocale })}</p>
-                                    </div>
-                                    <p className="text-sm text-muted-foreground">{notif.message}</p>
+                            <div className={cn("flex-grow", notif.isRead && "pl-5")}>
+                                <div className="flex justify-between items-center">
+                                    <p className="font-semibold text-sm">{notif.title}</p>
+                                    <p className="text-xs text-muted-foreground">{formatDistanceToNow(notif.createdAt.toDate(), { addSuffix: true, locale: idLocale })}</p>
                                 </div>
+                                <p className="text-sm text-muted-foreground">{notif.message}</p>
                             </div>
-                        </a>
+                        </div>
                     </Link>
                 ))}
             </div>
@@ -121,4 +120,3 @@ export function NotificationPanel() {
     </div>
   );
 }
-    
