@@ -32,6 +32,10 @@ import { useAuth } from '@/providers/auth-provider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AssignedUsersDialog } from '../recruitment/AssignedUsersDialog';
 import Link from 'next/link';
+import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { getInitials } from '@/lib/utils';
+
 
 function JobTableSkeleton() {
   return (
@@ -99,7 +103,7 @@ export function JobManagementClient() {
   const usersToFilterQuery = useMemoFirebase(() =>
     query(
       collection(firestore, 'users'),
-      where('role', 'in', ['manager', 'karyawan', 'hrd', 'super-admin']),
+      where('role', 'in', ['manager', 'karyawan']),
       where('isActive', '==', true)
     ),
     [firestore]
@@ -111,7 +115,6 @@ export function JobManagementClient() {
   
   const assignableUsers = useMemo(() => {
     if (!users) return [];
-    // Only allow 'manager' and 'karyawan' roles, excluding HR and Super Admin
     return users.filter(u => u.role === 'manager' || u.role === 'karyawan');
   }, [users]);
 
@@ -120,9 +123,9 @@ export function JobManagementClient() {
     return new Map(brands.map(brand => [brand.id!, brand.name]));
   }, [brands]);
   
-  const userMap = useMemo(() => {
-    if (!users) return new Map<string, string>();
-    return new Map(users.map(user => [user.uid, user.fullName]));
+  const userProfileMap = useMemo(() => {
+    if (!users) return new Map<string, UserProfile>();
+    return new Map(users.map(user => [user.uid, user]));
   }, [users]);
   
   const jobsForFilter = useMemo(() => {
@@ -151,13 +154,13 @@ export function JobManagementClient() {
     return filteredJobs.map(job => ({
       ...job,
       brandName: brandMap.get(job.brandId) || 'N/A',
-      updatedByName: userMap.get(job.updatedBy) || 'Unknown',
+      updatedByName: userProfileMap.get(job.updatedBy)?.fullName || 'Unknown',
     })).sort((a, b) => {
       const timeA = a.updatedAt?.toMillis ? a.updatedAt.toMillis() : Date.now();
       const timeB = b.updatedAt?.toMillis ? b.updatedAt.toMillis() : Date.now();
       return timeB - timeA;
     });
-  }, [jobs, brandMap, userMap, brandFilter, jobFilter, typeFilter]);
+  }, [jobs, brandMap, userProfileMap, brandFilter, jobFilter, typeFilter]);
 
 
   const handleCreate = () => {
@@ -169,7 +172,7 @@ export function JobManagementClient() {
     setSelectedJob(job);
     setIsFormOpen(true);
   };
-
+  
   const handleDelete = (job: Job) => {
     setSelectedJob(job);
     setIsDeleteConfirmOpen(true);
@@ -305,7 +308,9 @@ export function JobManagementClient() {
           </TableHeader>
           <TableBody>
             {jobsWithDetails && jobsWithDetails.length > 0 ? (
-              jobsWithDetails.map((job) => (
+              jobsWithDetails.map((job) => {
+                const assignedUsers = job.assignedUserIds?.map(uid => userProfileMap.get(uid)).filter((u): u is UserProfile => !!u) || [];
+                return (
                 <TableRow key={job.id}>
                   <TableCell className="font-medium">{job.position}</TableCell>
                   <TableCell>{job.brandName}</TableCell>
@@ -321,12 +326,33 @@ export function JobManagementClient() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    {job.assignedUserIds && job.assignedUserIds.length > 0 ? (
-                      <div className="flex items-center gap-1">
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm">{job.assignedUserIds.length} Users</span>
-                      </div>
-                    ) : '-'}
+                      {assignedUsers.length > 0 ? (
+                          <TooltipProvider>
+                              <Tooltip>
+                                  <TooltipTrigger asChild>
+                                      <div className="flex items-center -space-x-2 cursor-pointer" onClick={() => handleAssignUsers(job)}>
+                                          {assignedUsers.slice(0, 2).map(user => (
+                                              <Avatar key={user.uid} className="h-7 w-7 border-2 border-background">
+                                                  <AvatarFallback>{getInitials(user.fullName)}</AvatarFallback>
+                                              </Avatar>
+                                          ))}
+                                          {assignedUsers.length > 2 && (
+                                              <Avatar className="h-7 w-7 border-2 border-background">
+                                                  <AvatarFallback>+{assignedUsers.length - 2}</AvatarFallback>
+                                              </Avatar>
+                                          )}
+                                      </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                      <p>{assignedUsers.map(u => u.fullName).join(', ')}</p>
+                                  </TooltipContent>
+                              </Tooltip>
+                          </TooltipProvider>
+                      ) : (
+                          <div onClick={() => handleAssignUsers(job)} className="text-muted-foreground text-center cursor-pointer hover:text-foreground">
+                              -
+                          </div>
+                      )}
                   </TableCell>
                   <TableCell>
                     {job.applyDeadline?.toDate ? format(job.applyDeadline.toDate(), 'dd MMM yyyy') : '-'}
@@ -347,7 +373,7 @@ export function JobManagementClient() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onSelect={() => handleAssignUsers(job)}>
-                            <Users className="mr-2 h-4 w-4" /> Kelola User
+                            <Users className="mr-2 h-4 w-4" /> Kelola Tim
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setOpenMenuId(null); queueMicrotask(() => handleEdit(job)); }}>
@@ -385,7 +411,7 @@ export function JobManagementClient() {
                     </DropdownMenu>
                   </TableCell>
                 </TableRow>
-              ))
+              )})
             ) : (
               <TableRow>
                 <TableCell colSpan={9} className="h-24 text-center">
