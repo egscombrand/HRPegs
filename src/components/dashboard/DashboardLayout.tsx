@@ -7,11 +7,11 @@ import { SidebarNav } from './SidebarNav';
 import { Topbar } from './Topbar';
 import { SidebarProvider, SidebarInset } from '../ui/sidebar';
 import { useAuth } from '@/providers/auth-provider';
-import { useFirestore, useDoc, useMemoFirebase } from '@/firebase';
-import { doc } from 'firebase/firestore';
-import type { NavigationSetting } from '@/lib/types';
+import { useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase';
+import { doc, collection, query, where } from 'firebase/firestore';
+import type { NavigationSetting, UserRole, Job } from '@/lib/types';
 import { MENU_CONFIG, ALL_MENU_GROUPS } from '@/lib/menu-config';
-import { CheckSquare, FileHeart } from 'lucide-react';
+import { CheckSquare, FileHeart, Briefcase } from 'lucide-react';
 import { isActiveEmployeeEligibleForLeave, canUserReview } from '@/lib/auth-eligibility';
 
 
@@ -47,15 +47,43 @@ export function DashboardLayout({
   );
   const { data: navSettings, isLoading: isLoadingSettings } = useDoc<NavigationSetting>(settingsDocRef);
   
+  const assignedJobsQuery = useMemoFirebase(() => {
+    if (!userProfile?.uid) return null;
+    return query(
+      collection(firestore, 'jobs'),
+      where('assignedUserIds', 'array-contains', userProfile.uid)
+    );
+  }, [firestore, userProfile?.uid]);
+  const { data: assignedJobs, isLoading: isLoadingAssignedJobs } = useCollection<Job>(assignedJobsQuery);
+
   const menuConfig = useMemo(() => {
     if (!roleKey) return [];
     
     const baseConfig = MENU_CONFIG[roleKey] || [];
-    // Perform a deep copy of the config to avoid mutating the original object.
     let finalConfig = baseConfig.map(group => ({
       ...group,
       items: group.items.map(item => ({ ...item })),
     }));
+    
+    const hasRecruitmentTasks = assignedJobs && assignedJobs.length > 0;
+
+    if (hasRecruitmentTasks) {
+      const taskItem = {
+          key: 'recruitment.tasks',
+          href: '/admin/recruitment/my-tasks',
+          label: 'Tugas Rekrutmen',
+          icon: createElement(Briefcase),
+      };
+      let personalGroup = finalConfig.find(g => g.title === 'Personal' || g.title === 'Tugas Saya');
+      if (personalGroup) {
+        if (!personalGroup.items.some(item => item.key === taskItem.key)) {
+          personalGroup.items.push(taskItem);
+        }
+      } else {
+        const newGroup: MenuGroup = { title: 'Tugas Saya', items: [taskItem] };
+        finalConfig.splice(1, 0, newGroup);
+      }
+    }
 
     if (userProfile?.isDivisionManager) {
         const overtimeApprovalMenu: MenuItem = {
@@ -77,34 +105,26 @@ export function DashboardLayout({
             finalConfig.push(reviewGroup);
         }
         
-        // Add overtime menu if it doesn't exist
         if (!reviewGroup.items.some((item: MenuItem) => item.key === overtimeApprovalMenu.key)) {
             reviewGroup.items.push(overtimeApprovalMenu);
         }
-        // Add permission menu if it doesn't exist
         if (!reviewGroup.items.some((item: MenuItem) => item.key === permissionApprovalMenu.key)) {
             reviewGroup.items.push(permissionApprovalMenu);
         }
     }
     
-    // 1. Initial State: use either manual override or default role menu
     let currentConfig = manualMenuConfig || finalConfig;
 
-    // 2. Perform Dynamic Authority Checks
     const leaveStatus = isActiveEmployeeEligibleForLeave(userProfile);
     const userCanReview = canUserReview(userProfile);
 
-    // 3. Apply Hard Eligibility/Authority Filters
-    // This part runs ALWAYS, even if DB settings are missing/broken.
     currentConfig = currentConfig.map((group: MenuGroup) => ({
       ...group,
       items: group.items.filter(item => {
-          // Leave Eligibility (Staff must be active/loyal)
           if (item.key === 'employee.leave') {
               return leaveStatus.isEligible;
           }
           
-          // Review Authority (Only for Managers, HRD, and Appointed Division Managers)
           const reviewKeys = ['review.reports', 'manager.overtime_approval', 'manager.permission_approval', 'hrd.permission_approval', 'hrd.overtime_approval'];
           if (reviewKeys.includes(item.key) && !userCanReview) {
               return false;
@@ -113,7 +133,6 @@ export function DashboardLayout({
           return true;
       })
     })).filter((group) => {
-        // Double security: if the group is specifically "Review" and they aren't a reviewer, nix it.
         if (group.title === 'Review' && !userCanReview) {
             return false;
         }
@@ -121,8 +140,6 @@ export function DashboardLayout({
     });
 
 
-    // 4. Apply Database Visibility Restrictions
-    // If Admin has unchecked certain items in the 'Menu Visibility Settings' panel.
     if (!isLoadingSettings && navSettings?.visibleMenuItems) {
         const visibleKeys = new Set(navSettings.visibleMenuItems);
         currentConfig = currentConfig.map(group => ({
@@ -132,7 +149,7 @@ export function DashboardLayout({
     }
 
     return currentConfig;
-  }, [roleKey, userProfile, navSettings, isLoadingSettings, manualMenuConfig]);
+  }, [roleKey, userProfile, navSettings, isLoadingSettings, manualMenuConfig, assignedJobs]);
 
   return (
     <SidebarProvider>

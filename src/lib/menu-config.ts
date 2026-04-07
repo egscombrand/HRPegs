@@ -79,6 +79,7 @@ export const ALL_MENU_GROUPS: MenuGroup[] = [
         title: "Personal",
         items: [
             { key: 'personal.interviews', href: '/admin/interviews', label: 'My Interviews', icon: createElement(Video) },
+            { key: 'recruitment.tasks', href: '/admin/recruitment/my-tasks', label: 'Tugas Rekrutmen', icon: createElement(Briefcase) },
         ]
     },
     {
