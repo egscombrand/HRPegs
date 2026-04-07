@@ -28,7 +28,9 @@ function UserNav() {
 
     const handleLogout = async () => {
         await auth.signOut();
-        router.push('/admin/login');
+        // Redirect to a neutral public page first to prevent race conditions
+        // with login pages that redirect authenticated users.
+        router.push('/');
     };
 
     if (!userProfile) return null;
@@ -57,9 +59,9 @@ function UserNav() {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={(e) => {
-            e.preventDefault();
-            setOpen(false);
-            queueMicrotask(handleLogout);
+              e.preventDefault();
+              setOpen(false);
+              queueMicrotask(handleLogout);
             }}>
             <LogOut className="mr-2 h-4 w-4" />
             <span>Log out</span>
