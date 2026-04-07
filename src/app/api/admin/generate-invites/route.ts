@@ -1,5 +1,3 @@
-
-
 'use server';
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -18,34 +16,35 @@ const generateSchema = z.object({
   quantity: z.coerce.number().int().min(1).max(100),
 });
 
-export async function POST(req: NextRequest) {
-  try {
+async function verifyAdmin(req: NextRequest) {
     const authorization = req.headers.get('Authorization');
     if (!authorization?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized: Missing token.' }, { status: 401 });
+        return { error: 'Unauthorized: Missing token.', status: 401 };
     }
     const idToken = authorization.split('Bearer ')[1];
-    const decodedToken = await admin.auth().verifyIdToken(idToken);
-    
+    try {
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+        const userDoc = await admin.firestore().collection('users').doc(decodedToken.uid).get();
+        if (!userDoc.exists() || !['super-admin', 'hrd'].includes(userDoc.data()?.role)) {
+            return { error: 'Forbidden.', status: 403 };
+        }
+        return { uid: decodedToken.uid };
+    } catch (error: any) {
+        if (error.code === 'auth/id-token-expired') {
+            return { error: 'Sesi Anda telah berakhir, silakan muat ulang halaman dan coba lagi.', status: 401 };
+        }
+        return { error: `Verifikasi token gagal: ${error.message}`, status: 401 };
+    }
+}
+
+export async function POST(req: NextRequest) {
+  const authResult = await verifyAdmin(req);
+  if (authResult.error) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status });
+  }
+
+  try {
     const db = admin.firestore();
-    
-    // Check authority from the main 'users' collection
-    const userDoc = await db.collection('users').doc(decodedToken.uid).get();
-
-    if (!userDoc.exists) {
-        console.error(`User doc not found for UID: ${decodedToken.uid}`);
-        return NextResponse.json({ error: 'User profile not found.' }, { status: 403 });
-    }
-
-    const userData = userDoc.data();
-    const role = userData?.role;
-    const authorizedRoles = ['super-admin', 'hrd'];
-
-    if (!authorizedRoles.includes(role)) {
-        console.error(`Unauthorized access attempt by UID: ${decodedToken.uid} with role: ${role}`);
-        return NextResponse.json({ error: 'Forbidden: Insufficient permissions.' }, { status: 403 });
-    }
-
     const body = await req.json();
     console.log("Generating invites for body:", body);
     
@@ -75,7 +74,7 @@ export async function POST(req: NextRequest) {
         employmentType,
         totalSlots: quantity,
         claimedSlots: 0,
-        createdBy: decodedToken.uid,
+        createdBy: authResult.uid,
         createdAt: now as any,
         updatedAt: now as any,
     };
@@ -83,7 +82,6 @@ export async function POST(req: NextRequest) {
     console.log(`Writing batch ${batchId} to Firestore...`);
     await batchRef.set(batchData);
 
-    // Omit Timestamp objects from JSON as they can cause serialization errors in some environments
     const { createdAt, updatedAt, ...restOfData } = batchData;
 
     return NextResponse.json(
@@ -96,12 +94,9 @@ export async function POST(req: NextRequest) {
         },
         { status: 201 }
     );
-
-
   } catch (error: any) {
     console.error("CRITICAL: Generate invites error:", error);
     
-    // Improved diagnostic messages for the user
     let userFriendlyError = 'Terjadi kesalahan sistem saat mencoba membuat batch undangan.';
     if (error.message?.includes('The default Firebase app does not exist') || error.message?.includes('projectId')) {
         userFriendlyError = 'Konfigurasi Firebase Admin SDK belum lengkap atau tidak valid di .env.local.';

@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useCollection, useFirestore, useMemoFirebase, deleteDocumentNonBlocking } from '@/firebase';
+import { useCollection, useFirestore, useMemoFirebase, deleteDocumentNonBlocking, useAuth as useFirebaseAuth } from '@/firebase';
 import { collection, doc, query, where, writeBatch, serverTimestamp } from 'firebase/firestore';
 import type { InviteBatch, Brand, UserProfile } from '@/lib/types';
 import { useAuth } from '@/providers/auth-provider';
@@ -43,7 +43,8 @@ type AddQuotaFormValues = z.infer<typeof addQuotaSchema>;
 
 
 function AddQuotaDialog({ batch, open, onOpenChange, onQuotaAdded }: { batch: InviteBatch | null, open: boolean, onOpenChange: (open: boolean) => void, onQuotaAdded: () => void }) {
-    const { firebaseUser, auth } = useAuth();
+    const { firebaseUser } = useAuth();
+    const auth = useFirebaseAuth();
     const { toast } = useToast();
     const router = useRouter();
     const [isSaving, setIsSaving] = useState(false);
@@ -132,7 +133,8 @@ function AddQuotaDialog({ batch, open, onOpenChange, onQuotaAdded }: { batch: In
 
 
 export function InviteManagementClient() {
-  const { firebaseUser, userProfile, auth } = useAuth();
+  const { firebaseUser, userProfile } = useAuth();
+  const auth = useFirebaseAuth();
   const firestore = useFirestore();
   const { toast } = useToast();
   const router = useRouter();
