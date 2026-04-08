@@ -4,7 +4,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { useAuth } from '@/providers/auth-provider';
 import { useDoc, useFirestore, useMemoFirebase, updateDocumentNonBlocking, useCollection } from '@/firebase';
-import { doc, serverTimestamp, updateDoc, Timestamp, writeBatch, collection, where, query, limit } from 'firebase/firestore';
+import { doc, serverTimestamp, updateDoc, Timestamp, writeBatch, collection, where, query, limit, orderBy } from 'firebase/firestore';
 import type { JobApplication, Profile, Job, ApplicationTimelineEvent, ApplicationInterview, RescheduleRequest, Brand, UserProfile, AssessmentSession } from '@/lib/types';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
@@ -50,15 +50,15 @@ const SummaryTab = ({ profile }: { profile: Profile }) => (
   <div className="grid md:grid-cols-2 gap-6">
     <Card className="md:col-span-2">
       <CardHeader><CardTitle className="text-base">Deskripsi Diri</CardTitle></CardHeader>
-      <CardContent><p className="text-sm text-muted-foreground">{profile.selfDescription || 'Belum diisi.'}</p></CardContent>
+      <CardContent><p className="text-sm text-muted-foreground whitespace-pre-wrap">{profile.selfDescription || 'Belum diisi.'}</p></CardContent>
     </Card>
      <Card>
       <CardHeader><CardTitle className="text-base">Motivasi Melamar</CardTitle></CardHeader>
-      <CardContent><p className="text-sm text-muted-foreground">{profile.motivation || 'Belum diisi.'}</p></CardContent>
+      <CardContent><p className="text-sm text-muted-foreground whitespace-pre-wrap">{profile.motivation || 'Belum diisi.'}</p></CardContent>
     </Card>
     <Card>
       <CardHeader><CardTitle className="text-base">Alasan Ekspektasi Gaji</CardTitle></CardHeader>
-      <CardContent><p className="text-sm text-muted-foreground">{profile.salaryExpectationReason || 'Belum diisi.'}</p></CardContent>
+      <CardContent><p className="text-sm text-muted-foreground whitespace-pre-wrap">{profile.salaryExpectationReason || 'Belum diisi.'}</p></CardContent>
     </Card>
      <Card>
       <CardHeader><CardTitle className="text-base">Gaya Kerja</CardTitle></CardHeader>
@@ -114,9 +114,12 @@ export default function ApplicationDetailPage() {
 
   const assessmentSessionsQuery = useMemoFirebase(() => {
     if (!application) return null;
+    // Query by candidate UID to find their latest session, regardless of application.
+    // Order by update time to get the most recent activity (draft or submitted).
     return query(
       collection(firestore, 'assessment_sessions'),
-      where('applicationId', '==', application.id!),
+      where('candidateUid', '==', application.candidateUid),
+      orderBy('updatedAt', 'desc'),
       limit(1)
     );
   }, [firestore, application]);
@@ -365,14 +368,10 @@ export default function ApplicationDetailPage() {
                         icon={<BrainCircuit />}
                         label="Tes Kepribadian"
                         value={
-                          isLoadingSessions ? (
-                            <span className="text-sm text-muted-foreground">Memuat...</span>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <span className={cn('font-semibold', assessmentInfo.color)}>{assessmentInfo.text}</span>
-                              {assessmentInfo.result && <Badge variant="secondary">{assessmentInfo.result}</Badge>}
-                            </div>
-                          )
+                          <div className="flex items-center gap-2">
+                            <span className={cn('font-semibold', assessmentInfo.color)}>{assessmentInfo.text}</span>
+                            {assessmentInfo.result && <Badge variant="secondary">{assessmentInfo.result}</Badge>}
+                          </div>
                         }
                     />
                 </div>
@@ -393,7 +392,7 @@ export default function ApplicationDetailPage() {
                         <ProfileView profile={profile} />
                     </TabsContent>
                     <TabsContent value="documents" className="mt-4">
-                        <CandidateDocumentsCard application={application} onVerificationChange={mutateApplication}/>
+                        <CandidateDocumentsCard profile={profile}/>
                     </TabsContent>
                     <TabsContent value="ai_analysis" className="mt-4">
                        <CandidateFitAnalysis profile={profile} job={job} application={application} />
