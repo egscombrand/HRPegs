@@ -1,160 +1,101 @@
-
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import type { Profile, Education, WorkExperience, OrganizationalExperience, Certification } from "@/lib/types";
 import { format } from 'date-fns';
+import { id as idLocale } from 'date-fns/locale';
 import { Badge } from "../ui/badge";
+import { User, Home, BookOpen, Briefcase, Sparkles, Building, Link as LinkIcon, GraduationCap } from 'lucide-react';
 
 type InfoRowProps = {
   label: string;
-  value?: string | number | null;
+  value?: string | number | null | React.ReactNode;
 };
 
 const InfoRow = ({ label, value }: InfoRowProps) => (
-  <div className="grid grid-cols-3 gap-4">
-    <dt className="text-sm font-medium text-muted-foreground">{label}</dt>
-    <dd className="text-sm col-span-2">{value || '-'}</dd>
+  <div>
+    <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+    <dd className="text-sm mt-0.5">{typeof value === 'string' && value.startsWith('http') ? <a href={value} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1"><LinkIcon className="h-3 w-3" /> Link</a> : (value || '-')}</dd>
   </div>
 );
 
-type SectionProps = {
-    title: string;
-    children: React.ReactNode;
-}
-const Section = ({ title, children }: SectionProps) => (
+const Section = ({ title, icon, children }: { title: string; icon: React.ReactNode, children: React.ReactNode }) => (
     <div className="space-y-4">
-        <h3 className="text-lg font-semibold tracking-tight">{title}</h3>
-        <div className="space-y-3 pl-4 border-l-2 border-border">{children}</div>
+        <h3 className="text-lg font-semibold tracking-tight flex items-center gap-2 text-primary">{icon} {title}</h3>
+        <div className="space-y-4">{children}</div>
     </div>
 );
 
-const AddressView = ({ title, address }: { title: string; address: Profile['addressKtp'] }) => (
-    <div>
-        <h4 className="font-medium text-sm text-muted-foreground">{title}</h4>
-        <p className="text-sm">{address.street}, RT {address.rt}/RW {address.rw}</p>
-        <p className="text-sm">{address.village}, {address.district}</p>
-        <p className="text-sm">{address.city}, {address.province} {address.postalCode}</p>
-    </div>
-);
+const AddressView = ({ title, address }: { title: string; address?: Partial<Profile['addressKtp']> | string }) => {
+    if (!address) return <p className="text-sm text-muted-foreground">Belum diisi.</p>;
+    if (typeof address === 'string') return <p className="text-sm text-muted-foreground">{address}</p>;
+    if (!address.street) return <p className="text-sm text-muted-foreground">Belum diisi.</p>;
+    
+    return (
+         <div>
+            <h4 className="font-medium text-sm mb-1">{title}</h4>
+            <div className="text-sm text-muted-foreground">
+                <p>{address.street}, RT {address.rt}/RW {address.rw}</p>
+                <p>{address.village}, {address.district}</p>
+                <p>{address.city}, {address.province} {address.postalCode}</p>
+            </div>
+        </div>
+    )
+};
 
 const EducationView = ({ item }: { item: Education }) => (
-    <div className="text-sm">
+    <div className="text-sm border-b pb-3 last:border-0 last:pb-0">
         <p className="font-semibold">{item.institution}</p>
-        <p>{item.level} - {item.fieldOfStudy}</p>
-        <p className="text-muted-foreground">{item.startDate} - {item.isCurrent ? 'Sekarang' : item.endDate}</p>
-        {item.gpa && <p className="text-muted-foreground">IPK/Nilai: {item.gpa}</p>}
+        <p className="text-muted-foreground">{item.level} - {item.fieldOfStudy}</p>
+        {item.gpa && <p className="text-xs text-muted-foreground">IPK/Nilai: {item.gpa}</p>}
+        <p className="text-muted-foreground text-xs">{item.startDate} - {item.isCurrent ? 'Sekarang' : item.endDate}</p>
     </div>
 );
 
 const WorkExperienceView = ({ item }: { item: WorkExperience }) => (
-    <div className="text-sm">
+     <div className="text-sm border-b pb-3 last:border-0 last:pb-0">
         <p className="font-semibold">{item.position} <span className="font-normal text-muted-foreground">di {item.company}</span></p>
-        <p className="capitalize">{item.jobType}</p>
-        <p className="text-muted-foreground">{item.startDate} - {item.isCurrent ? 'Sekarang' : item.endDate}</p>
-        {item.description && <p className="mt-1">{item.description}</p>}
+        <p className="capitalize text-xs">{item.jobType}</p>
+        <p className="text-muted-foreground text-xs">{item.startDate} - {item.isCurrent ? 'Sekarang' : item.endDate}</p>
+        {item.description && <p className="mt-2 text-xs">{item.description}</p>}
         {!item.isCurrent && item.reasonForLeaving && <p className="mt-1 text-sm italic text-muted-foreground">Alasan berhenti: {item.reasonForLeaving}</p>}
     </div>
 );
 
-const OrgExperienceView = ({ item }: { item: OrganizationalExperience }) => (
-    <div className="text-sm">
-        <p className="font-semibold">{item.position} <span className="font-normal text-muted-foreground">di {item.organization}</span></p>
-        <p className="text-muted-foreground">{item.startDate} - {item.isCurrent ? 'Sekarang' : item.endDate}</p>
-        {item.description && <p className="mt-1">{item.description}</p>}
-    </div>
-);
-
-const CertificationView = ({ item }: { item: Certification }) => (
-    <div className="text-sm">
-        <p className="font-semibold">{item.name}</p>
-        <p className="text-muted-foreground">Penerbit: {item.organization}</p>
-        <p className="text-muted-foreground">Tanggal: {item.issueDate} {item.expirationDate ? ` - ${item.expirationDate}` : ''}</p>
-    </div>
-);
 
 export function ProfileView({ profile }: { profile: Profile }) {
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Candidate Profile</CardTitle>
-        <CardDescription>
-          Detailed information submitted by {profile.fullName}.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-8">
-        <section className="space-y-4">
-            <h3 className="text-xl font-semibold tracking-tight border-b pb-2">Informasi Pribadi</h3>
-            <InfoRow label="Nama Lengkap" value={profile.fullName} />
+      <CardContent className="pt-6 space-y-8">
+        <Section title="Data Pribadi" icon={<User className="h-5 w-5" />}>
+          <div className="grid md:grid-cols-2 gap-x-6 gap-y-4">
             <InfoRow label="Nama Panggilan" value={profile.nickname} />
-            <InfoRow label="Email" value={profile.email} />
-            <InfoRow label="Telepon" value={profile.phone} />
             <InfoRow label="Jenis Kelamin" value={profile.gender} />
-            <InfoRow label="Tempat, Tanggal Lahir" value={`${profile.birthPlace}, ${format(profile.birthDate.toDate(), 'dd MMMM yyyy')}`} />
+            <InfoRow label="Tempat Lahir" value={profile.birthPlace} />
+            <InfoRow label="Tanggal Lahir" value={profile.birthDate ? format(profile.birthDate.toDate(), 'dd MMMM yyyy', {locale: idLocale}) : '-'} />
             <InfoRow label="Nomor e-KTP" value={profile.eKtpNumber} />
-        </section>
-
-        <Separator />
-
-        <section className="space-y-4">
-            <h3 className="text-xl font-semibold tracking-tight border-b pb-2">Alamat</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <AddressView title="Alamat KTP" address={profile.addressKtp} />
-                {profile.isDomicileSameAsKtp ? <p className="text-sm text-muted-foreground">Alamat domisili sama dengan alamat KTP.</p> : <AddressView title="Alamat Domisili" address={profile.addressDomicile} />}
-            </div>
-        </section>
-
-        <Separator />
-        
-        <section className="space-y-4">
-            <h3 className="text-xl font-semibold tracking-tight border-b pb-2">Informasi Lainnya</h3>
             <InfoRow label="NPWP" value={profile.hasNpwp ? profile.npwpNumber : 'Tidak ada'} />
             <InfoRow label="Bersedia WFO" value={profile.willingToWfo ? 'Ya' : 'Tidak'} />
-            <InfoRow label="LinkedIn" value={profile.linkedinUrl} />
-            <InfoRow label="Website/Portfolio" value={profile.websiteUrl} />
-        </section>
+          </div>
+        </Section>
 
-        <Separator />
-        
-        <div className="grid md:grid-cols-2 gap-8">
-          <Section title="Pendidikan">
-            {profile.education?.map((item, i) => <EducationView key={i} item={item} />)}
-          </Section>
-          
-          <Section title="Keahlian">
-            <div className="flex flex-wrap gap-2">
-                {profile.skills?.map(skill => <Badge key={skill} variant="secondary">{skill}</Badge>)}
+        <Section title="Alamat" icon={<Home className="h-5 w-5" />}>
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <AddressView title="Alamat KTP" address={profile.addressKtp} />
+                {profile.isDomicileSameAsKtp ? <p className="text-sm text-muted-foreground self-center">Alamat domisili sama dengan alamat KTP.</p> : <AddressView title="Alamat Domisili" address={profile.addressDomicile} />}
             </div>
-          </Section>
-
-          {profile.workExperience && profile.workExperience.length > 0 && (
-            <Section title="Pengalaman Kerja">
-              {profile.workExperience.map((item, i) => <WorkExperienceView key={i} item={item} />)}
-            </Section>
-          )}
-
-          {profile.organizationalExperience && profile.organizationalExperience.length > 0 && (
-             <Section title="Pengalaman Organisasi">
-              {profile.organizationalExperience.map((item, i) => <OrgExperienceView key={i} item={item} />)}
-            </Section>
-          )}
-
-          {profile.certifications && profile.certifications.length > 0 && (
-            <Section title="Sertifikasi">
-              {profile.certifications.map((item, i) => <CertificationView key={i} item={item} />)}
-            </Section>
-          )}
-        </div>
-
-        <Separator />
+        </Section>
         
-        <section className="space-y-4">
-            <h3 className="text-xl font-semibold tracking-tight border-b pb-2">Deskripsi & Motivasi</h3>
-            <InfoRow label="Profil Singkat" value={profile.selfDescription} />
-            <InfoRow label="Ekspektasi Gaji" value={profile.salaryExpectation} />
-            <InfoRow label="Motivasi" value={profile.motivation} />
-        </section>
+        <Section title="Pendidikan" icon={<GraduationCap className="h-5 w-5" />}>
+            {profile.education?.length > 0 ? profile.education?.map((item, i) => <EducationView key={i} item={item} />) : <p className="text-sm text-muted-foreground">Belum diisi.</p>}
+        </Section>
+
+        {profile.workExperience && profile.workExperience.length > 0 && (
+          <Section title="Pengalaman Kerja" icon={<Briefcase className="h-5 w-5" />}>
+            {profile.workExperience.map((item, i) => <WorkExperienceView key={i} item={item} />)}
+          </Section>
+        )}
       </CardContent>
     </Card>
   );

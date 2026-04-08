@@ -33,11 +33,7 @@ export function CandidateDocumentsCard({ profile }: CandidateDocumentsCardProps)
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Dokumen Kandidat</CardTitle>
-        <CardDescription>Dokumen yang diunggah oleh kandidat saat melengkapi profil.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="pt-6 space-y-4">
         <div className="space-y-3">
             {profile.cvUrl ? (
                 <a href={profile.cvUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted transition-colors">
@@ -67,23 +63,19 @@ export function CandidateDocumentsCard({ profile }: CandidateDocumentsCardProps)
             )}
         </div>
         
-        <Separator />
-
-        <div>
-            <h4 className="font-semibold text-sm mb-2">Sertifikasi</h4>
-            {hasCerts ? (
-                <div className="space-y-2 rounded-md border p-2">
-                    {profile.certifications!.map((cert, index) => (
-                        <CertificationView key={cert.id || index} item={cert} />
-                    ))}
+        {hasCerts && (
+            <>
+                <Separator />
+                 <div>
+                    <h4 className="font-semibold text-sm mb-2">Sertifikasi</h4>
+                    <div className="space-y-2 rounded-md border p-2">
+                        {profile.certifications!.map((cert, index) => (
+                            <CertificationView key={cert.id || index} item={cert} />
+                        ))}
+                    </div>
                 </div>
-            ) : (
-                 <p className="text-sm text-muted-foreground text-center py-4 border rounded-lg border-dashed">
-                    Kandidat tidak melampirkan sertifikasi.
-                </p>
-            )}
-        </div>
-
+            </>
+        )}
       </CardContent>
     </Card>
   );
