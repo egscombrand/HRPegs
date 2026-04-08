@@ -44,7 +44,7 @@ export default function RecruitmentApplicantsPage() {
   const { data: applications, isLoading: isLoadingApps, error } = useCollection<JobApplication>(applicationsQuery);
 
   const usersQuery = useMemoFirebase(() => {
-    if (!userProfile || !['super-admin', 'hrd'].includes(userProfile.role)) {
+    if (!userProfile) {
         return null;
     }
     return query(
@@ -52,7 +52,7 @@ export default function RecruitmentApplicantsPage() {
       where('role', 'in', ['manager', 'karyawan', 'hrd', 'super-admin']),
       where('isActive', '==', true)
     );
-  }, [firestore, userProfile?.role]);
+  }, [firestore, userProfile]);
 
   const { data: usersToFilter, isLoading: isLoadingUsers } = useCollection<UserProfile>(usersQuery);
 

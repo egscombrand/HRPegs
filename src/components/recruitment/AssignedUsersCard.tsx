@@ -62,9 +62,11 @@ export function AssignedUsersCard({ job, allUsers, allBrands, onUpdate, classNam
               <CardTitle>Tim Rekrutmen ({assignedUsers.length} anggota)</CardTitle>
               <CardDescription>Pengguna internal yang ditugaskan untuk lowongan ini.</CardDescription>
             </div>
-            <Button variant="outline" size="sm" onClick={() => setIsDialogOpen(true)}>
-              Kelola Tim
-            </Button>
+             {['super-admin', 'hrd'].includes(currentUser.role) && (
+                <Button variant="outline" size="sm" onClick={() => setIsDialogOpen(true)}>
+                Kelola Tim
+                </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -74,6 +76,7 @@ export function AssignedUsersCard({ job, allUsers, allBrands, onUpdate, classNam
                 const userBrandName = Array.isArray(user.brandId)
                   ? user.brandId.map(id => brandMap.get(id)).filter(Boolean).join(', ')
                   : (user.brandId && brandMap.get(user.brandId as string)) || '';
+                const isCurrentUser = user.uid === currentUser.uid;
                 
                 return (
                   <div key={user.uid} className="flex items-center gap-3">
@@ -82,7 +85,10 @@ export function AssignedUsersCard({ job, allUsers, allBrands, onUpdate, classNam
                       <AvatarFallback>{getInitials(user.fullName)}</AvatarFallback>
                     </Avatar>
                     <div>
-                      <p className="font-semibold text-sm">{user.fullName}</p>
+                      <p className="font-semibold text-sm flex items-center gap-2">
+                        {user.fullName}
+                        {isCurrentUser && <Badge variant="secondary">Anda</Badge>}
+                      </p>
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <span className="capitalize">{user.role.replace('-', ' ')}</span>
                         {userBrandName && <span>• {userBrandName}</span>}
