@@ -46,7 +46,10 @@ export function AssignedUsersCard({ job, allUsers, allBrands, onUpdate, classNam
     });
   }, [assignedUsers]);
   
-  const brandMap = useMemo(() => new Map(allBrands.map(brand => [brand.id!, brand.name])), [allBrands]);
+  const brandMap = useMemo(() => {
+    if (!allBrands) return new Map<string, string>();
+    return new Map(allBrands.map(brand => [brand.id!, brand.name]));
+  }, [allBrands]);
 
   if (!currentUser) return null;
 
