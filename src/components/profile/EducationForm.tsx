@@ -24,11 +24,11 @@ const educationSchema = z.object({
   id: z.string(),
   institution: z.string().min(1, "Nama institusi harus diisi"),
   level: z.enum(EDUCATION_LEVELS, { required_error: "Jenjang pendidikan harus diisi" }),
-  fieldOfStudy: z.string().optional(),
-  thesisTitle: z.string().optional(),
-  gpa: z.string().optional(),
+  fieldOfStudy: z.string().optional().nullable(),
+  thesisTitle: z.string().optional().nullable(),
+  gpa: z.string().optional().nullable(),
   startDate: z.string().min(4, "Tahun mulai harus diisi"),
-  endDate: z.string().optional(),
+  endDate: z.string().optional().nullable(),
   isCurrent: z.boolean().default(false),
 }).refine(data => data.isCurrent || (data.endDate && data.endDate.length > 0), {
     message: "Tahun selesai harus diisi jika tidak sedang menempuh pendidikan ini.",
@@ -77,13 +77,12 @@ export function EducationForm({ initialData, onSaveSuccess, onBack }: EducationF
         }
         setIsSaving(true);
         try {
-            // Sanitize data before sending to Firestore to prevent 'undefined' values.
             const sanitizedEducation = values.education.map(edu => ({
                 ...edu,
                 fieldOfStudy: edu.fieldOfStudy || null,
-                thesisTitle: edu.thesisTitle || null,
+                thesisTitle: edu.isCurrent ? null : (edu.thesisTitle || null),
                 gpa: edu.gpa || null,
-                endDate: edu.endDate || null,
+                endDate: edu.isCurrent ? null : (edu.endDate || null),
             }));
 
             const payload = {
@@ -115,6 +114,7 @@ export function EducationForm({ initialData, onSaveSuccess, onBack }: EducationF
                     <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-8">
                         <div className="space-y-6">
                             {fields.map((field, index) => {
+                                const isCurrent = form.watch(`education.${index}.isCurrent`);
                                 const selectedLevel = form.watch(`education.${index}.level`);
                                 const thesisLabel = selectedLevel ? thesisLabels[selectedLevel] : null;
 
@@ -137,16 +137,21 @@ export function EducationForm({ initialData, onSaveSuccess, onBack }: EducationF
                                         <FormField control={form.control} name={`education.${index}.fieldOfStudy`} render={({ field }) => (<FormItem><FormLabel>Jurusan (Opsional)</FormLabel><FormControl><Input {...field} value={field.value ?? ''} placeholder="Contoh: Akuntansi" /></FormControl><FormMessage /></FormItem>)} />
                                     </div>
                                     
-                                    {thesisLabel && (
+                                    <FormField control={form.control} name={`education.${index}.gpa`} render={({ field }) => (<FormItem><FormLabel>IPK / Nilai (Opsional)</FormLabel><FormControl><Input {...field} value={field.value ?? ''} placeholder="Contoh: 3.85" /></FormControl><FormMessage /></FormItem>)} />
+                                    
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <FormField control={form.control} name={`education.${index}.startDate`} render={({ field }) => (<FormItem><FormLabel>Tahun Mulai <span className="text-destructive">*</span></FormLabel><FormControl><Input type="number" {...field} placeholder="YYYY" value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
+                                        {!isCurrent && (
+                                            <FormField control={form.control} name={`education.${index}.endDate`} render={({ field }) => (<FormItem><FormLabel>Tahun Selesai <span className="text-destructive">*</span></FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} placeholder="YYYY" /></FormControl><FormMessage /></FormItem>)} />
+                                        )}
+                                    </div>
+
+                                    {!isCurrent && thesisLabel && (
                                         <FormField control={form.control} name={`education.${index}.thesisTitle`} render={({ field }) => (<FormItem><FormLabel>{thesisLabel} (Opsional)</FormLabel><FormControl><Input {...field} value={field.value ?? ''} placeholder={`Contoh: Analisis...`} /></FormControl><FormMessage /></FormItem>)} />
                                     )}
 
-                                    <FormField control={form.control} name={`education.${index}.gpa`} render={({ field }) => (<FormItem><FormLabel>IPK / Nilai (Opsional)</FormLabel><FormControl><Input {...field} value={field.value ?? ''} placeholder="Contoh: 3.85" /></FormControl><FormMessage /></FormItem>)} />
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <FormField control={form.control} name={`education.${index}.startDate`} render={({ field }) => (<FormItem><FormLabel>Tahun Mulai <span className="text-destructive">*</span></FormLabel><FormControl><Input type="number" {...field} placeholder="YYYY" value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
-                                        <FormField control={form.control} name={`education.${index}.endDate`} render={({ field }) => (<FormItem><FormLabel>Tahun Selesai <span className="text-destructive">*</span></FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} placeholder="YYYY" disabled={form.watch(`education.${index}.isCurrent`)} /></FormControl><FormMessage /></FormItem>)} />
-                                    </div>
                                     <FormField control={form.control} name={`education.${index}.isCurrent`} render={({ field }) => (<FormItem className="flex flex-row items-start space-x-3 space-y-0"><FormControl><Checkbox checked={!!field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel>Saat ini sedang menempuh</FormLabel></div></FormItem>)} />
+                                    
                                     {index < fields.length - 1 && <Separator className="!mt-6" />}
                                 </div>
                             )})}

@@ -25,12 +25,12 @@ const experienceSchema = z.object({
   position: z.string().min(1, "Posisi harus diisi"),
   jobType: z.enum(JOB_TYPES, { required_error: "Tipe pekerjaan harus dipilih" }),
   startDate: z.string().min(4, "Tahun mulai harus diisi"),
-  endDate: z.string().optional(),
+  endDate: z.string().optional().nullable(),
   isCurrent: z.boolean().default(false),
-  description: z.string().optional(),
-  reasonForLeaving: z.string().optional(),
+  description: z.string().optional().nullable(),
+  reasonForLeaving: z.string().optional().nullable(),
 }).refine(data => data.isCurrent || (data.endDate && data.endDate.length > 0), {
-    message: "Tahun selesai harus diisi jika tidak sedang bekerja di sini.",
+    message: "Tahun selesai harus diisi jika sudah tidak bekerja di sini.",
     path: ["endDate"],
 }).refine(data => data.isCurrent || (data.reasonForLeaving && data.reasonForLeaving.length > 0), {
     message: "Alasan berhenti harus diisi jika sudah tidak bekerja di sini.",
@@ -74,9 +74,9 @@ export function WorkExperienceForm({ initialData, onSaveSuccess, onBack }: WorkE
         try {
             const sanitizedExperience = values.experience.map(exp => ({
                 ...exp,
-                endDate: exp.endDate || null,
+                endDate: exp.isCurrent ? null : (exp.endDate || null),
                 description: exp.description || null,
-                reasonForLeaving: exp.reasonForLeaving || null,
+                reasonForLeaving: exp.isCurrent ? null : (exp.reasonForLeaving || null),
             }));
 
             const payload = {
@@ -107,7 +107,9 @@ export function WorkExperienceForm({ initialData, onSaveSuccess, onBack }: WorkE
                 <Form {...form}>
                     <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-8">
                         <div className="space-y-6">
-                            {fields.map((field, index) => (
+                            {fields.map((field, index) => {
+                                const isCurrent = form.watch(`experience.${index}.isCurrent`);
+                                return (
                                 <div key={field.id} className="space-y-4 p-4 border rounded-md relative">
                                     <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10" onClick={() => remove(index)}>
                                         <Trash2 className="h-4 w-4" />
@@ -132,11 +134,13 @@ export function WorkExperienceForm({ initialData, onSaveSuccess, onBack }: WorkE
                                     )} />
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <FormField control={form.control} name={`experience.${index}.startDate`} render={({ field }) => (<FormItem><FormLabel>Tahun Mulai <span className="text-destructive">*</span></FormLabel><FormControl><Input type="number" {...field} placeholder="YYYY" value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
-                                        <FormField control={form.control} name={`experience.${index}.endDate`} render={({ field }) => (<FormItem><FormLabel>Tahun Selesai <span className="text-destructive">*</span></FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} placeholder="YYYY" disabled={form.watch(`experience.${index}.isCurrent`)} /></FormControl><FormMessage /></FormItem>)} />
+                                        {!isCurrent && (
+                                            <FormField control={form.control} name={`experience.${index}.endDate`} render={({ field }) => (<FormItem><FormLabel>Tahun Selesai <span className="text-destructive">*</span></FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} placeholder="YYYY" /></FormControl><FormMessage /></FormItem>)} />
+                                        )}
                                     </div>
                                     <FormField control={form.control} name={`experience.${index}.isCurrent`} render={({ field }) => (<FormItem className="flex flex-row items-start space-x-3 space-y-0"><FormControl><Checkbox checked={!!field.value} onCheckedChange={field.onChange} /></FormControl><div className="space-y-1 leading-none"><FormLabel>Saat ini masih bekerja di sini</FormLabel></div></FormItem>)} />
                                     <FormField control={form.control} name={`experience.${index}.description`} render={({ field }) => (<FormItem><FormLabel>Peran dan Tanggung Jawab (Opsional)</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} placeholder="Jelaskan tanggung jawab Anda..." /></FormControl><FormMessage /></FormItem>)} />
-                                    {!form.watch(`experience.${index}.isCurrent`) && (
+                                    {!isCurrent && (
                                         <FormField control={form.control} name={`experience.${index}.reasonForLeaving`} render={({ field }) => (
                                             <FormItem>
                                                 <FormLabel>Alasan Berhenti <span className="text-destructive">*</span></FormLabel>
@@ -147,7 +151,7 @@ export function WorkExperienceForm({ initialData, onSaveSuccess, onBack }: WorkE
                                     )}
                                     {index < fields.length - 1 && <Separator className="!mt-6" />}
                                 </div>
-                            ))}
+                            )})}
                         </div>
                         
                         <Button type="button" variant="outline" onClick={() => append({ id: crypto.randomUUID(), company: '', position: '', jobType: 'pkwt', startDate: '', endDate: '', isCurrent: false, description: '', reasonForLeaving: '' })}>

@@ -42,27 +42,17 @@ const personalDataSchema = z.object({
     birthDate: z.coerce.date({ required_error: 'Tanggal lahir harus diisi.'}),
     addressKtp: addressObjectSchema,
     isDomicileSameAsKtp: z.boolean().default(true),
-    addressDomicile: addressObjectSchema.deepPartial().optional(), // Make fields optional for conditional validation
+    addressDomicile: addressObjectSchema.deepPartial().optional(),
     hasNpwp: z.boolean().default(false),
     npwpNumber: z.string().optional().or(z.literal('')),
     willingToWfo: z.enum(['ya', 'tidak'], { required_error: 'Pilihan ini harus diisi.' }),
     linkedinUrl: z.preprocess(
-      (v) => {
-        if (typeof v !== "string") return v;
-        const s = v.trim();
-        if (!s || s.includes("...")) return "";
-        return s;
-      },
-      z.string().url({ message: "URL LinkedIn tidak valid." }).optional().or(z.literal(""))
+      (v) => (typeof v === "string" && v.trim() === "") ? undefined : v,
+      z.string().url({ message: "URL LinkedIn tidak valid." }).optional()
     ),
     websiteUrl: z.preprocess(
-      (v) => {
-        if (typeof v !== "string") return v;
-        const s = v.trim();
-        if (!s || s.includes("...")) return "";
-        return s;
-      },
-      z.string().url({ message: "URL Website/Portfolio tidak valid." }).optional().or(z.literal(""))
+      (v) => (typeof v === "string" && v.trim() === "") ? undefined : v,
+      z.string().url({ message: "URL Website/Portfolio tidak valid." }).optional()
     ),
 }).superRefine((data, ctx) => {
     if (!data.isDomicileSameAsKtp) {
@@ -144,6 +134,7 @@ export function PersonalDataForm({ initialData, onSaveSuccess }: PersonalDataFor
     }, [isDomicileSameAsKtp, addressKtp, form]);
 
     const onInvalid = (errors: FieldErrors<FormValues>) => {
+        console.error("Form validation errors:", errors);
         const firstErrorKey = Object.keys(errors)[0] as keyof FormValues | undefined;
         if (firstErrorKey) {
             const readableFieldName = firstErrorKey.replace(/([A-Z])/g, ' $1').replace(/\./g, ' -> ').replace(/^./, str => str.toUpperCase());
@@ -152,7 +143,11 @@ export function PersonalDataForm({ initialData, onSaveSuccess }: PersonalDataFor
                 title: 'Validasi Gagal',
                 description: `Harap periksa kembali isian Anda. Kolom "${readableFieldName}" sepertinya belum valid.`,
             });
-            form.setFocus(firstErrorKey as any);
+            try {
+                form.setFocus(firstErrorKey as any);
+            } catch (e) {
+                console.warn("Could not set focus on invalid field:", firstErrorKey);
+            }
         }
     };
 
