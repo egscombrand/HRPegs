@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Edit, User, Home, BookOpen, Briefcase, Sparkles, Building, Info as InfoIcon, Eye, EyeOff, Banknote, Lock, Loader2, GraduationCap } from 'lucide-react';
+import { Edit, User, Home, BookOpen, Briefcase, Sparkles, Building, Info as InfoIcon, Eye, EyeOff, Banknote, GraduationCap, Lock, Loader2 } from 'lucide-react';
 import type {
   Profile,
   Address,
@@ -28,6 +28,8 @@ import { useAuth } from '@/providers/auth-provider';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { collection, query, where } from 'firebase/firestore';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { JOB_TYPE_LABELS } from '@/lib/types';
+import Link from 'next/link';
 
 // Helper to mask NIK for display
 const maskNik = (nik?: string): string => {
@@ -35,10 +37,10 @@ const maskNik = (nik?: string): string => {
   return '************' + nik.slice(-4);
 };
 
-const InfoRow = ({ label, value }: { label: string; value?: string | number | null | React.ReactNode }) => (
-  <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 py-1.5">
-    <dt className="text-sm font-medium text-muted-foreground">{label}</dt>
-    <dd className="text-sm col-span-2">{value || '-'}</dd>
+const InfoRow = ({ label, value }: { label: string; value?: React.ReactNode }) => (
+  <div>
+    <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+    <dd className="text-base font-semibold mt-0.5">{value || '-'}</dd>
   </div>
 );
 
@@ -58,44 +60,59 @@ const SectionTitle = ({ children, icon, onEditClick, isLocked }: { children: Rea
 );
 
 const AddressView = ({ title, address }: { title: string; address?: Partial<Address> | string }) => {
-    if (!address || (typeof address === 'object' && !address.street)) return <p className="text-sm text-muted-foreground">Belum diisi.</p>;
-    if (typeof address === 'string') return <p className="text-sm">{address}</p>;
-    
-    return (
-         <div className="text-sm">
-            <p className="font-semibold">{title}</p>
-            <div className="text-muted-foreground text-xs">
-                <p>{address.street}, RT {address.rt}/RW {address.rw}</p>
-                <p>{address.village}, {address.district}</p>
-                <p>{address.city}, {address.province} {address.postalCode}</p>
+    if (!address || (typeof address === 'object' && !address.street)) {
+        return (
+            <div>
+                <p className="text-xs font-medium text-muted-foreground">{title}</p>
+                <p className="text-base font-semibold mt-0.5">-</p>
             </div>
+        );
+    }
+    if (typeof address === 'string') {
+        return (
+            <div>
+                <p className="text-xs font-medium text-muted-foreground">{title}</p>
+                <p className="text-base font-semibold mt-0.5">{address}</p>
+            </div>
+        );
+    }
+    
+    const fullAddress = `${address.street}, RT ${address.rt}/RW ${address.rw}, ${address.village}, ${address.district}, ${address.city}, ${address.province} ${address.postalCode}`;
+
+    return (
+        <div>
+            <p className="text-xs font-medium text-muted-foreground">{title}</p>
+            <p className="text-base font-semibold mt-0.5 whitespace-pre-line">{fullAddress}</p>
         </div>
-    )
+    );
 };
 
+
 const EducationView = ({ item }: { item: Education }) => (
-    <div className="text-sm border-b pb-3 last:border-b-0 last:pb-0">
-        <p className="font-semibold">{item.institution}</p>
-        <p className="text-muted-foreground text-xs">{item.level} - {item.fieldOfStudy}</p>
-        {item.gpa && <p className="text-xs text-muted-foreground">IPK/Nilai: {item.gpa}</p>}
-        <p className="text-muted-foreground text-xs mt-1">{item.startDate} - {item.isCurrent ? 'Sekarang' : item.endDate}</p>
+    <div className="py-3 border-b last:border-b-0 last:pb-0 first:pt-0">
+        <p className="font-semibold text-base">{item.institution}</p>
+        <p className="text-sm text-muted-foreground">{item.level} - {item.fieldOfStudy}</p>
+        <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
+            <span>{item.startDate} - {item.isCurrent ? 'Sekarang' : item.endDate}</span>
+            {item.gpa && <span>• IPK/Nilai: {item.gpa}</span>}
+        </div>
     </div>
 );
 
 const WorkExperienceView = ({ item }: { item: WorkExperience }) => (
-     <div className="text-sm border-b pb-3 last:border-b-0 last:pb-0">
+     <div className="py-3 border-b last:border-b-0 last:pb-0 first:pt-0">
         <p className="font-semibold text-base">{item.position}</p>
-        <p className="capitalize font-medium text-muted-foreground">{item.jobType ? JOB_TYPE_LABELS[item.jobType] : ''} di {item.company}</p>
+        <p className="text-sm text-muted-foreground capitalize">{item.jobType ? JOB_TYPE_LABELS[item.jobType] : ''} di {item.company}</p>
         <p className="text-muted-foreground text-xs mt-1">{item.startDate} - {item.isCurrent ? 'Sekarang' : item.endDate}</p>
-        {item.description && <p className="mt-2 text-xs">{item.description}</p>}
+        {item.description && <p className="mt-2 text-sm text-foreground/80 leading-relaxed">{item.description}</p>}
         {!item.isCurrent && item.reasonForLeaving && <p className="mt-1 text-sm italic text-muted-foreground">Alasan berhenti: {item.reasonForLeaving}</p>}
     </div>
 );
 
 const OrgExperienceView = ({ item }: { item: OrganizationalExperience }) => (
-    <div className="text-sm">
-        <p className="font-semibold">{item.position}</p>
-        <p className="text-muted-foreground">{item.organization}</p>
+    <div className="py-3 border-b last:border-b-0 last:pb-0 first:pt-0">
+        <p className="font-semibold text-base">{item.position}</p>
+        <p className="text-sm text-muted-foreground">{item.organization}</p>
         <p className="text-muted-foreground text-xs mt-1">{item.startDate} - {item.isCurrent ? 'Sekarang' : item.endDate}</p>
     </div>
 );
@@ -201,7 +218,7 @@ export function ProfilePreview({
                     <SectionTitle icon={<User className="h-5 w-5" />} onEditClick={() => onEditRequest(1)} isLocked={isProfileLocked}>Data Pribadi</SectionTitle>
                 </CardHeader>
                 <CardContent>
-                    <dl className="grid md:grid-cols-2 gap-x-6 gap-y-4">
+                    <dl className="grid md:grid-cols-2 gap-x-6 gap-y-6">
                         <InfoRow label="Nama Panggilan" value={profile.nickname} />
                         <InfoRow label="Jenis Kelamin" value={profile.gender} />
                         <InfoRow label="Tempat Lahir" value={profile.birthPlace} />
@@ -235,16 +252,28 @@ export function ProfilePreview({
             
             <Card>
                 <CardHeader><SectionTitle icon={<InfoIcon className="h-5 w-5" />} onEditClick={() => onEditRequest(6)} isLocked={isProfileLocked}>Tentang Saya</SectionTitle></CardHeader>
-                <CardContent className="space-y-4">
-                    <InfoRow label="Profil Singkat" value={profile.selfDescription} /> <Separator/>
-                    <InfoRow label="Ekspektasi Gaji" value={profile.salaryExpectation} /> <Separator/>
-                    <InfoRow label="Alasan Ekspektasi Gaji" value={profile.salaryExpectationReason} /> <Separator/>
-                    <InfoRow label="Motivasi Melamar" value={profile.motivation} /> <Separator/>
-                    <InfoRow label="Gaya Kerja" value={profile.workStyle} /> <Separator/>
-                    <InfoRow label="Area Pengembangan" value={profile.improvementArea} /> <Separator/>
-                    <InfoRow label="Ketersediaan" value={profile.availability === 'Lainnya' ? profile.availabilityOther : profile.availability} /> <Separator/>
-                    <InfoRow label="Bekerja dengan Target" value={profile.usedToDeadline ? 'Ya' : 'Tidak'} />
-                    {profile.usedToDeadline && <InfoRow label="Pengalaman dengan Target" value={profile.deadlineExperience} />}
+                <CardContent className="space-y-6">
+                    <InfoRow label="Profil Singkat" value={<p className="whitespace-pre-wrap leading-relaxed">{profile.selfDescription}</p>} />
+                    <Separator/>
+                    <div className="grid md:grid-cols-2 gap-6">
+                        <InfoRow label="Ekspektasi Gaji" value={profile.salaryExpectation} />
+                        <InfoRow label="Alasan Ekspektasi" value={<p className="whitespace-pre-wrap leading-relaxed">{profile.salaryExpectationReason}</p>} />
+                    </div>
+                    <Separator/>
+                    <InfoRow label="Motivasi Melamar" value={<p className="whitespace-pre-wrap leading-relaxed">{profile.motivation}</p>} />
+                    <Separator/>
+                    <div className="grid md:grid-cols-2 gap-6">
+                        <InfoRow label="Gaya Kerja" value={profile.workStyle} />
+                        <InfoRow label="Area Pengembangan" value={profile.improvementArea} />
+                    </div>
+                    <Separator/>
+                    <div className="grid md:grid-cols-2 gap-6">
+                        <InfoRow label="Ketersediaan" value={profile.availability === 'Lainnya' ? profile.availabilityOther : profile.availability} />
+                        <div>
+                            <InfoRow label="Bekerja dengan Target/Deadline" value={profile.usedToDeadline ? 'Ya' : 'Tidak'} />
+                            {profile.usedToDeadline && <p className="text-sm mt-2 text-muted-foreground">{profile.deadlineExperience}</p>}
+                        </div>
+                    </div>
                 </CardContent>
             </Card>
         </div>
@@ -270,18 +299,35 @@ export function ProfilePreview({
              <Card>
                 <CardHeader><SectionTitle icon={<Sparkles className="h-5 w-5" />} onEditClick={() => onEditRequest(5)} isLocked={isProfileLocked}>Dokumen & Keahlian</SectionTitle></CardHeader>
                 <CardContent className="space-y-4">
-                     <div className="grid grid-cols-2 gap-4">
-                        <a href={profile.cvUrl || '#'} target="_blank" rel="noopener noreferrer" className="block p-3 border rounded-lg hover:bg-muted transition-colors">
-                            <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Curriculum Vitae</p>
-                            {profile.cvUrl ? <span className="text-sm font-semibold text-primary flex items-center gap-1"><Eye className="h-4 w-4"/>Lihat CV</span> : <span className="text-sm text-muted-foreground">Belum diunggah</span>}
-                        </a>
-                        <a href={profile.ijazahUrl || '#'} target="_blank" rel="noopener noreferrer" className="block p-3 border rounded-lg hover:bg-muted transition-colors">
-                             <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Ijazah / SKL</p>
-                            {profile.ijazahUrl ? <span className="text-sm font-semibold text-primary flex items-center gap-1"><Eye className="h-4 w-4"/>Lihat Ijazah</span> : <span className="text-sm text-muted-foreground">Belum diunggah</span>}
-                        </a>
+                    <div className="space-y-2">
+                        <h4 className="font-semibold text-xs text-muted-foreground uppercase">Dokumen Utama</h4>
+                        <div className="grid grid-cols-1 gap-2">
+                            <a href={profile.cvUrl || '#'} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-2 rounded-md border hover:bg-muted transition-colors">
+                                <span className="text-sm font-medium">Curriculum Vitae (CV)</span>
+                                {profile.cvUrl ? <Eye className="h-4 w-4 text-primary"/> : <X className="h-4 w-4 text-destructive"/>}
+                            </a>
+                            <a href={profile.ijazahUrl || '#'} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-2 rounded-md border hover:bg-muted transition-colors">
+                                <span className="text-sm font-medium">Ijazah / SKL</span>
+                                {profile.ijazahUrl ? <Eye className="h-4 w-4 text-primary"/> : <X className="h-4 w-4 text-destructive"/>}
+                            </a>
+                        </div>
                     </div>
-                     {profile.skills && profile.skills.length > 0 && ( <> <Separator/> <div> <h4 className="font-semibold text-sm mb-2">Keahlian</h4> <div className="flex flex-wrap gap-2"> {profile.skills.slice(0, 8).map(skill => <Badge key={skill} variant="secondary">{skill}</Badge>)} {profile.skills.length > 8 && <Badge variant="outline">+{profile.skills.length - 8}</Badge>}</div></div></> )}
-                     {profile.certifications && profile.certifications.length > 0 && ( <> <Separator/> <div className="space-y-3"> <h4 className="font-semibold text-sm">Sertifikasi</h4> <div className="space-y-2"> {profile.certifications.map((cert, i) => (<CertificationView key={cert.id || i} item={cert} />))}</div></div> </> )}
+                     {profile.skills && profile.skills.length > 0 && (
+                        <div className="space-y-2">
+                            <h4 className="font-semibold text-xs text-muted-foreground uppercase">Keahlian</h4>
+                            <div className="flex flex-wrap gap-1.5">
+                                {profile.skills.map(skill => <Badge key={skill} variant="secondary" className="font-normal">{skill}</Badge>)}
+                            </div>
+                        </div>
+                     )}
+                     {profile.certifications && profile.certifications.length > 0 && (
+                        <div className="space-y-3">
+                            <h4 className="font-semibold text-xs text-muted-foreground uppercase">Sertifikasi</h4>
+                            <div className="space-y-2">
+                                {profile.certifications.map((cert, i) => (<CertificationView key={cert.id || i} item={cert} />))}
+                            </div>
+                        </div>
+                     )}
                 </CardContent>
             </Card>
         </div>
