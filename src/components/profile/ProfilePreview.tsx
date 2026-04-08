@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Edit, User, Home, BookOpen, Briefcase, Sparkles, Building, Info as InfoIcon, Eye, EyeOff, Banknote, Lock, Loader2 } from 'lucide-react';
+import { Edit, User, Home, BookOpen, Briefcase, Sparkles, Building, Info as InfoIcon, Eye, EyeOff, Banknote, Lock, Loader2, GraduationCap } from 'lucide-react';
 import type {
   Profile,
   Address,
@@ -74,7 +74,7 @@ const AddressView = ({ title, address }: { title: string; address?: Partial<Addr
 };
 
 const EducationView = ({ item }: { item: Education }) => (
-    <div className="text-sm">
+    <div className="text-sm border-b pb-3 last:border-b-0 last:pb-0">
         <p className="font-semibold">{item.institution}</p>
         <p className="text-muted-foreground text-xs">{item.level} - {item.fieldOfStudy}</p>
         {item.gpa && <p className="text-xs text-muted-foreground">IPK/Nilai: {item.gpa}</p>}
@@ -83,10 +83,12 @@ const EducationView = ({ item }: { item: Education }) => (
 );
 
 const WorkExperienceView = ({ item }: { item: WorkExperience }) => (
-     <div className="text-sm">
-        <p className="font-semibold">{item.position}</p>
-        <p className="text-muted-foreground capitalize text-xs">{item.company}</p>
+     <div className="text-sm border-b pb-3 last:border-b-0 last:pb-0">
+        <p className="font-semibold text-base">{item.position}</p>
+        <p className="capitalize font-medium text-muted-foreground">{item.jobType ? JOB_TYPE_LABELS[item.jobType] : ''} di {item.company}</p>
         <p className="text-muted-foreground text-xs mt-1">{item.startDate} - {item.isCurrent ? 'Sekarang' : item.endDate}</p>
+        {item.description && <p className="mt-2 text-xs">{item.description}</p>}
+        {!item.isCurrent && item.reasonForLeaving && <p className="mt-1 text-sm italic text-muted-foreground">Alasan berhenti: {item.reasonForLeaving}</p>}
     </div>
 );
 
@@ -137,7 +139,7 @@ export function ProfilePreview({
 
   const isProfileLocked = React.useMemo(() => {
     if (!applications) return false;
-    const lockStages: JobApplicationStatus[] = ['verification', 'document_submission', 'interview', 'offered', 'hired'];
+    const lockStages: JobApplicationStatus[] = ['verification', 'interview', 'offered', 'hired'];
     return applications.some(app => lockStages.includes(app.status));
   }, [applications]);
 
