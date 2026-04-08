@@ -19,7 +19,6 @@ import type {
   WorkExperience,
   OrganizationalExperience,
   Certification,
-  EmployeeProfile
 } from '@/lib/types';
 import { format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
@@ -119,10 +118,10 @@ export function ProfilePreview({
   profile,
   onEditRequest,
 }: {
-  profile: Profile & Partial<Omit<EmployeeProfile, 'birthDate'>>;
+  profile: Profile;
   onEditRequest: (step: number) => void;
 }) {
-  const isProfileComplete = profile.profileStatus === 'completed' || profile.completeness?.isComplete === true;
+  const isProfileComplete = profile.profileStatus === 'completed';
   const nextStep = profile.profileStep || 1;
   const [isNikVisible, setIsNikVisible] = React.useState(false);
 
@@ -213,20 +212,7 @@ export function ProfilePreview({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-3"><Banknote className="h-5 w-5 text-primary" />Informasi Finansial</CardTitle>
-        </CardHeader>
-        <CardContent>
-            <dl className="space-y-1">
-                <InfoRow label="Nama Bank" value={profile.bankName} />
-                <InfoRow label="Nomor Rekening" value={profile.bankAccountNumber} />
-                <InfoRow label="Nama Pemilik Rekening" value={profile.bankAccountHolderName} />
-            </dl>
-        </CardContent>
-      </Card>
-
-      <div className="grid md:grid-cols-2 gap-6">
+       <div className="grid md:grid-cols-2 gap-6">
         <Card>
             <CardHeader><CardTitle className="text-lg flex items-center gap-3"><BookOpen className="h-5 w-5 text-primary" />Pendidikan</CardTitle></CardHeader>
             <CardContent className="space-y-3">

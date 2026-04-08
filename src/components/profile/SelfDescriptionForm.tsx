@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from '@/components/ui/button';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Info } from 'lucide-react';
 import { Textarea } from '../ui/textarea';
 import { useState } from 'react';
 import { useAuth } from '@/providers/auth-provider';
@@ -17,6 +17,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Checkbox } from '../ui/checkbox';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../ui/select';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
+import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 
 const availabilityOptions = ['Secepatnya', '1 minggu', '2 minggu', '1 bulan', '3 bulan', '6 bulan', 'Lainnya'] as const;
 
@@ -134,9 +135,15 @@ export function SelfDescriptionForm({ initialData, onFinish, onBack }: SelfDescr
         <Card>
             <CardHeader>
                 <CardTitle>Deskripsi Diri & Pernyataan</CardTitle>
-                <CardDescription>Ini adalah langkah terakhir. Berikan sentuhan personal pada profil Anda. Kolom dengan tanda <span className="text-destructive">*</span> adalah kolom yang wajib diisi.</CardDescription>
+                <CardDescription>Ini adalah langkah terakhir. Berikan sentuhan personal pada profil Anda.</CardDescription>
             </CardHeader>
             <CardContent>
+                 <Alert className="mb-8">
+                    <Info className="h-4 w-4" />
+                    <AlertDescription>
+                        Meskipun beberapa kolom bersifat opsional, kami menyarankan Anda mengisinya secara lengkap agar tim rekrutmen dapat memahami profil Anda secara lebih menyeluruh.
+                    </AlertDescription>
+                </Alert>
                 <Form {...form}>
                     <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-8">
                         <FormField control={form.control} name="selfDescription" render={({ field }) => (<FormItem><FormLabel>Ceritakan singkat tentang diri Anda <span className="text-destructive">*</span></FormLabel><FormDescription>Fokus pada karakter, sikap kerja, keunggulan, serta hal yang ingin Anda kembangkan.</FormDescription><FormControl><Textarea {...field} value={field.value ?? ''} rows={5} /></FormControl><FormMessage /></FormItem>)} />
@@ -149,8 +156,8 @@ export function SelfDescriptionForm({ initialData, onFinish, onBack }: SelfDescr
                         <FormField control={form.control} name="motivation" render={({ field }) => (<FormItem><FormLabel>Motivasi Melamar <span className="text-destructive">*</span></FormLabel><FormDescription>Apa yang membuat Anda tertarik dengan posisi atau bidang ini?</FormDescription><FormControl><Textarea {...field} value={field.value ?? ''} placeholder="Jelaskan motivasi dan alasan yang mendasari Anda untuk bekerja pada bidang/posisi yang Anda pilih." rows={5} /></FormControl><FormMessage /></FormItem>)} />
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <FormField control={form.control} name="workStyle" render={({ field }) => (<FormItem><FormLabel>Bagaimana gaya kerja Anda?</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} placeholder="Contoh: lebih suka kerja mandiri atau tim, terstruktur atau fleksibel, dll." rows={3} /></FormControl><FormMessage /></FormItem>)} />
-                            <FormField control={form.control} name="improvementArea" render={({ field }) => (<FormItem><FormLabel>Apa satu hal yang ingin Anda tingkatkan?</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} placeholder="Contoh: meningkatkan komunikasi, manajemen waktu, atau skill teknis tertentu" rows={3} /></FormControl><FormMessage /></FormItem>)} />
+                            <FormField control={form.control} name="workStyle" render={({ field }) => (<FormItem><FormLabel>Bagaimana gaya kerja Anda? (Opsional)</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} placeholder="Contoh: lebih suka kerja mandiri atau tim, terstruktur atau fleksibel, dll." rows={3} /></FormControl><FormMessage /></FormItem>)} />
+                            <FormField control={form.control} name="improvementArea" render={({ field }) => (<FormItem><FormLabel>Apa satu hal yang ingin Anda tingkatkan? (Opsional)</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} placeholder="Contoh: meningkatkan komunikasi, manajemen waktu, atau skill teknis tertentu" rows={3} /></FormControl><FormMessage /></FormItem>)} />
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
