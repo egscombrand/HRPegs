@@ -18,13 +18,14 @@ import { Button } from '@/components/ui/button';
 import { CheckCircle, Edit, Loader2 } from 'lucide-react';
 import { OrganizationalExperienceForm } from '@/components/profile/OrganizationalExperienceForm';
 import { useToast } from '@/hooks/use-toast';
+import { ProfilePreview } from '@/components/profile/ProfilePreview';
 
 const steps = [
     { id: 1, name: 'Data Pribadi' },
     { id: 2, name: 'Pendidikan' },
     { id: 3, name: 'Pengalaman Kerja' },
     { id: 4, name: 'Pengalaman Organisasi' },
-    { id: 5, name: 'Keahlian & Sertifikasi' },
+    { id: 5, name: 'Dokumen & Sertifikasi' },
     { id: 6, name: 'Deskripsi & Pernyataan' },
 ];
 
@@ -44,39 +45,86 @@ function ProfileWizardContent() {
 
     const { data: profile, isLoading: isProfileLoading, mutate: refreshProfile } = useDoc<Profile>(profileDocRef);
 
+    useEffect(() => {
+        const createMissingProfile = async () => {
+            if (!isProfileLoading && !profile && firebaseUser && firestore && authProfile) {
+                console.warn("Profile document not found for this user, creating a new one as a fallback.");
+                const profileDocRef = doc(firestore, 'profiles', firebaseUser.uid);
+                const defaultProfileData = {
+                    fullName: authProfile.fullName,
+                    email: authProfile.email,
+                    profileStatus: 'draft',
+                    profileStep: 1,
+                    updatedAt: serverTimestamp(),
+                    createdAt: serverTimestamp(),
+                };
+                try {
+                    await setDocumentNonBlocking(profileDocRef, defaultProfileData, { merge: true });
+                    toast({ title: "Profil Dibuat", description: "Memulai profil baru untuk Anda." });
+                    refreshProfile();
+                } catch (e: any) {
+                    console.error("Failed to lazy-create profile:", e);
+                    toast({ variant: "destructive", title: "Gagal membuat profil", description: e.message });
+                }
+            }
+        };
+        createMissingProfile();
+    }, [isProfileLoading, profile, firebaseUser, firestore, authProfile, refreshProfile, toast]);
+
+
     const isLoading = authLoading || isProfileLoading;
-    const urlStep = parseInt(searchParams.get('step') || '1', 10);
+    const urlStep = parseInt(searchParams.get('step') || '0', 10);
+    const isPreviewMode = !!profile && urlStep === 0;
 
     const [effectiveStep, setEffectiveStep] = useState(1);
-    const [optimisticProfileStep, setOptimisticProfileStep] = useState(1);
 
-    useEffect(() => {
-        if (isLoading) return;
-
-        const profileStep = profile?.profileStep || 1;
-        const profileStepEffective = Math.max(profileStep, optimisticProfileStep);
-        
-        if (profile?.profileStatus === 'completed' && !searchParams.has('step')) {
-            setEffectiveStep(steps.length + 1); // A step beyond the last to show completion screen
+    const handleEnterEditMode = async (step: number = 1) => {
+        if (!firebaseUser) {
+            toast({
+                variant: 'destructive',
+                title: 'Gagal memulai edit',
+                description: 'User tidak ditemukan. Silakan login kembali.',
+            });
             return;
         }
 
-        const targetStep = urlStep > profileStepEffective ? profileStepEffective : urlStep;
+        setIsEditing(true);
+        try {
+            if (profile?.profileStatus === 'completed') {
+                const profileDocRef = doc(firestore, 'profiles', firebaseUser.uid);
+                await setDocumentNonBlocking(profileDocRef, { profileStatus: 'draft' }, { merge: true });
+            }
+            router.push(`${pathname}?step=${step}`);
+        } catch (error: any) {
+             toast({
+                variant: 'destructive',
+                title: 'Gagal memulai mode edit',
+                description: error.message || 'Terjadi kesalahan pada server.',
+            });
+        } finally {
+            setIsEditing(false);
+        }
+    };
+
+    useEffect(() => {
+        if (isLoading || isPreviewMode) return;
         
-        if (targetStep !== urlStep && profile?.profileStatus !== 'completed') {
+        const profileStep = profile?.profileStep || 1;
+        const targetStep = urlStep > profileStep ? profileStep : urlStep;
+        
+        if (targetStep !== urlStep) {
             router.replace(`${pathname}?step=${targetStep}`);
         }
         
-        setEffectiveStep(profile?.profileStatus === 'completed' ? urlStep : targetStep);
+        setEffectiveStep(targetStep || 1);
 
-    }, [urlStep, profile, isLoading, router, searchParams, optimisticProfileStep, pathname]);
+    }, [urlStep, profile, isLoading, router, pathname, isPreviewMode]);
 
 
     const handleSaveSuccess = () => {
-        refreshProfile(); // Refetch profile to get the latest step
-        refreshUserProfile(); // Refetch user data in auth context
+        refreshProfile();
+        refreshUserProfile();
         const nextStep = effectiveStep + 1;
-        setOptimisticProfileStep(nextStep);
         if (nextStep <= steps.length) {
             router.push(`${pathname}?step=${nextStep}`);
         } else {
@@ -91,40 +139,12 @@ function ProfileWizardContent() {
         }
     };
     
-    const handleFinish = () => {
+    const handleFinish = async () => {
         refreshProfile();
         refreshUserProfile();
-        setOptimisticProfileStep(steps.length + 1);
         router.push(pathname);
     }
-
-    const handleEdit = async () => {
-        if (!firebaseUser) {
-            toast({
-                variant: 'destructive',
-                title: 'Gagal memulai edit',
-                description: 'User tidak ditemukan. Silakan login kembali.',
-            });
-            return;
-        }
-
-        setIsEditing(true);
-        const profileDocRef = doc(firestore, 'profiles', firebaseUser.uid);
-        try {
-            await setDocumentNonBlocking(profileDocRef, { profileStatus: 'draft' }, { merge: true });
-            setOptimisticProfileStep(1);
-            router.push(`${pathname}?step=1`);
-        } catch (error: any) {
-            toast({
-                variant: 'destructive',
-                title: 'Gagal memulai mode edit',
-                description: error.message || 'Terjadi kesalahan pada server.',
-            });
-        } finally {
-            setIsEditing(false);
-        }
-    };
-
+    
     if (isLoading || !authProfile) {
         return (
              <div className="space-y-6">
@@ -133,32 +153,27 @@ function ProfileWizardContent() {
              </div>
         )
     }
-    
-    if (effectiveStep > steps.length) {
-       return (
+
+    if (!profile) {
+        return (
             <Card className="flex flex-col items-center justify-center text-center p-8">
                 <CardHeader>
-                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-                        <CheckCircle className="h-10 w-10 text-green-600" />
-                    </div>
-                    <CardTitle className="mt-4 text-2xl">Profil Anda Sudah Lengkap!</CardTitle>
+                    <CardTitle className="mt-4 text-2xl">Profil Pelamar Belum Dibuat</CardTitle>
                 </CardHeader>
                 <CardContent className="w-full max-w-sm">
                     <p className="text-muted-foreground mb-6">
-                        Terima kasih telah melengkapi profil Anda. Anda sekarang dapat melamar pekerjaan atau mengedit profil Anda jika ada perubahan.
+                       Anda belum memiliki profil pelamar. Mulai isi profil Anda untuk dapat melamar pekerjaan.
                     </p>
-                    <div className="flex flex-col sm:flex-row gap-4">
-                        <Button variant="outline" className="w-full" onClick={handleEdit} disabled={isEditing}>
-                            {isEditing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Edit className="mr-2 h-4 w-4" />}
-                            Edit Profil
-                        </Button>
-                        <Button className="w-full" onClick={() => router.push(pathname.replace('/profile', '/jobs'))}>
-                            Cari Lowongan
-                        </Button>
-                    </div>
+                    <Button className="w-full" onClick={() => handleEnterEditMode(1)}>
+                        Mulai Isi Profil
+                    </Button>
                 </CardContent>
             </Card>
-       )
+        )
+    }
+    
+    if (isPreviewMode) {
+       return <ProfilePreview profile={profile} onEditRequest={handleEnterEditMode} />;
     }
 
     const initialProfileData = {
@@ -204,6 +219,8 @@ function ProfileWizardContent() {
                     initialData={{
                         skills: initialProfileData.skills || [],
                         certifications: initialProfileData.certifications || [],
+                        cvUrl: initialProfileData.cvUrl,
+                        ijazahUrl: initialProfileData.ijazahUrl,
                     }}
                     onSaveSuccess={handleSaveSuccess}
                     onBack={handleBack}
@@ -214,7 +231,14 @@ function ProfileWizardContent() {
                     initialData={{
                         selfDescription: initialProfileData.selfDescription,
                         salaryExpectation: initialProfileData.salaryExpectation,
+                        salaryExpectationReason: initialProfileData.salaryExpectationReason,
                         motivation: initialProfileData.motivation,
+                        workStyle: initialProfileData.workStyle,
+                        improvementArea: initialProfileData.improvementArea,
+                        availability: initialProfileData.availability,
+                        availabilityOther: initialProfileData.availabilityOther,
+                        usedToDeadline: initialProfileData.usedToDeadline,
+                        deadlineExperience: initialProfileData.deadlineExperience,
                     }}
                     onFinish={handleFinish}
                     onBack={handleBack}

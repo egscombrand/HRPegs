@@ -35,6 +35,7 @@ function ProfileWizardContent() {
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const { toast } = useToast();
+    const [isEditing, setIsEditing] = useState(false);
 
     const profileDocRef = useMemoFirebase(() => {
         if (!firestore || !firebaseUser) return null;
@@ -75,6 +76,35 @@ function ProfileWizardContent() {
     const isPreviewMode = !!profile && urlStep === 0;
 
     const [effectiveStep, setEffectiveStep] = useState(1);
+    
+    const handleEnterEditMode = async (step: number = 1) => {
+        if (!firebaseUser) {
+            toast({
+                variant: 'destructive',
+                title: 'Gagal memulai edit',
+                description: 'User tidak ditemukan. Silakan login kembali.',
+            });
+            return;
+        }
+
+        setIsEditing(true);
+        try {
+            if (profile?.profileStatus === 'completed') {
+                const profileDocRef = doc(firestore, 'profiles', firebaseUser.uid);
+                await setDocumentNonBlocking(profileDocRef, { profileStatus: 'draft' }, { merge: true });
+            }
+            router.push(`${pathname}?step=${step}`);
+        } catch (error: any) {
+             toast({
+                variant: 'destructive',
+                title: 'Gagal memulai mode edit',
+                description: error.message || 'Terjadi kesalahan pada server.',
+            });
+        } finally {
+            setIsEditing(false);
+        }
+    };
+
 
     useEffect(() => {
         if (isLoading || isPreviewMode) return;
@@ -115,10 +145,6 @@ function ProfileWizardContent() {
         router.push(pathname); // Go to preview
     }
     
-    const onEditRequest = (step: number) => {
-        router.push(`${pathname}?step=${step}`);
-    };
-
     if (isLoading || !authProfile) {
         return (
              <div className="space-y-6">
@@ -138,7 +164,7 @@ function ProfileWizardContent() {
                     <p className="text-muted-foreground mb-6">
                        Anda belum memiliki profil pelamar. Mulai isi profil Anda untuk dapat melamar pekerjaan.
                     </p>
-                    <Button className="w-full" onClick={() => onEditRequest(1)}>
+                    <Button className="w-full" onClick={() => handleEnterEditMode(1)}>
                         Mulai Isi Profil
                     </Button>
                 </CardContent>
@@ -147,7 +173,7 @@ function ProfileWizardContent() {
     }
     
     if (isPreviewMode) {
-       return <ProfilePreview profile={profile} onEditRequest={onEditRequest} />;
+       return <ProfilePreview profile={profile} onEditRequest={handleEnterEditMode} />;
     }
 
     const initialProfileData = {
@@ -205,7 +231,14 @@ function ProfileWizardContent() {
                     initialData={{
                         selfDescription: initialProfileData.selfDescription,
                         salaryExpectation: initialProfileData.salaryExpectation,
+                        salaryExpectationReason: initialProfileData.salaryExpectationReason,
                         motivation: initialProfileData.motivation,
+                        workStyle: initialProfileData.workStyle,
+                        improvementArea: initialProfileData.improvementArea,
+                        availability: initialProfileData.availability,
+                        availabilityOther: initialProfileData.availabilityOther,
+                        usedToDeadline: initialProfileData.usedToDeadline,
+                        deadlineExperience: initialProfileData.deadlineExperience,
                     }}
                     onFinish={handleFinish}
                     onBack={handleBack}
