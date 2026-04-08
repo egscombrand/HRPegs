@@ -239,17 +239,13 @@ function ApplicationCard({ application, hasCompletedTest }: { application: JobAp
                 </div>
             </div>
         ) : (
-            <div className="p-4 rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-100">
+             <div className="p-4 rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-100">
                 <h3 className="font-semibold text-lg flex items-center gap-2 text-blue-800 dark:text-blue-100"><FileClock className="h-5 w-5" /> Lamaran Anda Sedang Diproses</h3>
-                <p className="text-sm mt-2 leading-relaxed">Terima kasih telah melamar posisi <strong>{application.jobPosition}</strong>. Lamaran Anda telah kami terima dan sedang dalam proses peninjauan oleh tim rekrutmen.</p>
-                <ul className="mt-3 space-y-2 text-sm list-disc list-inside text-blue-800/80 dark:text-blue-200/80">
-                    <li>Proses evaluasi membutuhkan waktu karena banyaknya aplikasi yang masuk.</li>
-                    <li>Kami akan menghubungi Anda jika profil Anda sesuai untuk tahap selanjutnya.</li>
-                    <li>Anda dapat memantau status lamaran Anda di halaman ini.</li>
-                </ul>
-                <p className="text-xs mt-3 italic text-blue-800/80 dark:text-blue-200/80">
-                   Profil Anda akan kami simpan untuk pertimbangan di masa depan.
-                </p>
+                 <div className="text-sm mt-3 space-y-3 text-blue-800/90 dark:text-blue-200/90 text-justify">
+                    <p>Terima kasih telah mengirimkan lamaran Anda untuk posisi <strong>{application.jobPosition}</strong>. Lamaran Anda telah kami terima dan saat ini sedang dalam proses peninjauan oleh tim rekrutmen kami.</p>
+                    <p>Kami menerima cukup banyak aplikasi, sehingga proses evaluasi membutuhkan waktu. Kami akan menghubungi Anda apabila terdapat perkembangan lebih lanjut. Anda juga dapat memantau status lamaran Anda di halaman ini secara berkala.</p>
+                    <p className="text-xs italic">Profil Anda juga akan kami simpan sebagai bagian dari pertimbangan untuk peluang lain di masa mendatang. Terima kasih atas minat dan kepercayaan Anda.</p>
+                </div>
                 {isProcessing && !hasCompletedTest && (
                   <div className="mt-4 pt-4 border-t border-blue-200/50 dark:border-blue-800/50">
                     <p className="font-bold text-blue-900 dark:text-blue-200">
