@@ -53,7 +53,7 @@ export function AssignedUsersCard({ job, allUsers, allBrands, onUpdate, classNam
     } else {
         setIsLoading(false);
     }
-  }, [allUsers, job.assignedUserIds, firestore]);
+  }, [allUsers.length, job.assignedUserIds, firestore]);
 
   const assignedUsers = useMemo(() => {
     if (!job.assignedUserIds) return [];
@@ -121,10 +121,10 @@ export function AssignedUsersCard({ job, allUsers, allBrands, onUpdate, classNam
                       <AvatarFallback>{getInitials(user.fullName)}</AvatarFallback>
                     </Avatar>
                     <div>
-                      <p className="font-semibold text-sm flex items-center gap-2">
+                      <div className="font-semibold text-sm flex items-center gap-2">
                         {user.fullName}
                         {isCurrentUser && <Badge variant="secondary">Anda</Badge>}
-                      </p>
+                      </div>
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <span className="capitalize">{user.role.replace('-', ' ')}</span>
                         {userBrandName && <span>• {userBrandName}</span>}
