@@ -178,7 +178,7 @@ export default function MyInterviewsPage() {
             where('role', 'in', ['hrd', 'manager', 'karyawan', 'super-admin']),
             where('isActive', '==', true)
         );
-    }, [firestore, userProfile]);
+    }, [firestore, userProfile?.role]);
 
     const { data: internalUsers, isLoading: isLoadingUsers } = useCollection<UserProfile>(internalUsersQuery);
     const { data: brands, isLoading: isLoadingBrands } = useCollection<Brand>(useMemoFirebase(() => collection(firestore, 'brands'), [firestore]));

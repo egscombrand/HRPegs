@@ -52,7 +52,7 @@ export default function RecruitmentApplicantsPage() {
       where('role', 'in', ['manager', 'karyawan', 'hrd', 'super-admin']),
       where('isActive', '==', true)
     );
-  }, [firestore, userProfile]);
+  }, [firestore, userProfile?.role]);
 
   const { data: usersToFilter, isLoading: isLoadingUsers } = useCollection<UserProfile>(usersQuery);
 
