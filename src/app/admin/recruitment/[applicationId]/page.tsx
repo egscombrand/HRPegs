@@ -15,7 +15,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from '@/components/ui/select';
 import { MENU_CONFIG } from '@/lib/menu-config';
 import { ProfileView } from '@/components/recruitment/ProfileView';
-import { ApplicationStatusBadge, APPLICATION_STATUSES, statusDisplayLabels } from '@/components/recruitment/ApplicationStatusBadge';
+import { ApplicationStatusBadge, statusDisplayLabels } from '@/components/recruitment/ApplicationStatusBadge';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { getInitials } from '@/lib/utils';
@@ -24,6 +24,8 @@ import { ApplicationProgressStepper } from '@/components/recruitment/Application
 import { Separator } from '@/components/ui/separator';
 import { CandidateDocumentsCard } from '@/components/recruitment/CandidateDocumentsCard';
 import { CandidateFitAnalysis } from '@/components/recruitment/CandidateFitAnalysis';
+import { ROLES_INTERNAL } from '@/lib/types';
+import { Lock } from 'lucide-react';
 
 function ApplicationDetailSkeleton() {
   return <Skeleton className="h-[500px] w-full" />;
@@ -100,7 +102,7 @@ function StatusManager({ application }: { application: JobApplication }) {
 }
 
 export default function ApplicationDetailPage() {
-  const hasAccess = useRoleGuard(['hrd', 'super-admin']);
+  const hasAccess = useRoleGuard([...ROLES_INTERNAL]);
   const { userProfile } = useAuth();
   const firestore = useFirestore();
   const params = useParams();
@@ -126,17 +128,44 @@ export default function ApplicationDetailPage() {
   const { data: job, isLoading: isLoadingJob } = useDoc<Job>(jobRef);
 
   const menuConfig = useMemo(() => {
-    if (userProfile?.role === 'super-admin') return MENU_CONFIG['super-admin'];
-    if (userProfile?.role === 'hrd') {
-      return MENU_CONFIG['hrd'];
-    }
-    return [];
+    if (!userProfile) return [];
+    if (userProfile.role === 'super-admin') return MENU_CONFIG['super-admin'];
+    if (userProfile.role === 'hrd') return MENU_CONFIG['hrd'];
+    return MENU_CONFIG[userProfile.role] || [];
   }, [userProfile]);
+
+  const isAssigned = useMemo(() => {
+    if (!userProfile || !application || !job) return false;
+    if (userProfile.role === 'super-admin' || userProfile.role === 'hrd') return true;
+    
+    // Check if user is in allPanelistIds or assigned to job
+    if (application.allPanelistIds?.includes(userProfile.uid)) return true;
+    if (job.assignedUserIds?.includes(userProfile.uid)) return true;
+
+    return false;
+  }, [userProfile, application, job]);
 
   const isLoading = isLoadingApp || isLoadingProfile || isLoadingJob;
 
   if (!hasAccess) {
     return <DashboardLayout pageTitle="Loading..." menuConfig={[]}><ApplicationDetailSkeleton /></DashboardLayout>;
+  }
+
+  if (!isLoading && !isAssigned) {
+    return (
+        <DashboardLayout pageTitle="Akses Ditolak" menuConfig={menuConfig}>
+          <div className="flex flex-col items-center justify-center h-[60vh] text-center space-y-4">
+             <div className="bg-destructive/10 p-4 rounded-full">
+                <Lock className="h-10 w-10 text-destructive" />
+             </div>
+             <h1 className="text-2xl font-bold">Akses Ditolak</h1>
+             <p className="text-muted-foreground max-w-md mx-auto">
+                Anda tidak memiliki akses ke data aplikasi ini.
+             </p>
+             <Button variant="outline" onClick={() => router.back()}>Kembali</Button>
+          </div>
+        </DashboardLayout>
+    );
   }
 
   return (
@@ -202,8 +231,8 @@ export default function ApplicationDetailPage() {
                  </div>
             </CardContent>
           </Card>
-          <CandidateDocumentsCard application={application} />
-          <CandidateFitAnalysis profile={profile} job={job} />
+          <CandidateDocumentsCard profile={profile as any} />
+          <CandidateFitAnalysis profile={profile} job={job} application={application} />
           <ProfileView profile={profile} />
         </div>
       )}
