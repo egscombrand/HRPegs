@@ -160,37 +160,57 @@ export function SelfDescriptionForm({ initialData, onFinish, onBack }: SelfDescr
                 </Alert>
                 <Form {...form}>
                     <form onSubmit={form.handleSubmit(handleSubmit, onInvalid)} className="space-y-8">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        
+                        <section className="space-y-6">
+                            <h3 className="text-lg font-semibold border-b pb-2">Tentang Anda</h3>
                             <FormField control={form.control} name="selfDescription" render={({ field }) => (<FormItem><FormLabel>Ceritakan singkat tentang diri Anda <span className="text-destructive">*</span></FormLabel><FormDescription>Fokus pada karakter, sikap kerja, keunggulan, serta hal yang ingin Anda kembangkan.</FormDescription><FormControl><Textarea {...field} value={field.value ?? ''} rows={5} /></FormControl><FormMessage /></FormItem>)} />
-                            <FormField control={form.control} name="motivation" render={({ field }) => (<FormItem><FormLabel>Motivasi Melamar <span className="text-destructive">*</span></FormLabel><FormDescription>Apa yang membuat Anda tertarik dengan posisi atau bidang ini?</FormDescription><FormControl><Textarea {...field} value={field.value ?? ''} placeholder="Jelaskan motivasi dan alasan yang mendasari Anda untuk bekerja pada bidang/posisi yang Anda pilih." rows={5} /></FormControl><FormMessage /></FormItem>)} />
-                        </div>
+                        </section>
+
+                        <Separator />
                         
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                           <FormField control={form.control} name="salaryExpectation" render={({ field }) => (<FormItem><FormLabel>Ekspektasi Gaji <span className="text-destructive">*</span></FormLabel><FormControl><Input {...field} value={field.value ?? ''} placeholder="Contoh: 5 - 7 Juta atau UMR" /></FormControl><FormMessage /></FormItem>)} />
-                           <FormField control={form.control} name="salaryExpectationReason" render={({ field }) => (<FormItem><FormLabel>Alasan Ekspektasi Gaji <span className="text-destructive">*</span></FormLabel><FormControl><Input {...field} value={field.value ?? ''} placeholder="Ceritakan pertimbangan Anda" /></FormControl><FormMessage /></FormItem>)} />
-                        </div>
+                        <section className="space-y-6">
+                            <h3 className="text-lg font-semibold border-b pb-2">Motivasi & Ekspektasi</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                                <FormField control={form.control} name="motivation" render={({ field }) => (<FormItem><FormLabel>Motivasi Melamar <span className="text-destructive">*</span></FormLabel><FormDescription>Apa yang membuat Anda tertarik dengan posisi atau bidang ini?</FormDescription><FormControl><Textarea {...field} value={field.value ?? ''} placeholder="Jelaskan motivasi dan alasan yang mendasari Anda untuk bekerja pada bidang/posisi yang Anda pilih." rows={5} /></FormControl><FormMessage /></FormItem>)} />
+                                <div className="space-y-4">
+                                    <FormField control={form.control} name="salaryExpectation" render={({ field }) => (<FormItem><FormLabel>Ekspektasi Gaji <span className="text-destructive">*</span></FormLabel><FormControl><Input {...field} value={field.value ?? ''} placeholder="Contoh: 5 - 7 Juta atau UMR" /></FormControl><FormMessage /></FormItem>)} />
+                                    <FormField control={form.control} name="salaryExpectationReason" render={({ field }) => (<FormItem><FormLabel>Alasan Ekspektasi Gaji <span className="text-destructive">*</span></FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} placeholder="Ceritakan pertimbangan Anda" /></FormControl><FormMessage /></FormItem>)} />
+                                </div>
+                            </div>
+                        </section>
+                        
+                        <Separator />
 
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <FormField control={form.control} name="workStyle" render={({ field }) => (<FormItem><FormLabel>Bagaimana gaya kerja Anda? (Opsional)</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} placeholder="Contoh: lebih suka kerja mandiri atau tim, terstruktur atau fleksibel, dll." rows={3} /></FormControl><FormMessage /></FormItem>)} />
-                            <FormField control={form.control} name="improvementArea" render={({ field }) => (<FormItem><FormLabel>Apa satu hal yang ingin Anda tingkatkan? (Opsional)</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} placeholder="Contoh: meningkatkan komunikasi, manajemen waktu, atau skill teknis tertentu" rows={3} /></FormControl><FormMessage /></FormItem>)} />
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <FormField control={form.control} name="availability" render={({ field }) => (<FormItem><FormLabel>Kapan Anda dapat mulai bergabung? <span className="text-destructive">*</span></FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Pilih ketersediaan" /></SelectTrigger></FormControl><SelectContent>{availabilityOptions.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
-                            {availability === 'Lainnya' && (
-                                <FormField control={form.control} name="availabilityOther" render={({ field }) => (<FormItem><FormLabel>Sebutkan waktu ketersediaan Anda <span className="text-destructive">*</span></FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
+                        <section className="space-y-6">
+                            <h3 className="text-lg font-semibold border-b pb-2">Gaya Kerja & Pengembangan Diri</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <FormField control={form.control} name="workStyle" render={({ field }) => (<FormItem><FormLabel>Bagaimana gaya kerja Anda? (Opsional)</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} placeholder="Contoh: lebih suka kerja mandiri atau tim, terstruktur atau fleksibel, dll." rows={3} /></FormControl><FormMessage /></FormItem>)} />
+                                <FormField control={form.control} name="improvementArea" render={({ field }) => (<FormItem><FormLabel>Apa satu hal yang ingin Anda tingkatkan dari diri Anda saat ini? (Opsional)</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} placeholder="Contoh: meningkatkan komunikasi, manajemen waktu, atau skill teknis tertentu" rows={3} /></FormControl><FormMessage /></FormItem>)} />
+                            </div>
+                        </section>
+                        
+                        <Separator />
+                        
+                        <section className="space-y-6">
+                             <h3 className="text-lg font-semibold border-b pb-2">Kesiapan Kerja</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <FormField control={form.control} name="availability" render={({ field }) => (<FormItem><FormLabel>Kapan Anda dapat mulai bergabung? <span className="text-destructive">*</span></FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Pilih ketersediaan" /></SelectTrigger></FormControl><SelectContent>{availabilityOptions.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
+                                {availability === 'Lainnya' && (
+                                    <FormField control={form.control} name="availabilityOther" render={({ field }) => (<FormItem><FormLabel>Sebutkan waktu ketersediaan Anda <span className="text-destructive">*</span></FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
+                                )}
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <FormField control={form.control} name="usedToDeadline" render={({ field }) => (<FormItem><FormLabel>Apakah Anda terbiasa bekerja dengan target/deadline? <span className="text-destructive">*</span></FormLabel><FormControl><RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4 pt-2"><FormItem className="flex items-center space-x-2 space-y-0"><FormControl><RadioGroupItem value="ya" /></FormControl><FormLabel className="font-normal">Ya</FormLabel></FormItem><FormItem className="flex items-center space-x-2 space-y-0"><FormControl><RadioGroupItem value="tidak" /></FormControl><FormLabel className="font-normal">Tidak</FormLabel></FormItem></RadioGroup></FormControl><FormMessage /></FormItem>)} />
+                            </div>
+                            
+                            {usedToDeadline === 'ya' && (
+                                 <FormField control={form.control} name="deadlineExperience" render={({ field }) => (<FormItem><FormLabel>Ceritakan pengalaman Anda dengan target <span className="text-destructive">*</span></FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} placeholder="Ceritakan bagaimana Anda mengelola tekanan dan prioritas untuk memenuhi deadline." rows={4} /></FormControl><FormMessage /></FormItem>)} />
                             )}
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <FormField control={form.control} name="usedToDeadline" render={({ field }) => (<FormItem><FormLabel>Apakah Anda terbiasa bekerja dengan target/deadline? <span className="text-destructive">*</span></FormLabel><FormControl><RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4 pt-2"><FormItem className="flex items-center space-x-2 space-y-0"><FormControl><RadioGroupItem value="ya" /></FormControl><FormLabel className="font-normal">Ya</FormLabel></FormItem><FormItem className="flex items-center space-x-2 space-y-0"><FormControl><RadioGroupItem value="tidak" /></FormControl><FormLabel className="font-normal">Tidak</FormLabel></FormItem></RadioGroup></FormControl><FormMessage /></FormItem>)} />
-                        </div>
+                        </section>
                         
-                        {usedToDeadline === 'ya' && (
-                             <FormField control={form.control} name="deadlineExperience" render={({ field }) => (<FormItem><FormLabel>Ceritakan pengalaman Anda bekerja dengan target <span className="text-destructive">*</span></FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} placeholder="Ceritakan bagaimana Anda mengelola tekanan dan prioritas untuk memenuhi deadline." rows={4} /></FormControl><FormMessage /></FormItem>)} />
-                        )}
+                        <Separator />
 
-                        <div className="space-y-4 rounded-lg border-2 border-amber-200 bg-amber-50/50 p-6 dark:border-amber-900/50 dark:bg-amber-950/20 !mt-12">
+                        <section className="space-y-4 rounded-lg border-2 border-amber-200 bg-amber-50/50 p-6 dark:border-amber-900/50 dark:bg-amber-950/20">
                             <div className="flex items-start gap-4">
                                 <ShieldCheck className="h-6 w-6 flex-shrink-0 text-amber-600" />
                                 <div>
@@ -222,7 +242,7 @@ export function SelfDescriptionForm({ initialData, onFinish, onBack }: SelfDescr
                                     </FormItem>
                                 )}
                             />
-                        </div>
+                        </section>
 
 
                         <div className="flex justify-between pt-4">
