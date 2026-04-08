@@ -131,15 +131,6 @@ export default function RecruitmentApplicantsPage() {
             </Button>
         </div>
         
-        {job && (userProfile?.role === 'hrd' || userProfile?.role === 'super-admin') && (
-            <AssignedUsersCard 
-                job={job} 
-                allUsers={assignableUsers}
-                allBrands={brands || []}
-                onUpdate={mutateJob} 
-            />
-        )}
-        
         <ApplicantsPageClient 
           applications={applications || []} 
           job={job}
