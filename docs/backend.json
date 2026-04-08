@@ -600,7 +600,8 @@
                         },
                         "startDate": { "type": "string" },
                         "endDate": { "type": "string" },
-                        "isCurrent": { "type": "boolean" }
+                        "isCurrent": { "type": "boolean" },
+                        "thesisTitle": { "type": "string", "description": "Judul karya ilmiah (skripsi, tesis, dll)." }
                     },
                     "required": ["id", "institution", "level", "startDate"]
                 }
@@ -666,9 +667,38 @@
               "type": "string",
               "description": "The candidate's expected salary range or value."
             },
+            "salaryExpectationReason": {
+                "type": "string",
+                "description": "The candidate's reasoning for their salary expectation."
+            },
             "motivation": {
               "type": "string",
               "description": "The candidate's motivation and reasons for choosing the desired position."
+            },
+            "workStyle": {
+                "type": "string",
+                "description": "Candidate's preferred working style (e.g., independent, team-based)."
+            },
+            "improvementArea": {
+                "type": "string",
+                "description": "One thing the candidate wants to improve about themselves."
+            },
+            "availability": {
+                "type": "string",
+                "description": "When the candidate can start working.",
+                "enum": ["Secepatnya", "1 minggu", "2 minggu", "1 bulan", "3 bulan", "6 bulan", "Lainnya"]
+            },
+            "availabilityOther": {
+                "type": "string",
+                "description": "Details if 'Lainnya' is selected for availability."
+            },
+            "usedToDeadline": {
+                "type": "boolean",
+                "description": "Indicates if the candidate is used to working with targets or deadlines."
+            },
+            "deadlineExperience": {
+                "type": "string",
+                "description": "Candidate's experience with working under deadlines."
             },
             "declaration": {
               "type": "boolean",
@@ -694,7 +724,7 @@
               "description": "Timestamp when the profile was marked as complete."
             }
         },
-        "required": ["fullName", "nickname", "email", "phone", "eKtpNumber", "gender", "birthPlace", "birthDate", "addressKtp", "willingToWfo", "education", "declaration"]
+        "required": ["fullName", "nickname", "email", "phone", "eKtpNumber", "gender", "birthPlace", "birthDate", "addressKtp", "willingToWfo", "education", "selfDescription", "salaryExpectation", "salaryExpectationReason", "motivation", "availability", "usedToDeadline"]
     },
     "Assessment": {
       "title": "Assessment",

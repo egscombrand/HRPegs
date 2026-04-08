@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from '@/components/ui/button';
-import { Loader2, Info } from 'lucide-react';
+import { Loader2, Info, ShieldCheck } from 'lucide-react';
 import { Textarea } from '../ui/textarea';
 import { useState } from 'react';
 import { useAuth } from '@/providers/auth-provider';
@@ -33,7 +33,7 @@ const formSchema = z.object({
   usedToDeadline: z.enum(['ya', 'tidak'], { required_error: 'Pilihan ini harus diisi.' }),
   deadlineExperience: z.string().optional(),
   declaration: z.literal(true, {
-    errorMap: () => ({ message: "Anda harus menyetujui pernyataan ini untuk menyelesaikan profil." }),
+    errorMap: () => ({ message: "Anda harus menyetujui pernyataan ini sebelum melanjutkan." }),
   }),
 }).refine((data) => {
     if (data.usedToDeadline === 'ya' && (!data.deadlineExperience || data.deadlineExperience.length < 10)) {
@@ -140,20 +140,22 @@ export function SelfDescriptionForm({ initialData, onFinish, onBack }: SelfDescr
             <CardContent>
                  <Alert className="mb-8">
                     <Info className="h-4 w-4" />
-                    <AlertDescription>
-                        Meskipun beberapa kolom bersifat opsional, kami menyarankan Anda mengisinya secara lengkap agar tim rekrutmen dapat memahami profil Anda secara lebih menyeluruh.
+                     <AlertDescription>
+                       Meskipun beberapa kolom bersifat opsional, kami menyarankan Anda mengisinya secara lengkap agar tim rekrutmen dapat memahami profil Anda secara lebih menyeluruh.
                     </AlertDescription>
                 </Alert>
                 <Form {...form}>
                     <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-8">
-                        <FormField control={form.control} name="selfDescription" render={({ field }) => (<FormItem><FormLabel>Ceritakan singkat tentang diri Anda <span className="text-destructive">*</span></FormLabel><FormDescription>Fokus pada karakter, sikap kerja, keunggulan, serta hal yang ingin Anda kembangkan.</FormDescription><FormControl><Textarea {...field} value={field.value ?? ''} rows={5} /></FormControl><FormMessage /></FormItem>)} />
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <FormField control={form.control} name="selfDescription" render={({ field }) => (<FormItem><FormLabel>Ceritakan singkat tentang diri Anda <span className="text-destructive">*</span></FormLabel><FormDescription>Fokus pada karakter, sikap kerja, keunggulan, serta hal yang ingin Anda kembangkan.</FormDescription><FormControl><Textarea {...field} value={field.value ?? ''} rows={5} /></FormControl><FormMessage /></FormItem>)} />
+                            <FormField control={form.control} name="motivation" render={({ field }) => (<FormItem><FormLabel>Motivasi Melamar <span className="text-destructive">*</span></FormLabel><FormDescription>Apa yang membuat Anda tertarik dengan posisi atau bidang ini?</FormDescription><FormControl><Textarea {...field} value={field.value ?? ''} placeholder="Jelaskan motivasi dan alasan yang mendasari Anda untuk bekerja pada bidang/posisi yang Anda pilih." rows={5} /></FormControl><FormMessage /></FormItem>)} />
+                        </div>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                            <FormField control={form.control} name="salaryExpectation" render={({ field }) => (<FormItem><FormLabel>Ekspektasi Gaji <span className="text-destructive">*</span></FormLabel><FormControl><Input {...field} value={field.value ?? ''} placeholder="Contoh: 5 - 7 Juta atau UMR" /></FormControl><FormMessage /></FormItem>)} />
                            <FormField control={form.control} name="salaryExpectationReason" render={({ field }) => (<FormItem><FormLabel>Alasan Ekspektasi Gaji <span className="text-destructive">*</span></FormLabel><FormControl><Input {...field} value={field.value ?? ''} placeholder="Ceritakan pertimbangan Anda" /></FormControl><FormMessage /></FormItem>)} />
                         </div>
 
-                        <FormField control={form.control} name="motivation" render={({ field }) => (<FormItem><FormLabel>Motivasi Melamar <span className="text-destructive">*</span></FormLabel><FormDescription>Apa yang membuat Anda tertarik dengan posisi atau bidang ini?</FormDescription><FormControl><Textarea {...field} value={field.value ?? ''} placeholder="Jelaskan motivasi dan alasan yang mendasari Anda untuk bekerja pada bidang/posisi yang Anda pilih." rows={5} /></FormControl><FormMessage /></FormItem>)} />
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <FormField control={form.control} name="workStyle" render={({ field }) => (<FormItem><FormLabel>Bagaimana gaya kerja Anda? (Opsional)</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} placeholder="Contoh: lebih suka kerja mandiri atau tim, terstruktur atau fleksibel, dll." rows={3} /></FormControl><FormMessage /></FormItem>)} />
@@ -174,27 +176,40 @@ export function SelfDescriptionForm({ initialData, onFinish, onBack }: SelfDescr
                              <FormField control={form.control} name="deadlineExperience" render={({ field }) => (<FormItem><FormLabel>Ceritakan pengalaman Anda bekerja dengan target <span className="text-destructive">*</span></FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} placeholder="Ceritakan bagaimana Anda mengelola tekanan dan prioritas untuk memenuhi deadline." rows={4} /></FormControl><FormMessage /></FormItem>)} />
                         )}
 
-                        <FormField
-                            control={form.control}
-                            name="declaration"
-                            render={({ field }) => (
-                                <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm !mt-12">
-                                <FormControl>
-                                    <Checkbox
-                                    checked={field.value}
-                                    onCheckedChange={field.onChange}
-                                    />
-                                </FormControl>
-                                <div className="space-y-1 leading-none">
-                                    <FormLabel>Pernyataan Kebenaran Data <span className="text-destructive">*</span></FormLabel>
-                                    <FormDescription>
-                                        Saya menyatakan dengan sesungguhnya bahwa seluruh data yang saya berikan adalah benar dan dapat dipertanggungjawabkan.
-                                    </FormDescription>
-                                    <FormMessage />
+                        <div className="space-y-4 rounded-lg border-2 border-amber-200 bg-amber-50/50 p-6 dark:border-amber-900/50 dark:bg-amber-950/20 !mt-12">
+                            <div className="flex items-start gap-4">
+                                <ShieldCheck className="h-6 w-6 flex-shrink-0 text-amber-600" />
+                                <div>
+                                    <h4 className="font-semibold text-amber-900 dark:text-amber-200">Pernyataan Kebenaran Data</h4>
+                                    <p className="text-sm text-amber-800/90 dark:text-amber-300/90 mt-2">
+                                        Dengan ini saya menyatakan bahwa seluruh data dan dokumen yang saya berikan adalah benar, akurat, dan dapat dipertanggungjawabkan. Saya bersedia menerima konsekuensi apabila di kemudian hari ditemukan ketidaksesuaian atau informasi yang tidak benar.
+                                    </p>
                                 </div>
-                                </FormItem>
-                            )}
-                        />
+                            </div>
+                            <Separator className="bg-amber-200 dark:bg-amber-900/50" />
+                            <FormField
+                                control={form.control}
+                                name="declaration"
+                                render={({ field }) => (
+                                    <FormItem className="flex flex-row items-center space-x-3 space-y-0 pt-2">
+                                        <FormControl>
+                                            <Checkbox
+                                                checked={field.value}
+                                                onCheckedChange={field.onChange}
+                                                id="declaration-checkbox"
+                                            />
+                                        </FormControl>
+                                        <div className="space-y-1 leading-none">
+                                            <FormLabel htmlFor="declaration-checkbox" className="cursor-pointer font-medium text-amber-900 dark:text-amber-200">
+                                                Saya telah membaca dan menyetujui pernyataan di atas
+                                            </FormLabel>
+                                            <FormMessage />
+                                        </div>
+                                    </FormItem>
+                                )}
+                            />
+                        </div>
+
 
                         <div className="flex justify-between pt-4">
                             <Button type="button" variant="secondary" onClick={onBack}>
