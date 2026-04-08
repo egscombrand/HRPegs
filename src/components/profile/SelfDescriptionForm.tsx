@@ -23,9 +23,12 @@ const availabilityOptions = ['Secepatnya', '1 minggu', '2 minggu', '1 bulan', '3
 const formSchema = z.object({
   selfDescription: z.string().min(20, { message: "Deskripsi diri harus diisi, minimal 20 karakter." }),
   salaryExpectation: z.string().min(1, { message: "Ekspektasi gaji harus diisi." }),
-  salaryExpectationReason: z.string().optional(),
+  salaryExpectationReason: z.string().min(10, { message: "Alasan ekspektasi gaji harus diisi (minimal 10 karakter)." }),
   motivation: z.string().min(20, { message: "Motivasi dan alasan harus diisi, minimal 20 karakter." }),
+  workStyle: z.string().optional(),
+  improvementArea: z.string().optional(),
   availability: z.enum(availabilityOptions, { required_error: 'Ketersediaan harus dipilih.' }),
+  availabilityOther: z.string().optional(),
   usedToDeadline: z.enum(['ya', 'tidak'], { required_error: 'Pilihan ini harus diisi.' }),
   deadlineExperience: z.string().optional(),
   declaration: z.literal(true, {
@@ -39,6 +42,9 @@ const formSchema = z.object({
 }, {
     message: 'Ceritakan pengalaman Anda dengan target/deadline (minimal 10 karakter).',
     path: ['deadlineExperience'],
+}).refine(data => data.availability === 'Lainnya' ? (data.availabilityOther && data.availabilityOther.length > 0) : true, {
+    message: "Harap sebutkan waktu ketersediaan Anda.",
+    path: ["availabilityOther"],
 });
 
 
@@ -50,7 +56,10 @@ interface SelfDescriptionFormProps {
         salaryExpectation?: string;
         salaryExpectationReason?: string;
         motivation?: string;
+        workStyle?: string;
+        improvementArea?: string;
         availability?: typeof availabilityOptions[number];
+        availabilityOther?: string;
         usedToDeadline?: boolean;
         deadlineExperience?: string;
     };
@@ -71,7 +80,10 @@ export function SelfDescriptionForm({ initialData, onFinish, onBack }: SelfDescr
             salaryExpectation: initialData?.salaryExpectation || '',
             salaryExpectationReason: initialData?.salaryExpectationReason || '',
             motivation: initialData?.motivation || '',
+            workStyle: initialData?.workStyle || '',
+            improvementArea: initialData?.improvementArea || '',
             availability: initialData?.availability,
+            availabilityOther: initialData?.availabilityOther || '',
             usedToDeadline: initialData?.usedToDeadline === true ? 'ya' : (initialData?.usedToDeadline === false ? 'tidak' : undefined),
             deadlineExperience: initialData?.deadlineExperience || '',
             declaration: false,
@@ -79,6 +91,7 @@ export function SelfDescriptionForm({ initialData, onFinish, onBack }: SelfDescr
     });
 
     const usedToDeadline = form.watch('usedToDeadline');
+    const availability = form.watch('availability');
 
     const handleSubmit = async (values: FormValues) => {
         if (!firebaseUser) {
@@ -126,17 +139,27 @@ export function SelfDescriptionForm({ initialData, onFinish, onBack }: SelfDescr
             <CardContent>
                 <Form {...form}>
                     <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-8">
-                        <FormField control={form.control} name="selfDescription" render={({ field }) => (<FormItem><FormLabel>Ceritakan singkat tentang diri Anda <span className="text-destructive">*</span></FormLabel><FormDescription>Fokus pada karakter, sikap kerja, keunggulan, serta hal yang ingin Anda kembangkan.</FormDescription><FormControl><Textarea {...field} value={field.value ?? ''} rows={6} /></FormControl><FormMessage /></FormItem>)} />
+                        <FormField control={form.control} name="selfDescription" render={({ field }) => (<FormItem><FormLabel>Ceritakan singkat tentang diri Anda <span className="text-destructive">*</span></FormLabel><FormDescription>Fokus pada karakter, sikap kerja, keunggulan, serta hal yang ingin Anda kembangkan.</FormDescription><FormControl><Textarea {...field} value={field.value ?? ''} rows={5} /></FormControl><FormMessage /></FormItem>)} />
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <FormField control={form.control} name="salaryExpectation" render={({ field }) => (<FormItem><FormLabel>Ekspektasi Gaji <span className="text-destructive">*</span></FormLabel><FormControl><Input {...field} value={field.value ?? ''} placeholder="Contoh: 5 - 7 Juta atau UMR" /></FormControl><FormMessage /></FormItem>)} />
-                            <FormField control={form.control} name="salaryExpectationReason" render={({ field }) => (<FormItem><FormLabel>Alasan Ekspektasi Gaji (Opsional)</FormLabel><FormControl><Input {...field} value={field.value ?? ''} placeholder="Contoh: Berdasarkan riset dan pengalaman..." /></FormControl><FormMessage /></FormItem>)} />
+                           <FormField control={form.control} name="salaryExpectation" render={({ field }) => (<FormItem><FormLabel>Ekspektasi Gaji <span className="text-destructive">*</span></FormLabel><FormControl><Input {...field} value={field.value ?? ''} placeholder="Contoh: 5 - 7 Juta atau UMR" /></FormControl><FormMessage /></FormItem>)} />
+                           <FormField control={form.control} name="salaryExpectationReason" render={({ field }) => (<FormItem><FormLabel>Alasan Ekspektasi Gaji <span className="text-destructive">*</span></FormLabel><FormControl><Input {...field} value={field.value ?? ''} placeholder="Ceritakan pertimbangan Anda" /></FormControl><FormMessage /></FormItem>)} />
                         </div>
 
-                        <FormField control={form.control} name="motivation" render={({ field }) => (<FormItem><FormLabel>Motivasi Melamar <span className="text-destructive">*</span></FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} placeholder="Jelaskan motivasi dan alasan yang mendasari Anda untuk bekerja pada bidang/posisi yang Anda pilih." rows={6} /></FormControl><FormMessage /></FormItem>)} />
+                        <FormField control={form.control} name="motivation" render={({ field }) => (<FormItem><FormLabel>Motivasi Melamar <span className="text-destructive">*</span></FormLabel><FormDescription>Apa yang membuat Anda tertarik dengan posisi atau bidang ini?</FormDescription><FormControl><Textarea {...field} value={field.value ?? ''} placeholder="Jelaskan motivasi dan alasan yang mendasari Anda untuk bekerja pada bidang/posisi yang Anda pilih." rows={5} /></FormControl><FormMessage /></FormItem>)} />
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <FormField control={form.control} name="workStyle" render={({ field }) => (<FormItem><FormLabel>Bagaimana gaya kerja Anda?</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} placeholder="Contoh: lebih suka kerja mandiri atau tim, terstruktur atau fleksibel, dll." rows={3} /></FormControl><FormMessage /></FormItem>)} />
+                            <FormField control={form.control} name="improvementArea" render={({ field }) => (<FormItem><FormLabel>Apa satu hal yang ingin Anda tingkatkan?</FormLabel><FormControl><Textarea {...field} value={field.value ?? ''} placeholder="Contoh: meningkatkan komunikasi, manajemen waktu, atau skill teknis tertentu" rows={3} /></FormControl><FormMessage /></FormItem>)} />
+                        </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <FormField control={form.control} name="availability" render={({ field }) => (<FormItem><FormLabel>Kapan Anda dapat mulai bergabung? <span className="text-destructive">*</span></FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Pilih ketersediaan" /></SelectTrigger></FormControl><SelectContent>{availabilityOptions.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
+                            {availability === 'Lainnya' && (
+                                <FormField control={form.control} name="availabilityOther" render={({ field }) => (<FormItem><FormLabel>Sebutkan waktu ketersediaan Anda <span className="text-destructive">*</span></FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
+                            )}
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <FormField control={form.control} name="usedToDeadline" render={({ field }) => (<FormItem><FormLabel>Apakah Anda terbiasa bekerja dengan target/deadline? <span className="text-destructive">*</span></FormLabel><FormControl><RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4 pt-2"><FormItem className="flex items-center space-x-2 space-y-0"><FormControl><RadioGroupItem value="ya" /></FormControl><FormLabel className="font-normal">Ya</FormLabel></FormItem><FormItem className="flex items-center space-x-2 space-y-0"><FormControl><RadioGroupItem value="tidak" /></FormControl><FormLabel className="font-normal">Tidak</FormLabel></FormItem></RadioGroup></FormControl><FormMessage /></FormItem>)} />
                         </div>
                         

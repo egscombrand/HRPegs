@@ -457,7 +457,10 @@ export type Profile = {
     salaryExpectation?: string;
     salaryExpectationReason?: string;
     motivation?: string;
+    workStyle?: string;
+    improvementArea?: string;
     availability?: 'Secepatnya' | '1 minggu' | '2 minggu' | '1 bulan' | '3 bulan' | '6 bulan' | 'Lainnya';
+    availabilityOther?: string;
     usedToDeadline?: boolean;
     deadlineExperience?: string;
 

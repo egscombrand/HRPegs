@@ -291,7 +291,7 @@ export function ProfilePreview({
                      {profile.certifications && profile.certifications.length > 0 ? (
                          <div className="space-y-2 rounded-md border p-2">
                              {profile.certifications.map((cert, i) => (
-                                 <CertificationView key={i} item={cert} />
+                                 <CertificationView key={cert.id || i} item={cert} />
                              ))}
                          </div>
                      ) : <p className="text-sm text-muted-foreground">Belum diisi.</p>}
@@ -308,7 +308,9 @@ export function ProfilePreview({
                     <InfoRow label="Ekspektasi Gaji" value={profile.salaryExpectation} />
                     <InfoRow label="Alasan Ekspektasi Gaji" value={profile.salaryExpectationReason} />
                     <InfoRow label="Motivasi Melamar" value={profile.motivation} />
-                    <InfoRow label="Ketersediaan" value={profile.availability} />
+                    <InfoRow label="Gaya Kerja" value={profile.workStyle} />
+                    <InfoRow label="Area Pengembangan" value={profile.improvementArea} />
+                    <InfoRow label="Ketersediaan" value={profile.availability === 'Lainnya' ? profile.availabilityOther : profile.availability} />
                     <InfoRow label="Bekerja dengan Target" value={profile.usedToDeadline ? 'Ya' : 'Tidak'} />
                     {profile.usedToDeadline && (
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 py-1.5">
