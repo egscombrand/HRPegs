@@ -77,8 +77,17 @@ export function EducationForm({ initialData, onSaveSuccess, onBack }: EducationF
         }
         setIsSaving(true);
         try {
+            // Sanitize data before sending to Firestore to prevent 'undefined' values.
+            const sanitizedEducation = values.education.map(edu => ({
+                ...edu,
+                fieldOfStudy: edu.fieldOfStudy || null,
+                thesisTitle: edu.thesisTitle || null,
+                gpa: edu.gpa || null,
+                endDate: edu.endDate || null,
+            }));
+
             const payload = {
-                education: values.education,
+                education: sanitizedEducation,
                 profileStatus: 'draft',
                 profileStep: 3,
                 updatedAt: serverTimestamp() as Timestamp,

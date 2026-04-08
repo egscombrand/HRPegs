@@ -66,8 +66,14 @@ export function OrganizationalExperienceForm({ initialData, onSaveSuccess, onBac
         }
         setIsSaving(true);
         try {
+            const sanitizedExperience = values.experience.map(exp => ({
+                ...exp,
+                endDate: exp.endDate || null,
+                description: exp.description || null,
+            }));
+
             const payload = {
-                organizationalExperience: values.experience,
+                organizationalExperience: sanitizedExperience,
                 profileStatus: 'draft',
                 profileStep: 5,
                 updatedAt: serverTimestamp() as Timestamp,

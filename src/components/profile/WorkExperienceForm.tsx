@@ -72,8 +72,15 @@ export function WorkExperienceForm({ initialData, onSaveSuccess, onBack }: WorkE
         }
         setIsSaving(true);
         try {
+            const sanitizedExperience = values.experience.map(exp => ({
+                ...exp,
+                endDate: exp.endDate || null,
+                description: exp.description || null,
+                reasonForLeaving: exp.reasonForLeaving || null,
+            }));
+
             const payload = {
-                workExperience: values.experience,
+                workExperience: sanitizedExperience,
                 profileStatus: 'draft',
                 profileStep: 4,
                 updatedAt: serverTimestamp() as Timestamp,
