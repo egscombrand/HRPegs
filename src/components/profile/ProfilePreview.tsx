@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Edit, User, Home, BookOpen, Briefcase, Sparkles, Building, Info as InfoIcon, Eye, EyeOff, Banknote } from 'lucide-react';
+import { Edit, User, Home, BookOpen, Briefcase, Sparkles, Building, Info as InfoIcon, Eye, EyeOff, Banknote, Lock, Loader2 } from 'lucide-react';
 import type {
   Profile,
   Address,
@@ -19,9 +19,15 @@ import type {
   WorkExperience,
   OrganizationalExperience,
   Certification,
+  JobApplication,
+  JobApplicationStatus,
 } from '@/lib/types';
 import { format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
+import { useAuth } from '@/providers/auth-provider';
+import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import { collection, query, where } from 'firebase/firestore';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 // Helper to mask NIK for display
 const maskNik = (nik?: string): string => {
@@ -121,11 +127,33 @@ export function ProfilePreview({
   profile: Profile;
   onEditRequest: (step: number) => void;
 }) {
+  const { userProfile } = useAuth();
+  const firestore = useFirestore();
+
+  const applicationsQuery = useMemoFirebase(() => {
+    if (!userProfile?.uid) return null;
+    return query(
+      collection(firestore, 'applications'),
+      where('candidateUid', '==', userProfile.uid)
+    );
+  }, [userProfile?.uid, firestore]);
+
+  const { data: applications, isLoading: isLoadingApps } = useCollection<JobApplication>(applicationsQuery);
+
+  const isProfileLocked = React.useMemo(() => {
+    if (!applications) return false;
+    const lockStages: JobApplicationStatus[] = ['screening', 'tes_kepribadian', 'verification', 'document_submission', 'interview', 'offered', 'hired'];
+    return applications.some(app => lockStages.includes(app.status));
+  }, [applications]);
+
   const isProfileComplete = profile.profileStatus === 'completed';
   const nextStep = profile.profileStep || 1;
   const [isNikVisible, setIsNikVisible] = React.useState(false);
 
   const handleCTAClick = () => {
+    if (isProfileLocked) {
+      return;
+    }
     if (isProfileComplete) {
       onEditRequest(1);
     } else {
@@ -135,11 +163,9 @@ export function ProfilePreview({
 
   const birthDateValue = React.useMemo(() => {
     if (!profile.birthDate) return '-';
-    // Check if it's a Firebase Timestamp-like object
     if (typeof (profile.birthDate as any).toDate === 'function') {
       return format((profile.birthDate as any).toDate(), 'dd MMMM yyyy', { locale: idLocale });
     }
-    // Handle string date
     if (typeof profile.birthDate === 'string') {
       const date = new Date(profile.birthDate);
       if (!isNaN(date.getTime())) {
@@ -149,8 +175,19 @@ export function ProfilePreview({
     return 'Invalid Date';
   }, [profile.birthDate]);
 
+  const LockAlert = () => (
+    <Alert variant="default" className="mb-6 bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-800">
+      <Lock className="h-4 w-4 text-amber-600" />
+      <AlertTitle className="text-amber-800 dark:text-amber-200">Profil Dikunci</AlertTitle>
+      <AlertDescription className="text-amber-700 dark:text-amber-300">
+        Profil Anda telah dikunci karena sedang dalam tahap seleksi lanjutan. Perubahan data tidak dapat dilakukan saat ini.
+      </AlertDescription>
+    </Alert>
+  );
+
   return (
     <div className="space-y-6">
+      {isProfileLocked && <LockAlert />}
       <Card>
         <CardHeader>
           <div className="flex justify-between items-start">
@@ -164,8 +201,8 @@ export function ProfilePreview({
                 <Badge variant={isProfileComplete ? 'default' : 'secondary'}>
                     {isProfileComplete ? 'Lengkap' : 'Draf'}
                 </Badge>
-                <Button onClick={handleCTAClick}>
-                    <Edit className="mr-2 h-4 w-4" />
+                <Button onClick={handleCTAClick} disabled={isProfileLocked || isLoadingApps}>
+                    {isLoadingApps ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Edit className="mr-2 h-4 w-4" />}
                     {isProfileComplete ? 'Perbarui Profil' : 'Lanjutkan Pengisian'}
                 </Button>
             </div>
