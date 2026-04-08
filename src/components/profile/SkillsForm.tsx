@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, ChangeEvent, useEffect, useRef } from 'react';
+import { useState, useCallback, ChangeEvent, useEffect, useRef, useMemo } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Loader2, X, PlusCircle, Trash2, FileUp, Eye, Globe, Info } from 'lucide-react';
+import { Loader2, X, PlusCircle, Trash2, FileUp, Eye, Globe, Info, Edit, FileText } from 'lucide-react';
 import { Separator } from '../ui/separator';
 import { useAuth } from '@/providers/auth-provider';
 import { useFirestore, setDocumentNonBlocking } from '@/firebase';
@@ -18,13 +18,14 @@ import { useToast } from '@/hooks/use-toast';
 import { Progress } from '../ui/progress';
 import { Alert, AlertDescription } from '../ui/alert';
 import { cn } from '@/lib/utils';
-
+import Image from 'next/image';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 const certificationSchema = z.object({
   id: z.string(),
   name: z.string().min(1, "Nama sertifikasi harus diisi"),
   organization: z.string().min(1, "Nama organisasi harus diisi"),
-  issueDate: z.string().regex(/^\d{4}-\d{2}$/, { message: "Gunakan format YYYY-MM" }),
+  issueDate: z.string().regex(/^\d{4}-\d{2}$/, { message: "Format YYYY-MM harus diisi" }),
   expirationDate: z.string().regex(/^\d{4}-\d{2}$/, { message: "Gunakan format YYYY-MM" }).optional().or(z.literal('')),
   imageUrl: z.string().optional().or(z.literal('')),
 });
@@ -51,30 +52,31 @@ interface FileUploadFieldProps {
 function FileUploadField({ label, value, onChange, userId, pathPrefix, required = false }: FileUploadFieldProps) {
     const [isUploading, setIsUploading] = useState(false);
     const [progress, setProgress] = useState(0);
-    const [useLink, setUseLink] = useState(!!value && !value.includes('firebasestorage'));
     const [fileName, setFileName] = useState<string | null>(null);
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
-        if (value && value.includes('firebasestorage')) {
+        if (value) {
             try {
                 const url = new URL(value);
-                const pathParts = decodeURIComponent(url.pathname).split('/');
-                const lastPart = pathParts[pathParts.length - 1];
-                const name = lastPart.split('?')[0].split('_').slice(2).join('_');
-                setFileName(name || 'File terunggah');
+                if (url.hostname.includes('firebasestorage.googleapis.com')) {
+                    const pathParts = decodeURIComponent(url.pathname).split('/');
+                    const lastPart = pathParts[pathParts.length - 1];
+                    const name = lastPart.split('?')[0].split('_').slice(2).join('_');
+                    setFileName(name || 'File terunggah');
+                } else {
+                    setFileName(url.pathname.split('/').pop() || 'Link eksternal');
+                }
             } catch (e) {
-                setFileName('File terunggah');
+                setFileName('Link eksternal');
             }
-        } else if (value && !value.includes('firebasestorage')) {
-            setFileName(value);
         } else {
             setFileName(null);
         }
     }, [value]);
 
-    const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
@@ -108,35 +110,101 @@ function FileUploadField({ label, value, onChange, userId, pathPrefix, required 
         );
     };
 
+    const isImage = value && /\.(jpg|jpeg|png|webp|gif)$/i.test(new URL(value).pathname);
+
     return (
-        <div className="space-y-2">
-            <div className="flex items-center justify-between">
-                <FormLabel className="text-sm font-semibold">{label} {required && <span className="text-destructive">*</span>}</FormLabel>
-                <Button type="button" variant="link" size="sm" className="text-xs h-7" onClick={() => setUseLink(!useLink)}>
-                    {useLink ? 'Gunakan Upload File' : 'Gunakan Link External'}
-                </Button>
-            </div>
-            {useLink ? (
-                <div className="flex gap-2 items-center">
-                    <Input placeholder="Tempel link Google Drive / Dropbox" value={value || ''} onChange={(e) => onChange(e.target.value)} className="h-9" />
+        <FormItem>
+            <FormLabel>{label} {required && <span className="text-destructive">*</span>}</FormLabel>
+            {value ? (
+                <div className="space-y-2">
+                    <div className="flex items-center gap-3 p-2 border rounded-lg bg-muted/50">
+                        {isImage ? (
+                            <Image src={value} alt="Preview" width={40} height={40} className="rounded-md object-cover aspect-square" />
+                        ) : (
+                            <FileText className="h-8 w-8 text-muted-foreground flex-shrink-0" />
+                        )}
+                        <p className="text-sm font-medium truncate flex-1" title={fileName || ''}>{fileName || 'File terunggah'}</p>
+                        <div className="flex items-center gap-1">
+                            <Button type="button" variant="ghost" size="icon" className="h-8 w-8" asChild>
+                                <a href={value} target="_blank" rel="noopener noreferrer" title="Lihat File">
+                                    <Eye className="h-4 w-4" />
+                                </a>
+                            </Button>
+                            <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => onChange('')} title="Hapus File">
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    </div>
+                     <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
+                        {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <FileUp className="mr-2 h-4 w-4" />}
+                        Ganti File
+                    </Button>
                 </div>
             ) : (
                 <div className="space-y-2">
                     <div className="flex items-center gap-2">
-                        <label htmlFor={`${pathPrefix}-upload`} className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), "h-9 cursor-pointer border-primary text-primary hover:bg-primary/10")}>
-                           <FileUp className="mr-2 h-4 w-4" /> Unggah File
-                        </label>
-                        <div className="flex-1 text-sm text-muted-foreground truncate">
-                            {fileName || 'Belum ada file dipilih'}
-                        </div>
-                        <Input id={`${pathPrefix}-upload`} ref={fileInputRef} type="file" className="hidden" onChange={handleFileChange} accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" disabled={isUploading}/>
+                       <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
+                          {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <FileUp className="mr-2 h-4 w-4" />}
+                          Unggah File
+                        </Button>
+                        <span className="text-sm text-muted-foreground">atau</span>
+                        <Input 
+                            placeholder="Tempel link external (Google Drive, dll)"
+                            onChange={(e) => onChange(e.target.value)}
+                            className="h-9 text-xs"
+                        />
                     </div>
-                    {isUploading && <Progress value={progress} className="h-1" />}
+                    {isUploading && <Progress value={progress} className="h-1 mt-2" />}
                 </div>
             )}
-        </div>
+            <Input id={`${pathPrefix}-upload`} ref={fileInputRef} type="file" className="hidden" onChange={handleFileChange} accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" disabled={isUploading}/>
+            <FormMessage />
+        </FormItem>
     );
 }
+
+const MonthYearPicker = ({ value, onChange, disabled, required }: { value?: string, onChange: (value: string) => void, disabled?: boolean, required?: boolean }) => {
+    const [year, month] = useMemo(() => {
+        if (!value || !/^\d{4}-\d{2}$/.test(value)) return ['', ''];
+        return value.split('-');
+    }, [value]);
+
+    const handleYearChange = (newYear: string) => {
+        if (newYear && month) {
+            onChange(`${newYear}-${month}`);
+        }
+    };
+    
+    const handleMonthChange = (newMonth: string) => {
+        if (year && newMonth) {
+            onChange(`${year}-${newMonth}`);
+        }
+    };
+
+    const currentYear = new Date().getFullYear();
+    const years = Array.from({ length: 60 }, (_, i) => (currentYear + 5 - i).toString());
+    const months = Array.from({ length: 12 }, (_, i) => ({
+      value: (i + 1).toString().padStart(2, '0'),
+      label: new Date(2000, i).toLocaleString('id-ID', { month: 'long' }),
+    }));
+    
+    return (
+        <div className="flex gap-2">
+            <Select onValueChange={handleMonthChange} value={month} disabled={disabled}>
+                <SelectTrigger><SelectValue placeholder="Bulan" /></SelectTrigger>
+                <SelectContent>
+                    {months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                </SelectContent>
+            </Select>
+            <Select onValueChange={handleYearChange} value={year} disabled={disabled}>
+                <SelectTrigger><SelectValue placeholder="Tahun" /></SelectTrigger>
+                <SelectContent>
+                    {years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+                </SelectContent>
+            </Select>
+        </div>
+    );
+};
 
 interface SkillsFormProps {
     initialData: { 
@@ -210,34 +278,28 @@ export function SkillsForm({ initialData, onSaveSuccess, onBack }: SkillsFormPro
                                 control={form.control}
                                 name="cvUrl"
                                 render={({ field }) => (
-                                    <FormItem>
-                                        <FileUploadField 
-                                            label="Curriculum Vitae (CV)" 
-                                            value={field.value} 
-                                            onChange={field.onChange}
-                                            userId={firebaseUser?.uid || ''}
-                                            pathPrefix="cv"
-                                            required
-                                        />
-                                        <FormMessage />
-                                    </FormItem>
+                                    <FileUploadField 
+                                        label="Curriculum Vitae (CV)" 
+                                        value={field.value} 
+                                        onChange={field.onChange}
+                                        userId={firebaseUser?.uid || ''}
+                                        pathPrefix="cv"
+                                        required
+                                    />
                                 )}
                              />
                               <FormField
                                 control={form.control}
                                 name="ijazahUrl"
                                 render={({ field }) => (
-                                    <FormItem>
-                                        <FileUploadField 
-                                            label="Ijazah / SKL" 
-                                            value={field.value} 
-                                            onChange={field.onChange}
-                                            userId={firebaseUser?.uid || ''}
-                                            pathPrefix="ijazah"
-                                            required
-                                        />
-                                        <FormMessage />
-                                    </FormItem>
+                                    <FileUploadField 
+                                        label="Ijazah / SKL" 
+                                        value={field.value} 
+                                        onChange={field.onChange}
+                                        userId={firebaseUser?.uid || ''}
+                                        pathPrefix="ijazah"
+                                        required
+                                    />
                                 )}
                              />
                         </div>
@@ -267,14 +329,13 @@ export function SkillsForm({ initialData, onSaveSuccess, onBack }: SkillsFormPro
                                     </div>
                                     
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <FormField control={form.control} name={`certifications.${index}.issueDate`} render={({ field }) => (<FormItem><FormLabel>Tgl Terbit <span className="text-destructive">*</span></FormLabel><FormControl><Input {...field} placeholder="YYYY-MM" value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
-                                        <FormField control={form.control} name={`certifications.${index}.expirationDate`} render={({ field }) => (<FormItem><FormLabel>Tgl Kedaluwarsa</FormLabel><FormControl><Input {...field} value={field.value ?? ''} placeholder="YYYY-MM" /></FormControl><FormMessage /></FormItem>)} />
+                                        <FormField control={form.control} name={`certifications.${index}.issueDate`} render={({ field }) => (<FormItem><FormLabel>Tgl Terbit <span className="text-destructive">*</span></FormLabel><FormControl><MonthYearPicker value={field.value} onChange={field.onChange} /></FormControl><FormMessage /></FormItem>)} />
+                                        <FormField control={form.control} name={`certifications.${index}.expirationDate`} render={({ field }) => (<FormItem><FormLabel>Tgl Kedaluwarsa</FormLabel><FormControl><MonthYearPicker value={field.value} onChange={field.onChange} /></FormControl><FormMessage /></FormItem>)} />
                                     </div>
                                     <FormField
                                         control={form.control}
                                         name={`certifications.${index}.imageUrl`}
                                         render={({ field }) => (
-                                        <FormItem>
                                             <FileUploadField 
                                                 label="Bukti Sertifikat (File/Link)" 
                                                 value={field.value} 
@@ -282,9 +343,8 @@ export function SkillsForm({ initialData, onSaveSuccess, onBack }: SkillsFormPro
                                                 userId={firebaseUser?.uid || ''}
                                                 pathPrefix={`cert_${index}`}
                                             />
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}/>
+                                        )}
+                                    />
                                 </div>
                             ))}
                         </div>
