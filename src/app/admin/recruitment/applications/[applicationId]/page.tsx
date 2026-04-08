@@ -4,19 +4,19 @@ import { useMemo, useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { useAuth } from '@/providers/auth-provider';
 import { useDoc, useFirestore, useMemoFirebase, updateDocumentNonBlocking, useCollection } from '@/firebase';
-import { doc, serverTimestamp, updateDoc, Timestamp, writeBatch, collection, where, query } from 'firebase/firestore';
-import type { JobApplication, Profile, Job, ApplicationTimelineEvent, ApplicationInterview, RescheduleRequest, Brand, UserProfile } from '@/lib/types';
+import { doc, serverTimestamp, updateDoc, Timestamp, writeBatch, collection, where, query, limit } from 'firebase/firestore';
+import type { JobApplication, Profile, Job, ApplicationTimelineEvent, ApplicationInterview, RescheduleRequest, Brand, UserProfile, AssessmentSession } from '@/lib/types';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Mail, Phone, Briefcase, Calendar, CheckCircle, XCircle, Building, GraduationCap, DollarSign, Clock, Target, Lightbulb, User, FileText, Bot } from 'lucide-react';
+import { Mail, Phone, Briefcase, Calendar, CheckCircle, XCircle, Building, GraduationCap, DollarSign, Clock, Target, Lightbulb, User, FileText, Bot, BrainCircuit } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { MENU_CONFIG } from '@/lib/menu-config';
 import { ProfileView } from '@/components/recruitment/ProfileView';
 import { ApplicationStatusBadge, statusDisplayLabels } from '@/components/recruitment/ApplicationStatusBadge';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { getInitials } from '@/lib/utils';
+import { getInitials, cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { ApplicationProgressStepper } from '@/components/recruitment/ApplicationProgressStepper';
 import { CandidateDocumentsCard } from '@/components/recruitment/CandidateDocumentsCard';
@@ -29,6 +29,7 @@ import { Loader2 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { InterviewManagement } from '@/components/recruitment/InterviewManagement';
 import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
 
 function ApplicationDetailSkeleton() {
   return <Skeleton className="h-[500px] w-full" />;
@@ -110,6 +111,16 @@ export default function ApplicationDetailPage() {
   );
   const { data: internalUsers, isLoading: isLoadingUsers } = useCollection<UserProfile>(internalUsersQuery);
   const { data: brands, isLoading: isLoadingBrands } = useCollection<Brand>(useMemoFirebase(() => collection(firestore, 'brands'), [firestore]));
+
+  const assessmentSessionsQuery = useMemoFirebase(() => {
+    if (!application) return null;
+    return query(
+      collection(firestore, 'assessment_sessions'),
+      where('applicationId', '==', application.id!),
+      limit(1)
+    );
+  }, [firestore, application]);
+  const { data: assessmentSessions, isLoading: isLoadingSessions } = useCollection<AssessmentSession>(assessmentSessionsQuery);
 
   const menuConfig = useMemo(() => {
     if (userProfile?.role === 'super-admin') return MENU_CONFIG['super-admin'];
@@ -279,8 +290,26 @@ export default function ApplicationDetailPage() {
     autoScreening();
   }, [application, isLoadingApp, userProfile, hasTriggeredAutoScreen, applicationRef, mutateApplication, toast]);
 
+  const assessmentInfo = useMemo(() => {
+    if (isLoadingSessions) {
+      return { status: 'loading', text: 'Memuat...', result: null, color: 'text-muted-foreground' };
+    }
+    if (!assessmentSessions || assessmentSessions.length === 0) {
+      return { status: 'unstarted', text: 'Belum Dikerjakan', result: null, color: 'text-destructive' };
+    }
+    const session = assessmentSessions[0];
+    if (session.status === 'submitted') {
+      const resultText = session.result?.discType || session.result?.mbtiArchetype?.code;
+      return { status: 'completed', text: 'Selesai', result: resultText, color: 'text-green-600' };
+    }
+    if (session.status === 'draft') {
+      return { status: 'in_progress', text: 'Sedang Dikerjakan', result: null, color: 'text-amber-600' };
+    }
+    return { status: 'unstarted', text: 'Belum Dikerjakan', result: null, color: 'text-destructive' };
+  }, [assessmentSessions, isLoadingSessions]);
 
-  const isLoading = isLoadingApp || isLoadingProfile || isLoadingJob || isLoadingUsers || isLoadingBrands;
+
+  const isLoading = isLoadingApp || isLoadingProfile || isLoadingJob || isLoadingUsers || isLoadingBrands || isLoadingSessions;
 
   if (!hasAccess) {
     return <DashboardLayout pageTitle="Loading..." menuConfig={[]}><ApplicationDetailSkeleton /></DashboardLayout>;
@@ -327,11 +356,25 @@ export default function ApplicationDetailPage() {
                 </Card>
 
                 {/* Quick Summary */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                     <InfoCard icon={<DollarSign/>} label="Ekspektasi Gaji" value={profile.salaryExpectation} />
                     <InfoCard icon={<GraduationCap/>} label="Pendidikan Terakhir" value={`${profile.education?.[0]?.level} ${profile.education?.[0]?.fieldOfStudy}`} />
                     <InfoCard icon={<Calendar/>} label="Ketersediaan" value={profile.availability} />
                     <InfoCard icon={<Clock/>} label="Kerja Deadline" value={profile.usedToDeadline ? 'Ya' : 'Tidak'} />
+                    <InfoCard
+                        icon={<BrainCircuit />}
+                        label="Tes Kepribadian"
+                        value={
+                          isLoadingSessions ? (
+                            <span className="text-sm text-muted-foreground">Memuat...</span>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <span className={cn('font-semibold', assessmentInfo.color)}>{assessmentInfo.text}</span>
+                              {assessmentInfo.result && <Badge variant="secondary">{assessmentInfo.result}</Badge>}
+                            </div>
+                          )
+                        }
+                    />
                 </div>
                 
                 <ApplicationProgressStepper currentStatus={application.status} />
@@ -350,7 +393,7 @@ export default function ApplicationDetailPage() {
                         <ProfileView profile={profile} />
                     </TabsContent>
                     <TabsContent value="documents" className="mt-4">
-                        <CandidateDocumentsCard profile={profile} />
+                        <CandidateDocumentsCard profile={profile} application={application} onVerificationChange={mutateApplication}/>
                     </TabsContent>
                     <TabsContent value="ai_analysis" className="mt-4">
                        <CandidateFitAnalysis profile={profile} job={job} application={application} />
@@ -382,3 +425,5 @@ export default function ApplicationDetailPage() {
     </DashboardLayout>
   );
 }
+
+    
