@@ -69,11 +69,6 @@ export function InternalEvaluationSection({ application }: InternalEvaluationSec
   const [strengths, setStrengths] = useState('');
   const [concerns, setConcerns] = useState('');
 
-  // Assignment State
-  const [isManageDialogOpen, setIsManageDialogOpen] = useState(false);
-  const [isSavingConfig, setIsSavingConfig] = useState(false);
-  const [internalUsers, setInternalUsers] = useState<{uid: string, fullName: string}[]>([]);
-
   const isHRD = userProfile?.role === 'hrd' || userProfile?.role === 'super-admin';
 
   const reviewsRef = useMemo(() => 
@@ -81,26 +76,6 @@ export function InternalEvaluationSection({ application }: InternalEvaluationSec
   , [firestore, application.id]);
 
   const { data: reviews, isLoading: isLoadingReviews } = useCollection<InternalReview>(reviewsRef);
-
-  // Load internal users for assignment
-  React.useEffect(() => {
-    if (isManageDialogOpen && internalUsers.length === 0) {
-        const fetchUsers = async () => {
-            const snap = await getDocs(query(collection(firestore, 'users'), where('role', 'in', ['hrd', 'manager', 'karyawan', 'super-admin'])));
-            setInternalUsers(snap.docs.map(d => ({ uid: d.id, fullName: d.data().fullName })));
-        }
-        fetchUsers();
-    }
-  }, [isManageDialogOpen, firestore]);
-
-  const [selectedUids, setSelectedUids] = useState<string[]>(application.internalReviewConfig?.assignedReviewerUids || []);
-  
-  // Update internal state when application data changes
-  React.useEffect(() => {
-    if (application.internalReviewConfig?.assignedReviewerUids) {
-        setSelectedUids(application.internalReviewConfig.assignedReviewerUids);
-    }
-  }, [application.internalReviewConfig]);
 
   const myReview = useMemo(() => 
     reviews?.find(r => r.reviewerUid === userProfile?.uid)
@@ -197,57 +172,6 @@ export function InternalEvaluationSection({ application }: InternalEvaluationSec
     }
   };
 
-  const handleUpdateConfig = async () => {
-    if (!application.id) return;
-    setIsSavingConfig(true);
-    try {
-        const appRef = doc(firestore, 'applications', application.id);
-        const selectedNames = internalUsers.filter(u => selectedUids.includes(u.uid)).map(u => u.fullName);
-        
-        const config = {
-            enabled: true,
-            assignedReviewerUids: selectedUids,
-            assignedReviewerNames: selectedNames,
-            visibilityMode: 'shared_internal',
-            reviewLocked: false,
-            lastUpdatedAt: Timestamp.now()
-        };
-
-        const currentSummary = application.internalReviewSummary || {
-            totalAssigned: 0,
-            totalSubmitted: 0,
-            totalSangatDirekomendasikan: 0,
-            totalDirekomendasikan: 0,
-            totalDipertimbangkan: 0,
-            totalBelumSesuai: 0,
-            pendingReviewerUids: [],
-            allSubmitted: false
-        };
-
-        const submittedUids = reviews?.map(r => r.reviewerUid) || [];
-        const pendingUids = selectedUids.filter(uid => !submittedUids.includes(uid));
-
-        const updatedSummary = {
-            ...currentSummary,
-            totalAssigned: selectedUids.length,
-            pendingReviewerUids: pendingUids,
-            allSubmitted: selectedUids.length > 0 && submittedUids.length >= selectedUids.length
-        };
-
-        await updateDocumentNonBlocking(appRef, {
-            internalReviewConfig: config,
-            internalReviewSummary: updatedSummary
-        });
-
-        toast({ title: 'Config Updated', description: 'Reviewer rekrutmen telah diperbarui.' });
-        setIsManageDialogOpen(false);
-    } catch (e: any) {
-        toast({ variant: 'destructive', title: 'Update Gagal', description: e.message });
-    } finally {
-        setIsSavingConfig(false);
-    }
-  };
-
   if (!canReview && (!reviews || reviews.length === 0) && !isHRD) return null;
 
   return (
@@ -264,42 +188,20 @@ export function InternalEvaluationSection({ application }: InternalEvaluationSec
                 </div>
             </div>
             <div className="flex items-center gap-3">
-                {isHRD && (
-                    <Dialog open={isManageDialogOpen} onOpenChange={setIsManageDialogOpen}>
-                        <DialogTrigger asChild>
-                            <Button variant="outline" size="sm" className="rounded-xl border-primary/30 text-primary hover:bg-primary/5">
-                                <Settings className="mr-2 h-4 w-4" /> Tugaskan Reviewer
-                            </Button>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-md rounded-[2rem]">
-                            <DialogHeader>
-                                <DialogTitle>Tugaskan Reviewer Internal</DialogTitle>
-                                <DialogDescription>Pilih anggota tim yang akan memberikan penilaian pada kandidat ini.</DialogDescription>
-                            </DialogHeader>
-                            <div className="max-h-[300px] overflow-y-auto space-y-2 py-4">
-                                {internalUsers.map((u) => (
-                                    <div key={u.uid} className="flex items-center gap-3 p-3 rounded-xl border hover:bg-muted/50 cursor-pointer" onClick={() => {
-                                        setSelectedUids(prev => prev.includes(u.uid) ? prev.filter(id => id !== u.uid) : [...prev, u.uid]);
-                                    }}>
-                                        <Checkbox checked={selectedUids.includes(u.uid)} />
-                                        <span className="font-semibold text-sm">{u.fullName} {u.uid === userProfile?.uid && "(Saya)"}</span>
-                                    </div>
-                                ))}
-                                {internalUsers.length === 0 && <p className="text-center py-10 text-muted-foreground italic">Memuat daftar tim...</p>}
-                            </div>
-                            <DialogFooter>
-                                <Button variant="ghost" onClick={() => setIsManageDialogOpen(false)}>Batal</Button>
-                                <Button onClick={handleUpdateConfig} disabled={isSavingConfig}>{isSavingConfig ? 'Menyimpan...' : 'Simpan Penugasan'}</Button>
-                            </DialogFooter>
-                        </DialogContent>
-                    </Dialog>
-                )}
-                {application.internalReviewSummary && (
-                    <div className="hidden md:flex items-center gap-2 px-4 py-2 bg-background/50 rounded-2xl border font-bold text-sm">
-                        <UserCheck className="h-4 w-4 text-primary" />
-                        {application.internalReviewSummary.totalSubmitted} / {application.internalReviewSummary.totalAssigned || '-'} Reviewer
-                    </div>
-                )}
+                {application.internalReviewConfig?.assignedReviewerUids?.map((uid, index) => {
+                    const name = application.internalReviewConfig?.assignedReviewerNames?.[index] || 'Reviewer';
+                    const hasSubmitted = reviews?.some(r => r.reviewerUid === uid);
+                    return (
+                        <div key={uid} className="flex items-center gap-2 px-3 py-1.5 bg-background/50 rounded-xl border text-[11px] font-bold">
+                            <span className="text-muted-foreground">{name}</span>
+                            {hasSubmitted ? (
+                                <Badge variant="outline" className="h-4 px-1 text-[8px] bg-green-50 text-green-600 border-green-200 uppercase font-black">Sudah Menilai</Badge>
+                            ) : (
+                                <Badge variant="outline" className="h-4 px-1 text-[8px] bg-amber-50 text-amber-600 border-amber-200 uppercase font-black">Belum Menilai</Badge>
+                            )}
+                        </div>
+                    );
+                })}
             </div>
         </div>
       </CardHeader>

@@ -317,17 +317,18 @@ service cloud.firestore {
           return isOwner && isInterviewStage && onlyAllowedFieldsChanged;
         }
 
-        // Internal Reviews Subcollection (Moved outside nested match for better list query stability)
-        function hasInternalReviewAccess(appId) {
-          let appData = get(/databases/$(database)/documents/applications/$(appId)).data;
-          return request.auth.uid in appData.get(['internalReviewConfig', 'assignedReviewerUids'], []);
-        }
+    }
 
-        match /applications/{applicationId}/internal_reviews/{reviewerUid} {
-          allow list: if isHrd() || isSuperAdmin() || (isSignedIn() && hasInternalReviewAccess(applicationId));
-          allow get: if isHrd() || isSuperAdmin() || request.auth.uid == reviewerUid || (isSignedIn() && hasInternalReviewAccess(applicationId));
-          allow write: if isHrd() || isSuperAdmin() || (isOwner(reviewerUid) && hasInternalReviewAccess(applicationId));
-        }
+    // Internal Reviews Subcollection (Properly moved outside nested applications block)
+    function hasInternalReviewAccess(appId) {
+      let appData = get(/databases/$(database)/documents/applications/$(appId)).data;
+      return request.auth.uid in appData.get(['internalReviewConfig', 'assignedReviewerUids'], []);
+    }
+
+    match /applications/{applicationId}/internal_reviews/{reviewerUid} {
+      allow list: if isHrd() || isSuperAdmin() || (isSignedIn() && hasInternalReviewAccess(applicationId));
+      allow get: if isHrd() || isSuperAdmin() || request.auth.uid == reviewerUid || (isSignedIn() && hasInternalReviewAccess(applicationId));
+      allow write: if isHrd() || isSuperAdmin() || (isOwner(reviewerUid) && hasInternalReviewAccess(applicationId));
     }
 
     /**
