@@ -4,7 +4,7 @@ import { useAuth } from '@/providers/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
-import { ArrowRight, Briefcase, User, CheckCircle2, Circle, BrainCircuit, ClipboardList, ShieldCheck } from 'lucide-react';
+import { ArrowRight, Briefcase, FileText, User, CheckCircle2, Circle, BrainCircuit, ClipboardList, ShieldCheck } from 'lucide-react';
 import React, { useMemo } from 'react';
 import { ApplicationStatusStepper } from '@/components/careers/ApplicationStatusStepper';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
@@ -30,9 +30,11 @@ export default function CandidateDashboardPage() {
   }, [userProfile?.uid, firestore]);
   const { data: assessmentSessions, isLoading: isLoadingSessions } = useCollection<AssessmentSession>(sessionsQuery);
 
-  const isProfileComplete = userProfile?.isProfileComplete || false;
   const hasApplied = applications && applications.length > 0;
   const hasFinishedTest = assessmentSessions?.some((s: AssessmentSession) => s.status === 'submitted') || false;
+
+  // Profile completeness check is now simplified
+  const isProfileComplete = !!userProfile?.isProfileComplete;
 
   const allStepsCompleted = isProfileComplete && hasApplied && hasFinishedTest;
 
@@ -160,8 +162,8 @@ export default function CandidateDashboardPage() {
         {hasApplied && (
             <Card>
                 <CardHeader>
-                    <CardTitle>Progres Lamaran Detail</CardTitle>
-                    <CardDescription>Cek detail status per tahapan rekrutmen di bawah ini.</CardDescription>
+                    <CardTitle>Status Lamaran Aktif Anda</CardTitle>
+                    <CardDescription>Berikut adalah linimasa proses rekrutmen untuk posisi dengan progres terjauh. Tahap yang sedang aktif akan ditandai dengan warna.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <ApplicationStatusStepper 
