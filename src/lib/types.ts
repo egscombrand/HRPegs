@@ -416,6 +416,7 @@ export type Certification = {
     organization: string;
     issueDate: string; // Storing as YYYY-MM
     expirationDate?: string; // Storing as YYYY-MM
+    imageUrl?: string;
 };
 
 export type Address = {

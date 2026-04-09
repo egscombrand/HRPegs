@@ -23,6 +23,7 @@ import { CandidateDocumentsCard } from '@/components/recruitment/CandidateDocume
 import { CandidateFitAnalysis } from '@/components/recruitment/CandidateFitAnalysis';
 import { ApplicationActionBar } from '@/components/recruitment/ApplicationActionBar';
 import { ApplicationNotes } from '@/components/recruitment/ApplicationNotes';
+import { CandidateStepNav, CandidateStepContent } from '@/components/recruitment/CandidateStepView';
 import type { ScheduleInterviewData } from '@/components/recruitment/ScheduleInterviewDialog';
 import { ScheduleInterviewDialog } from '@/components/recruitment/ScheduleInterviewDialog';
 import { Button } from '@/components/ui/button';
@@ -59,6 +60,7 @@ export default function ApplicationDetailPage() {
   const [hasTriggeredAutoScreen, setHasTriggeredAutoScreen] = useState(false);
   const [isOfferDialogOpen, setIsOfferDialogOpen] = useState(false);
   const [isActivating, setIsActivating] = useState(false);
+  const [activeProfileStep, setActiveProfileStep] = useState(1);
 
   const applicationRef = useMemoFirebase(
     () => (applicationId ? doc(firestore, 'applications', applicationId) : null),
@@ -318,35 +320,27 @@ export default function ApplicationDetailPage() {
             </CardHeader>
           </Card>
 
-          {/* Quick Summary */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-              <InfoCard icon={<GraduationCap/>} label="Pendidikan Terakhir" value={`${profile.education?.[0]?.level} ${profile.education?.[0]?.fieldOfStudy}`} />
-              <InfoCard icon={<Calendar/>} label="Ketersediaan" value={profile.availability} />
-              <InfoCard
-                  icon={<BrainCircuit />}
-                  label="Tes Kepribadian"
-                  value={
-                    isLoadingSessions ? (
-                      <span className="text-sm text-muted-foreground">Memuat...</span>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <span className={cn('font-semibold', assessmentInfo.color)}>{assessmentInfo.text}</span>
-                        {assessmentInfo.result && <Badge variant="secondary">{assessmentInfo.result}</Badge>}
-                      </div>
-                    )
-                  }
-              />
-          </div>
           
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-            <div className="lg:col-span-2 space-y-6">
-                <InterviewManagement job={job} application={application} onUpdate={mutateApplication} allUsers={internalUsers || []} allBrands={brands || []} />
-                <CandidateFitAnalysis profile={profile} job={job} application={application}/>
-                <ProfileView profile={profile as any} />
+          {/* Unified Detail Sections (Headless Step Navigation Structure) */}
+          <div className="grid grid-cols-1 xl:grid-cols-[200px_1fr] gap-10 items-start pt-4">
+            
+            {/* 1. Step Navigation (Secondary) */}
+            <div className="xl:sticky xl:top-24 hidden xl:block">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 mb-4 px-3">Navigator Profil</p>
+                <CandidateStepNav activeStep={activeProfileStep} onStepChange={setActiveProfileStep} />
             </div>
-            <div className="lg:sticky lg:top-24 space-y-6">
-                    <CandidateDocumentsCard profile={profile} application={application} onVerificationChange={mutateApplication}/>
-                <ApplicationNotes application={application} onNoteAdded={mutateApplication} />
+
+            <div className="space-y-6">
+                <Card className="shadow-2xl border-none p-4 sm:p-8 md:p-12 rounded-[2.5rem] bg-card/60 backdrop-blur-md border-t-8 border-t-primary min-h-[700px]">
+                    <CandidateStepContent profile={profile} application={application} activeStep={activeProfileStep} job={job} />
+                </Card>
+            </div>
+            
+            {/* Mobile Nav Trigger (Visible only on mobile if you want, but sticking to desktop layout focus first) */}
+            <div className="xl:hidden grid grid-cols-3 gap-2 p-2 bg-muted/30 rounded-2xl">
+                 {[1,2,3,4,5,6].map(i => (
+                     <Button key={i} variant={activeProfileStep === i ? 'default' : 'ghost'} size="sm" onClick={() => setActiveProfileStep(i)}>Step {i}</Button>
+                 ))}
             </div>
           </div>
         </div>
