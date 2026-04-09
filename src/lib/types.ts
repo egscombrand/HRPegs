@@ -343,7 +343,7 @@ export type JobApplication = {
   internalReviewSummary?: InternalReviewSummary;
 };
 
-export type InternalReviewScore = 'sangat_direkomendasikan' | 'direkomendasikan' | 'dipertimbangkan' | 'belum_sesuai';
+export type InternalReviewScore = 'direkomendasikan' | 'dipertimbangkan' | 'belum_sesuai';
 
 export interface InternalReviewConfig {
   enabled: boolean;
@@ -357,7 +357,6 @@ export interface InternalReviewConfig {
 export interface InternalReviewSummary {
   totalAssigned: number;
   totalSubmitted: number;
-  totalSangatDirekomendasikan: number;
   totalDirekomendasikan: number;
   totalDipertimbangkan: number;
   totalBelumSesuai: number;

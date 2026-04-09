@@ -352,7 +352,7 @@ export default function ApplicationDetailPage() {
             </div>
           </div>
 
-          <InternalEvaluationSection application={application} />
+          <InternalEvaluationSection application={application} job={job} internalUsers={internalUsers} />
         </div>
         </>
       )}
