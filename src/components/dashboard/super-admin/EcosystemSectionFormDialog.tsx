@@ -221,11 +221,11 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
                     name="sectionKey"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Section Key</FormLabel>
+                        <FormLabel>Section ID (Pengenal Unik)</FormLabel>
                         <FormControl>
-                          <Input {...field} disabled={mode === 'Edit'} placeholder="e.g., hero, basecamp, our-values" />
+                          <Input {...field} disabled={mode === 'Edit'} placeholder="e.g., hero, our-values" />
                         </FormControl>
-                        <FormDescription>Pengenal unik untuk section ini. Tidak bisa diubah setelah dibuat.</FormDescription>
+                        <FormDescription>Pengenal unik untuk section ini. Digunakan oleh sistem untuk menempatkan konten. Hanya huruf kecil, angka, dan tanda hubung (-).</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -248,7 +248,7 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
                             </SelectContent>
                           </Select>
                          <FormDescription>
-                           {field.value === 'hero' ? 'Tampil di bagian paling atas halaman dengan layout khusus.' : 'Tampil sebagai blok konten standar di bawah hero.'}
+                           'Hero' akan tampil di paling atas halaman. 'Content' akan tampil sebagai blok informasi di bawahnya.
                          </FormDescription>
                         <FormMessage />
                       </FormItem>
