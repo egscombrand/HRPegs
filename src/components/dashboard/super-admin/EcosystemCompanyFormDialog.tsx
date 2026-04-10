@@ -18,7 +18,6 @@ import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import Image from 'next/image';
 import type { EcosystemCompany } from '@/lib/types';
 import { Label } from '@/components/ui/label';
-import { ScrollArea } from '@/components/ui/scroll-area';
 
 const formSchema = z.object({
   name: z.string().min(2, "Name is required."),
@@ -116,84 +115,85 @@ export function EcosystemCompanyFormDialog({ open, onOpenChange, item }: Ecosyst
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-lg h-[90vh] flex flex-col p-0">
+        <DialogHeader className="p-6 pb-2 border-b flex-shrink-0">
           <DialogTitle>{mode} Ecosystem Company</DialogTitle>
-          <DialogDescription>
+           <DialogDescription>
             Atur urutan untuk mengontrol posisi di landing page. Angka kecil akan tampil lebih dulu.
           </DialogDescription>
         </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <ScrollArea className="max-h-[60vh] w-full pr-6">
-                <div className="space-y-4">
-                  <FormField control={form.control} name="name" render={({ field }) => (<FormItem><FormLabel>Company Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
-                  <FormField control={form.control} name="websiteUrl" render={({ field }) => (<FormItem><FormLabel>Website URL</FormLabel><FormControl><Input type="url" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                  <FormField control={form.control} name="iconFile" render={({ field }) => (
+
+        <div className="flex-grow p-6 overflow-y-auto">
+          <Form {...form}>
+            <form id="ecosystem-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <FormField control={form.control} name="name" render={({ field }) => (<FormItem><FormLabel>Company Name</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField control={form.control} name="websiteUrl" render={({ field }) => (<FormItem><FormLabel>Website URL</FormLabel><FormControl><Input type="url" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                <FormField control={form.control} name="iconFile" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Logo</FormLabel>
+                      <FormControl>
+                        <label htmlFor="icon-upload" className="relative mt-2 flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted transition-colors">
+                            {imagePreview ? (
+                                <Image src={imagePreview} alt="Logo preview" layout="fill" className="object-contain rounded-lg p-2" />
+                            ) : (
+                                <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                    <UploadCloud className="w-10 h-10 mb-3 text-muted-foreground" />
+                                    <p className="mb-2 text-sm text-primary font-semibold">Choose Logo</p>
+                                    <p className="text-xs text-muted-foreground">PNG, JPG, WEBP up to 2MB</p>
+                                </div>
+                            )}
+                            <Input id="icon-upload" name={field.name} type="file" className="hidden" onChange={handleFileChange} accept="image/*" />
+                        </label>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                )} />
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="sortOrder"
+                    render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Logo</FormLabel>
+                        <FormLabel>Sort Order</FormLabel>
+                        <FormDescription>Angka kecil tampil duluan.</FormDescription>
                         <FormControl>
-                          <label htmlFor="icon-upload" className="relative mt-2 flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted transition-colors">
-                              {imagePreview ? (
-                                  <Image src={imagePreview} alt="Logo preview" layout="fill" className="object-contain rounded-lg p-2" />
-                              ) : (
-                                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                                      <UploadCloud className="w-10 h-10 mb-3 text-muted-foreground" />
-                                      <p className="mb-2 text-sm text-primary font-semibold">Choose Logo</p>
-                                      <p className="text-xs text-muted-foreground">PNG, JPG, WEBP up to 2MB</p>
-                                  </div>
-                              )}
-                              <Input id="icon-upload" name={field.name} type="file" className="hidden" onChange={handleFileChange} accept="image/*" />
-                          </label>
+                          <Input type="number" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
-                  )} />
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="sortOrder"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Sort Order</FormLabel>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="isActive"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Status</FormLabel>
+                        <div className="flex items-center space-x-2 h-10">
                           <FormControl>
-                            <Input type="number" {...field} />
+                            <Switch
+                              id="is-active-switch"
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                            />
                           </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="isActive"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Status</FormLabel>
-                          <div className="flex items-center space-x-2 h-10">
-                            <FormControl>
-                              <Switch
-                                id="is-active-switch"
-                                checked={field.value}
-                                onCheckedChange={field.onChange}
-                              />
-                            </FormControl>
-                            <Label htmlFor="is-active-switch">Active</Label>
-                          </div>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+                          <Label htmlFor="is-active-switch">Active</Label>
+                        </div>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
-            </ScrollArea>
-            <DialogFooter className="pt-4 border-t">
-              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button type="submit" disabled={isSaving}>
-                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
+            </form>
+          </Form>
+        </div>
+
+        <DialogFooter className="p-6 pt-4 border-t flex-shrink-0">
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button type="submit" form="ecosystem-form" disabled={isSaving}>
+            {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
