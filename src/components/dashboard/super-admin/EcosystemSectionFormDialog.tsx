@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Save, UploadCloud, Trash2, GripVertical, PlusCircle } from 'lucide-react';
+import { Loader2, Save, UploadCloud, Trash2, PlusCircle } from 'lucide-react';
 import { useFirestore, setDocumentNonBlocking, useFirebaseApp } from '@/firebase';
 import { doc, collection, serverTimestamp } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -22,11 +22,9 @@ import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type D
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const formSchema = z.object({
-  sectionKey: z.string().min(3, "Section Key is required.").regex(/^[a-z0-9-]+$/, "Only lowercase letters, numbers, and hyphens allowed."),
-  type: z.enum(['hero', 'content'], { required_error: 'Section type must be selected.' }),
+  sectionKey: z.string().min(3, "Section ID is required.").regex(/^[a-z0-9-]+$/, "Only lowercase letters, numbers, and hyphens allowed."),
   title: z.string().min(3, "Title must be at least 3 characters."),
   subtitle: z.string().optional(),
   description: z.string().optional(),
@@ -86,7 +84,7 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
 
   const form = useForm<FormValues>({ resolver: zodResolver(formSchema) });
   
-  const selectedType = form.watch('type');
+  const sectionKey = form.watch('sectionKey');
 
   const handleClose = (isOpen: boolean) => {
     if (!isOpen) {
@@ -100,7 +98,6 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
     if (open) {
       form.reset({
         sectionKey: item?.sectionKey || '',
-        type: item?.type || 'content',
         title: item?.title || '',
         subtitle: item?.subtitle || '',
         description: item?.description || '',
@@ -181,7 +178,7 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
 
         const payload: Omit<EcosystemSection, 'id'> = {
             sectionKey: values.sectionKey,
-            type: values.type,
+            type: values.sectionKey === 'hero' ? 'hero' : 'content',
             title: values.title,
             subtitle: values.subtitle || '',
             description: values.description || '',
@@ -225,35 +222,12 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
                         <FormControl>
                           <Input {...field} disabled={mode === 'Edit'} placeholder="e.g., hero, our-values" />
                         </FormControl>
-                        <FormDescription>Pengenal unik untuk section ini. Digunakan oleh sistem untuk menempatkan konten. Hanya huruf kecil, angka, dan tanda hubung (-).</FormDescription>
+                        <FormDescription>Pengenal unik untuk section ini (misal: "hero"). Ini digunakan oleh sistem untuk menempatkan konten dan tidak dapat diubah.</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                  <FormField
-                    control={form.control}
-                    name="type"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Tipe Section</FormLabel>
-                         <Select onValueChange={field.onChange} value={field.value} disabled={mode === 'Edit'}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Pilih tipe section..." />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="hero">Hero Section</SelectItem>
-                              <SelectItem value="content">Content Section</SelectItem>
-                            </SelectContent>
-                          </Select>
-                         <FormDescription>
-                           'Hero' akan tampil di paling atas halaman. 'Content' akan tampil sebagai blok informasi di bawahnya.
-                         </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  
                   <FormField
                     control={form.control}
                     name="title"
@@ -261,13 +235,13 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
                       <FormItem>
                         <FormLabel>Judul</FormLabel>
                         <FormControl><Input {...field} /></FormControl>
-                        <FormDescription>Judul utama yang akan ditampilkan di section.</FormDescription>
+                         <FormDescription>Judul utama yang akan ditampilkan di section.</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
                   
-                  {selectedType === 'hero' ? (
+                  {sectionKey === 'hero' ? (
                     <FormField control={form.control} name="subtitle" render={({ field }) => (<FormItem><FormLabel>Subtitle</FormLabel><FormControl><Textarea {...field} /></FormControl><FormDescription>Teks pendukung di bawah judul, khusus untuk Hero Section.</FormDescription><FormMessage /></FormItem>)} />
                   ) : (
                     <FormField control={form.control} name="description" render={({ field }) => (<FormItem><FormLabel>Deskripsi</FormLabel><FormControl><Textarea {...field} /></FormControl><FormDescription>Paragraf deskripsi untuk Content Section.</FormDescription><FormMessage /></FormItem>)} />
