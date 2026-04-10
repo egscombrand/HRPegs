@@ -195,13 +195,26 @@ service cloud.firestore {
     
     /**
      * /ecosystem_companies/{companyId}
-     * - Publicly readable for the landing page.
+     * - Publicly readable for the landing page if active.
      * - Writable only by HRD and Super Admins.
      */
     match /ecosystem_companies/{companyId} {
-        allow get, list: if true;
+        allow get: if resource.data.isActive == true || isHrd() || isSuperAdmin();
+        allow list: if true; // Public can list with `where('isActive', '==', true)`
         allow write: if isHrd() || isSuperAdmin();
     }
+    
+    /**
+     * /ecosystem_sections/{sectionId}
+     * - Publicly readable for the landing page if active.
+     * - Writable only by HRD and Super Admins.
+     */
+    match /ecosystem_sections/{sectionId} {
+      allow get: if resource.data.isActive == true || isHrd() || isSuperAdmin();
+      allow list: if true;
+      allow write: if isHrd() || isSuperAdmin();
+    }
+
 
     /**
      * /brands/{brandId}

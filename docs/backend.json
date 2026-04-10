@@ -84,6 +84,29 @@
         "createdAt"
       ]
     },
+    "EcosystemSection": {
+      "title": "Ecosystem Section",
+      "type": "object",
+      "description": "Represents a dynamic content section on the landing page, like the hero or spotlight.",
+      "properties": {
+        "sectionKey": {
+          "type": "string",
+          "description": "A unique key for the section, e.g., 'hero', 'basecamp'."
+        },
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "description": { "type": "string" },
+        "imageUrls": {
+          "type": "array",
+          "items": { "type": "string", "format": "uri" }
+        },
+        "isActive": { "type": "boolean", "default": true },
+        "sortOrder": { "type": "number", "default": 0 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["sectionKey", "title", "imageUrls", "isActive"]
+    },
     "EcosystemCompany": {
       "title": "Ecosystem Company",
       "type": "object",
@@ -1164,6 +1187,13 @@
         "definition": {
           "schema": { "$ref": "#/backend/entities/EcosystemCompany" },
           "description": "Stores information about companies in the ecosystem for the landing page."
+        }
+      },
+      {
+        "path": "/ecosystem_sections/{sectionId}",
+        "definition": {
+          "schema": { "$ref": "#/backend/entities/EcosystemSection" },
+          "description": "Stores content for dynamic sections on the landing page."
         }
       },
       {

@@ -165,6 +165,19 @@ export type EcosystemCompany = {
   updatedAt: Timestamp;
 };
 
+export type EcosystemSection = {
+  id?: string;
+  sectionKey: 'hero' | 'basecamp';
+  title: string;
+  subtitle?: string;
+  description?: string;
+  imageUrls: string[];
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+};
+
 export type NavigationSetting = {
   id?: string;
   role: UserRole;

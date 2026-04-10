@@ -72,7 +72,7 @@ export const ALL_MENU_GROUPS: MenuGroup[] = [
         items: [
             { key: 'admin.users', href: '/admin/super-admin/user-management', label: 'User Management', icon: createElement(Users) },
             { key: 'admin.master', href: '/admin/super-admin/departments-brands', label: 'Master Data', icon: createElement(Database) },
-            { key: 'admin.ecosystem', href: '/admin/super-admin/ecosystem-management', label: 'Ecosystem', icon: createElement(Globe) },
+            { key: 'admin.ecosystem', href: '/admin/super-admin/ecosystem', label: 'Ecosystem', icon: createElement(Globe) },
             { key: 'admin.access', href: '/admin/super-admin/menu-settings', label: 'Access & Roles', icon: createElement(ShieldCheck) },
         ]
     },
@@ -127,7 +127,7 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
         items: [
             { key: 'admin.users', href: '/admin/super-admin/user-management', label: 'User Management', icon: createElement(Users) },
             { key: 'admin.master', href: '/admin/super-admin/departments-brands', label: 'Master Data', icon: createElement(Database) },
-            { key: 'admin.ecosystem', href: '/admin/super-admin/ecosystem-management', label: 'Ecosystem', icon: createElement(Globe) },
+            { key: 'admin.ecosystem', href: '/admin/super-admin/ecosystem', label: 'Ecosystem', icon: createElement(Globe) },
             { key: 'admin.access', href: '/admin/super-admin/menu-settings', label: 'Access & Roles', icon: createElement(ShieldCheck) },
         ]
     },

@@ -16,7 +16,8 @@ import dynamic from 'next/dynamic';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { collection, query, where, orderBy } from 'firebase/firestore';
-import type { EcosystemCompany } from '@/lib/types';
+import type { EcosystemCompany, EcosystemSection } from '@/lib/types';
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
 
 
 const DynamicJobExplorerClient = dynamic(
@@ -261,28 +262,37 @@ const Header = () => {
 
 
 // --- Hero Section ---
-const HeroSection = () => {
+const HeroSection = ({ sectionData }: { sectionData: EcosystemSection | null }) => {
+    const title = sectionData?.title || t.Hero.title;
+    const subtitle = sectionData?.subtitle || t.Hero.subtitle;
+    const images = sectionData?.imageUrls || [imagePlaceholders.careers_hero.src];
+    
     return (
         <section id="hero" className="relative w-full overflow-hidden bg-background">
             <div className="absolute inset-0">
-                <Image
-                    src={imagePlaceholders.careers_hero.src}
-                    alt={imagePlaceholders.careers_hero.alt}
-                    data-ai-hint={imagePlaceholders.careers_hero.ai_hint}
-                    fill
-                    priority
-                    className="object-cover"
-                />
+                {images.length > 1 ? (
+                    <Carousel className="h-full w-full" opts={{ loop: true, duration: 25 }}>
+                        <CarouselContent>
+                            {images.map((img, i) => (
+                                <CarouselItem key={i}>
+                                    <Image src={img} alt={`${title} image ${i+1}`} fill priority className="object-cover" />
+                                </CarouselItem>
+                            ))}
+                        </CarouselContent>
+                    </Carousel>
+                ) : (
+                    <Image src={images[0]} alt={title} fill priority className="object-cover" />
+                )}
                 <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
                 <div className="absolute inset-0 bg-background/50" />
             </div>
             <div className="relative z-10 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div className="flex min-h-[70vh] flex-col items-center justify-center pb-20 pt-32 text-center lg:min-h-dvh">
                     <h1 className="text-4xl font-extrabold tracking-tight text-foreground md:text-6xl lg:text-7xl">
-                        {t.Hero.title}
+                        {title}
                     </h1>
                     <p className="mt-6 max-w-2xl text-lg text-muted-foreground">
-                        {t.Hero.subtitle}
+                        {subtitle}
                     </p>
                     <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4 w-full max-w-xs sm:max-w-none">
                       <Button size="lg" className="h-12 px-8 text-base w-full sm:w-auto" asChild>
@@ -354,10 +364,7 @@ const ValuePropsSection = () => {
 const EcosystemSection = () => {
     const firestore = useFirestore();
     const ecosystemQuery = useMemoFirebase(
-      () => query(
-        collection(firestore, 'ecosystem_companies'),
-        where('isActive', '==', true)
-      ),
+      () => query(collection(firestore, 'ecosystem_companies'), where('isActive', '==', true)),
       [firestore]
     );
     const { data: companiesFromHook, isLoading } = useCollection<EcosystemCompany>(ecosystemQuery);
@@ -472,22 +479,32 @@ const RecruitmentProcessSection = () => {
 
 
 // --- Office Spotlight Section ---
-const OfficeSpotlightSection = () => {
+const OfficeSpotlightSection = ({ sectionData }: { sectionData: EcosystemSection | null }) => {
+    const title = sectionData?.title || t.OfficeSpotlight.title;
+    const description = sectionData?.description || t.OfficeSpotlight.subtitle;
+    const images = sectionData?.imageUrls || [imagePlaceholders.careers_office_spotlight.src];
+    
     return (
     <section className="w-full py-16 lg:py-24 bg-card">
         <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
             <Card className="overflow-hidden relative flex items-end min-h-[500px] rounded-2xl shadow-lg">
-                 <Image
-                    src={imagePlaceholders.careers_office_spotlight.src}
-                    alt={imagePlaceholders.careers_office_spotlight.alt}
-                    data-ai-hint={imagePlaceholders.careers_office_spotlight.ai_hint}
-                    fill
-                    className="object-cover"
-                />
+                {images.length > 1 ? (
+                    <Carousel className="h-full w-full" opts={{ loop: true, duration: 25 }}>
+                        <CarouselContent>
+                            {images.map((img, i) => (
+                                <CarouselItem key={i}>
+                                    <Image src={img} alt={`${title} image ${i+1}`} fill className="object-cover" />
+                                </CarouselItem>
+                            ))}
+                        </CarouselContent>
+                    </Carousel>
+                ) : (
+                    <Image src={images[0]} alt={title} fill className="object-cover" />
+                )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
                 <div className="relative z-10 p-8 md:p-12 text-white">
-                    <h2 className="text-3xl md:text-4xl font-bold">{t.OfficeSpotlight.title}</h2>
-                    <p className="mt-2 max-w-lg text-white/80">{t.OfficeSpotlight.subtitle}</p>
+                    <h2 className="text-3xl md:text-4xl font-bold">{title}</h2>
+                    <p className="mt-2 max-w-lg text-white/80">{description}</p>
                 </div>
             </Card>
         </div>
@@ -592,16 +609,26 @@ const Footer = () => {
 
 // --- Main Page Component ---
 export function CareersPageClient() {
+  const firestore = useFirestore();
+  const sectionsQuery = useMemoFirebase(
+    () => query(collection(firestore, 'ecosystem_sections'), where('isActive', '==', true), orderBy('sortOrder')),
+    [firestore]
+  );
+  const { data: sections } = useCollection<EcosystemSection>(sectionsQuery);
+  
+  const heroSectionData = useMemo(() => sections?.find(s => s.sectionKey === 'hero') || null, [sections]);
+  const basecampSectionData = useMemo(() => sections?.find(s => s.sectionKey === 'basecamp') || null, [sections]);
+  
   return (
     <div className="flex min-h-dvh flex-col bg-background font-body text-foreground">
       <Header />
       <main className="flex-1">
-        <HeroSection />
+        <HeroSection sectionData={heroSectionData} />
         <JobExplorerSection />
         <ValuePropsSection />
         <EcosystemSection />
         <RecruitmentProcessSection />
-        <OfficeSpotlightSection />
+        <OfficeSpotlightSection sectionData={basecampSectionData} />
         <HowToApplySection />
         <FaqSection />
       </main>
