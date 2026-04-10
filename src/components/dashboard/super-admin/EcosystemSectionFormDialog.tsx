@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Save, UploadCloud, Trash2 } from 'lucide-react';
+import { Loader2, Save, UploadCloud, Trash2, PlusCircle } from 'lucide-react';
 import { useFirestore, setDocumentNonBlocking, useFirebaseApp } from '@/firebase';
 import { doc, collection, serverTimestamp } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -106,7 +106,7 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
 
   useEffect(() => {
     if (open) {
-      const type = item?.type || 'content';
+      const type = item ? (item.sectionKey === 'hero' ? 'hero' : 'content') : 'content';
       form.reset({
         type: type,
         sectionKey: item?.sectionKey || '',
@@ -201,9 +201,9 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
         if (mode === 'Edit' && item) {
             sectionKey = item.sectionKey;
         } else {
-            sectionKey = values.type === 'hero' ? 'hero' : (values.sectionKey || slugify(values.title) + '-' + Date.now().toString(36).slice(-4));
+            sectionKey = values.sectionKey || slugify(values.title) + '-' + Date.now().toString(36).slice(-4);
         }
-
+        
         const docRef = doc(firestore, 'ecosystem_sections', sectionKey);
 
         const newImageUrls = await Promise.all(
@@ -225,10 +225,10 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
 
         const payload: Omit<EcosystemSection, 'id'> = {
             sectionKey: sectionKey,
-            type: values.type,
+            type: sectionType,
             title: values.title,
-            subtitle: values.type === 'hero' ? values.subtitle : '',
-            description: values.type === 'content' ? values.description : '',
+            subtitle: sectionType === 'hero' ? values.subtitle : '',
+            description: sectionType === 'content' ? values.description : '',
             imageUrls: finalImageUrls,
             isActive: values.isActive,
             sortOrder: values.sortOrder,
@@ -309,39 +309,46 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
                     <FormField control={form.control} name="description" render={({ field }) => (<FormItem><FormLabel>Deskripsi</FormLabel><FormControl><Textarea {...field} /></FormControl><FormDescription>Paragraf deskripsi untuk Content Section.</FormDescription><FormMessage /></FormItem>)} />
                   )}
 
-                 <FormItem>
-                  <FormLabel>Gambar</FormLabel>
-                  <FormDescription>Seret gambar untuk mengubah urutan. Jika lebih dari satu, akan tampil sebagai carousel.</FormDescription>
-                  <label
-                    htmlFor="image-upload"
-                    onDragOver={(e) => handleDragEvents(e, true)}
-                    onDragLeave={(e) => handleDragEvents(e, false)}
-                    onDrop={handleDrop}
-                    className={cn(
-                      "mt-2 p-4 border-2 border-dashed rounded-lg transition-colors flex flex-col items-center justify-center min-h-[150px] cursor-pointer",
-                      isDragging ? "border-primary bg-primary/10" : "border-input hover:border-primary/50"
+                  <FormItem>
+                    <FormLabel>Gambar</FormLabel>
+                    <FormDescription>Seret gambar untuk mengubah urutan. Jika lebih dari satu, akan tampil sebagai carousel.</FormDescription>
+                    
+                    {imagePreviews.length > 0 && (
+                      <div className="rounded-md border p-2 mt-2">
+                        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                          <SortableContext items={imagePreviews.map(p => p.id)} strategy={verticalListSortingStrategy}>
+                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-4 w-full">
+                              {imagePreviews.map((image) => (
+                                <SortableImagePreview key={image.id} image={image} onRemove={() => handleRemoveImage(image.id)} />
+                              ))}
+                            </div>
+                          </SortableContext>
+                        </DndContext>
+                      </div>
                     )}
-                  >
-                    {imagePreviews.length > 0 ? (
-                       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                        <SortableContext items={imagePreviews.map(p => p.id)} strategy={verticalListSortingStrategy}>
-                          <div className="grid grid-cols-3 sm:grid-cols-4 gap-4 w-full">
-                            {imagePreviews.map((image) => (
-                              <SortableImagePreview key={image.id} image={image} onRemove={() => handleRemoveImage(image.id)} />
-                            ))}
-                          </div>
-                        </SortableContext>
-                      </DndContext>
-                    ) : (
-                       <div className="text-center text-muted-foreground p-4 pointer-events-none">
-                            <UploadCloud className="mx-auto h-12 w-12 text-gray-400" />
-                            <p className="mt-2 font-semibold">Seret & lepas gambar di sini, atau klik untuk memilih file</p>
-                            <p className="text-xs">PNG, JPG, WEBP hingga 5MB.</p>
-                       </div>
-                    )}
-                  </label>
-                  <Input id="image-upload" type="file" multiple className="hidden" onChange={handleFileChange} accept="image/png, image/jpeg, image/webp" />
-                </FormItem>
+                  
+                    <label
+                      htmlFor="image-upload"
+                      onDragOver={(e) => handleDragEvents(e, true)}
+                      onDragLeave={(e) => handleDragEvents(e, false)}
+                      onDrop={handleDrop}
+                      className={cn(
+                        "mt-4 p-4 border-2 border-dashed rounded-lg transition-colors flex flex-col items-center justify-center min-h-[150px] cursor-pointer",
+                        isDragging ? "border-primary bg-primary/10" : "border-input hover:border-primary/50"
+                      )}
+                    >
+                      <div className="text-center text-muted-foreground p-4 pointer-events-none">
+                        <UploadCloud className="mx-auto h-12 w-12 text-gray-400" />
+                        <p className="mt-2 font-semibold">
+                          {imagePreviews.length > 0 ? "Tambah gambar lain" : "Seret & lepas gambar di sini"}, atau klik untuk memilih file
+                        </p>
+                        <p className="text-xs">Anda dapat memilih beberapa file sekaligus.</p>
+                        <p className="text-xs">PNG, JPG, WEBP hingga 5MB.</p>
+                      </div>
+                    </label>
+                    <Input id="image-upload" type="file" multiple className="hidden" onChange={handleFileChange} accept="image/png, image/jpeg, image/webp" />
+                  </FormItem>
+
 
                 <div className="grid grid-cols-2 gap-4">
                   <FormField control={form.control} name="sortOrder" render={({ field }) => (<FormItem><FormLabel>Urutan Tampil</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormDescription>Angka kecil akan tampil lebih dulu.</FormDescription><FormMessage /></FormItem>)} />
@@ -353,7 +360,7 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
         </ScrollArea>
 
         <DialogFooter className="p-6 pt-4 border-t flex-shrink-0">
-          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Batal</Button>
+          <Button type="button" variant="ghost" onClick={() => handleClose(false)}>Batal</Button>
           <Button type="submit" form="section-form" disabled={isSaving}>
             {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Simpan
           </Button>
