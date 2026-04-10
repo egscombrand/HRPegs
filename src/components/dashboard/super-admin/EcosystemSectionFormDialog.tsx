@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Save, UploadCloud, Trash2, PlusCircle } from 'lucide-react';
+import { Loader2, Save, UploadCloud, Trash2 } from 'lucide-react';
 import { useFirestore, setDocumentNonBlocking, useFirebaseApp } from '@/firebase';
 import { doc, collection, serverTimestamp } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -23,6 +23,7 @@ import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } 
 import { CSS } from '@dnd-kit/utilities';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 
 const slugify = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
@@ -80,6 +81,7 @@ interface EcosystemSectionFormDialogProps {
 export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess }: EcosystemSectionFormDialogProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [imagePreviews, setImagePreviews] = useState<ImagePreview[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
   const firestore = useFirestore();
   const firebaseApp = useFirebaseApp();
   const storage = getStorage(firebaseApp);
@@ -92,25 +94,25 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
 
   const handleClose = (isOpen: boolean) => {
     if (!isOpen) {
-      // Clean up blob URLs when dialog closes
       imagePreviews.forEach(p => {
         if (p.isNew) {
           URL.revokeObjectURL(p.url);
         }
       });
-      setImagePreviews([]); // Clear previews
+      setImagePreviews([]);
     }
     onOpenChange(isOpen);
   };
 
   useEffect(() => {
     if (open) {
+      const type = item?.type || 'content';
       form.reset({
-        type: item?.type || 'content',
+        type: type,
         sectionKey: item?.sectionKey || '',
         title: item?.title || '',
-        subtitle: item?.subtitle || '',
-        description: item?.description || '',
+        subtitle: (type === 'hero' ? item?.subtitle : '') || '',
+        description: (type === 'content' ? item?.description : '') || '',
         isActive: item?.isActive ?? true,
         sortOrder: item?.sortOrder || 0,
         imageFiles: [],
@@ -122,11 +124,24 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
     }
   }, [open, item, form]);
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
-    if (files.length === 0) return;
-    
-    const newPreviews: ImagePreview[] = files.map(file => ({
+  const handleFiles = useCallback((files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    const newImageFiles = Array.from(files).filter(file => {
+        if (!file.type.startsWith('image/')) {
+            toast({ variant: "destructive", title: "Invalid File Type", description: `${file.name} is not an image.` });
+            return false;
+        }
+        if (file.size > 5 * 1024 * 1024) { // 5MB
+            toast({ variant: "destructive", title: "File Too Large", description: `${file.name} is larger than 5MB.` });
+            return false;
+        }
+        return true;
+    });
+
+    if (newImageFiles.length === 0) return;
+
+    const newPreviews: ImagePreview[] = newImageFiles.map(file => ({
         id: crypto.randomUUID(),
         url: URL.createObjectURL(file),
         file: file,
@@ -134,7 +149,23 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
     }));
     
     setImagePreviews(prev => [...prev, ...newPreviews]);
-    form.setValue('imageFiles', [...(form.getValues('imageFiles') || []), ...files]);
+    form.setValue('imageFiles', [...(form.getValues('imageFiles') || []), ...newImageFiles]);
+  }, [form, toast]);
+
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    handleFiles(event.target.files);
+  };
+  
+  const handleDragEvents = (e: React.DragEvent<HTMLLabelElement>, isEntering: boolean) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(isEntering);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLLabelElement>) => {
+    handleDragEvents(e, false);
+    handleFiles(e.dataTransfer.files);
   };
   
   const handleRemoveImage = (idToRemove: string) => {
@@ -166,7 +197,7 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
   const onSubmit = async (values: FormValues) => {
     setIsSaving(true);
     try {
-        let sectionKey;
+        let sectionKey = '';
         if (mode === 'Edit' && item) {
             sectionKey = item.sectionKey;
         } else {
@@ -236,11 +267,7 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
                       <FormItem>
                         <FormLabel>Jenis Section</FormLabel>
                         <Select onValueChange={field.onChange} value={field.value} disabled={mode === 'Edit'}>
-                            <FormControl>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Pilih jenis section..." />
-                                </SelectTrigger>
-                            </FormControl>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Pilih jenis section..." /></SelectTrigger></FormControl>
                             <SelectContent>
                                 <SelectItem value="hero">Hero (Banner Utama)</SelectItem>
                                 <SelectItem value="content">Content (Section Informasi)</SelectItem>
@@ -255,15 +282,10 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
                   />
 
                   {mode === 'Create' && sectionType === 'content' && (
-                     <FormField
-                        control={form.control}
-                        name="sectionKey"
-                        render={({ field }) => (
+                     <FormField control={form.control} name="sectionKey" render={({ field }) => (
                           <FormItem>
                             <FormLabel>Section ID (Pengenal Unik)</FormLabel>
-                            <FormControl>
-                              <Input {...field} placeholder="e.g., basecamp, our-values" />
-                            </FormControl>
+                            <FormControl><Input {...field} placeholder="e.g., basecamp, our-values" /></FormControl>
                             <FormDescription>Gunakan huruf kecil tanpa spasi (boleh pakai tanda hubung "-"). Jika dikosongkan, akan dibuat otomatis dari judul.</FormDescription>
                             <FormMessage />
                           </FormItem>
@@ -271,10 +293,7 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
                       />
                   )}
                   
-                  <FormField
-                    control={form.control}
-                    name="title"
-                    render={({ field }) => (
+                  <FormField control={form.control} name="title" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Judul</FormLabel>
                         <FormControl><Input {...field} /></FormControl>
@@ -293,11 +312,20 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
                  <FormItem>
                   <FormLabel>Gambar</FormLabel>
                   <FormDescription>Seret gambar untuk mengubah urutan. Jika lebih dari satu, akan tampil sebagai carousel.</FormDescription>
-                  <div className="mt-2 p-4 border rounded-lg">
+                  <label
+                    htmlFor="image-upload"
+                    onDragOver={(e) => handleDragEvents(e, true)}
+                    onDragLeave={(e) => handleDragEvents(e, false)}
+                    onDrop={handleDrop}
+                    className={cn(
+                      "mt-2 p-4 border-2 border-dashed rounded-lg transition-colors flex flex-col items-center justify-center min-h-[150px] cursor-pointer",
+                      isDragging ? "border-primary bg-primary/10" : "border-input hover:border-primary/50"
+                    )}
+                  >
                     {imagePreviews.length > 0 ? (
                        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                         <SortableContext items={imagePreviews.map(p => p.id)} strategy={verticalListSortingStrategy}>
-                          <div className="grid grid-cols-3 sm:grid-cols-4 gap-4">
+                          <div className="grid grid-cols-3 sm:grid-cols-4 gap-4 w-full">
                             {imagePreviews.map((image) => (
                               <SortableImagePreview key={image.id} image={image} onRemove={() => handleRemoveImage(image.id)} />
                             ))}
@@ -305,15 +333,14 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
                         </SortableContext>
                       </DndContext>
                     ) : (
-                       <div className="text-center text-muted-foreground p-4">Belum ada gambar yang diunggah.</div>
+                       <div className="text-center text-muted-foreground p-4 pointer-events-none">
+                            <UploadCloud className="mx-auto h-12 w-12 text-gray-400" />
+                            <p className="mt-2 font-semibold">Seret & lepas gambar di sini, atau klik untuk memilih file</p>
+                            <p className="text-xs">PNG, JPG, WEBP hingga 5MB.</p>
+                       </div>
                     )}
-                  </div>
-                 <div className="mt-2">
-                    <label htmlFor="image-upload" className="cursor-pointer text-sm text-primary font-medium underline-offset-4 hover:underline">
-                      <PlusCircle className="inline-block h-4 w-4 mr-2" /> Tambah Gambar
-                    </label>
-                    <Input id="image-upload" type="file" multiple className="hidden" onChange={handleFileChange} accept="image/png, image/jpeg, image/webp" />
-                  </div>
+                  </label>
+                  <Input id="image-upload" type="file" multiple className="hidden" onChange={handleFileChange} accept="image/png, image/jpeg, image/webp" />
                 </FormItem>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -326,7 +353,7 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
         </ScrollArea>
 
         <DialogFooter className="p-6 pt-4 border-t flex-shrink-0">
-          <Button type="button" variant="ghost" onClick={() => handleClose(false)}>Batal</Button>
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Batal</Button>
           <Button type="submit" form="section-form" disabled={isSaving}>
             {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Simpan
           </Button>
