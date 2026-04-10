@@ -22,16 +22,20 @@ import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type D
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+const slugify = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
 const formSchema = z.object({
-  sectionKey: z.string().min(3, "Section ID is required.").regex(/^[a-z0-9-]+$/, "Only lowercase letters, numbers, and hyphens allowed."),
-  title: z.string().min(3, "Title must be at least 3 characters."),
+  type: z.enum(['hero', 'content'], { required_error: "Jenis section harus dipilih." }),
+  sectionKey: z.string().min(3, "Section ID harus diisi.").regex(/^[a-z0-9-]+$/, "Hanya huruf kecil, angka, dan tanda hubung yang diizinkan.").optional(),
+  title: z.string().min(3, "Judul harus minimal 3 karakter."),
   subtitle: z.string().optional(),
   description: z.string().optional(),
   imageFiles: z.array(z.instanceof(File)).optional(),
   imageUrls: z.array(z.string()).default([]),
   isActive: z.boolean().default(true),
-  sortOrder: z.coerce.number().int().min(0, "Sort order must be a positive number."),
+  sortOrder: z.coerce.number().int().min(0, "Urutan harus angka positif."),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -84,12 +88,17 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
 
   const form = useForm<FormValues>({ resolver: zodResolver(formSchema) });
   
-  const sectionKey = form.watch('sectionKey');
+  const sectionType = form.watch('type');
 
   const handleClose = (isOpen: boolean) => {
     if (!isOpen) {
-      imagePreviews.forEach(p => { if (p.isNew) URL.revokeObjectURL(p.url); });
-      setImagePreviews([]);
+      // Clean up blob URLs when dialog closes
+      imagePreviews.forEach(p => {
+        if (p.isNew) {
+          URL.revokeObjectURL(p.url);
+        }
+      });
+      setImagePreviews([]); // Clear previews
     }
     onOpenChange(isOpen);
   };
@@ -97,6 +106,7 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
   useEffect(() => {
     if (open) {
       form.reset({
+        type: item?.type || 'content',
         sectionKey: item?.sectionKey || '',
         title: item?.title || '',
         subtitle: item?.subtitle || '',
@@ -156,12 +166,18 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
   const onSubmit = async (values: FormValues) => {
     setIsSaving(true);
     try {
-        const docId = item?.id || values.sectionKey;
-        const docRef = doc(firestore, 'ecosystem_sections', docId);
+        let sectionKey;
+        if (mode === 'Edit' && item) {
+            sectionKey = item.sectionKey;
+        } else {
+            sectionKey = values.type === 'hero' ? 'hero' : (values.sectionKey || slugify(values.title) + '-' + Date.now().toString(36).slice(-4));
+        }
+
+        const docRef = doc(firestore, 'ecosystem_sections', sectionKey);
 
         const newImageUrls = await Promise.all(
             (values.imageFiles || []).map(async (file) => {
-                const filePath = `ecosystem_sections/${docId}/${Date.now()}-${file.name}`;
+                const filePath = `ecosystem_sections/${sectionKey}/${Date.now()}-${file.name}`;
                 const storageRef = ref(storage, filePath);
                 await uploadBytes(storageRef, file);
                 return getDownloadURL(storageRef);
@@ -177,11 +193,11 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
         }).filter(Boolean) as string[];
 
         const payload: Omit<EcosystemSection, 'id'> = {
-            sectionKey: values.sectionKey,
-            type: values.sectionKey === 'hero' ? 'hero' : 'content',
+            sectionKey: sectionKey,
+            type: values.type,
             title: values.title,
-            subtitle: values.subtitle || '',
-            description: values.description || '',
+            subtitle: values.type === 'hero' ? values.subtitle : '',
+            description: values.type === 'content' ? values.description : '',
             imageUrls: finalImageUrls,
             isActive: values.isActive,
             sortOrder: values.sortOrder,
@@ -215,18 +231,45 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
               <form id="section-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                   <FormField
                     control={form.control}
-                    name="sectionKey"
+                    name="type"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Section ID (Pengenal Unik)</FormLabel>
-                        <FormControl>
-                          <Input {...field} disabled={mode === 'Edit'} placeholder="e.g., hero, our-values" />
-                        </FormControl>
-                        <FormDescription>Pengenal unik untuk section ini (misal: "hero"). Ini digunakan oleh sistem untuk menempatkan konten dan tidak dapat diubah.</FormDescription>
+                        <FormLabel>Jenis Section</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={mode === 'Edit'}>
+                            <FormControl>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Pilih jenis section..." />
+                                </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                                <SelectItem value="hero">Hero (Banner Utama)</SelectItem>
+                                <SelectItem value="content">Content (Section Informasi)</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <FormDescription>
+                            {field.value === 'hero' ? 'Akan tampil di bagian paling atas halaman sebagai banner utama.' : 'Akan tampil di bawah sebagai section informasi.'}
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+
+                  {mode === 'Create' && sectionType === 'content' && (
+                     <FormField
+                        control={form.control}
+                        name="sectionKey"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Section ID (Pengenal Unik)</FormLabel>
+                            <FormControl>
+                              <Input {...field} placeholder="e.g., basecamp, our-values" />
+                            </FormControl>
+                            <FormDescription>Gunakan huruf kecil tanpa spasi (boleh pakai tanda hubung "-"). Jika dikosongkan, akan dibuat otomatis dari judul.</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                  )}
                   
                   <FormField
                     control={form.control}
@@ -241,7 +284,7 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
                     )}
                   />
                   
-                  {sectionKey === 'hero' ? (
+                  {sectionType === 'hero' ? (
                     <FormField control={form.control} name="subtitle" render={({ field }) => (<FormItem><FormLabel>Subtitle</FormLabel><FormControl><Textarea {...field} /></FormControl><FormDescription>Teks pendukung di bawah judul, khusus untuk Hero Section.</FormDescription><FormMessage /></FormItem>)} />
                   ) : (
                     <FormField control={form.control} name="description" render={({ field }) => (<FormItem><FormLabel>Deskripsi</FormLabel><FormControl><Textarea {...field} /></FormControl><FormDescription>Paragraf deskripsi untuk Content Section.</FormDescription><FormMessage /></FormItem>)} />
@@ -274,8 +317,8 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
                 </FormItem>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <FormField control={form.control} name="sortOrder" render={({ field }) => (<FormItem><FormLabel>Sort Order</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                  <FormField control={form.control} name="isActive" render={({ field }) => (<FormItem><FormLabel>Status</FormLabel><div className="flex items-center space-x-2 h-10"><FormControl><Switch id="is-active" checked={field.value} onCheckedChange={field.onChange} /></FormControl><Label htmlFor="is-active">Aktif</Label></div><FormMessage /></FormItem>)} />
+                  <FormField control={form.control} name="sortOrder" render={({ field }) => (<FormItem><FormLabel>Urutan Tampil</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormDescription>Angka kecil akan tampil lebih dulu.</FormDescription><FormMessage /></FormItem>)} />
+                  <FormField control={form.control} name="isActive" render={({ field }) => (<FormItem><FormLabel>Status</FormLabel><div className="flex items-center space-x-2 h-10"><FormControl><Switch id="is-active" checked={field.value} onCheckedChange={field.onChange} /></FormControl><Label htmlFor="is-active">Aktif (Tampilkan di landing page)</Label></div><FormMessage /></FormItem>)} />
                 </div>
               </form>
             </Form>
