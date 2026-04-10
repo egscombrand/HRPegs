@@ -1,4 +1,5 @@
 
+
 /**
  * This ruleset enforces a strict security model for the HRP Starter application,
  * balancing user ownership with powerful administrative capabilities.
@@ -198,7 +199,7 @@ service cloud.firestore {
      * - Writable only by HRD and Super Admins.
      */
     match /ecosystem_companies/{companyId} {
-        allow read: if true;
+        allow get, list: if true;
         allow write: if isHrd() || isSuperAdmin();
     }
 
@@ -325,21 +326,20 @@ service cloud.firestore {
           let onlyAllowedFieldsChanged = changedKeys.hasOnly(allowedKeys);
           return isOwner && isInterviewStage && onlyAllowedFieldsChanged;
         }
-
     }
-
-    // Internal Reviews Subcollection (Properly moved outside nested applications block)
+    
+    match /applications/{applicationId}/internal_reviews/{reviewerUid} {
+      allow get: if isHrd() || isSuperAdmin() || request.auth.uid == reviewerUid || (isSignedIn() && hasInternalReviewAccess(applicationId));
+      allow list: if isHrd() || isSuperAdmin() || (isSignedIn() && hasInternalReviewAccess(applicationId));
+      allow write: if isHrd() || isSuperAdmin() || (isOwner(reviewerUid) && hasInternalReviewAccess(applicationId));
+    }
+    
     function hasInternalReviewAccess(appId) {
       let appData = get(/databases/$(database)/documents/applications/$(appId)).data;
       return request.auth.uid in appData.get(['internalReviewConfig', 'assignedReviewerUids'], []) ||
              request.auth.uid in appData.get('allPanelistIds', []);
     }
 
-    match /applications/{applicationId}/internal_reviews/{reviewerUid} {
-      allow list: if isHrd() || isSuperAdmin() || (isSignedIn() && hasInternalReviewAccess(applicationId));
-      allow get: if isHrd() || isSuperAdmin() || request.auth.uid == reviewerUid || (isSignedIn() && hasInternalReviewAccess(applicationId));
-      allow write: if isHrd() || isSuperAdmin() || (isOwner(reviewerUid) && hasInternalReviewAccess(applicationId));
-    }
 
     /**
      * /navigation_settings/{roleId}
@@ -515,5 +515,3 @@ service cloud.firestore {
     }
   }
 }
-
-    
