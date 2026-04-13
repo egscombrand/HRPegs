@@ -17,6 +17,45 @@ import { ScheduleInterviewDialog, type ScheduleInterviewData } from './ScheduleI
 import { ManagePanelistsDialog } from './ManagePanelistsDialog';
 import type { JobApplication, ApplicationInterview, RescheduleRequest, Brand, UserProfile, ApplicationTimelineEvent, Job } from '@/lib/types';
 
+function getInterviewChangeSummary(
+  oldIv: ApplicationInterview, 
+  newIv: ScheduleInterviewData,
+  allUsers: UserProfile[]
+): { changes: string[]; hasMajorChange: boolean } {
+  const changes: string[] = [];
+  let hasMajorChange = false;
+
+  const oldStart = oldIv.startAt.toDate();
+  const newStart = newIv.dateTime;
+
+  if (format(oldStart, 'yyyy-MM-dd') !== format(newStart, 'yyyy-MM-dd')) {
+    changes.push(`📅 Tanggal: ${format(oldStart, 'dd MMM')} → ${format(newStart, 'dd MMM')}`);
+    hasMajorChange = true;
+  }
+  if (format(oldStart, 'HH:mm') !== format(newStart, 'HH:mm')) {
+    changes.push(`🕒 Waktu: ${format(oldStart, 'HH:mm')} → ${format(newStart, 'HH:mm')}`);
+    hasMajorChange = true;
+  }
+  if (oldIv.meetingLink !== newIv.meetingLink) {
+    changes.push('🔗 Link Meeting diperbarui');
+    hasMajorChange = true;
+  }
+  
+  const oldDuration = differenceInMinutes(oldIv.endAt.toDate(), oldIv.startAt.toDate());
+  if (oldDuration !== newIv.duration) {
+      changes.push(`⏱️ Durasi: ${oldDuration} mnt → ${newIv.duration} mnt`);
+  }
+
+  const oldPanelistIds = new Set(oldIv.panelistIds || []);
+  const newPanelistIds = new Set(newIv.panelists.map(p => p.value));
+  if (oldPanelistIds.size !== newPanelistIds.size || ![...oldPanelistIds].every(id => newPanelistIds.has(id))) {
+      changes.push('👥 Tim pewawancara diperbarui');
+      hasMajorChange = true;
+  }
+  
+  return { changes, hasMajorChange };
+}
+
 
 export function InterviewManagement({ application, onUpdate, allUsers, allBrands, job }: { application: JobApplication; onUpdate: () => void; allUsers: UserProfile[], allBrands: Brand[], job: Job }) {
   const [isScheduleDialogOpen, setScheduleDialogOpen] = useState(false);
@@ -102,6 +141,8 @@ export function InterviewManagement({ application, onUpdate, allUsers, allBrands
             if (index !== -1) {
                 const originalData = newInterviews[index];
 
+                const { changes, hasMajorChange } = getInterviewChangeSummary(originalData, data, allUsers);
+
                 const updatedData: ApplicationInterview = {
                     ...originalData,
                     startAt: Timestamp.fromDate(data.dateTime),
@@ -111,27 +152,16 @@ export function InterviewManagement({ application, onUpdate, allUsers, allBrands
                     meetingLink: data.meetingLink || '',
                     notes: data.notes,
                 };
-                
-                // Compare key fields to see if a notification is needed
-                const hasChanged =
-                    originalData.startAt.toMillis() !== updatedData.startAt.toMillis() ||
-                    originalData.endAt.toMillis() !== updatedData.endAt.toMillis() ||
-                    originalData.meetingLink !== updatedData.meetingLink ||
-                    JSON.stringify((originalData.panelistIds || []).sort()) !== JSON.stringify(updatedData.panelistIds.sort());
-
                 newInterviews[index] = updatedData;
 
-                if (hasChanged) {
-                    console.log('[InterviewManagement] Interview updated → sending notifications');
-
+                if (hasMajorChange) {
                     newTimeline.push({
                         type: 'interview_updated',
                         at: Timestamp.now(),
                         by: userProfile.uid,
-                        meta: { note: 'Jadwal wawancara diperbarui oleh HRD.' },
+                        meta: { note: 'Jadwal wawancara diperbarui oleh HRD.', changes },
                     });
 
-                    // Build rich meta for the notification payload
                     const interviewDateStr = format(updatedData.startAt.toDate(), 'dd MMMM yyyy', { locale: idLocale });
                     const interviewTimeStr = format(updatedData.startAt.toDate(), 'HH:mm');
                     const notifMeta = {
@@ -142,23 +172,10 @@ export function InterviewManagement({ application, onUpdate, allUsers, allBrands
                         interviewDate: interviewDateStr,
                         interviewTime: interviewTimeStr,
                         meetingLink: updatedData.meetingLink,
+                        changes,
                     };
 
-                    // Recipients:
-                    // 1. Panelists assigned to this specific interview
-                    // 2. ALL recruitment team members assigned to this job (job.assignedUserIds)
-                    // 3. The candidate
-                    const recruitmentTeamIds = new Set<string>([
-                        ...updatedData.panelistIds,
-                        ...(job.assignedUserIds || []),
-                    ]);
-                    const allRecipients = new Set<string>([
-                        application.candidateUid,
-                        ...recruitmentTeamIds,
-                    ]);
-
-                    console.log(`[InterviewManagement] Notifying ${allRecipients.size} recipients (candidate + ${recruitmentTeamIds.size} recruitment team members)`);
-
+                    const allRecipients = new Set<string>([application.candidateUid, ...panelistIds, ...(job.assignedUserIds || [])]);
                     allRecipients.forEach(recipientUid => {
                         const notifRef = doc(collection(firestore, 'users', recipientUid, 'notifications'));
                         const isCandidate = recipientUid === application.candidateUid;
@@ -167,21 +184,15 @@ export function InterviewManagement({ application, onUpdate, allUsers, allBrands
                             userId: recipientUid,
                             type: 'interview_updated',
                             title: 'Jadwal Wawancara Diperbarui',
-                            message: `Jadwal wawancara untuk ${application.candidateName} telah diperbarui. Silakan cek detail terbaru.`,
-                            actionUrl: isCandidate
-                                ? `/careers/portal/applications`
-                                : `/admin/recruitment/my-tasks`,
+                            message: `Jadwal wawancara untuk ${isCandidate ? `posisi "${application.jobPosition}"` : application.candidateName} telah diperbarui.`,
+                            actionUrl: isCandidate ? `/careers/portal/applications` : `/admin/recruitment/my-tasks`,
                             meta: notifMeta,
                         });
                     });
                 }
                 
-                const allPanelistIds = new Set<string>();
-                newInterviews.forEach(iv => {
-                    if (iv.status === 'scheduled') {
-                        (iv.panelistIds || []).forEach(id => allPanelistIds.add(id));
-                    }
-                });
+                const allPanelistIds = new Set<string>((application.allPanelistIds || []));
+                newInterviews.forEach(iv => { if (iv.status === 'scheduled') { (iv.panelistIds || []).forEach(id => allPanelistIds.add(id)); } });
 
                 batch.update(appRef, { interviews: newInterviews, timeline: newTimeline, allPanelistIds: Array.from(allPanelistIds) });
                 toast({ title: 'Wawancara Diperbarui' });
@@ -220,54 +231,10 @@ export function InterviewManagement({ application, onUpdate, allUsers, allBrands
                 by: userProfile.uid,
                 meta: { interviewDate: Timestamp.fromDate(data.dateTime) }
             });
-
-            // On new schedule: notify candidate + panelists + full job recruitment team
-            const newInterviewDateStr = format(data.dateTime, 'dd MMMM yyyy', { locale: idLocale });
-            const newInterviewTimeStr = format(data.dateTime, 'HH:mm');
-            const newNotifMeta = {
-                jobId: application.jobId,
-                applicationId: application.id!,
-                candidateName: application.candidateName,
-                jobTitle: application.jobPosition,
-                interviewDate: newInterviewDateStr,
-                interviewTime: newInterviewTimeStr,
-                meetingLink: data.meetingLink,
-            };
-
-            const newRecruitmentTeamIds = new Set<string>([
-                ...panelistIds,
-                ...(job.assignedUserIds || []),
-            ]);
-            const allRecipients = new Set<string>([
-                application.candidateUid,
-                ...newRecruitmentTeamIds,
-            ]);
-
-            console.log(`[InterviewManagement] Interview scheduled → notifying ${allRecipients.size} recipients`);
-
-            allRecipients.forEach(recipientUid => {
-                const notifRef = doc(collection(firestore, 'users', recipientUid, 'notifications'));
-                const isCandidate = recipientUid === application.candidateUid;
-
-                batch.set(notifRef, {
-                    ...notificationBase,
-                    userId: recipientUid,
-                    type: 'interview_scheduled',
-                    title: 'Jadwal Wawancara Baru',
-                    message: isCandidate
-                        ? `Anda telah dijadwalkan untuk wawancara posisi "${application.jobPosition}". Silakan cek detail terbaru.`
-                        : `Jadwal wawancara baru untuk ${application.candidateName} (${application.jobPosition}) telah ditetapkan.`,
-                    actionUrl: isCandidate
-                        ? `/careers/portal/applications`
-                        : `/admin/recruitment/my-tasks`,
-                    meta: newNotifMeta,
-                });
-            });
-
             const allPanelistIds = new Set<string>(application.allPanelistIds || []);
             panelistIds.forEach(id => allPanelistIds.add(id));
 
-            batch.update(appRef, { interviews: newInterviews, timeline: newTimeline, allPanelistIds: Array.from(allPanelistIds) });
+            await updateDoc(doc(firestore, 'applications', application.id!), { interviews: newInterviews, timeline: newTimeline, allPanelistIds: Array.from(allPanelistIds) });
             toast({ title: activeInterview ? 'Jadwal Baru Diajukan' : 'Wawancara Dijadwalkan' });
         }
         
@@ -304,9 +271,6 @@ export function InterviewManagement({ application, onUpdate, allUsers, allBrands
         return iv;
     });
 
-    const batch = writeBatch(firestore);
-    const appRef = doc(firestore, 'applications', application.id!);
-
     const timelineEvent: ApplicationTimelineEvent = {
         type: 'status_changed',
         at: Timestamp.now(),
@@ -315,57 +279,10 @@ export function InterviewManagement({ application, onUpdate, allUsers, allBrands
     };
 
     try {
-        batch.update(appRef, {
+        await updateDoc(doc(firestore, 'applications', application.id!), {
             interviews: newInterviews,
             timeline: [...(application.timeline || []), timelineEvent]
         });
-
-        // Notify candidate and recruitment team
-        const interviewDateStr = format(approvedSlot.startAt.toDate(), 'dd MMMM yyyy', { locale: idLocale });
-        const interviewTimeStr = format(approvedSlot.startAt.toDate(), 'HH:mm');
-        
-        const notifMeta = {
-            jobId: application.jobId,
-            applicationId: application.id!,
-            candidateName: application.candidateName,
-            jobTitle: application.jobPosition,
-            interviewDate: interviewDateStr,
-            interviewTime: interviewTimeStr,
-            meetingLink: interviewToApprove.meetingLink,
-        };
-
-        const recruitmentTeamIds = new Set<string>([
-            ...(interviewToApprove.panelistIds || []),
-            ...(job.assignedUserIds || []),
-        ]);
-        const allRecipients = new Set<string>([
-            application.candidateUid,
-            ...recruitmentTeamIds,
-        ]);
-
-        allRecipients.forEach(recipientUid => {
-            const notifRef = doc(collection(firestore, 'users', recipientUid, 'notifications'));
-            const isCandidate = recipientUid === application.candidateUid;
-            
-            batch.set(notifRef, {
-                module: 'recruitment',
-                targetType: 'application',
-                targetId: application.id!,
-                userId: recipientUid,
-                type: 'interview_updated',
-                title: 'Permintaan Jadwal Ulang Disetujui',
-                message: isCandidate 
-                    ? `Permintaan jadwal ulang Anda telah disetujui untuk tanggal ${interviewDateStr}.`
-                    : `Jadwal ulang untuk ${application.candidateName} telah disetujui.`,
-                actionUrl: isCandidate ? '/careers/portal/applications' : '/admin/recruitment/my-tasks',
-                isRead: false,
-                createdAt: serverTimestamp(),
-                createdBy: userProfile.uid,
-                meta: notifMeta,
-            });
-        });
-
-        await batch.commit();
         onUpdate();
         toast({ title: 'Jadwal Ulang Disetujui' });
     } catch (error: any) {
@@ -396,51 +313,8 @@ export function InterviewManagement({ application, onUpdate, allUsers, allBrands
         return iv;
     });
 
-    const batch = writeBatch(firestore);
-    const appRef = doc(firestore, 'applications', application.id!);
-
     try {
-        batch.update(appRef, { interviews: newInterviews });
-
-        // Notify candidate and recruitment team
-        const interviewDateStr = format(interviewToDeny.startAt.toDate(), 'dd MMMM yyyy', { locale: idLocale });
-        
-        const recruitmentTeamIds = new Set<string>([
-            ...(interviewToDeny.panelistIds || []),
-            ...(job.assignedUserIds || []),
-        ]);
-        const allRecipients = new Set<string>([
-            application.candidateUid,
-            ...recruitmentTeamIds,
-        ]);
-
-        allRecipients.forEach(recipientUid => {
-            const notifRef = doc(collection(firestore, 'users', recipientUid, 'notifications'));
-            const isCandidate = recipientUid === application.candidateUid;
-            
-            batch.set(notifRef, {
-                module: 'recruitment',
-                targetType: 'application',
-                targetId: application.id!,
-                userId: recipientUid,
-                type: 'interview_updated',
-                title: 'Permintaan Jadwal Ulang Ditolak',
-                message: isCandidate 
-                    ? `Mohon maaf, permintaan jadwal ulang Anda ditolak. Silakan ikuti jadwal semula.`
-                    : `Permintaan jadwal ulang untuk ${application.candidateName} ditolak.`,
-                actionUrl: isCandidate ? '/careers/portal/applications' : '/admin/recruitment/my-tasks',
-                isRead: false,
-                createdAt: serverTimestamp(),
-                createdBy: userProfile.uid,
-                meta: {
-                    jobId: application.jobId,
-                    applicationId: application.id!,
-                    candidateName: application.candidateName,
-                }
-            });
-        });
-
-        await batch.commit();
+        await updateDoc(doc(firestore, 'applications', application.id!), { interviews: newInterviews });
         onUpdate();
         toast({ title: 'Permintaan Ditolak', description: 'Status wawancara dikembalikan ke "Terjadwal".' });
     } catch (error: any) {
@@ -525,7 +399,7 @@ export function InterviewManagement({ application, onUpdate, allUsers, allBrands
                                                 {iv.rescheduleRequest.proposedSlots.map((slot, slotIndex) => (
                                                     <li key={slotIndex} className="flex items-center justify-between text-sm p-2 bg-background/50 rounded-md">
                                                         <span>{format(slot.startAt.toDate(), 'eeee, dd MMM yyyy - HH:mm', { locale: idLocale })}</span>
-                                                        {isPrivilegedRecruiter && <Button size="sm" onClick={() => handleApproveReschedule(iv, slot)} disabled={isSubmitting}>Setujui</Button>}
+                                                        {isPrivilegedRecruiter && <Button size="xs" onClick={() => handleApproveReschedule(iv, slot)} disabled={isSubmitting}>Setujui</Button>}
                                                     </li>
                                                 ))}
                                             </ul>

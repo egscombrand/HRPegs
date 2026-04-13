@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { formatDistanceToNow } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { Loader2, BellOff, Briefcase } from 'lucide-react';
+import { Loader2, BellOff, Briefcase, Calendar } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 
@@ -58,6 +58,18 @@ export function NotificationPanel() {
   const getLinkHref = (notification: Notification): string => {
     return notification.actionUrl || '#';
   }
+  
+  const renderIcon = (type: Notification['type']) => {
+    switch (type) {
+      case 'interview_scheduled':
+      case 'interview_updated':
+        return <Calendar className="h-4 w-4 text-muted-foreground" />;
+      case 'recruitment_assignment':
+        return <Briefcase className="h-4 w-4 text-muted-foreground" />;
+      default:
+        return <Briefcase className="h-4 w-4 text-muted-foreground" />;
+    }
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -86,8 +98,6 @@ export function NotificationPanel() {
             )}
             <div className="p-2 space-y-1">
                 {notifications?.map(notif => {
-                    const jobTitle = notif.meta?.jobTitle || 'sebuah lowongan';
-                    
                     return (
                         <Link
                             key={notif.id}
@@ -100,22 +110,32 @@ export function NotificationPanel() {
                         >
                             <div className="flex items-start gap-3 p-3">
                                 <div className="relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted mt-1">
-                                <Briefcase className="h-4 w-4 text-muted-foreground" />
-                                {!notif.isRead && (
-                                    <span className="absolute top-0 right-0 flex h-2.5 w-2.5">
-                                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75"></span>
-                                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary"></span>
-                                    </span>
-                                )}
+                                    {renderIcon(notif.type)}
+                                    {!notif.isRead && (
+                                        <span className="absolute top-0 right-0 flex h-2.5 w-2.5">
+                                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75"></span>
+                                            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary"></span>
+                                        </span>
+                                    )}
                                 </div>
                                 <div className="flex-grow">
-                                <p className="text-xs font-semibold text-muted-foreground">{notif.title}</p>
-                                <p className="text-sm text-foreground mt-1">
-                                    {notif.message}
-                                </p>
-                                <p className="text-xs text-muted-foreground mt-1.5">
-                                    {notif.createdAt?.toDate ? formatDistanceToNow(notif.createdAt.toDate(), { addSuffix: true, locale: idLocale }) : ''}
-                                </p>
+                                    <p className="text-xs font-semibold text-muted-foreground">{notif.title}</p>
+                                    <p className="text-sm text-foreground mt-1">
+                                        {notif.message}
+                                    </p>
+                                    {notif.meta?.changes && notif.meta.changes.length > 0 && (
+                                        <div className="mt-2 space-y-1 border-l-2 border-border pl-2 text-xs">
+                                            {notif.meta.changes.slice(0,3).map((change: string, i: number) => (
+                                                <p key={i} className="text-muted-foreground">{change}</p>
+                                            ))}
+                                            {notif.meta.changes.length > 3 && (
+                                                <p className="text-muted-foreground font-semibold italic">+ {notif.meta.changes.length - 3} perubahan lainnya...</p>
+                                            )}
+                                        </div>
+                                    )}
+                                    <p className="text-xs text-muted-foreground mt-1.5">
+                                        {notif.createdAt?.toDate ? formatDistanceToNow(notif.createdAt.toDate(), { addSuffix: true, locale: idLocale }) : ''}
+                                    </p>
                                 </div>
                             </div>
                         </Link>
