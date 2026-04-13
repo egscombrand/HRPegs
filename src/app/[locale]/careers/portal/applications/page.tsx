@@ -7,12 +7,12 @@ import { useCollection, useFirestore, useMemoFirebase, updateDocumentNonBlocking
 import { collection, query, where, doc, serverTimestamp } from 'firebase/firestore';
 import type { JobApplication, JobApplicationStatus, AssessmentSession } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
-import { format } from 'date-fns';
+import { format, addMonths } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from "@/components/ui/button";
 import { Link } from "@/navigation";
-import { ArrowRight, Check, Briefcase, Building, FileSignature, FileUp, ClipboardCheck, Users, Award, XCircle, BrainCircuit, FileText, Search, Calendar, Link as LinkIcon, FileClock, Loader2 } from "lucide-react";
+import { ArrowRight, Check, Briefcase, Building, FileSignature, FileUp, ClipboardCheck, Users, Award, XCircle, BrainCircuit, FileText, Search, Calendar, Link as LinkIcon, FileClock, Loader2, Clock } from "lucide-react";
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 import { ORDERED_RECRUITMENT_STAGES } from '@/lib/types';
@@ -209,6 +209,60 @@ function ApplicationCard({ application, hasCompletedTest }: { application: JobAp
       );
   }
 
+  if (isInterviewStage) {
+    if (scheduledInterview) {
+        const interviewStart = scheduledInterview.startAt.toDate();
+        const interviewInProgressEnd = new Date(interviewStart.getTime() + 2 * 60 * 60 * 1000);
+
+        if (now < interviewStart) {
+            // Before interview
+            return (
+                 <div className="p-4 rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-100">
+                    <h3 className="font-semibold text-lg flex items-center gap-2 text-blue-800 dark:text-blue-100"><Calendar className="h-5 w-5" /> Wawancara Akan Dilaksanakan</h3>
+                    <div className="text-sm mt-3 space-y-3 text-blue-800/90 dark:text-blue-200/90 text-justify">
+                        <p>Anda dijadwalkan untuk mengikuti tahap wawancara untuk posisi <strong>{application.jobPosition}</strong>.</p>
+                        <p>Wawancara akan dilaksanakan pada: <br/><strong>{format(interviewStart, "eeee, dd MMMM yyyy", { locale: id })} pukul {format(interviewStart, "HH:mm")} WIB</strong>.</p>
+                        <p>Mohon pastikan Anda hadir tepat waktu dan mempersiapkan diri dengan baik.</p>
+                    </div>
+                </div>
+            )
+        } else if (now >= interviewStart && now < interviewInProgressEnd) {
+            // During interview window
+            return (
+                 <div className="p-4 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 text-amber-900 dark:text-amber-100">
+                    <h3 className="font-semibold text-lg flex items-center gap-2 text-amber-800 dark:text-amber-100"><Clock className="h-5 w-5 animate-spin" /> Wawancara Sedang Berlangsung</h3>
+                    <div className="text-sm mt-3 space-y-3 text-amber-800/90 dark:text-amber-200/90 text-justify">
+                        <p>Tahap wawancara Anda sedang berlangsung. Silakan mengikuti sesi sesuai jadwal yang telah ditentukan.</p>
+                    </div>
+                </div>
+            )
+        } else {
+            // After interview
+             return (
+                <div className="p-4 rounded-md border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-900 dark:text-indigo-100">
+                    <h3 className="font-semibold text-lg flex items-center gap-2 text-indigo-800 dark:text-indigo-100"><Users className="h-5 w-5" /> Tahap Wawancara Selesai, Sedang Kami Tinjau</h3>
+                    <div className="text-sm mt-3 space-y-3 text-indigo-800/90 dark:text-indigo-200/90 text-justify">
+                        <p>Terima kasih telah berpartisipasi dalam tahap wawancara untuk posisi <strong>{application.jobPosition}</strong>. Saat ini, tim rekrutmen kami sedang melakukan evaluasi mendalam berdasarkan hasil diskusi dan kualifikasi Anda secara keseluruhan.</p>
+                        <p>Kami memahami bahwa menunggu kabar bisa jadi hal yang mendebarkan. Kami berkomitmen untuk melakukan proses yang adil dan teliti bagi setiap kandidat. Oleh karena itu, proses ini mungkin membutuhkan sedikit waktu.</p>
+                        <p className="text-xs italic">Kami akan segera memberikan informasi perkembangan selanjutnya melalui portal ini atau email. Terima kasih atas pengertian dan antusiasme Anda.</p>
+                    </div>
+                </div>
+            )
+        }
+    } else {
+        // No interview scheduled yet for this 'interview' stage application
+        return (
+            <div className="p-4 rounded-md border border-muted-foreground/20 bg-muted/50 text-muted-foreground">
+                <h3 className="font-semibold text-lg flex items-center gap-2"><Clock className="h-5 w-5" /> Menunggu Penjadwalan Wawancara</h3>
+                <div className="text-sm mt-3 space-y-3">
+                    <p>Selamat! Anda telah lolos ke tahap wawancara. Tim HRD kami sedang mengatur jadwal yang sesuai.</p>
+                    <p>Anda akan menerima notifikasi di portal ini dan melalui email setelah jadwal wawancara Anda dikonfirmasi. Mohon periksa secara berkala.</p>
+                </div>
+            </div>
+        )
+    }
+  }
+
   return (
     <Card className="flex flex-col">
       <CardHeader>
@@ -236,15 +290,6 @@ function ApplicationCard({ application, hasCompletedTest }: { application: JobAp
                         ? 'Anda telah menolak penawaran kerja ini. Proses rekrutmen untuk posisi ini telah selesai.'
                         : 'Terima kasih atas minat Anda. Saat ini kami belum dapat melanjutkan proses lamaran Anda.'}
                     </p>
-                </div>
-            </div>
-        ) : isInterviewStage ? (
-            <div className="p-4 rounded-md border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-900 dark:text-indigo-100">
-                <h3 className="font-semibold text-lg flex items-center gap-2 text-indigo-800 dark:text-indigo-100"><Users className="h-5 w-5" /> Tahap Wawancara Selesai, Sedang Kami Tinjau</h3>
-                <div className="text-sm mt-3 space-y-3 text-indigo-800/90 dark:text-indigo-200/90 text-justify">
-                    <p>Terima kasih telah berpartisipasi dalam tahap wawancara untuk posisi <strong>{application.jobPosition}</strong>. Saat ini, tim rekrutmen kami sedang melakukan evaluasi mendalam berdasarkan hasil diskusi dan kualifikasi Anda secara keseluruhan.</p>
-                    <p>Kami memahami bahwa menunggu kabar bisa jadi hal yang mendebarkan. Kami berkomitmen untuk melakukan proses yang adil dan teliti bagi setiap kandidat. Oleh karena itu, proses ini mungkin membutuhkan sedikit waktu.</p>
-                    <p className="text-xs italic">Kami akan segera memberikan informasi perkembangan selanjutnya melalui portal ini atau email. Terima kasih atas pengertian dan antusiasme Anda.</p>
                 </div>
             </div>
         ) : (
