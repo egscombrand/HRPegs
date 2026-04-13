@@ -68,7 +68,7 @@ function InterviewCard({ interview, onMutate }: { interview: EnrichedInterview, 
                         </div>
                         <div className="flex-shrink-0">
                              {isTemplate ? (
-                                <Badge variant="outline" className="text-blue-600 border-blue-500">Jadwal Template</Badge>
+                                <Badge variant="outline" className="text-blue-600 border-blue-500">Jadwal Wawancara</Badge>
                             ) : rescheduleStatus === 'pending' ? (
                                 <Badge variant="outline" className="text-amber-600 border-amber-500">Menunggu Konfirmasi HRD</Badge>
                             ) : rescheduleStatus === 'approved' ? (
@@ -99,12 +99,6 @@ function InterviewCard({ interview, onMutate }: { interview: EnrichedInterview, 
                             </div>
                         </div>
                     </div>
-                     {isTemplate && (
-                        <div className="p-3 bg-blue-50/50 rounded-md text-sm border border-blue-200">
-                            <p className="font-semibold text-blue-700">Jadwal Tentatif</p>
-                            <p className="text-xs text-blue-600">Ini adalah jadwal dari template lowongan. Jadwal spesifik Anda mungkin berbeda dan akan dikonfirmasi oleh HRD.</p>
-                        </div>
-                    )}
                     {interview.rescheduleRequest?.hrResponseNote && (
                         <div className="p-3 bg-muted/50 rounded-md text-sm">
                             <p className="font-semibold text-muted-foreground">Catatan dari HRD:</p>
@@ -230,8 +224,8 @@ export default function InterviewsPage() {
         
         const now = new Date().getTime();
         const sorted = [...interviews].sort((a, b) => {
-            const aDate = a.startAt.toDate ? a.startAt.toDate() : a.startAt;
-            const bDate = b.startAt.toDate ? b.startAt.toDate() : b.startAt;
+            const aDate = a.startAt.toDate ? a.startAt.toDate() : a.startAt as Date;
+            const bDate = b.startAt.toDate ? b.startAt.toDate() : b.startAt as Date;
             const aTime = aDate.getTime();
             const bTime = bDate.getTime();
             
