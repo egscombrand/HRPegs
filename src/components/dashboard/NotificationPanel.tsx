@@ -56,12 +56,7 @@ export function NotificationPanel() {
   }
 
   const getLinkHref = (notification: Notification): string => {
-    switch (notification.type) {
-      case 'recruitment_assignment':
-        return `/admin/recruitment/jobs/${notification.jobId}`;
-      default:
-        return '#';
-    }
+    return notification.actionUrl || '#';
   }
 
   return (
@@ -91,9 +86,7 @@ export function NotificationPanel() {
             )}
             <div className="p-2 space-y-1">
                 {notifications?.map(notif => {
-                    const jobTitle = notif.type === 'recruitment_assignment'
-                        ? notif.message.split('"')[1] || 'sebuah lowongan'
-                        : '';
+                    const jobTitle = notif.meta?.jobTitle || 'sebuah lowongan';
                     
                     return (
                         <Link
@@ -118,10 +111,10 @@ export function NotificationPanel() {
                                 <div className="flex-grow">
                                 <p className="text-xs font-semibold text-muted-foreground">{notif.title}</p>
                                 <p className="text-sm text-foreground mt-1">
-                                    Anda ditugaskan ke: <span className="font-semibold">{jobTitle}</span>
+                                    {notif.message}
                                 </p>
                                 <p className="text-xs text-muted-foreground mt-1.5">
-                                    {formatDistanceToNow(notif.createdAt.toDate(), { addSuffix: true, locale: idLocale })}
+                                    {notif.createdAt?.toDate ? formatDistanceToNow(notif.createdAt.toDate(), { addSuffix: true, locale: idLocale }) : ''}
                                 </p>
                                 </div>
                             </div>

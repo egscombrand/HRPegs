@@ -74,11 +74,19 @@ export async function POST(
         const notificationData: Omit<Notification, 'id' | 'createdAt'> & { createdAt: FieldValue } = {
             userId: userId,
             type: 'recruitment_assignment',
-            jobId: params.jobId,
+            module: 'recruitment',
             title: "Penugasan Tim Rekrutmen",
-            message: `Anda telah ditugaskan sebagai tim rekrutmen untuk lowongan "${currentJobData.position}".`,
+            message: `Anda telah ditugaskan untuk membantu proses rekrutmen pada lowongan "${currentJobData.position}".`,
+            targetType: 'job',
+            targetId: params.jobId,
+            actionUrl: `/admin/recruitment/my-tasks`,
             isRead: false,
+            createdBy: authResult.uid,
             createdAt: FieldValue.serverTimestamp(),
+            meta: {
+                jobId: params.jobId,
+                jobTitle: currentJobData.position
+            }
         };
         batch.set(notificationRef, notificationData);
     });

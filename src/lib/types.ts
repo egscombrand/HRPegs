@@ -761,13 +761,27 @@ export interface InternWithReviewStatus extends EmployeeProfile {
 export type Notification = {
   id?: string;
   userId: string;
-  type: 'recruitment_assignment' | 'new_application' | 'status_update';
-  jobId?: string;
-  applicationId?: string;
+  type: 'recruitment_assignment' | 'interview_scheduled' | 'interview_updated' | 'stage_advanced' | 'new_application' | 'status_update';
+  module: 'recruitment' | 'employee';
   title: string;
   message: string;
+  targetType: 'job' | 'application' | 'user';
+  targetId: string;
+  actionUrl: string;
   isRead: boolean;
   createdAt: Timestamp;
+  createdBy: string;
+  meta?: {
+    jobId?: string;
+    applicationId?: string;
+    candidateUid?: string;
+    candidateName?: string;
+    jobTitle?: string;
+    interviewDate?: string;
+    interviewTime?: string;
+    meetingLink?: string;
+    [key: string]: any;
+  };
 };
 
 // --- AI ANALYSIS TYPES ---
