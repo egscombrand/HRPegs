@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useState, useEffect } from 'react';
@@ -9,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link as LinkIcon, Calendar, Video, RefreshCw, Users, Info } from "lucide-react";
-import { add, format, differenceInMinutes, isBefore, set } from 'date-fns';
+import { add, set, format, differenceInMinutes, isBefore } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
@@ -88,7 +89,10 @@ function InterviewCard({ interview, onMutate }: { interview: EnrichedInterview, 
                             <div>
                                 <p className="font-semibold">Tanggal & Waktu</p>
                                 <p>{startDate ? format(startDate, 'eeee, dd MMMM yyyy', { locale: id }) : '-'}</p>
-                                <p>{startDate ? format(startDate, 'HH:mm') : ''} - {endDate ? format(endDate, 'HH:mm') : ''} WIB</p>
+                                <p>
+                                    {startDate ? format(startDate, 'HH:mm') : ''} - {endDate ? format(endDate, 'HH:mm') : ''} WIB
+                                    {interview.isTemplate && <span className="text-muted-foreground font-normal ml-1">(Estimasi)</span>}
+                                </p>
                             </div>
                         </div>
                          <div className="flex items-start gap-3">
