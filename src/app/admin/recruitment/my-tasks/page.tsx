@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { ArrowRight, Briefcase, Calendar, CheckCircle2, Clock, User, Link as LinkIcon } from 'lucide-react';
 import Link from 'next/link';
 import { ApplicationStatusBadge } from '@/components/recruitment/ApplicationStatusBadge';
@@ -22,17 +22,21 @@ import { getInitials } from '@/lib/utils';
 const getDisplayInterview = (app: JobApplication): ApplicationInterview | null => {
     if (!app.interviews || app.interviews.length === 0) return null;
     const now = new Date();
-    // Filter for interviews that are either scheduled or have a reschedule request
-    const scheduled = app.interviews.filter(iv => iv.status === 'scheduled' || iv.status === 'reschedule_requested');
-    if (scheduled.length === 0) return null;
+    // Filter for interviews that are not canceled
+    const relevantInterviews = app.interviews.filter(iv => iv.status !== 'canceled');
+    if (relevantInterviews.length === 0) return null;
+
     // Find the next upcoming interview
-    const upcoming = scheduled
+    const upcoming = relevantInterviews
         .filter(iv => iv.startAt.toDate() >= now)
         .sort((a, b) => a.startAt.toDate().getTime() - b.startAt.toDate().getTime());
+    
     if (upcoming.length > 0) return upcoming[0];
+    
     // If no upcoming, find the most recent past one
-    const past = scheduled
+    const past = relevantInterviews
         .sort((a, b) => b.startAt.toDate().getTime() - a.startAt.toDate().getTime());
+    
     return past.length > 0 ? past[0] : null;
 };
 
@@ -75,6 +79,7 @@ export default function MyRecruitmentTasksPage() {
 
   const jobLevelAppsQuery = useMemoFirebase(() => {
     if (!userProfile?.uid || assignedJobIds.length === 0) return null;
+    // Firestore 'in' queries are limited to 30 items per query.
     return query(
       collection(firestore, 'applications'),
       where('jobId', 'in', assignedJobIds.slice(0, 30))
