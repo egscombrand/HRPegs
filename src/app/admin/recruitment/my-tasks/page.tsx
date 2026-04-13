@@ -12,8 +12,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { format, differenceInMinutes, addDays } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
 import {
@@ -47,11 +48,17 @@ const getDisplayInterview = (app: JobApplication): ApplicationInterview | null =
     if (sortedInterviews.length === 0) return null;
 
     const now = new Date();
-    const upcoming = sortedInterviews.find(iv => iv.startAt.toDate() >= now);
+    // Prioritize interviews that are not yet completed or are currently happening
+    const activeOrUpcoming = sortedInterviews.filter(iv => iv.status === 'scheduled' || iv.status === 'reschedule_requested');
 
+    const upcoming = activeOrUpcoming.find(iv => iv.startAt.toDate() >= now);
     if (upcoming) return upcoming;
-
-    // If no upcoming, return the most recent past one
+    
+    // If no upcoming, return the most recent active/past one
+    const past = activeOrUpcoming.sort((a,b) => b.startAt.toMillis() - a.startAt.toMillis());
+    if (past.length > 0) return past[0];
+    
+    // Fallback to any latest interview if no active ones found
     return sortedInterviews.pop() || null;
 };
 
@@ -102,122 +109,118 @@ function InterviewDetailModal({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="h-9 w-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm">
-              {getInitials(candidateName)}
-            </div>
+          <div className="flex items-start gap-4">
+            <Avatar className="h-14 w-14">
+              <AvatarFallback className="bg-primary/10 text-primary font-bold text-lg">{getInitials(candidateName)}</AvatarFallback>
+            </Avatar>
             <div>
-              <DialogTitle className="text-base leading-tight">{candidateName}</DialogTitle>
-              <DialogDescription className="text-xs">{jobPosition} · {brandName}</DialogDescription>
+              <DialogTitle className="text-xl mb-1">{candidateName}</DialogTitle>
+              <DialogDescription>
+                {jobPosition} &middot; {brandName}
+              </DialogDescription>
+              {isTemplate && (
+                <Badge variant="outline" className="mt-2 text-xs gap-1.5 border-amber-500/50 bg-amber-500/10 text-amber-500">
+                  <Info className="h-3 w-3" />
+                  Informasi dari Template (Jadwal belum final)
+                </Badge>
+              )}
             </div>
           </div>
-          {isTemplate && (
-            <Badge variant="secondary" className="w-fit text-xs gap-1">
-              <Info className="h-3 w-3" /> Info dari Template Lowongan
-            </Badge>
-          )}
         </DialogHeader>
 
         <Separator />
 
-        <div className="space-y-4 py-2">
-          {/* Tanggal & Waktu */}
-          <div className="flex items-start gap-3">
-            <Calendar className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-xs font-medium text-muted-foreground mb-0.5">Tanggal &amp; Waktu</p>
-              {startDate ? (
-                <p className="font-semibold text-sm">
-                  {format(startDate, 'EEEE, dd MMMM yyyy', { locale: idLocale })}
-                </p>
-              ) : (
-                <p className="text-sm text-muted-foreground italic">Tanggal belum ditentukan</p>
-              )}
-              {startDate && (
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {isTemplate
-                    ? `Mulai pukul ${data.template.workdayStartTime ?? '–'}`
-                    : `${format(startDate, 'HH:mm')}${endDate ? ` – ${format(endDate, 'HH:mm')} WIB` : ' WIB'}`}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Durasi */}
-          {duration != null && (
-            <div className="flex items-start gap-3">
-              <Clock className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-0.5">Durasi</p>
-                <p className="text-sm font-semibold">{duration} menit</p>
-              </div>
-            </div>
-          )}
-
-          {/* Panelis (hanya jadwal aktual) */}
-          {!isTemplate && panelistNames.length > 0 && (
-            <div className="flex items-start gap-3">
-              <Users className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-0.5">Pewawancara / Panelis</p>
-                <div className="flex flex-wrap gap-1.5 mt-1">
-                  {panelistNames.map((name, i) => (
-                    <Badge key={i} variant="secondary" className="text-xs">{name}</Badge>
-                  ))}
+        <div className="grid md:grid-cols-2 gap-x-6 gap-y-8 py-2">
+            <div className="space-y-6">
+                <div className="flex items-start gap-3">
+                    <Calendar className="h-5 w-5 text-primary mt-1 flex-shrink-0" />
+                    <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-0.5">Tanggal & Waktu</p>
+                        {startDate ? (
+                            <p className="font-semibold text-base">{format(startDate, 'EEEE, dd MMMM yyyy', { locale: idLocale })}</p>
+                        ) : (
+                            <p className="text-sm text-muted-foreground italic">Tanggal belum ditentukan</p>
+                        )}
+                        {startDate && (
+                            <p className="text-sm text-muted-foreground mt-0.5">
+                                {isTemplate ? `Mulai pukul ${data.template.workdayStartTime ?? '–'}` : `${format(startDate, 'HH:mm')}${endDate ? ` – ${format(endDate, 'HH:mm')} WIB` : ' WIB'}`}
+                            </p>
+                        )}
+                    </div>
                 </div>
-              </div>
-            </div>
-          )}
 
-          {/* Catatan (hanya jadwal aktual) */}
-          {!isTemplate && data.interview.notes && (
-            <div className="flex items-start gap-3">
-              <Info className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-0.5">Catatan</p>
-                <p className="text-sm">{data.interview.notes}</p>
-              </div>
+                {duration != null && (
+                    <div className="flex items-start gap-3">
+                        <Clock className="h-5 w-5 text-primary mt-1 flex-shrink-0" />
+                        <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-0.5">Durasi</p>
+                        <p className="text-base font-semibold">{duration} menit</p>
+                        </div>
+                    </div>
+                )}
+                 {!isTemplate && panelistNames.length > 0 && (
+                    <div className="flex items-start gap-3">
+                        <Users className="h-5 w-5 text-primary mt-1 flex-shrink-0" />
+                        <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-1">Pewawancara / Panelis</p>
+                            <div className="flex flex-wrap gap-1.5">
+                                {panelistNames.map((name, i) => (
+                                    <Badge key={i} variant="secondary">{name}</Badge>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
-          )}
-
-          {/* Link Meeting */}
-          {meetingLink ? (
-            <div className="flex items-start gap-3">
-              <Video className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-muted-foreground mb-1">Link Meeting</p>
-                <p className="text-xs font-mono text-muted-foreground break-all mb-2">{meetingLink}</p>
-                <Button asChild size="sm" className="gap-2 w-full">
-                  <a href={meetingLink} target="_blank" rel="noopener noreferrer">
-                    <Video className="h-4 w-4" />
-                    Bergabung ke Meeting
-                    <ExternalLink className="h-3.5 w-3.5 ml-auto" />
-                  </a>
-                </Button>
-              </div>
+            
+            <div className="space-y-4">
+                 {meetingLink ? (
+                    <div className="flex flex-col gap-3">
+                        <div className="flex items-start gap-3">
+                            <Video className="h-5 w-5 text-primary mt-1 flex-shrink-0" />
+                            <div>
+                            <p className="text-xs font-medium text-muted-foreground mb-1">Link Meeting</p>
+                            <p className="text-xs font-mono text-muted-foreground break-all">{meetingLink}</p>
+                            </div>
+                        </div>
+                        <Button asChild className="gap-2 w-full">
+                            <a href={meetingLink} target="_blank" rel="noopener noreferrer">
+                            <Video className="h-4 w-4" />
+                            Bergabung ke Meeting
+                            <ExternalLink className="h-3.5 w-3.5 ml-auto" />
+                            </a>
+                        </Button>
+                    </div>
+                ) : (
+                    <div className="flex items-start gap-3 p-4 bg-muted/50 rounded-lg">
+                        <Video className="h-5 w-5 text-muted-foreground mt-1 flex-shrink-0" />
+                        <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Link Meeting</p>
+                        <p className="text-sm font-semibold text-muted-foreground">Belum tersedia</p>
+                        </div>
+                    </div>
+                )}
+                 {!isTemplate && data.interview.notes && (
+                    <div className="flex items-start gap-3 p-4 bg-muted/50 rounded-lg">
+                        <Info className="h-5 w-5 text-muted-foreground mt-1 flex-shrink-0" />
+                        <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Catatan</p>
+                        <p className="text-sm">{data.interview.notes}</p>
+                        </div>
+                    </div>
+                )}
             </div>
-          ) : (
-            <div className="flex items-start gap-3">
-              <Video className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-0.5">Link Meeting</p>
-                <p className="text-sm text-muted-foreground italic">Belum tersedia</p>
-              </div>
-            </div>
-          )}
         </div>
 
-        <Separator />
-
-        <div className="flex justify-end">
-          <Button asChild variant="outline" size="sm" className="gap-1.5">
-            <Link href={`/admin/recruitment/applications/${data.app.id}`}>
-              Lihat Profil Kandidat <ChevronRight className="h-4 w-4" />
-            </Link>
-          </Button>
-        </div>
+        <DialogFooter>
+            <Button asChild variant="outline" size="sm" className="gap-1.5">
+                <Link href={`/admin/recruitment/applications/${data.app.id}`}>
+                Lihat Profil Kandidat <ChevronRight className="h-4 w-4" />
+                </Link>
+            </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -396,9 +399,7 @@ export default function MyRecruitmentTasksPage() {
                       {/* Kandidat */}
                       <TableCell>
                         <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold">
-                            {getInitials(app.candidateName)}
-                          </div>
+                          <Avatar className="h-10 w-10"><AvatarFallback>{getInitials(app.candidateName)}</AvatarFallback></Avatar>
                           <div>
                             <p className="font-bold">{app.candidateName}</p>
                             <p className="text-xs text-muted-foreground">{app.candidateEmail}</p>
@@ -427,12 +428,9 @@ export default function MyRecruitmentTasksPage() {
                           >
                             <div className="flex items-center gap-2">
                               <Calendar className="h-4 w-4 text-primary" />
-                              <div className="leading-tight">
-                                <p className="font-semibold text-sm group-hover:text-primary transition-colors">
-                                  {format(safeToDate(interview.startAt)!, 'dd MMM, HH:mm')}
-                                </p>
-                                <p className="text-xs text-muted-foreground group-hover:text-primary/80">Klik untuk detail</p>
-                              </div>
+                              <p className="font-semibold text-sm group-hover:text-primary transition-colors">
+                                {format(safeToDate(interview.startAt)!, 'dd MMM, HH:mm')}
+                              </p>
                             </div>
                           </Button>
                         ) : jobTemplate && (templateDate || jobTemplate.meetingLink) ? (
@@ -445,9 +443,8 @@ export default function MyRecruitmentTasksPage() {
                               <Info className="h-4 w-4 text-sky-500" />
                               <div className="leading-tight">
                                 <p className="font-semibold text-sm group-hover:text-primary transition-colors">
-                                  Info dari Template
+                                    Jadwal dari Template
                                 </p>
-                                <p className="text-xs text-muted-foreground group-hover:text-primary/80">Klik untuk detail</p>
                               </div>
                             </div>
                           </Button>
