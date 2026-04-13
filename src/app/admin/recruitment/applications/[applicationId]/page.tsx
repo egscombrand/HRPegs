@@ -34,6 +34,7 @@ import { ManagePanelistsDialog } from '@/components/recruitment/ManagePanelistsD
 import { ROLES_INTERNAL } from '@/lib/types';
 import { InterviewManagement } from '@/components/recruitment/InterviewManagement';
 import { InternalEvaluationSection } from '@/components/recruitment/InternalEvaluationSection';
+import { PostInterviewEvaluationSection } from '@/components/recruitment/PostInterviewEvaluationSection';
 import { FinalInternalDecisionSection } from '@/components/recruitment/FinalInternalDecisionSection';
 import { InternalHRTimeline } from '@/components/recruitment/InternalHRTimeline';
 
@@ -64,6 +65,7 @@ export default function ApplicationDetailPage() {
   const [isOfferDialogOpen, setIsOfferDialogOpen] = useState(false);
   const [isActivating, setIsActivating] = useState(false);
   const [activeProfileStep, setActiveProfileStep] = useState(1);
+  const [evaluationFilter, setEvaluationFilter] = useState<'all' | 'pre' | 'post'>('all');
 
   const applicationRef = useMemoFirebase(
     () => (applicationId ? doc(firestore, 'applications', applicationId) : null),
@@ -246,6 +248,16 @@ export default function ApplicationDetailPage() {
   }, [assessmentSessions, isLoadingSessions]);
 
 
+  const shouldShowPostInterview = useMemo(() => {
+    if (!application?.status) return false;
+    
+    // Show as long as it has reached 'interview' stage or beyond
+    // Include verification and document_submission as they are sometimes used as post-interview/final-review phases
+    const stages = ['interview', 'verification', 'document_submission', 'offered', 'hired', 'rejected'];
+    return stages.includes(application.status);
+  }, [application]);
+
+
   const isLoading = isLoadingApp || isLoadingProfile || isLoadingJob || isLoadingUsers || isLoadingBrands || isLoadingSessions;
 
   if (!hasAccess) {
@@ -357,7 +369,48 @@ export default function ApplicationDetailPage() {
             </div>
           </div>
 
-          <InternalEvaluationSection application={application} job={job} internalUsers={internalUsers} />
+          <div className="space-y-6 pt-10">
+              <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                      <div className="flex p-1 bg-slate-900/50 rounded-2xl border border-slate-800 ring-1 ring-white/5 shadow-2xl">
+                          <Button 
+                              variant={evaluationFilter === 'all' ? 'default' : 'ghost'} 
+                              size="sm" 
+                              onClick={() => setEvaluationFilter('all')}
+                              className={cn("rounded-xl text-[10px] font-black uppercase tracking-widest px-6 h-10", evaluationFilter === 'all' && "bg-indigo-600 shadow-lg shadow-indigo-600/20")}
+                          >
+                              Semua
+                          </Button>
+                          <Button 
+                              variant={evaluationFilter === 'pre' ? 'default' : 'ghost'} 
+                              size="sm" 
+                              onClick={() => setEvaluationFilter('pre')}
+                              className={cn("rounded-xl text-[10px] font-black uppercase tracking-widest px-6 h-10", evaluationFilter === 'pre' && "bg-indigo-600 shadow-lg shadow-indigo-600/20")}
+                          >
+                              Pra Wawancara
+                          </Button>
+                          {shouldShowPostInterview && (
+                              <Button 
+                                  variant={evaluationFilter === 'post' ? 'default' : 'ghost'} 
+                                  size="sm" 
+                                  onClick={() => setEvaluationFilter('post')}
+                                  className={cn("rounded-xl text-[10px] font-black uppercase tracking-widest px-6 h-10", evaluationFilter === 'post' && "bg-teal-600 shadow-lg shadow-teal-600/20")}
+                              >
+                                  Pasca Wawancara
+                              </Button>
+                          )}
+                      </div>
+                  </div>
+              </div>
+
+              {(evaluationFilter === 'all' || evaluationFilter === 'pre') && (
+                  <InternalEvaluationSection application={application} job={job} internalUsers={internalUsers} />
+              )}
+
+              {shouldShowPostInterview && (evaluationFilter === 'all' || evaluationFilter === 'post') && (
+                  <PostInterviewEvaluationSection application={application} job={job} internalUsers={internalUsers} />
+              )}
+          </div>
         </div>
         </>
       )}

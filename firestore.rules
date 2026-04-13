@@ -324,7 +324,7 @@ service cloud.firestore {
         }
         function isInternalStatusUpdate() {
             let changedKeys = request.resource.data.diff(resource.data).affectedKeys();
-            let allowedKeys = ['status', 'candidateStatus', 'decisionAt', 'updatedAt', 'personalityTestAssignedAt', 'cvVerified', 'ijazahVerified', 'timeline', 'interviews', 'allPanelistIds', 'offerStatus', 'offeredSalary', 'probationDurationMonths', 'contractStartDate', 'contractDurationMonths', 'contractEndDate', 'offerNotes', 'internalAccessEnabled', 'internalReviewSummary'];
+            let allowedKeys = ['status', 'candidateStatus', 'decisionAt', 'updatedAt', 'personalityTestAssignedAt', 'cvVerified', 'ijazahVerified', 'timeline', 'interviews', 'allPanelistIds', 'offerStatus', 'offeredSalary', 'probationDurationMonths', 'contractStartDate', 'contractDurationMonths', 'contractEndDate', 'offerNotes', 'internalAccessEnabled', 'internalReviewSummary', 'postInterviewEvaluation'];
             let hrdOnlyKeys = ['internalReviewConfig', 'recruitmentInternalDecision'];
             
             if (changedKeys.hasAny(hrdOnlyKeys)) {
@@ -347,11 +347,25 @@ service cloud.firestore {
       allow list: if isHrd() || isSuperAdmin() || (isSignedIn() && hasInternalReviewAccess(applicationId));
       allow write: if isHrd() || isSuperAdmin() || (isOwner(reviewerUid) && hasInternalReviewAccess(applicationId));
     }
+
+    match /applications/{applicationId}/post_interview_reviews/{reviewerUid} {
+      allow get: if isHrd() || isSuperAdmin() || request.auth.uid == reviewerUid || (isSignedIn() && hasPostInterviewReviewAccess(applicationId));
+      allow list: if isHrd() || isSuperAdmin() || (isSignedIn() && hasPostInterviewReviewAccess(applicationId));
+      allow write: if isHrd() || isSuperAdmin() || (isOwner(reviewerUid) && hasPostInterviewReviewAccess(applicationId));
+    }
     
     function hasInternalReviewAccess(appId) {
       let appData = get(/databases/$(database)/documents/applications/$(appId)).data;
       return request.auth.uid in appData.get(['internalReviewConfig', 'assignedReviewerUids'], []) ||
              request.auth.uid in appData.get('allPanelistIds', []);
+    }
+
+    function hasPostInterviewReviewAccess(appId) {
+      let appData = get(/databases/$(database)/documents/applications/$(appId)).data;
+      // Access granted to explicitly assigned panelists or anyone with general internal review access
+      return request.auth.uid in appData.get('allPanelistIds', []) || 
+             request.auth.uid in appData.get(['internalReviewConfig', 'assignedReviewerUids'], []) ||
+             isHrd() || isSuperAdmin();
     }
 
 

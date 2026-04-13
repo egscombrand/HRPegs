@@ -367,6 +367,7 @@ export type JobApplication = {
   internalReviewConfig?: InternalReviewConfig;
   internalReviewSummary?: InternalReviewSummary;
   recruitmentInternalDecision?: RecruitmentInternalDecision;
+  postInterviewEvaluation?: PostInterviewEvaluationSummary;
 };
 
 export type InternalReviewScore = 'direkomendasikan' | 'dipertimbangkan' | 'belum_sesuai';
@@ -414,6 +415,34 @@ export interface InternalReview {
   concerns?: string;
   submittedAt: Timestamp;
   updatedAt: Timestamp;
+}
+
+export type PostInterviewReviewScore = 'direkomendasikan' | 'dipertimbangkan' | 'belum_direkomendasikan';
+
+export interface PostInterviewReview {
+  id?: string; // Same as reviewerUid
+  applicationId: string;
+  reviewerUid: string;
+  reviewerName: string;
+  reviewerRole: string;
+  recommendation: PostInterviewReviewScore;
+  notes: string;
+  strengths: string;
+  concerns: string;
+  communicationScore: number;
+  attitudeScore: number;
+  fitScore: number;
+  submittedAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+export interface PostInterviewEvaluationSummary {
+  evaluators: string[];
+  submissions: number;
+  progress: number;
+  notes?: string;
+  recommendation?: PostInterviewReviewScore;
+  lastUpdatedAt?: Timestamp | null;
 }
 
 export type Candidate = {
