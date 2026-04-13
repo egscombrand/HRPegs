@@ -22,6 +22,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { format } from 'date-fns';
+import { id as idLocale } from 'date-fns/locale';
 import { useFirestore, updateDocumentNonBlocking, useCollection, useMemoFirebase } from '@/firebase';
 import { doc, writeBatch, serverTimestamp, Timestamp, query, collection, where } from 'firebase/firestore';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
@@ -226,6 +227,49 @@ export function BulkScheduleWizard({ isOpen, onOpenChange, candidates, recruiter
                 timelineEvent
             ],
             updatedAt: serverTimestamp()
+        });
+
+        // Notifications for bulk schedule
+        const interviewDateStr = format(slot.startAt, 'dd MMMM yyyy', { locale: idLocale });
+        const interviewTimeStr = format(slot.startAt, 'HH:mm');
+        
+        const notifMeta = {
+            jobId: slot.candidate.jobId,
+            applicationId: slot.candidate.id!,
+            candidateName: slot.candidate.candidateName,
+            jobTitle: slot.candidate.jobPosition,
+            interviewDate: interviewDateStr,
+            interviewTime: interviewTimeStr,
+            meetingLink: meetingLink ?? '',
+        };
+
+        const recruitmentTeamIds = new Set<string>([
+            ...panelistIds,
+            ...(job.assignedUserIds || []),
+        ]);
+        const allRecipients = new Set<string>([
+            slot.candidate.candidateUid,
+            ...recruitmentTeamIds,
+        ]);
+
+        allRecipients.forEach(recipientUid => {
+            const notifRef = doc(collection(firestore, 'users', recipientUid, 'notifications'));
+            const isCandidate = recipientUid === slot.candidate.candidateUid;
+            
+            batch.set(notifRef, {
+                module: 'recruitment',
+                targetType: 'application',
+                targetId: slot.candidate.id!,
+                userId: recipientUid,
+                type: 'interview_scheduled',
+                title: 'Jadwal Wawancara Baru',
+                message: `Jadwal wawancara untuk ${slot.candidate.candidateName} telah ditetapkan. Silakan cek detail terbaru.`,
+                actionUrl: isCandidate ? '/careers/portal/applications' : '/admin/recruitment/my-tasks',
+                isRead: false,
+                createdAt: serverTimestamp(),
+                createdBy: recruiter.uid,
+                meta: notifMeta,
+            });
         });
     });
 

@@ -13,6 +13,7 @@ import { ApplicationStatusBadge, statusDisplayLabels } from '@/components/recrui
 import { Checkbox } from '@/components/ui/checkbox';
 import Link from 'next/link';
 import { format, differenceInMinutes, add } from 'date-fns';
+import { id as idLocale } from 'date-fns/locale';
 import { Badge } from '../ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { BulkScheduleWizard } from './BulkScheduleWizard';
@@ -21,7 +22,7 @@ import { useToast } from '@/hooks/use-toast';
 import { ORDERED_RECRUITMENT_STAGES } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '../ui/card';
 import { setDocumentNonBlocking, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { doc, serverTimestamp, Timestamp, query, collection, where } from 'firebase/firestore';
+import { doc, serverTimestamp, Timestamp, query, collection, where, writeBatch } from 'firebase/firestore';
 import type { ScheduleInterviewData } from './ScheduleInterviewDialog';
 import { ScheduleInterviewDialog } from './ScheduleInterviewDialog';
 import { EditInterviewTemplateDialog } from './EditInterviewTemplateDialog';
@@ -94,6 +95,29 @@ export function ApplicantsPageClient({ applications, job, onJobUpdate, allBrands
             },
             'updatedAt': serverTimestamp(),
         }, { merge: true });
+
+        // Notify recruitment team about template change
+        if (job.assignedUserIds && job.assignedUserIds.length > 0) {
+            const batch = writeBatch(firestore);
+            job.assignedUserIds.forEach(uid => {
+                const notifRef = doc(collection(firestore, 'users', uid, 'notifications'));
+                batch.set(notifRef, {
+                    module: 'recruitment',
+                    targetType: 'job',
+                    targetId: job.id,
+                    userId: uid,
+                    type: 'interview_updated',
+                    title: 'Template Wawancara Diperbarui',
+                    message: `Template jadwal wawancara untuk "${job.position}" telah diperbarui.`,
+                    actionUrl: '/admin/recruitment/my-tasks',
+                    isRead: false,
+                    createdAt: serverTimestamp(),
+                    createdBy: userProfile?.uid,
+                });
+            });
+            await batch.commit();
+        }
+
         toast({ title: "Template Updated", description: "The detected settings have been set as the default." });
         onJobUpdate();
     } catch (e: any) {
@@ -164,6 +188,29 @@ export function ApplicantsPageClient({ applications, job, onJobUpdate, allBrands
         },
         'updatedAt': serverTimestamp(),
       }, { merge: true });
+
+      // Notify recruitment team about template change
+      if (job.assignedUserIds && job.assignedUserIds.length > 0) {
+          const batch = writeBatch(firestore);
+          job.assignedUserIds.forEach(uid => {
+              const notifRef = doc(collection(firestore, 'users', uid, 'notifications'));
+              batch.set(notifRef, {
+                  module: 'recruitment',
+                  targetType: 'job',
+                  targetId: job.id,
+                  userId: uid,
+                  type: 'interview_updated',
+                  title: 'Template Wawancara Diperbarui',
+                  message: `Template jadwal wawancara untuk "${job.position}" telah diperbarui.`,
+                  actionUrl: '/admin/recruitment/my-tasks',
+                  isRead: false,
+                  createdAt: serverTimestamp(),
+                  createdBy: userProfile?.uid,
+              });
+          });
+          await batch.commit();
+      }
+
       toast({ title: "Template Saved", description: "The default interview template has been updated." });
       onJobUpdate();
       setIsTemplateDialogOpen(false);
@@ -216,10 +263,64 @@ export function ApplicantsPageClient({ applications, job, onJobUpdate, allBrands
     );
 
     try {
-        await setDocumentNonBlocking(doc(firestore, 'applications', activeApplication.id!), {
+        const batch = writeBatch(firestore);
+        const appRef = doc(firestore, 'applications', activeApplication.id!);
+
+        batch.set(appRef, {
             interviews: newInterviews,
             allPanelistIds,
+            updatedAt: serverTimestamp(),
         }, { merge: true });
+
+        // Notification logic
+        const startAtDate = values.dateTime;
+        const interviewDateStr = format(startAtDate, 'dd MMMM yyyy', { locale: idLocale });
+        const interviewTimeStr = format(startAtDate, 'HH:mm');
+        const meetingLink = values.meetingLink || (interviewToEdit?.meetingLink) || job?.interviewTemplate?.meetingLink || '';
+
+        const notifMeta = {
+            jobId: activeApplication.jobId,
+            applicationId: activeApplication.id!,
+            candidateName: activeApplication.candidateName,
+            jobTitle: activeApplication.jobPosition,
+            interviewDate: interviewDateStr,
+            interviewTime: interviewTimeStr,
+            meetingLink: meetingLink,
+        };
+
+        const recruitmentTeamIds = new Set<string>([
+            ...panelistIds,
+            ...(job?.assignedUserIds || []),
+        ]);
+        const allRecipients = new Set<string>([
+            activeApplication.candidateUid,
+            ...recruitmentTeamIds,
+        ]);
+
+        console.log(`[ApplicantsPageClient] Notifying ${allRecipients.size} recipients for interview update/creation`);
+
+        allRecipients.forEach(recipientUid => {
+            const notifRef = doc(collection(firestore, 'users', recipientUid, 'notifications'));
+            const isCandidate = recipientUid === activeApplication.candidateUid;
+            
+            batch.set(notifRef, {
+                module: 'recruitment',
+                targetType: 'application',
+                targetId: activeApplication.id!,
+                userId: recipientUid,
+                type: interviewToEdit ? 'interview_updated' : 'interview_scheduled',
+                title: interviewToEdit ? 'Jadwal Wawancara Diperbarui' : 'Jadwal Wawancara Baru',
+                message: `Jadwal wawancara untuk ${activeApplication.candidateName} telah ${interviewToEdit ? 'diperbarui' : 'ditetapkan'}. Silakan cek detail terbaru.`,
+                actionUrl: isCandidate ? '/careers/portal/applications' : '/admin/recruitment/my-tasks',
+                isRead: false,
+                createdAt: serverTimestamp(),
+                createdBy: userProfile.uid,
+                meta: notifMeta,
+            });
+        });
+
+        await batch.commit();
+
         toast({ title: "Jadwal Diperbarui", description: `Jadwal untuk ${activeApplication.candidateName} telah disimpan.`});
         onJobUpdate();
         return true;

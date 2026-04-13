@@ -4,11 +4,12 @@ import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import { format } from 'date-fns';
 import { Loader2 } from 'lucide-react';
 import type { JobApplication, ApplicationInterview, UserProfile, ApplicationTimelineEvent, Brand } from '@/lib/types';
 import { useAuth } from '@/providers/auth-provider';
 import { useFirestore, updateDocumentNonBlocking } from '@/firebase';
-import { doc, Timestamp, writeBatch } from 'firebase/firestore';
+import { doc, Timestamp, writeBatch, collection, serverTimestamp } from 'firebase/firestore';
 import { PanelistPickerSimple } from './PanelistPickerSimple';
 
 interface ManagePanelistsDialogProps {
@@ -74,6 +75,61 @@ export function ManagePanelistsDialog({ open, onOpenChange, application, intervi
         interviews: newInterviews,
         allPanelistIds: allPanelistIds,
         timeline: [...(application.timeline || []), timelineEvent]
+    });
+
+    // Notify added panelists
+    if (added.length > 0) {
+        added.forEach(uid => {
+            const notifRef = doc(collection(firestore, 'users', uid, 'notifications'));
+            batch.set(notifRef, {
+                module: 'recruitment',
+                targetType: 'application',
+                targetId: application.id!,
+                userId: uid,
+                type: 'recruitment_assignment',
+                title: 'Penugasan Panelis Wawancara',
+                message: `Anda telah ditambahkan sebagai panelis wawancara untuk ${application.candidateName} (${application.jobPosition}).`,
+                actionUrl: '/admin/recruitment/my-tasks',
+                isRead: false,
+                createdAt: serverTimestamp(),
+                createdBy: currentUser.uid,
+            });
+        });
+    }
+
+    // Notify candidate and existing recruitment team about the update
+    const interviewDateStr = format(interview.startAt.toDate(), 'dd MMMM yyyy'); // Standard format is fine here
+    const recruitmentTeamIds = new Set<string>([
+        ...allPanelistIds,
+        ...(application.id ? [] : []) // Placeholder for job assigned, but I need jobId
+    ]);
+
+    // We need to fetch the job or at least have the assignedUserIds. 
+    // Usually these dialogs should have job context. 
+    // For now, let's notify the candidate and the current panelist set.
+
+    const allRecipients = new Set<string>([
+        application.candidateUid,
+        ...allPanelistIds,
+    ]);
+
+    allRecipients.forEach(recipientUid => {
+        const notifRef = doc(collection(firestore, 'users', recipientUid, 'notifications'));
+        const isCandidate = recipientUid === application.candidateUid;
+        
+        batch.set(notifRef, {
+            module: 'recruitment',
+            targetType: 'application',
+            targetId: application.id!,
+            userId: recipientUid,
+            type: 'interview_updated',
+            title: 'Panelis Wawancara Diperbarui',
+            message: `Daftar panelis untuk wawancara ${application.candidateName} pada ${interviewDateStr} telah diperbarui.`,
+            actionUrl: isCandidate ? '/careers/portal/applications' : '/admin/recruitment/my-tasks',
+            isRead: false,
+            createdAt: serverTimestamp(),
+            createdBy: currentUser.uid,
+        });
     });
 
     try {

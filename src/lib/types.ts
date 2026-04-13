@@ -238,7 +238,7 @@ export const APPLICATION_SOURCES = ['website', 'linkedin', 'jobstreet', 'referra
 export type ApplicationSource = (typeof APPLICATION_SOURCES)[number];
 
 export type ApplicationTimelineEvent = {
-    type: 'stage_changed' | 'note_added' | 'interview_scheduled' | 'offer_sent' | 'assessment_graded' | 'status_changed' | 'panelists_updated';
+    type: 'stage_changed' | 'note_added' | 'interview_scheduled' | 'interview_updated' | 'offer_sent' | 'assessment_graded' | 'status_changed' | 'panelists_updated';
     at: Timestamp;
     by: string; // Recruiter UID
     meta: {

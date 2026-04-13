@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, Edit, X, ShieldCheck, AlertTriangle, Users } from 'lucide-react';
 import { format, differenceInMinutes, add } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
+
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/providers/auth-provider';
 import { useFirestore, updateDocumentNonBlocking } from '@/firebase';
@@ -112,7 +113,7 @@ export function InterviewManagement({ application, onUpdate, allUsers, allBrands
                 };
                 
                 // Compare key fields to see if a notification is needed
-                const hasChanged = 
+                const hasChanged =
                     originalData.startAt.toMillis() !== updatedData.startAt.toMillis() ||
                     originalData.endAt.toMillis() !== updatedData.endAt.toMillis() ||
                     originalData.meetingLink !== updatedData.meetingLink ||
@@ -121,14 +122,43 @@ export function InterviewManagement({ application, onUpdate, allUsers, allBrands
                 newInterviews[index] = updatedData;
 
                 if (hasChanged) {
+                    console.log('[InterviewManagement] Interview updated → sending notifications');
+
                     newTimeline.push({
                         type: 'interview_updated',
                         at: Timestamp.now(),
                         by: userProfile.uid,
-                        meta: { note: `Jadwal wawancara diperbarui oleh HRD.` },
+                        meta: { note: 'Jadwal wawancara diperbarui oleh HRD.' },
                     });
-                    
-                    const allRecipients = new Set([application.candidateUid, ...updatedData.panelistIds]);
+
+                    // Build rich meta for the notification payload
+                    const interviewDateStr = format(updatedData.startAt.toDate(), 'dd MMMM yyyy', { locale: idLocale });
+                    const interviewTimeStr = format(updatedData.startAt.toDate(), 'HH:mm');
+                    const notifMeta = {
+                        jobId: application.jobId,
+                        applicationId: application.id!,
+                        candidateName: application.candidateName,
+                        jobTitle: application.jobPosition,
+                        interviewDate: interviewDateStr,
+                        interviewTime: interviewTimeStr,
+                        meetingLink: updatedData.meetingLink,
+                    };
+
+                    // Recipients:
+                    // 1. Panelists assigned to this specific interview
+                    // 2. ALL recruitment team members assigned to this job (job.assignedUserIds)
+                    // 3. The candidate
+                    const recruitmentTeamIds = new Set<string>([
+                        ...updatedData.panelistIds,
+                        ...(job.assignedUserIds || []),
+                    ]);
+                    const allRecipients = new Set<string>([
+                        application.candidateUid,
+                        ...recruitmentTeamIds,
+                    ]);
+
+                    console.log(`[InterviewManagement] Notifying ${allRecipients.size} recipients (candidate + ${recruitmentTeamIds.size} recruitment team members)`);
+
                     allRecipients.forEach(recipientUid => {
                         const notifRef = doc(collection(firestore, 'users', recipientUid, 'notifications'));
                         const isCandidate = recipientUid === application.candidateUid;
@@ -137,10 +167,11 @@ export function InterviewManagement({ application, onUpdate, allUsers, allBrands
                             userId: recipientUid,
                             type: 'interview_updated',
                             title: 'Jadwal Wawancara Diperbarui',
-                            message: isCandidate
-                                ? `Jadwal wawancara Anda untuk posisi "${application.jobPosition}" telah diubah. Mohon periksa detailnya.`
-                                : `Jadwal wawancara untuk ${application.candidateName} (${application.jobPosition}) telah diperbarui.`,
-                            actionUrl: isCandidate ? '/careers/portal/interviews' : '/admin/interviews',
+                            message: `Jadwal wawancara untuk ${application.candidateName} telah diperbarui. Silakan cek detail terbaru.`,
+                            actionUrl: isCandidate
+                                ? `/careers/portal/applications`
+                                : `/admin/recruitment/my-tasks`,
+                            meta: notifMeta,
                         });
                     });
                 }
@@ -177,7 +208,7 @@ export function InterviewManagement({ application, onUpdate, allUsers, allBrands
                 panelistIds: panelistIds,
                 panelistNames: panelistNames,
                 status: 'scheduled',
-                meetingLink: data.meetingLink,
+                meetingLink: data.meetingLink || '',
                 notes: data.notes,
                 meetingPublished: false,
             };
@@ -190,7 +221,30 @@ export function InterviewManagement({ application, onUpdate, allUsers, allBrands
                 meta: { interviewDate: Timestamp.fromDate(data.dateTime) }
             });
 
-            const allRecipients = new Set([application.candidateUid, ...panelistIds]);
+            // On new schedule: notify candidate + panelists + full job recruitment team
+            const newInterviewDateStr = format(data.dateTime, 'dd MMMM yyyy', { locale: idLocale });
+            const newInterviewTimeStr = format(data.dateTime, 'HH:mm');
+            const newNotifMeta = {
+                jobId: application.jobId,
+                applicationId: application.id!,
+                candidateName: application.candidateName,
+                jobTitle: application.jobPosition,
+                interviewDate: newInterviewDateStr,
+                interviewTime: newInterviewTimeStr,
+                meetingLink: data.meetingLink,
+            };
+
+            const newRecruitmentTeamIds = new Set<string>([
+                ...panelistIds,
+                ...(job.assignedUserIds || []),
+            ]);
+            const allRecipients = new Set<string>([
+                application.candidateUid,
+                ...newRecruitmentTeamIds,
+            ]);
+
+            console.log(`[InterviewManagement] Interview scheduled → notifying ${allRecipients.size} recipients`);
+
             allRecipients.forEach(recipientUid => {
                 const notifRef = doc(collection(firestore, 'users', recipientUid, 'notifications'));
                 const isCandidate = recipientUid === application.candidateUid;
@@ -201,9 +255,12 @@ export function InterviewManagement({ application, onUpdate, allUsers, allBrands
                     type: 'interview_scheduled',
                     title: 'Jadwal Wawancara Baru',
                     message: isCandidate
-                        ? `Anda telah dijadwalkan untuk wawancara posisi "${application.jobPosition}".`
-                        : `Anda ditugaskan sebagai panelis untuk wawancara ${application.candidateName} (${application.jobPosition}).`,
-                    actionUrl: isCandidate ? '/careers/portal/interviews' : '/admin/interviews',
+                        ? `Anda telah dijadwalkan untuk wawancara posisi "${application.jobPosition}". Silakan cek detail terbaru.`
+                        : `Jadwal wawancara baru untuk ${application.candidateName} (${application.jobPosition}) telah ditetapkan.`,
+                    actionUrl: isCandidate
+                        ? `/careers/portal/applications`
+                        : `/admin/recruitment/my-tasks`,
+                    meta: newNotifMeta,
                 });
             });
 
@@ -247,6 +304,9 @@ export function InterviewManagement({ application, onUpdate, allUsers, allBrands
         return iv;
     });
 
+    const batch = writeBatch(firestore);
+    const appRef = doc(firestore, 'applications', application.id!);
+
     const timelineEvent: ApplicationTimelineEvent = {
         type: 'status_changed',
         at: Timestamp.now(),
@@ -255,10 +315,57 @@ export function InterviewManagement({ application, onUpdate, allUsers, allBrands
     };
 
     try {
-        await updateDoc(doc(firestore, 'applications', application.id!), {
+        batch.update(appRef, {
             interviews: newInterviews,
             timeline: [...(application.timeline || []), timelineEvent]
         });
+
+        // Notify candidate and recruitment team
+        const interviewDateStr = format(approvedSlot.startAt.toDate(), 'dd MMMM yyyy', { locale: idLocale });
+        const interviewTimeStr = format(approvedSlot.startAt.toDate(), 'HH:mm');
+        
+        const notifMeta = {
+            jobId: application.jobId,
+            applicationId: application.id!,
+            candidateName: application.candidateName,
+            jobTitle: application.jobPosition,
+            interviewDate: interviewDateStr,
+            interviewTime: interviewTimeStr,
+            meetingLink: interviewToApprove.meetingLink,
+        };
+
+        const recruitmentTeamIds = new Set<string>([
+            ...(interviewToApprove.panelistIds || []),
+            ...(job.assignedUserIds || []),
+        ]);
+        const allRecipients = new Set<string>([
+            application.candidateUid,
+            ...recruitmentTeamIds,
+        ]);
+
+        allRecipients.forEach(recipientUid => {
+            const notifRef = doc(collection(firestore, 'users', recipientUid, 'notifications'));
+            const isCandidate = recipientUid === application.candidateUid;
+            
+            batch.set(notifRef, {
+                module: 'recruitment',
+                targetType: 'application',
+                targetId: application.id!,
+                userId: recipientUid,
+                type: 'interview_updated',
+                title: 'Permintaan Jadwal Ulang Disetujui',
+                message: isCandidate 
+                    ? `Permintaan jadwal ulang Anda telah disetujui untuk tanggal ${interviewDateStr}.`
+                    : `Jadwal ulang untuk ${application.candidateName} telah disetujui.`,
+                actionUrl: isCandidate ? '/careers/portal/applications' : '/admin/recruitment/my-tasks',
+                isRead: false,
+                createdAt: serverTimestamp(),
+                createdBy: userProfile.uid,
+                meta: notifMeta,
+            });
+        });
+
+        await batch.commit();
         onUpdate();
         toast({ title: 'Jadwal Ulang Disetujui' });
     } catch (error: any) {
@@ -289,8 +396,51 @@ export function InterviewManagement({ application, onUpdate, allUsers, allBrands
         return iv;
     });
 
+    const batch = writeBatch(firestore);
+    const appRef = doc(firestore, 'applications', application.id!);
+
     try {
-        await updateDoc(doc(firestore, 'applications', application.id!), { interviews: newInterviews });
+        batch.update(appRef, { interviews: newInterviews });
+
+        // Notify candidate and recruitment team
+        const interviewDateStr = format(interviewToDeny.startAt.toDate(), 'dd MMMM yyyy', { locale: idLocale });
+        
+        const recruitmentTeamIds = new Set<string>([
+            ...(interviewToDeny.panelistIds || []),
+            ...(job.assignedUserIds || []),
+        ]);
+        const allRecipients = new Set<string>([
+            application.candidateUid,
+            ...recruitmentTeamIds,
+        ]);
+
+        allRecipients.forEach(recipientUid => {
+            const notifRef = doc(collection(firestore, 'users', recipientUid, 'notifications'));
+            const isCandidate = recipientUid === application.candidateUid;
+            
+            batch.set(notifRef, {
+                module: 'recruitment',
+                targetType: 'application',
+                targetId: application.id!,
+                userId: recipientUid,
+                type: 'interview_updated',
+                title: 'Permintaan Jadwal Ulang Ditolak',
+                message: isCandidate 
+                    ? `Mohon maaf, permintaan jadwal ulang Anda ditolak. Silakan ikuti jadwal semula.`
+                    : `Permintaan jadwal ulang untuk ${application.candidateName} ditolak.`,
+                actionUrl: isCandidate ? '/careers/portal/applications' : '/admin/recruitment/my-tasks',
+                isRead: false,
+                createdAt: serverTimestamp(),
+                createdBy: userProfile.uid,
+                meta: {
+                    jobId: application.jobId,
+                    applicationId: application.id!,
+                    candidateName: application.candidateName,
+                }
+            });
+        });
+
+        await batch.commit();
         onUpdate();
         toast({ title: 'Permintaan Ditolak', description: 'Status wawancara dikembalikan ke "Terjadwal".' });
     } catch (error: any) {
@@ -375,7 +525,7 @@ export function InterviewManagement({ application, onUpdate, allUsers, allBrands
                                                 {iv.rescheduleRequest.proposedSlots.map((slot, slotIndex) => (
                                                     <li key={slotIndex} className="flex items-center justify-between text-sm p-2 bg-background/50 rounded-md">
                                                         <span>{format(slot.startAt.toDate(), 'eeee, dd MMM yyyy - HH:mm', { locale: idLocale })}</span>
-                                                        {isPrivilegedRecruiter && <Button size="xs" onClick={() => handleApproveReschedule(iv, slot)} disabled={isSubmitting}>Setujui</Button>}
+                                                        {isPrivilegedRecruiter && <Button size="sm" onClick={() => handleApproveReschedule(iv, slot)} disabled={isSubmitting}>Setujui</Button>}
                                                     </li>
                                                 ))}
                                             </ul>
