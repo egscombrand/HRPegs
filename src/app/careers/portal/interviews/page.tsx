@@ -3,13 +3,13 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useAuth } from '@/providers/auth-provider';
 import { useCollection, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
-import { collection, query, where, doc, updateDoc, add } from 'firebase/firestore';
+import { collection, query, where, doc, updateDoc } from 'firebase/firestore';
 import type { JobApplication, ApplicationInterview, Job } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link as LinkIcon, Calendar, Video, RefreshCw, Users, Info } from "lucide-react";
-import { format } from 'date-fns';
+import { format, add } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
