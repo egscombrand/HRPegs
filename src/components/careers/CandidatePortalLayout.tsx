@@ -8,7 +8,7 @@ import { useAuth } from '@/providers/auth-provider';
 import { useAuth as useFirebaseAuth, useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase';
 import { doc, collection, query, where } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
-import { LogOut, ArrowLeft, Leaf } from 'lucide-react';
+import { LogOut, ArrowLeft, Leaf, Bell } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import {
@@ -24,13 +24,15 @@ import {
   SidebarFooter,
 } from '@/components/ui/sidebar';
 import { MENU_CONFIG } from '@/lib/menu-config';
-import type { NavigationSetting, UserRole, JobApplication, AssessmentSession, JobApplicationStatus } from '@/lib/types';
+import type { NavigationSetting, UserRole, JobApplication, AssessmentSession, JobApplicationStatus, Notification } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '../ui/ThemeToggle';
 import { Separator } from '../ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { ORDERED_RECRUITMENT_STAGES } from '@/lib/types';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { NotificationPanel } from '../dashboard/NotificationPanel';
 
 
 function UserNav() {
@@ -108,6 +110,16 @@ export function CandidatePortalLayout({ children }: { children: ReactNode }) {
     return query(collection(firestore, 'assessment_sessions'), where('candidateUid', '==', userProfile.uid));
   }, [userProfile?.uid, firestore]);
   const { data: sessions, isLoading: isLoadingSessions } = useCollection<AssessmentSession>(sessionsQuery);
+
+    const unreadNotifsQuery = useMemoFirebase(() => {
+        if (!userProfile?.uid) return null;
+        return query(
+            collection(firestore, 'users', userProfile.uid, 'notifications'), 
+            where('isRead', '==', false)
+        );
+    }, [userProfile?.uid, firestore]);
+    const { data: unreadNotifications } = useCollection<Notification>(unreadNotifsQuery);
+    const unreadCount = unreadNotifications?.length || 0;
 
   const [now, setNow] = useState(new Date());
   useEffect(() => {
@@ -206,7 +218,7 @@ export function CandidatePortalLayout({ children }: { children: ReactNode }) {
                 : { locked: true, reason: 'Anda akan diundang untuk mengunggah dokumen setelah lolos tahap verifikasi.' };
         case 'Jadwal Wawancara':
             const interviewStageIndex = ORDERED_RECRUITMENT_STAGES.indexOf('interview');
-            return highestStatusIndex >= interviewStageIndex
+            return highestStatusIndex >= interviewStageIndex 
                 ? { locked: false, reason: '' }
                 : { locked: true, reason: 'Jadwal akan muncul di sini setelah diatur oleh HRD.' };
         default:
@@ -324,6 +336,23 @@ export function CandidatePortalLayout({ children }: { children: ReactNode }) {
           <div className="flex-1" />
           <div className="flex items-center gap-4">
             <ThemeToggle />
+            <Popover>
+                <PopoverTrigger asChild>
+                    <Button variant="outline" size="icon" className="h-10 w-10 relative">
+                        <Bell className="h-5 w-5" />
+                        {unreadCount > 0 && (
+                            <span className="absolute top-1 right-1 flex h-4 w-4">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-4 w-4 bg-primary text-xs text-primary-foreground items-center justify-center">{unreadCount > 9 ? '9+' : unreadCount}</span>
+                            </span>
+                        )}
+                        <span className="sr-only">Notifications</span>
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 h-[50vh] p-0" align="end">
+                   <NotificationPanel />
+                </PopoverContent>
+            </Popover>
             <UserNav />
           </div>
         </header>
