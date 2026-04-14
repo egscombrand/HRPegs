@@ -367,11 +367,12 @@ export type JobApplication = {
   internalReviewConfig?: InternalReviewConfig;
   internalReviewSummary?: InternalReviewSummary;
   recruitmentInternalDecision?: RecruitmentInternalDecision;
+  
+  // --- Post-Interview Features ---
   postInterviewEvaluation?: PostInterviewEvaluationSummary;
   postInterviewDecision?: PostInterviewDecision;
-  candidateStatus?: 'lolos' | 'menunggu';
   
-  // Interview Lifecycle Tracking
+  // --- Manual Completion ---
   interviewCompleted?: boolean;
   interviewCompletedAt?: Timestamp;
   interviewCompletionSource?: 'manual' | 'auto_time';

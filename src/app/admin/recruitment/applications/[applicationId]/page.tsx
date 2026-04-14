@@ -23,7 +23,6 @@ import { CandidateDocumentsCard } from '@/components/recruitment/CandidateDocume
 import { CandidateFitAnalysis } from '@/components/recruitment/CandidateFitAnalysis';
 import { ApplicationActionBar } from '@/components/recruitment/ApplicationActionBar';
 import { ApplicationNotes } from '@/components/recruitment/ApplicationNotes';
-import { CandidateStepNav, CandidateStepContent } from '@/components/recruitment/CandidateStepView';
 import type { ScheduleInterviewData } from '@/components/recruitment/ScheduleInterviewDialog';
 import { ScheduleInterviewDialog } from '@/components/recruitment/ScheduleInterviewDialog';
 import { Button } from '@/components/ui/button';
@@ -36,7 +35,6 @@ import { InterviewManagement } from '@/components/recruitment/InterviewManagemen
 import { InternalEvaluationSection } from '@/components/recruitment/InternalEvaluationSection';
 import { PostInterviewEvaluationSection } from '@/components/recruitment/PostInterviewEvaluationSection';
 import { UnifiedInternalDecision } from '@/components/recruitment/UnifiedInternalDecision';
-import { InternalHRTimeline } from '@/components/recruitment/InternalHRTimeline';
 
 
 function ApplicationDetailSkeleton() {
@@ -65,7 +63,7 @@ export default function ApplicationDetailPage() {
   const [isOfferDialogOpen, setIsOfferDialogOpen] = useState(false);
   const [isActivating, setIsActivating] = useState(false);
   const [activeProfileStep, setActiveProfileStep] = useState(1);
-  const [evaluationFilter, setEvaluationFilter] = useState<'all' | 'pre' | 'post'>('all');
+  const [evaluationFilter, setEvaluationFilter] = useState<'all' | 'pra' | 'pasca'>('all');
 
   const applicationRef = useMemoFirebase(
     () => (applicationId ? doc(firestore, 'applications', applicationId) : null),
@@ -300,17 +298,11 @@ export default function ApplicationDetailPage() {
       ) : (
         <>
         <div className="space-y-6">
-          {/* Action bar removed per user request: everything moved to FinalInternalDecisionSection */}
-
-          {isPrivilegedRecruiter && (
-              <div className="mb-4">
-                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-500 mb-3 ml-2 flex items-center gap-2">
-                      <Lock className="h-3 w-3" />
-                      Timeline Internal Khusus HRD
-                  </h3>
-                  <InternalHRTimeline application={application} />
-              </div>
-          )}
+          <ApplicationActionBar 
+            application={application} 
+            onStageChange={handleStageChange}
+            onSendOfferClick={() => setIsOfferDialogOpen(true)}
+          />
           
           <Card>
             <CardHeader>
@@ -353,10 +345,8 @@ export default function ApplicationDetailPage() {
               onUpdate={mutateApplication}
           />
           
-          {/* Unified Detail Sections (Headless Step Navigation Structure) */}
           <div className="grid grid-cols-1 xl:grid-cols-[200px_1fr] gap-10 items-start pt-4">
             
-            {/* 1. Step Navigation (Secondary) */}
             <div className="xl:sticky xl:top-24 hidden xl:block">
                 <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 mb-4 px-3">Navigator Profil</p>
                 <CandidateStepNav activeStep={activeProfileStep} onStepChange={setActiveProfileStep} />
@@ -368,7 +358,6 @@ export default function ApplicationDetailPage() {
                 </Card>
             </div>
             
-            {/* Mobile Nav Trigger (Visible only on mobile if you want, but sticking to desktop layout focus first) */}
             <div className="xl:hidden grid grid-cols-3 gap-2 p-2 bg-muted/30 rounded-2xl">
                  {[1,2,3,4,5,6].map(i => (
                      <Button key={i} variant={activeProfileStep === i ? 'default' : 'ghost'} size="sm" onClick={() => setActiveProfileStep(i)}>Step {i}</Button>
@@ -389,19 +378,19 @@ export default function ApplicationDetailPage() {
                               Semua
                           </Button>
                           <Button 
-                              variant={evaluationFilter === 'pre' ? 'default' : 'ghost'} 
+                              variant={evaluationFilter === 'pra' ? 'default' : 'ghost'} 
                               size="sm" 
-                              onClick={() => setEvaluationFilter('pre')}
-                              className={cn("rounded-xl text-[10px] font-black uppercase tracking-widest px-6 h-10", evaluationFilter === 'pre' && "bg-indigo-600 shadow-lg shadow-indigo-600/20")}
+                              onClick={() => setEvaluationFilter('pra')}
+                              className={cn("rounded-xl text-[10px] font-black uppercase tracking-widest px-6 h-10", evaluationFilter === 'pra' && "bg-indigo-600 shadow-lg shadow-indigo-600/20")}
                           >
                               Pra Wawancara
                           </Button>
                           {shouldShowPostInterview && (
                               <Button 
-                                  variant={evaluationFilter === 'post' ? 'default' : 'ghost'} 
+                                  variant={evaluationFilter === 'pasca' ? 'default' : 'ghost'} 
                                   size="sm" 
-                                  onClick={() => setEvaluationFilter('post')}
-                                  className={cn("rounded-xl text-[10px] font-black uppercase tracking-widest px-6 h-10", evaluationFilter === 'post' && "bg-teal-600 shadow-lg shadow-teal-600/20")}
+                                  onClick={() => setEvaluationFilter('pasca')}
+                                  className={cn("rounded-xl text-[10px] font-black uppercase tracking-widest px-6 h-10", evaluationFilter === 'pasca' && "bg-teal-600 shadow-lg shadow-teal-600/20")}
                               >
                                   Pasca Wawancara
                               </Button>
@@ -410,11 +399,11 @@ export default function ApplicationDetailPage() {
                   </div>
               </div>
 
-              {(evaluationFilter === 'all' || evaluationFilter === 'pre') && (
+              {(evaluationFilter === 'all' || evaluationFilter === 'pra') && (
                   <InternalEvaluationSection application={application} job={job} internalUsers={internalUsers} />
               )}
 
-              {shouldShowPostInterview && (evaluationFilter === 'all' || evaluationFilter === 'post') && (
+              {shouldShowPostInterview && (evaluationFilter === 'all' || evaluationFilter === 'pasca') && (
                   <PostInterviewEvaluationSection application={application} job={job} internalUsers={internalUsers} />
               )}
           </div>

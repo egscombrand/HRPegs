@@ -212,7 +212,7 @@ export function InterviewManagement({ application, onUpdate, allUsers, allBrands
                  throw new Error("Wawancara yang akan diedit tidak ditemukan.");
             }
         } else { // Create or Counter-proposal
-            if (activeInterview && activeInterview.rescheduleRequest) {
+            if (activeInterview && activeInterview.rescheduleRequest) { // Counter-proposal
                 const index = newInterviews.findIndex(iv => iv.interviewId === activeInterview.interviewId);
                 if (index !== -1) {
                     newInterviews[index].status = 'canceled';
@@ -357,7 +357,7 @@ export function InterviewManagement({ application, onUpdate, allUsers, allBrands
         setIsSubmitting(false);
     }
   };
-
+  
   const handleMarkCompleted = async () => {
     if (!application || !userProfile) return;
     setIsSubmitting(true);
@@ -488,7 +488,7 @@ export function InterviewManagement({ application, onUpdate, allUsers, allBrands
                                                 {iv.rescheduleRequest.proposedSlots.map((slot, slotIndex) => (
                                                     <li key={slotIndex} className="flex items-center justify-between text-sm p-2 bg-background/50 rounded-md">
                                                         <span>{format(slot.startAt.toDate(), 'eeee, dd MMM yyyy - HH:mm', { locale: idLocale })}</span>
-                                                        {isPrivilegedRecruiter && <Button size="sm" onClick={() => handleApproveReschedule(iv, slot)} disabled={isSubmitting}>Setujui</Button>}
+                                                        {isPrivilegedRecruiter && <Button size="xs" onClick={() => handleApproveReschedule(iv, slot)} disabled={isSubmitting}>Setujui</Button>}
                                                     </li>
                                                 ))}
                                             </ul>
