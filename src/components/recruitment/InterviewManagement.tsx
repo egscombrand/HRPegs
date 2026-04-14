@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Edit, X, ShieldCheck, AlertTriangle, Users, CheckCircle } from 'lucide-react';
+import { Loader2, Edit, X, ShieldCheck, AlertTriangle, Users } from 'lucide-react';
 import { format, differenceInMinutes, add } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
 
@@ -334,47 +334,6 @@ export function InterviewManagement({ application, onUpdate, allUsers, allBrands
         setIsSubmitting(false);
     }
   };
-
-  const handleMarkCompleted = async () => {
-    if (!application || !userProfile) return;
-    setIsSubmitting(true);
-    try {
-        const payload: any = {
-            interviewCompleted: true,
-            interviewCompletedAt: serverTimestamp(),
-            interviewCompletionSource: 'manual',
-            updatedAt: serverTimestamp()
-        };
-
-        // If no interviews exist, creating one from template to ensure timeline consistency
-        if (!application.interviews || application.interviews.length === 0) {
-            if (job.interviewTemplate) {
-                const template = job.interviewTemplate;
-                const templateStart = (template.defaultStartDate as Timestamp)?.toDate() || new Date();
-                const newInterview: ApplicationInterview = {
-                    interviewId: crypto.randomUUID(),
-                    startAt: Timestamp.fromDate(templateStart),
-                    endAt: Timestamp.fromDate(add(templateStart, { minutes: template.slotDurationMinutes || 60 })),
-                    panelistIds: [],
-                    panelistNames: [],
-                    status: 'scheduled',
-                    meetingLink: template.meetingLink || '',
-                    notes: 'Wawancara diselesaikan secara manual berdasarkan template.',
-                    meetingPublished: true,
-                };
-                payload.interviews = [newInterview];
-            }
-        }
-
-        await updateDoc(doc(firestore, 'applications', application.id!), payload);
-        toast({ title: 'Wawancara Selesai', description: 'Status wawancara telah ditandai sebagai selesai secara manual.' });
-        onUpdate();
-    } catch (error: any) {
-        toast({ variant: 'destructive', title: 'Gagal Memperbarui Status', description: error.message });
-    } finally {
-        setIsSubmitting(false);
-    }
-  };
   
   if (application.status !== 'interview') {
     return null;
@@ -393,25 +352,6 @@ export function InterviewManagement({ application, onUpdate, allUsers, allBrands
               <CardDescription>{description}</CardDescription>
             </div>
             <div className="flex items-center gap-2">
-                {isPrivilegedRecruiter && (
-                  application.interviewCompleted ? (
-                    <div className="text-right text-xs text-muted-foreground p-2 bg-muted/50 rounded-lg">
-                      <p className="font-semibold text-green-600 flex items-center gap-1.5"><CheckCircle className="h-4 w-4" /> Wawancara Selesai</p>
-                      {application.interviewCompletedAt && <p>Ditandai pada: {format(application.interviewCompletedAt.toDate(), 'dd MMM yyyy, HH:mm', { locale: idLocale })}</p>}
-                    </div>
-                  ) : (
-                    <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="text-emerald-600 border-emerald-600 hover:bg-emerald-50"
-                        onClick={handleMarkCompleted}
-                        disabled={isSubmitting}
-                    >
-                        {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
-                        Tandai Selesai
-                    </Button>
-                  )
-                )}
                 {isPrivilegedRecruiter && (!application.interviews || application.interviews.filter(iv => iv.status !== 'canceled').length === 0) && (
                 <Button size="sm" onClick={() => handleOpenScheduleDialog()}>Jadwalkan Wawancara Baru</Button>
                 )}
@@ -517,6 +457,7 @@ export function InterviewManagement({ application, onUpdate, allUsers, allBrands
             interview={activeInterview}
             currentUser={userProfile}
             allUsers={allUsers}
+            allBrands={allBrands}
             onSuccess={onUpdate}
         />
       )}

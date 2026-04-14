@@ -36,6 +36,7 @@ import { InternalEvaluationSection } from '@/components/recruitment/InternalEval
 import { PostInterviewEvaluationSection } from '@/components/recruitment/PostInterviewEvaluationSection';
 import { UnifiedInternalDecision } from '@/components/recruitment/UnifiedInternalDecision';
 import { CandidateStepNav, CandidateStepContent } from '@/components/recruitment/CandidateStepView';
+import { FinalInternalDecisionSection } from '@/components/recruitment/FinalInternalDecisionSection';
 
 
 function ApplicationDetailSkeleton() {
@@ -250,7 +251,12 @@ export default function ApplicationDetailPage() {
   const shouldShowPostInterview = useMemo(() => {
     if (!application) return false;
 
-    if (application.interviewCompleted) {
+    // If there's already a post-interview evaluation summary, it's definitely post-interview phase.
+    if (application.postInterviewEvaluation && application.postInterviewEvaluation.submissions > 0) {
+      return true;
+    }
+
+    if (application.interviewCompleted) { // Keep legacy check for now
       return true;
     }
 
@@ -425,6 +431,7 @@ export default function ApplicationDetailPage() {
               {shouldShowPostInterview && (evaluationFilter === 'all' || evaluationFilter === 'pasca') && (
                   <PostInterviewEvaluationSection application={application} job={job} internalUsers={internalUsers} />
               )}
+               {isHRD && <FinalInternalDecisionSection application={application} onStageChange={handleStageChange} />}
           </div>
         </div>
         </>

@@ -230,7 +230,7 @@ function ApplicationCard({ application, job, hasCompletedTest }: { application: 
         const interviewEnd = scheduledInterview.endAt.toDate();
         const twoHoursInMs = 2 * 60 * 60 * 1000;
         
-        const isActuallyCompleted = application.interviewCompleted || (now.getTime() > interviewEnd.getTime() + twoHoursInMs);
+        const isActuallyCompleted = application.postInterviewEvaluation?.submissions > 0 || (now.getTime() > interviewEnd.getTime() + twoHoursInMs);
 
         if (!isActuallyCompleted) {
             // Before or during interview
