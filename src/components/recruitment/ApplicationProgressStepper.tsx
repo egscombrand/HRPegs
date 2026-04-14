@@ -3,39 +3,65 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
 import type { JobApplicationStatus } from '@/lib/types';
-import { Check, Users, Award, Search, FileText } from 'lucide-react';
+import { Check, Users, Award, Search, BrainCircuit, CheckCircle } from 'lucide-react';
 import { ORDERED_RECRUITMENT_STAGES } from '@/lib/types';
 
-const applicationSteps = [
-  { status: 'screening', label: 'Screening', icon: Search },
-  { status: 'interview', label: 'Wawancara', icon: Users },
-  { status: 'offered', label: 'Penawaran', icon: Award },
-  { status: 'hired', label: 'Diterima', icon: Check },
+// The visual steps for the candidate, in order.
+const VISUAL_STEPS = [
+  { stage: 'screening', label: 'Screening', icon: Search },
+  { stage: 'tes_kepribadian', label: 'Assessment', icon: BrainCircuit },
+  { stage: 'interview', label: 'Interview', icon: Users },
+  { stage: 'offered', label: 'Offering', icon: Award },
+  { stage: 'hired', label: 'Hired', icon: CheckCircle },
 ];
+
+// Map internal statuses to the index of the visual step.
+const statusToVisualStepIndex = (status: JobApplicationStatus): number => {
+  switch (status) {
+    case 'draft':
+    case 'submitted':
+    case 'screening':
+    case 'verification':
+    case 'document_submission':
+      return 0; // All these map to the "Screening" visual step
+    case 'tes_kepribadian':
+      return 1; // Maps to "Assessment"
+    case 'interview':
+      return 2; // Maps to "Interview"
+    case 'offered':
+      return 3; // Maps to "Offering"
+    case 'hired':
+      return 4; // Maps to "Hired"
+    case 'rejected':
+      return -1; // Rejected state
+    default:
+      return 0; // Default to the first step
+  }
+};
+
 
 interface ApplicationProgressStepperProps {
   currentStatus: JobApplicationStatus;
 }
 
 export function ApplicationProgressStepper({ currentStatus }: ApplicationProgressStepperProps) {
-  const currentStepIndex = ORDERED_RECRUITMENT_STAGES.indexOf(currentStatus);
+  const currentVisualIndex = statusToVisualStepIndex(currentStatus);
   const isRejected = currentStatus === 'rejected';
 
+  // If rejected, we don't show a linear progress bar.
   if (isRejected) {
-    return null;
+    return null; 
   }
 
   return (
     <div className="w-full overflow-x-auto pb-4">
       <div className="flex items-center min-w-[500px]">
-        {applicationSteps.map((step, index) => {
-          const canonicalIndex = ORDERED_RECRUITMENT_STAGES.indexOf(step.status as JobApplicationStatus);
-          
-          const isActive = canonicalIndex === currentStepIndex;
-          const isCompleted = !isRejected && currentStepIndex > canonicalIndex;
+        {VISUAL_STEPS.map((step, index) => {
+          const isActive = currentVisualIndex === index;
+          const isCompleted = currentVisualIndex > index;
           
           return (
-            <React.Fragment key={step.status}>
+            <React.Fragment key={step.stage}>
               <div className="flex flex-col items-center text-center w-24 flex-shrink-0 z-10 rounded-md p-1">
                 <div
                   className={cn(
@@ -57,7 +83,7 @@ export function ApplicationProgressStepper({ currentStatus }: ApplicationProgres
                 </p>
               </div>
 
-              {index < applicationSteps.length - 1 && (
+              {index < VISUAL_STEPS.length - 1 && (
                 <div className={cn(
                   "flex-1 h-1 transition-colors duration-300 -mx-1",
                   isCompleted ? 'bg-primary' : 'bg-border'
