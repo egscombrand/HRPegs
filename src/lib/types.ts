@@ -1,15 +1,31 @@
-'use client';
+"use client";
 
-import type { Timestamp } from 'firebase/firestore';
+import type { Timestamp } from "firebase/firestore";
 
-export const ROLES = ['super-admin', 'hrd', 'manager', 'kandidat', 'karyawan'] as const;
-export const ROLES_INTERNAL = ['super-admin', 'hrd', 'manager', 'karyawan'] as const;
+export const ROLES = [
+  "super-admin",
+  "hrd",
+  "manager",
+  "kandidat",
+  "karyawan",
+] as const;
+export const ROLES_INTERNAL = [
+  "super-admin",
+  "hrd",
+  "manager",
+  "karyawan",
+] as const;
 
 export type UserRole = (typeof ROLES)[number];
-export const EMPLOYMENT_TYPES = ['karyawan', 'magang', 'training'] as const;
+export const EMPLOYMENT_TYPES = ["karyawan", "magang", "training"] as const;
 export type EmploymentType = (typeof EMPLOYMENT_TYPES)[number];
 
-export const EMPLOYMENT_STAGES = ['intern_education', 'intern_pre_probation', 'probation', 'active'] as const;
+export const EMPLOYMENT_STAGES = [
+  "intern_education",
+  "intern_pre_probation",
+  "probation",
+  "active",
+] as const;
 export type EmploymentStage = (typeof EMPLOYMENT_STAGES)[number];
 
 export type UserProfile = {
@@ -43,30 +59,34 @@ export type UserProfile = {
   updatedAt?: Timestamp;
 };
 
-export const EMPLOYMENT_STATUSES = ['active', 'probation', 'resigned', 'terminated'] as const;
+export const EMPLOYMENT_STATUSES = [
+  "active",
+  "probation",
+  "resigned",
+  "terminated",
+] as const;
 export type EmploymentStatus = (typeof EMPLOYMENT_STATUSES)[number];
-
 
 export type EmployeeProfile = {
   id?: string;
   uid: string;
-  
+
   // --- Data Pribadi ---
   fullName: string;
   nickName?: string;
   phone: string;
   email: string;
-  gender?: 'Laki-laki' | 'Perempuan' | 'Lainnya';
+  gender?: "Laki-laki" | "Perempuan" | "Lainnya";
   birthPlace?: string;
   birthDate?: string; // YYYY-MM-DD
-  maritalStatus?: 'Belum Kawin' | 'Kawin' | 'Cerai Hidup' | 'Cerai Mati';
+  maritalStatus?: "Belum Kawin" | "Kawin" | "Cerai Hidup" | "Cerai Mati";
   religion?: string;
   address?: Address;
   contact?: {
     phone: string;
     email: string;
   };
-  
+
   // --- Informasi Pekerjaan ---
   employeeNumber?: string; // NIK
   positionTitle?: string; // Jabatan/Posisi
@@ -81,7 +101,7 @@ export type EmployeeProfile = {
   managerName?: string;
   supervisorUid?: string; // Used for interns, synonymous with managerUid
   supervisorName?: string;
-  
+
   // --- Data Administratif ---
   nik?: string; // No KTP/SIM
   hasNpwp?: boolean;
@@ -93,42 +113,42 @@ export type EmployeeProfile = {
   bankName?: string;
   bankAccountNumber?: string;
   bankAccountHolderName?: string;
-  
+
   // --- Riwayat Pendidikan & Pelatihan ---
   education?: Education[];
   certifications?: Certification[];
-  
+
   // --- Riwayat Karir & Kinerja ---
   careerHistory?: {
-      date: Timestamp;
-      event: 'promotion' | 'assessment' | 'award' | 'sanction';
-      description: string;
-      notes?: string;
+    date: Timestamp;
+    event: "promotion" | "assessment" | "award" | "sanction";
+    description: string;
+    notes?: string;
   }[];
 
   // --- Kehadiran & Cuti (Biasanya di koleksi terpisah, tapi bisa ada summary di sini) ---
   leaveBalance?: {
-      annual: number;
-      sick: number;
+    annual: number;
+    sick: number;
   };
 
   // --- Data Penggajian (Hanya untuk HRD) ---
   payroll?: {
-      baseSalary?: number;
-      allowances?: Record<string, number>;
+    baseSalary?: number;
+    allowances?: Record<string, number>;
   };
-  
+
   // --- Kontak Darurat ---
   emergencyContactName: string;
   emergencyContactRelation: string;
   emergencyContactPhone: string;
-  
+
   // --- Legacy Intern Fields ---
-  internSubtype?: 'intern_education' | 'intern_pre_probation';
+  internSubtype?: "intern_education" | "intern_pre_probation";
 
   // --- Metadata ---
-  dataSource?: 'register' | 'import' | 'manual';
-  dataCompleteness?: 'lengkap' | 'sebagian' | 'belum_lengkap';
+  dataSource?: "register" | "import" | "manual";
+  dataCompleteness?: "lengkap" | "sebagian" | "belum_lengkap";
   completeness?: {
     isComplete: boolean;
     completedAt?: Timestamp;
@@ -138,7 +158,6 @@ export type EmployeeProfile = {
   hrdNotes?: string;
   additionalFields?: Record<string, any>;
 };
-
 
 export type Brand = {
   id?: string;
@@ -168,7 +187,7 @@ export type EcosystemCompany = {
 export type EcosystemSection = {
   id?: string;
   sectionKey: string;
-  type: 'hero' | 'content';
+  type: "hero" | "content";
   title: string;
   subtitle?: string;
   description?: string;
@@ -189,28 +208,28 @@ export type InviteBatch = {
   id?: string; // The unique batch code
   brandId: string;
   brandName: string;
-  employmentType: 'karyawan' | 'magang' | 'training';
+  employmentType: "karyawan" | "magang" | "training";
   totalSlots: number;
   claimedSlots: number;
   createdBy: string; // UID of HRD/SuperAdmin
   createdAt: Timestamp;
   updatedAt: Timestamp;
-}
+};
 
 export type Job = {
   id?: string;
   position: string;
   slug: string;
-  statusJob: 'fulltime' | 'internship' | 'contract';
+  statusJob: "fulltime" | "internship" | "contract";
   division: string;
   location: string;
-  workMode?: 'onsite' | 'hybrid' | 'remote';
+  workMode?: "onsite" | "hybrid" | "remote";
   brandId: string;
   brandName?: string; // Denormalized for convenience
   coverImageUrl?: string;
   generalRequirementsHtml: string;
   specialRequirementsHtml: string;
-  publishStatus: 'draft' | 'published' | 'closed';
+  publishStatus: "draft" | "published" | "closed";
   applyDeadline?: Timestamp;
   numberOfOpenings?: number;
   createdAt: Timestamp;
@@ -230,55 +249,90 @@ export type Job = {
   };
 };
 
-export const ORDERED_RECRUITMENT_STAGES = ['draft', 'submitted', 'tes_kepribadian', 'screening', 'verification', 'document_submission', 'interview', 'offered', 'hired', 'rejected'] as const;
+export const ORDERED_RECRUITMENT_STAGES = [
+  "draft",
+  "submitted",
+  "tes_kepribadian",
+  "screening",
+  "verification",
+  "document_submission",
+  "interview",
+  "offered",
+  "hired",
+  "rejected",
+] as const;
 export type JobApplicationStatus = (typeof ORDERED_RECRUITMENT_STAGES)[number];
 
-
-export const APPLICATION_SOURCES = ['website', 'linkedin', 'jobstreet', 'referral', 'instagram', 'other'] as const;
+export const APPLICATION_SOURCES = [
+  "website",
+  "linkedin",
+  "jobstreet",
+  "referral",
+  "instagram",
+  "other",
+] as const;
 export type ApplicationSource = (typeof APPLICATION_SOURCES)[number];
 
+export const CANDIDATE_STATUSES = [
+  "lolos",
+  "menunggu",
+  "interview_scheduled",
+  "offer_received",
+  "process_complete",
+  "under_review",
+] as const;
+export type CandidateStatus = (typeof CANDIDATE_STATUSES)[number];
+
 export type ApplicationTimelineEvent = {
-    type: 'stage_changed' | 'note_added' | 'interview_scheduled' | 'interview_updated' | 'offer_sent' | 'assessment_graded' | 'status_changed' | 'panelists_updated';
-    at: Timestamp;
-    by: string; // Recruiter UID
-    meta: {
-        from?: string;
-        to?: string;
-        note?: string;
-        added?: string[]; // UIDs
-        removed?: string[]; // UIDs
-        [key: string]: any;
-    };
+  type:
+    | "stage_changed"
+    | "note_added"
+    | "interview_scheduled"
+    | "interview_updated"
+    | "offer_sent"
+    | "assessment_graded"
+    | "status_changed"
+    | "panelists_updated";
+  at: Timestamp;
+  by: string; // Recruiter UID
+  meta: {
+    from?: string;
+    to?: string;
+    note?: string;
+    added?: string[]; // UIDs
+    removed?: string[]; // UIDs
+    [key: string]: any;
+  };
 };
 
 export type RescheduleRequest = {
-    requestedAt: Timestamp;
-    requestedByUid: string;
-    reason: string;
-    proposedSlots: Array<{ startAt: Timestamp, endAt: Timestamp }>;
-    status: 'pending' | 'approved' | 'denied' | 'countered';
-    hrResponseNote?: string;
-    decidedAt?: Timestamp;
-    decidedByUid?: string;
+  requestedAt: Timestamp;
+  requestedByUid: string;
+  reason: string;
+  proposedSlots: Array<{ startAt: Timestamp; endAt: Timestamp }>;
+  status: "pending" | "approved" | "denied" | "countered";
+  hrResponseNote?: string;
+  decidedAt?: Timestamp;
+  decidedByUid?: string;
 };
 
 export type ApplicationInterview = {
-    interviewId: string; // Unique ID for this specific interview instance
-    startAt: Timestamp;
-    endAt: Timestamp;
-    meetingLink: string;
-    panelistIds: string[];
-    panelistNames: string[];
-    leadPanelistId?: string;
-    status: 'scheduled' | 'completed' | 'canceled' | 'reschedule_requested';
-    notes?: string;
-    rescheduleRequest?: RescheduleRequest;
-    meetingPublished?: boolean;
-    meetingPublishedAt?: Timestamp | null;
-    meetingPublishedBy?: string | null;
-    rescheduleReason?: string; // Legacy field
-    interviewerIds?: string[]; // Legacy field
-    interviewerNames?: string[]; // Legacy field
+  interviewId: string; // Unique ID for this specific interview instance
+  startAt: Timestamp;
+  endAt: Timestamp;
+  meetingLink: string;
+  panelistIds: string[];
+  panelistNames: string[];
+  leadPanelistId?: string;
+  status: "scheduled" | "completed" | "canceled" | "reschedule_requested";
+  notes?: string;
+  rescheduleRequest?: RescheduleRequest;
+  meetingPublished?: boolean;
+  meetingPublishedAt?: Timestamp | null;
+  meetingPublishedBy?: string | null;
+  rescheduleReason?: string; // Legacy field
+  interviewerIds?: string[]; // Legacy field
+  interviewerNames?: string[]; // Legacy field
 };
 
 export type InterviewChangeRequest = {
@@ -287,7 +341,7 @@ export type InterviewChangeRequest = {
   interviewId: string;
   requestedByUid: string;
   requestedByName: string;
-  type: 'replace_panelist' | 'add_panelist' | 'remove_panelist';
+  type: "replace_panelist" | "add_panelist" | "remove_panelist";
   payload: {
     removeUid?: string;
     addUid?: string;
@@ -295,12 +349,11 @@ export type InterviewChangeRequest = {
     removeUids?: string[];
   };
   reason: string;
-  status: 'pending' | 'approved' | 'denied';
+  status: "pending" | "approved" | "denied";
   createdAt: Timestamp;
   decidedByUid?: string;
   decidedAt?: Timestamp;
 };
-
 
 export type JobApplication = {
   id?: string;
@@ -318,14 +371,16 @@ export type JobApplication = {
   timeline?: ApplicationTimelineEvent[];
   cvVerified?: boolean;
   ijazahVerified?: boolean;
-  
+
   // New offer fields
-  offerStatus?: 'sent' | 'accepted' | 'rejected' | 'withdrawn';
+  offerStatus?: "sent" | "accepted" | "rejected" | "withdrawn";
   offeredSalary?: number | null;
   probationDurationMonths?: number | null;
   contractStartDate?: Timestamp | null;
   contractDurationMonths?: number | null;
   contractEndDate?: Timestamp | null;
+  offerDescription?: string | null;
+  workDays?: string | null;
   offerNotes?: string | null;
   candidateOfferDecisionAt?: Timestamp | null;
   internalAccessEnabled?: boolean;
@@ -343,7 +398,9 @@ export type JobApplication = {
   jobSlug: string;
   brandId: string;
   brandName: string;
-  jobType: 'fulltime' | 'internship' | 'contract';
+  jobType: "fulltime" | "internship" | "contract";
+  candidateStatus?: CandidateStatus;
+  finalDecisionLocked?: boolean;
   location: string;
   status: JobApplicationStatus;
   personalityTestAssignedAt?: Timestamp;
@@ -360,31 +417,34 @@ export type JobApplication = {
   // CV text extraction cache
   cvText?: string;
   cvTextExtractedAt?: Timestamp;
-  cvTextSource?: 'pdf-parse' | 'ocr-vision' | 'ocr-docai' | 'unknown';
+  cvTextSource?: "pdf-parse" | "ocr-vision" | "ocr-docai" | "unknown";
   cvCharCount?: number;
-  
+
   // --- Internal Review Features ---
   internalReviewConfig?: InternalReviewConfig;
   internalReviewSummary?: InternalReviewSummary;
   recruitmentInternalDecision?: RecruitmentInternalDecision;
-  
+
   // --- Post-Interview Features ---
   postInterviewEvaluation?: PostInterviewEvaluationSummary;
   postInterviewDecision?: PostInterviewDecision;
-  
+
   // --- Manual Completion ---
   interviewCompleted?: boolean;
   interviewCompletedAt?: Timestamp;
-  interviewCompletionSource?: 'manual' | 'auto_time';
+  interviewCompletionSource?: "manual" | "auto_time";
 };
 
-export type InternalReviewScore = 'direkomendasikan' | 'dipertimbangkan' | 'belum_sesuai';
+export type InternalReviewScore =
+  | "direkomendasikan"
+  | "dipertimbangkan"
+  | "belum_sesuai";
 
 export interface InternalReviewConfig {
   enabled: boolean;
   assignedReviewerUids: string[];
   assignedReviewerNames?: string[];
-  visibilityMode: 'shared_internal';
+  visibilityMode: "shared_internal";
   reviewLocked: boolean;
   lastUpdatedAt?: Timestamp | null;
 }
@@ -401,7 +461,10 @@ export interface InternalReviewSummary {
   lastUpdatedAt?: Timestamp | null;
 }
 
-export type RecruitmentInternalDecisionStatus = 'lanjut_ke_tahap_selanjutnya' | 'pending_internal' | 'tidak_dilanjutkan_saat_ini';
+export type RecruitmentInternalDecisionStatus =
+  | "lanjut_ke_tahap_selanjutnya"
+  | "pending_internal"
+  | "tidak_dilanjutkan_saat_ini";
 
 export interface RecruitmentInternalDecision {
   status: RecruitmentInternalDecisionStatus;
@@ -411,7 +474,7 @@ export interface RecruitmentInternalDecision {
   decidedAt: Timestamp;
 }
 
-export type PostInterviewDecisionStatus = 'lanjut' | 'pending' | 'tidak_lanjut';
+export type PostInterviewDecisionStatus = "lanjut" | "pending" | "tidak_lanjut";
 
 export interface PostInterviewDecision {
   status: PostInterviewDecisionStatus;
@@ -426,7 +489,7 @@ export interface InternalReview {
   applicationId: string;
   reviewerUid: string;
   reviewerName: string;
-  reviewerRole: 'hrd' | 'reviewer' | 'manager' | 'super-admin';
+  reviewerRole: "hrd" | "reviewer" | "manager" | "super-admin";
   score: InternalReviewScore;
   note: string;
   strengths?: string;
@@ -435,7 +498,10 @@ export interface InternalReview {
   updatedAt: Timestamp;
 }
 
-export type PostInterviewReviewScore = 'direkomendasikan' | 'dipertimbangkan' | 'belum_direkomendasikan';
+export type PostInterviewReviewScore =
+  | "direkomendasikan"
+  | "dipertimbangkan"
+  | "belum_direkomendasikan";
 
 export interface PostInterviewReview {
   id?: string; // Same as reviewerUid
@@ -464,19 +530,18 @@ export interface PostInterviewEvaluationSummary {
 }
 
 export type Candidate = {
-    id?: string;
-    fullName: string;
-    email: string;
-    phone: string;
-    city: string;
-    photoUrl?: string;
-    resumeUrl?: string;
-    createdAt: Timestamp;
-    tags?: string[];
-    currentPosition?: string;
-    currentCompany?: string;
+  id?: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  city: string;
+  photoUrl?: string;
+  resumeUrl?: string;
+  createdAt: Timestamp;
+  tags?: string[];
+  currentPosition?: string;
+  currentCompany?: string;
 };
-
 
 // The rest of the types... (SavedJob, Education, etc.)
 
@@ -491,150 +556,163 @@ export type SavedJob = {
 };
 
 export type Education = {
-    id: string;
-    institution: string;
-    level: 'SMA/SMK' | 'D3' | 'S1' | 'S2' | 'S3';
-    fieldOfStudy?: string;
-    thesisTitle?: string;
-    gpa?: string;
-    startDate: string;
-    endDate?: string;
-    isCurrent: boolean;
-}
+  id: string;
+  institution: string;
+  level: "SMA/SMK" | "D3" | "S1" | "S2" | "S3";
+  fieldOfStudy?: string;
+  thesisTitle?: string;
+  gpa?: string;
+  startDate: string;
+  endDate?: string;
+  isCurrent: boolean;
+};
 
-export const JOB_TYPES = ['internship', 'pkwt', 'kwtt', 'outsourcing', 'freelance'] as const;
+export const JOB_TYPES = [
+  "internship",
+  "pkwt",
+  "kwtt",
+  "outsourcing",
+  "freelance",
+] as const;
 export type JobType = (typeof JOB_TYPES)[number];
 export const JOB_TYPE_LABELS: Record<JobType, string> = {
-    internship: 'Internship (Magang)',
-    pkwt: 'PKWT (Kontrak)',
-    kwtt: 'KWTT (Tetap)',
-    outsourcing: 'Outsourcing',
-    freelance: 'Freelance/Kontrak Harian'
+  internship: "Internship (Magang)",
+  pkwt: "PKWT (Kontrak)",
+  kwtt: "KWTT (Tetap)",
+  outsourcing: "Outsourcing",
+  freelance: "Freelance/Kontrak Harian",
 };
 
 export type WorkExperience = {
-    id: string;
-    company: string;
-    position: string;
-    jobType?: JobType;
-    startDate: string;
-    endDate?: string;
-    isCurrent: boolean;
-    description?: string;
-    reasonForLeaving?: string;
-}
+  id: string;
+  company: string;
+  position: string;
+  jobType?: JobType;
+  startDate: string;
+  endDate?: string;
+  isCurrent: boolean;
+  description?: string;
+  reasonForLeaving?: string;
+};
 
 export type OrganizationalExperience = {
-    id: string;
-    organization: string;
-    position: string;
-    startDate: string;
-    endDate?: string;
-    isCurrent: boolean;
-    description?: string;
-}
+  id: string;
+  organization: string;
+  position: string;
+  startDate: string;
+  endDate?: string;
+  isCurrent: boolean;
+  description?: string;
+};
 
 export type Certification = {
-    id: string;
-    name: string;
-    organization: string;
-    issueDate: string; // Storing as YYYY-MM
-    expirationDate?: string; // Storing as YYYY-MM
-    imageUrl?: string;
+  id: string;
+  name: string;
+  organization: string;
+  issueDate: string; // Storing as YYYY-MM
+  expirationDate?: string; // Storing as YYYY-MM
+  imageUrl?: string;
 };
 
 export type Address = {
-    street: string;
-    rt: string;
-    rw: string;
-    village: string;
-    district: string;
-    city: string;
-    province: string;
-    postalCode: string;
+  street: string;
+  rt: string;
+  rw: string;
+  village: string;
+  district: string;
+  city: string;
+  province: string;
+  postalCode: string;
 };
 
 export type Profile = {
-    fullName: string;
-    nickname: string;
-    email: string;
-    phone: string;
-    eKtpNumber: string;
-    nikHash?: string;
-    gender: 'Laki-laki' | 'Perempuan';
-    birthPlace: string;
-    birthDate: Timestamp;
-    addressKtp: Address;
-    addressDomicile: Address;
-    isDomicileSameAsKtp: boolean;
-    hasNpwp?: boolean;
-    npwpNumber?: string;
-    willingToWfo: boolean;
-    linkedinUrl?: string;
-    websiteUrl?: string;
-    education: Education[];
-    workExperience?: WorkExperience[];
-    organizationalExperience?: OrganizationalExperience[];
-    skills?: string[];
-    certifications?: Certification[];
-    
-    selfDescription?: string;
-    salaryExpectation?: string;
-    salaryExpectationReason?: string;
-    motivation?: string;
-    workStyle?: string;
-    improvementArea?: string;
-    availability?: 'Secepatnya' | '1 minggu' | '2 minggu' | '1 bulan' | '3 bulan' | '6 bulan' | 'Lainnya';
-    availabilityOther?: string;
-    usedToDeadline?: boolean;
-    deadlineExperience?: string;
+  fullName: string;
+  nickname: string;
+  email: string;
+  phone: string;
+  eKtpNumber: string;
+  nikHash?: string;
+  gender: "Laki-laki" | "Perempuan";
+  birthPlace: string;
+  birthDate: Timestamp;
+  addressKtp: Address;
+  addressDomicile: Address;
+  isDomicileSameAsKtp: boolean;
+  hasNpwp?: boolean;
+  npwpNumber?: string;
+  willingToWfo: boolean;
+  linkedinUrl?: string;
+  websiteUrl?: string;
+  education: Education[];
+  workExperience?: WorkExperience[];
+  organizationalExperience?: OrganizationalExperience[];
+  skills?: string[];
+  certifications?: Certification[];
 
-    declaration?: boolean;
+  selfDescription?: string;
+  salaryExpectation?: string;
+  salaryExpectationReason?: string;
+  motivation?: string;
+  workStyle?: string;
+  improvementArea?: string;
+  availability?:
+    | "Secepatnya"
+    | "1 minggu"
+    | "2 minggu"
+    | "1 bulan"
+    | "3 bulan"
+    | "6 bulan"
+    | "Lainnya";
+  availabilityOther?: string;
+  usedToDeadline?: boolean;
+  deadlineExperience?: string;
 
-    // Document URLs
-    cvUrl?: string;
-    cvFileName?: string;
-    ijazahUrl?: string;
-    ijazahFileName?: string;
-    otherDocumentUrls?: string[];
-    
-    // Wizard metadata
-    profileStatus?: 'draft' | 'completed';
-    profileStep?: number;
-    updatedAt?: Timestamp;
-    completedAt?: Timestamp | null;
+  declaration?: boolean;
+
+  // Document URLs
+  cvUrl?: string;
+  cvFileName?: string;
+  ijazahUrl?: string;
+  ijazahFileName?: string;
+  otherDocumentUrls?: string[];
+
+  // Wizard metadata
+  profileStatus?: "draft" | "completed";
+  profileStep?: number;
+  updatedAt?: Timestamp;
+  completedAt?: Timestamp | null;
 };
 
 // --- ASSESSMENT TYPES ---
 
 export type AssessmentConfig = {
-    id?: string;
-    bigfiveCount: number;
-    discCount: number;
-    forcedChoiceCount?: number;
-    updatedAt: Timestamp;
-}
+  id?: string;
+  bigfiveCount: number;
+  discCount: number;
+  forcedChoiceCount?: number;
+  updatedAt: Timestamp;
+};
 
-export type AssessmentFormat = 'likert' | 'forced-choice';
+export type AssessmentFormat = "likert" | "forced-choice";
 
 export type AssessmentTemplate = {
   id?: string;
   name: string;
   format: AssessmentFormat;
-  engine: 'dual' | 'disc' | 'bigfive';
+  engine: "dual" | "disc" | "bigfive";
   scale: {
-    type: 'likert';
+    type: "likert";
     points: number;
     leftLabel: string;
     rightLabel: string;
-    ui: 'bubbles';
+    ui: "bubbles";
   };
   dimensions: {
     disc: { key: string; label: string }[];
     bigfive: { key: string; label: string }[];
   };
   scoring: {
-    method: 'sum';
+    method: "sum";
     reverseEnabled: boolean;
   };
   createdAt: Timestamp;
@@ -647,7 +725,7 @@ export type Assessment = {
   name: string;
   version: number;
   isActive: boolean;
-  publishStatus: 'draft' | 'published';
+  publishStatus: "draft" | "published";
   createdAt: Timestamp;
   updatedAt: Timestamp;
   questionConfig?: {
@@ -656,7 +734,10 @@ export type Assessment = {
   };
   resultTemplates: {
     disc: Record<string, Partial<ResultTemplate>>;
-    bigfive: Record<string, { highText: string; midText: string; lowText: string }>;
+    bigfive: Record<
+      string,
+      { highText: string; midText: string; lowText: string }
+    >;
     overall: {
       summaryBlocks?: string[];
       interviewQuestions: string[];
@@ -665,36 +746,36 @@ export type Assessment = {
     };
   };
   rules?: {
-    discRule?: 'highest';
-    bigfiveNormalization?: 'minmax';
+    discRule?: "highest";
+    bigfiveNormalization?: "minmax";
   };
 };
 
 export type ResultTemplate = {
-    title: string;
-    subtitle: string;
-    blocks: string[];
-    strengths: string[];
-    risks: string[];
-    roleFit: string[];
+  title: string;
+  subtitle: string;
+  blocks: string[];
+  strengths: string[];
+  risks: string[];
+  roleFit: string[];
 };
 
 export type ForcedChoice = {
   text: string;
   dimensionKey: string;
-  engineKey: 'disc' | 'bigfive';
+  engineKey: "disc" | "bigfive";
 };
 
 export type AssessmentQuestion = {
   id?: string;
   assessmentId: string;
-  type: 'likert' | 'forced-choice';
+  type: "likert" | "forced-choice";
   order?: number;
   isActive: boolean;
-  
+
   // Likert specific
   text?: string;
-  engineKey?: 'disc' | 'bigfive';
+  engineKey?: "disc" | "bigfive";
   dimensionKey?: string;
   reverse?: boolean;
   weight?: number;
@@ -712,9 +793,9 @@ export type AssessmentSession = {
   applicationId?: string;
   jobPosition?: string;
   brandName?: string;
-  status: 'draft' | 'submitted';
+  status: "draft" | "submitted";
   deadlineAt?: Timestamp;
-  currentTestPart?: 'likert' | 'forced-choice';
+  currentTestPart?: "likert" | "forced-choice";
   part1GuideAck?: boolean;
   part2GuideAck?: boolean;
   selectedQuestionIds?: {
@@ -732,12 +813,15 @@ export type AssessmentSession = {
   result?: {
     discType: string;
     mbtiArchetype: {
-        archetype: string;
-        code: string;
+      archetype: string;
+      code: string;
     } | null;
-    report: Partial<ResultTemplate> & { bigfiveSummary?: any[], interviewQuestions?: any[] };
+    report: Partial<ResultTemplate> & {
+      bigfiveSummary?: any[];
+      interviewQuestions?: any[];
+    };
   };
-  hrdDecision?: 'pending' | 'approved' | 'rejected';
+  hrdDecision?: "pending" | "approved" | "rejected";
   hrdDecisionAt?: Timestamp;
   hrdDecisionBy?: string;
   startedAt: Timestamp;
@@ -747,7 +831,12 @@ export type AssessmentSession = {
 
 // --- MONTHLY EVALUATION TYPES ---
 
-export const RATING_SCALE = ['Sangat Baik', 'Baik', 'Cukup', 'Perlu Perbaikan'] as const;
+export const RATING_SCALE = [
+  "Sangat Baik",
+  "Baik",
+  "Cukup",
+  "Perlu Perbaikan",
+] as const;
 export type RatingScale = (typeof RATING_SCALE)[number];
 
 export type EvaluationCriteria = {
@@ -790,13 +879,12 @@ export type ReviewCycle = {
   isCurrent: boolean;
 };
 
-
 export type ReviewStatus =
-  | 'Belum Waktunya'
-  | 'Akan Jatuh Tempo'
-  | 'Siap Direview'
-  | 'Terlambat'
-  | 'Sudah Dievaluasi';
+  | "Belum Waktunya"
+  | "Akan Jatuh Tempo"
+  | "Siap Direview"
+  | "Terlambat"
+  | "Sudah Dievaluasi";
 
 export interface InternWithReviewStatus extends EmployeeProfile {
   reviewCycle: ReviewCycle | null;
@@ -808,11 +896,17 @@ export interface InternWithReviewStatus extends EmployeeProfile {
 export type Notification = {
   id?: string;
   userId: string;
-  type: 'recruitment_assignment' | 'interview_scheduled' | 'interview_updated' | 'stage_advanced' | 'new_application' | 'status_update';
-  module: 'recruitment' | 'employee';
+  type:
+    | "recruitment_assignment"
+    | "interview_scheduled"
+    | "interview_updated"
+    | "stage_advanced"
+    | "new_application"
+    | "status_update";
+  module: "recruitment" | "employee";
   title: string;
   message: string;
-  targetType: 'job' | 'application' | 'user';
+  targetType: "job" | "application" | "user";
   targetId: string;
   actionUrl: string;
   isRead: boolean;
@@ -833,17 +927,21 @@ export type Notification = {
 
 // --- AI ANALYSIS TYPES ---
 
-export type RecommendedDecision = 'advance_interview' | 'advance_test' | 'hold' | 'reject';
+export type RecommendedDecision =
+  | "advance_interview"
+  | "advance_test"
+  | "hold"
+  | "reject";
 
 export type Confidence = {
-  level: 'high' | 'medium' | 'low';
+  level: "high" | "medium" | "low";
   reasons: string[];
 };
 
 export type RequirementMatch = {
   requirement: string;
-  type: 'must-have' | 'nice-to-have';
-  match: 'yes' | 'partial' | 'no';
+  type: "must-have" | "nice-to-have";
+  match: "yes" | "partial" | "no";
   evidence_from_cv: string;
   risk_note?: string;
 };
@@ -881,7 +979,7 @@ export type CandidateFitAnalysisOutput = {
   recommendedDecision: RecommendedDecision;
   confidence: Confidence;
   overallFitScore: number;
-  overallFitLabel: 'strong_fit' | 'moderate_fit' | 'weak_fit';
+  overallFitLabel: "strong_fit" | "moderate_fit" | "weak_fit";
   scoreSummary: string[];
   requirementMatchMatrix: RequirementMatch[];
   scoreBreakdown: ScoreBreakdown;
@@ -908,52 +1006,56 @@ export interface InterviewAssignment {
 
 // --- EMPLOYEE MONITORING TYPES ---
 export type AttendanceSite = {
-    id?: string;
-    name: string;
-    brandIds?: string[]; // Updated from brandId
-    brandId?: string; // Legacy
-    isActive: boolean;
-    office: {
-        lat: number;
-        lng: number;
-    };
-    radiusM: number;
-    timezone: string;
-    workDays: string[];
-    shift: {
-        startTime: string; // HH:mm
-        endTime: string; // HH:mm
-        graceLateMinutes: number;
-    };
-    updatedAt?: Timestamp;
-    updatedBy?: string;
+  id?: string;
+  name: string;
+  brandIds?: string[]; // Updated from brandId
+  brandId?: string; // Legacy
+  isActive: boolean;
+  office: {
+    lat: number;
+    lng: number;
+  };
+  radiusM: number;
+  timezone: string;
+  workDays: string[];
+  shift: {
+    startTime: string; // HH:mm
+    endTime: string; // HH:mm
+    graceLateMinutes: number;
+  };
+  updatedAt?: Timestamp;
+  updatedBy?: string;
 };
 
 export type AttendanceEvent = {
-    id?: string;
-    uid: string;
-    userId?: string; // Alias for uid
-    siteId?: string; // Denormalized site ID
-    type: 'tap_in' | 'tap_out' | 'IN' | 'OUT';
-    timestamp?: Timestamp; // Original HRP field
-    ts?: Timestamp; // Alias for timestamp
-    createdAt?: Timestamp; // Alias for timestamp
-    tsServer?: Timestamp; // From AbsenHRP
-    tsClient?: Timestamp; // From AbsenHRP
-    dateKey?: string; // YYYY-MM-DD
-    mode: 'ONSITE' | 'OFFSITE' | 'onsite' | 'offsite';
-    location: {
-        lat: number;
-        lng: number;
-    };
-    photoUrl?: string;
-    brandId?: string;
-    displayName?: string;
-    flags?: string[];
-    address?: string;
+  id?: string;
+  uid: string;
+  userId?: string; // Alias for uid
+  siteId?: string; // Denormalized site ID
+  type: "tap_in" | "tap_out" | "IN" | "OUT";
+  timestamp?: Timestamp; // Original HRP field
+  ts?: Timestamp; // Alias for timestamp
+  createdAt?: Timestamp; // Alias for timestamp
+  tsServer?: Timestamp; // From AbsenHRP
+  tsClient?: Timestamp; // From AbsenHRP
+  dateKey?: string; // YYYY-MM-DD
+  mode: "ONSITE" | "OFFSITE" | "onsite" | "offsite";
+  location: {
+    lat: number;
+    lng: number;
+  };
+  photoUrl?: string;
+  brandId?: string;
+  displayName?: string;
+  flags?: string[];
+  address?: string;
 };
 
-export type ReportStatus = 'draft' | 'submitted' | 'needs_revision' | 'approved';
+export type ReportStatus =
+  | "draft"
+  | "submitted"
+  | "needs_revision"
+  | "approved";
 
 export type DailyReport = {
   id?: string;
@@ -975,157 +1077,179 @@ export type DailyReport = {
 };
 
 export const OVERTIME_SUBMISSION_STATUSES = [
-  'draft',
-  'pending_manager',
-  'rejected_manager',
-  'revision_manager',
-  'approved_by_manager',
-  'pending_hrd',
-  'rejected_hrd',
-  'revision_hrd',
-  'approved',
+  "draft",
+  "pending_manager",
+  "rejected_manager",
+  "revision_manager",
+  "approved_by_manager",
+  "pending_hrd",
+  "rejected_hrd",
+  "revision_hrd",
+  "approved",
 ] as const;
-export type OvertimeSubmissionStatus = (typeof OVERTIME_SUBMISSION_STATUSES)[number];
-
+export type OvertimeSubmissionStatus =
+  (typeof OVERTIME_SUBMISSION_STATUSES)[number];
 
 export type OvertimeSubmission = {
-    id?: string;
-    uid: string;
-    fullName: string;
-    brandId: string;
-    brandName?: string;
-    division: string;
-    positionTitle: string;
-    date: Timestamp;
-    startTime: string; // "HH:mm"
-    endTime: string; // "HH:mm"
-    totalDurationMinutes: number;
-    overtimeType: 'hari_kerja' | 'hari_libur' | 'urgent';
-    tasks: {
-        description: string;
-        estimatedMinutes?: number;
-        actualMinutes?: number | null;
-    }[];
-    reason: string;
-    location: 'kantor' | 'remote' | 'site';
-    employeeNotes?: string | null;
-    attachments?: string[];
-    status: OvertimeSubmissionStatus;
-    managerUid?: string | null;
-    managerNotes?: string | null;
-    managerDecisionAt?: Timestamp | null;
-    hrdReviewerUid?: string | null;
-    hrdNotes?: string | null;
-    hrdDecisionAt?: Timestamp | null;
-    createdAt: Timestamp;
-    updatedAt: Timestamp;
-}
+  id?: string;
+  uid: string;
+  fullName: string;
+  brandId: string;
+  brandName?: string;
+  division: string;
+  positionTitle: string;
+  date: Timestamp;
+  startTime: string; // "HH:mm"
+  endTime: string; // "HH:mm"
+  totalDurationMinutes: number;
+  overtimeType: "hari_kerja" | "hari_libur" | "urgent";
+  tasks: {
+    description: string;
+    estimatedMinutes?: number;
+    actualMinutes?: number | null;
+  }[];
+  reason: string;
+  location: "kantor" | "remote" | "site";
+  employeeNotes?: string | null;
+  attachments?: string[];
+  status: OvertimeSubmissionStatus;
+  managerUid?: string | null;
+  managerNotes?: string | null;
+  managerDecisionAt?: Timestamp | null;
+  hrdReviewerUid?: string | null;
+  hrdNotes?: string | null;
+  hrdDecisionAt?: Timestamp | null;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+};
 
 export const PERMISSION_REQUEST_STATUSES = [
-  'draft',
-  'pending_manager',
-  'rejected_manager',
-  'revision_manager',
-  'approved_by_manager',
-  'pending_hrd',
-  'rejected_hrd',
-  'revision_hrd',
-  'approved',
-  
-  // Specific to non-blocking office exit statuses (keluar_kantor)
-  'reported', // Laporan keluar dibuat
-  'returned', // Sudah tap in kembali
-  'verified_manager', // Diverifikasi manager
-  'closed', // Selesai / Diarsipkan HRD
-] as const;
-export type PermissionRequestStatus = (typeof PERMISSION_REQUEST_STATUSES)[number];
+  "draft",
+  "pending_manager",
+  "rejected_manager",
+  "revision_manager",
+  "approved_by_manager",
+  "pending_hrd",
+  "rejected_hrd",
+  "revision_hrd",
+  "approved",
 
-export const PERMISSION_TYPES = ["cuti", "sakit", "keluar_kantor", "tidak_masuk", "duka", "akademik", "lainnya"] as const;
+  // Specific to non-blocking office exit statuses (keluar_kantor)
+  "reported", // Laporan keluar dibuat
+  "returned", // Sudah tap in kembali
+  "verified_manager", // Diverifikasi manager
+  "closed", // Selesai / Diarsipkan HRD
+] as const;
+export type PermissionRequestStatus =
+  (typeof PERMISSION_REQUEST_STATUSES)[number];
+
+export const PERMISSION_TYPES = [
+  "cuti",
+  "sakit",
+  "keluar_kantor",
+  "tidak_masuk",
+  "duka",
+  "akademik",
+  "lainnya",
+] as const;
 export type PermissionType = (typeof PERMISSION_TYPES)[number];
 
-
-
 export type PermissionRequest = {
-    id?: string;
-    uid: string;
-    fullName: string;
-    brandId: string;
-    brandName?: string;
-    division: string;
-    positionTitle: string;
-    type: PermissionType;
-    reason: string;
-    startDate: Timestamp;
-    endDate: Timestamp;
-    totalDurationMinutes: number;
-    attachments?: string[];
-    attachmentStatus?: 'provided' | 'not_provided' | 'verification_needed';
-    status: PermissionRequestStatus;
-    managerUid?: string | null;
-    managerNotes?: string | null;
-    managerDecisionAt?: Timestamp | null;
-    hrdReviewerUid?: string | null;
-    hrdNotes?: string | null;
-    hrdDecisionAt?: Timestamp | null;
-    createdAt: Timestamp;
-    updatedAt: Timestamp;
+  id?: string;
+  uid: string;
+  fullName: string;
+  brandId: string;
+  brandName?: string;
+  division: string;
+  positionTitle: string;
+  type: PermissionType;
+  reason: string;
+  startDate: Timestamp;
+  endDate: Timestamp;
+  totalDurationMinutes: number;
+  attachments?: string[];
+  attachmentStatus?: "provided" | "not_provided" | "verification_needed";
+  status: PermissionRequestStatus;
+  managerUid?: string | null;
+  managerNotes?: string | null;
+  managerDecisionAt?: Timestamp | null;
+  hrdReviewerUid?: string | null;
+  hrdNotes?: string | null;
+  hrdDecisionAt?: Timestamp | null;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
 
-    // --- Detail Izin Keluar Kantor ---
-    destination?: string; // For 'keluar_kantor': The location/destination.
-    reportedExitAt?: Timestamp | null; // Jam keluar rencana
-    expectedReturnAt?: Timestamp | null; // Estimasi jam kembali
-    estimatedDurationMinutes?: number; // Estimasi durasi rencana
-    
-    // --- Realisasi Kembali (Izin Keluar Kantor) ---
-    actualReturnAt?: Timestamp | null; // Jam kembali aktual
-    returnSource?: 'attendance_auto' | 'manual_button'; // Sumber deteksi
-    returnDetectedFromAttendance?: boolean; // Apakah deteksi via absen?
-    actualDurationMinutes?: number; // Total durasi nyata
-    exceededEstimatedReturn?: boolean; // Apakah terlambat dari estimasi?
-    exceededFourHours?: boolean; // Apakah lebih dari 4 jam?
-    overtimeReturnMinutes?: number; // Selisih menit keterlambatan
-    
-    // Flags & Reviewer Notes
-    needsManagerAttention?: boolean; // Perlu perhatian manager
-    needsHrdNote?: boolean; // Perlu catatan HRD
-    managerReviewNote?: string | null;
-    hrdReviewNote?: string | null;
+  // --- Detail Izin Keluar Kantor ---
+  destination?: string; // For 'keluar_kantor': The location/destination.
+  reportedExitAt?: Timestamp | null; // Jam keluar rencana
+  expectedReturnAt?: Timestamp | null; // Estimasi jam kembali
+  estimatedDurationMinutes?: number; // Estimasi durasi rencana
 
-    // --- Field Spesifik per Jenis Izin ---
-    sicknessDescription?: string;
-    familyRelation?: string;
-    academicActivityName?: string;
-    academicInstitution?: string;
-    otherLeaveTitle?: string;
+  // --- Realisasi Kembali (Izin Keluar Kantor) ---
+  actualReturnAt?: Timestamp | null; // Jam kembali aktual
+  returnSource?: "attendance_auto" | "manual_button"; // Sumber deteksi
+  returnDetectedFromAttendance?: boolean; // Apakah deteksi via absen?
+  actualDurationMinutes?: number; // Total durasi nyata
+  exceededEstimatedReturn?: boolean; // Apakah terlambat dari estimasi?
+  exceededFourHours?: boolean; // Apakah lebih dari 4 jam?
+  overtimeReturnMinutes?: number; // Selisih menit keterlambatan
+
+  // Flags & Reviewer Notes
+  needsManagerAttention?: boolean; // Perlu perhatian manager
+  needsHrdNote?: boolean; // Perlu catatan HRD
+  managerReviewNote?: string | null;
+  hrdReviewNote?: string | null;
+
+  // --- Field Spesifik per Jenis Izin ---
+  sicknessDescription?: string;
+  familyRelation?: string;
+  academicActivityName?: string;
+  academicInstitution?: string;
+  otherLeaveTitle?: string;
 };
 
 /**
  * Helper to check if a submission (Overtime or Permission) is in a final status.
  */
 export function isFinalStatus(status: string): boolean {
-  return ['approved', 'rejected_manager', 'rejected_hrd', 'verified_manager', 'closed'].includes(status);
+  return [
+    "approved",
+    "rejected_manager",
+    "rejected_hrd",
+    "verified_manager",
+    "closed",
+  ].includes(status);
 }
 
 /**
  * Helper to check if a specific role can act on a submission based on its status.
  */
-export function isActionableStatus(status: string, mode: 'manager' | 'hrd'): boolean {
+export function isActionableStatus(
+  status: string,
+  mode: "manager" | "hrd",
+): boolean {
   if (isFinalStatus(status)) return false;
-  
-  if (mode === 'manager') {
+
+  if (mode === "manager") {
     // For normal flow
-    const normalActionable = status === 'pending_manager' || status === 'revision_manager';
+    const normalActionable =
+      status === "pending_manager" || status === "revision_manager";
     // For non-blocking office exit flow
     // A manager can verify either after reported OR after returned (tap-in detected)
-    const officeExitActionable = status === 'reported' || status === 'returned';
-    
+    const officeExitActionable = status === "reported" || status === "returned";
+
     return normalActionable || officeExitActionable;
   }
-  
-  if (mode === 'hrd') {
+
+  if (mode === "hrd") {
     // HRD can act on items approved by manager or pending hrd review
-    return status === 'pending_hrd' || status === 'approved_by_manager' || status === 'revision_hrd' || status === 'verified_manager';
+    return (
+      status === "pending_hrd" ||
+      status === "approved_by_manager" ||
+      status === "revision_hrd" ||
+      status === "verified_manager"
+    );
   }
-  
+
   return false;
 }

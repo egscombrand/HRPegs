@@ -1,40 +1,66 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuGroup } from '@/components/ui/dropdown-menu';
-import { Check, MoreVertical } from 'lucide-react';
-import { type JobApplication, ORDERED_RECRUITMENT_STAGES } from '@/lib/types';
-import { statusDisplayLabels } from '@/components/recruitment/ApplicationStatusBadge';
-import { StageChangeDialog } from './StageChangeDialog';
+import React, { useState } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuGroup,
+} from "@/components/ui/dropdown-menu";
+import { Check, MoreVertical } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { type JobApplication, ORDERED_RECRUITMENT_STAGES } from "@/lib/types";
+import { statusDisplayLabels } from "@/components/recruitment/ApplicationStatusBadge";
+import { StageChangeDialog } from "./StageChangeDialog";
 
 interface ApplicationActionBarProps {
   application: JobApplication;
-  onStageChange: (newStage: JobApplication['status'], reason: string) => Promise<boolean>;
+  onStageChange: (
+    newStage: JobApplication["status"],
+    reason: string,
+  ) => Promise<boolean>;
   onSendOfferClick: () => void;
+  actionsLocked?: boolean;
 }
 
-const getStageActions = (currentStatus: JobApplication['status']) => {
-    const currentIndex = ORDERED_RECRUITMENT_STAGES.indexOf(currentStatus);
-    
-    if (['offered', 'hired', 'rejected'].includes(currentStatus) || currentIndex === -1) {
-        return { primaryAction: null, otherActions: [] };
-    }
+const getStageActions = (currentStatus: JobApplication["status"]) => {
+  const currentIndex = ORDERED_RECRUITMENT_STAGES.indexOf(currentStatus);
 
-    const nextLogicalStage = ORDERED_RECRUITMENT_STAGES[currentIndex + 1];
-    const primaryAction: JobApplication['status'] | null = nextLogicalStage;
-    const otherActions: JobApplication['status'][] = ORDERED_RECRUITMENT_STAGES
-        .filter(stage => stage !== currentStatus && stage !== nextLogicalStage);
-        
-    return { primaryAction, otherActions };
-}
+  if (
+    ["offered", "hired", "rejected"].includes(currentStatus) ||
+    currentIndex === -1
+  ) {
+    return { primaryAction: null, otherActions: [] };
+  }
 
-export function ApplicationActionBar({ application, onStageChange, onSendOfferClick }: ApplicationActionBarProps) {
+  const nextLogicalStage = ORDERED_RECRUITMENT_STAGES[currentIndex + 1];
+  const primaryAction: JobApplication["status"] | null = nextLogicalStage;
+  const otherActions: JobApplication["status"][] =
+    ORDERED_RECRUITMENT_STAGES.filter(
+      (stage) => stage !== currentStatus && stage !== nextLogicalStage,
+    );
+
+  return { primaryAction, otherActions };
+};
+
+export function ApplicationActionBar({
+  application,
+  onStageChange,
+  onSendOfferClick,
+  actionsLocked,
+}: ApplicationActionBarProps) {
   const [stageChangeDialogOpen, setStageChangeDialogOpen] = useState(false);
-  const [targetStage, setTargetStage] = useState<JobApplication['status'] | null>(null);
+  const [targetStage, setTargetStage] = useState<
+    JobApplication["status"] | null
+  >(null);
 
-  const handleActionClick = (stage: JobApplication['status']) => {
-    if (stage === 'offered') {
+  const handleActionClick = (stage: JobApplication["status"]) => {
+    if (actionsLocked) return;
+    if (stage === "offered") {
       onSendOfferClick();
     } else {
       setTargetStage(stage);
@@ -46,15 +72,17 @@ export function ApplicationActionBar({ application, onStageChange, onSendOfferCl
     if (!targetStage) return;
     const success = await onStageChange(targetStage, reason);
     if (success) {
-        setStageChangeDialogOpen(false);
-        setTargetStage(null);
+      setStageChangeDialogOpen(false);
+      setTargetStage(null);
     }
   };
 
   const { primaryAction, otherActions } = getStageActions(application.status);
-  
-  const finalStageActions = ['hired', 'rejected', 'offered'];
-  const backAndSkipActions = otherActions.filter(stage => !finalStageActions.includes(stage));
+
+  const finalStageActions = ["hired", "rejected", "offered"];
+  const backAndSkipActions = otherActions.filter(
+    (stage) => !finalStageActions.includes(stage),
+  );
 
   return (
     <>
@@ -62,43 +90,63 @@ export function ApplicationActionBar({ application, onStageChange, onSendOfferCl
         {/* Tombol "Lolos ke..." telah dihapus karena fungsinya digantikan oleh panel Keputusan Final Internal di bawah header */}
 
         <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="lg" className="px-3">
-                <MoreVertical className="h-4 w-4" />
-                <span className="sr-only">Tindakan Lain</span>
-                </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-                {backAndSkipActions.length > 0 && (
-                    <DropdownMenuGroup>
-                        <DropdownMenuLabel>Pindahkan ke Tahap Lain</DropdownMenuLabel>
-                        {backAndSkipActions.map(stage => (
-                            <DropdownMenuItem key={stage} onSelect={() => handleActionClick(stage)} className="cursor-pointer">
-                                {statusDisplayLabels[stage]}
-                            </DropdownMenuItem>
-                        ))}
-                    </DropdownMenuGroup>
-                )}
-                
-                <DropdownMenuSeparator />
-                
-                <DropdownMenuGroup>
-                    <DropdownMenuLabel>Keputusan Final</DropdownMenuLabel>
-                    <DropdownMenuItem onSelect={() => handleActionClick('offered')} className="cursor-pointer">
-                        Kirim Penawaran Kerja
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                        onSelect={() => handleActionClick('rejected')}
-                        className="cursor-pointer text-destructive focus:text-destructive"
-                    >
-                        Tolak Kandidat
-                    </DropdownMenuItem>
-                </DropdownMenuGroup>
-            </DropdownMenuContent>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="lg"
+              disabled={actionsLocked}
+              className={cn(
+                "px-3",
+                actionsLocked && "opacity-50 cursor-not-allowed",
+              )}
+              title={
+                actionsLocked
+                  ? "Aksi dikunci karena keputusan final telah dibuat"
+                  : undefined
+              }
+            >
+              <MoreVertical className="h-4 w-4" />
+              <span className="sr-only">Tindakan Lain</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {backAndSkipActions.length > 0 && (
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Pindahkan ke Tahap Lain</DropdownMenuLabel>
+                {backAndSkipActions.map((stage) => (
+                  <DropdownMenuItem
+                    key={stage}
+                    onSelect={() => handleActionClick(stage)}
+                    className="cursor-pointer"
+                  >
+                    {statusDisplayLabels[stage]}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
+            )}
+
+            <DropdownMenuSeparator />
+
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Keputusan Final</DropdownMenuLabel>
+              <DropdownMenuItem
+                onSelect={() => handleActionClick("offered")}
+                className="cursor-pointer"
+              >
+                Kirim Penawaran Kerja
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => handleActionClick("rejected")}
+                className="cursor-pointer text-destructive focus:text-destructive"
+              >
+                Tolak Kandidat
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      
-      <StageChangeDialog 
+
+      <StageChangeDialog
         open={stageChangeDialogOpen}
         onOpenChange={setStageChangeDialogOpen}
         targetStage={targetStage}

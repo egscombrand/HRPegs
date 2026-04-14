@@ -300,7 +300,7 @@ service cloud.firestore {
         }
         function isInternalStatusUpdate() {
             let changedKeys = request.resource.data.diff(resource.data).affectedKeys();
-            let allowedKeys = ['status', 'candidateStatus', 'decisionAt', 'updatedAt', 'personalityTestAssignedAt', 'cvVerified', 'ijazahVerified', 'timeline', 'interviews', 'allPanelistIds', 'offerStatus', 'offeredSalary', 'probationDurationMonths', 'contractStartDate', 'contractDurationMonths', 'contractEndDate', 'offerNotes', 'internalAccessEnabled', 'internalReviewSummary'];
+            let allowedKeys = ['status', 'candidateStatus', 'finalDecisionLocked', 'decisionAt', 'updatedAt', 'personalityTestAssignedAt', 'cvVerified', 'ijazahVerified', 'timeline', 'interviews', 'allPanelistIds', 'offerStatus', 'offeredSalary', 'probationDurationMonths', 'contractStartDate', 'contractDurationMonths', 'contractEndDate', 'offerDescription', 'workDays', 'offerNotes', 'internalAccessEnabled', 'internalReviewSummary'];
             let hrdOnlyKeys = ['internalReviewConfig', 'recruitmentInternalDecision'];
             
             if (changedKeys.hasAny(hrdOnlyKeys)) {
