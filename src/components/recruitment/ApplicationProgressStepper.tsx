@@ -11,39 +11,36 @@ import {
   BrainCircuit,
   CheckCircle,
 } from "lucide-react";
-import { ORDERED_RECRUITMENT_STAGES } from "@/lib/types";
 
 // The visual steps for the candidate, in order.
 const VISUAL_STEPS = [
   { stage: "screening", label: "Screening", icon: Search },
-  { stage: "tes_kepribadian", label: "Assessment", icon: BrainCircuit },
   { stage: "interview", label: "Interview", icon: Users },
   { stage: "offered", label: "Offering", icon: Award },
   { stage: "hired", label: "Hired", icon: CheckCircle },
 ];
 
-// Map internal statuses to the index of the visual step.
-const statusToVisualStepIndex = (status: JobApplicationStatus): number => {
-  switch (status) {
-    case "draft":
-    case "submitted":
-    case "screening":
-    case "verification":
-    case "document_submission":
-      return 0; // Screening / assessment preparation
-    case "tes_kepribadian":
-      return 1; // Assessment
-    case "interview":
-      return 2; // Interview
-    case "offered":
-      return 3; // Offering
-    case "hired":
-      return 4; // Hired
-    case "rejected":
-      return 2; // Keep the last meaningful stage visible for rejected candidates
-    default:
-      return 0;
-  }
+function mapStage(
+  status: string,
+): "screening" | "interview" | "offering" | "hired" {
+  const screeningStages = [
+    "screening",
+    "document_submission",
+    "tes_kepribadian",
+    "assessment",
+  ];
+
+  if (screeningStages.includes(status)) return "screening";
+  if (status === "interview") return "interview";
+  if (status === "offered") return "offering";
+  if (status === "hired") return "hired";
+
+  return "screening";
+}
+
+const statusToVisualStepIndex = (status: string): number => {
+  const mapped = mapStage(status);
+  return VISUAL_STEPS.findIndex((step) => step.stage === mapped);
 };
 
 interface ApplicationProgressStepperProps {

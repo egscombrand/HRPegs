@@ -239,7 +239,8 @@ service cloud.firestore {
                      request.auth.uid in resource.data.get(['internalReviewConfig', 'assignedReviewerUids'], []);
 
         // CREATE: A user can create an application only if they are the owner.
-        allow create: if isCreatingOwn() && (request.resource.data.status == "draft" || request.resource.data.status == "submitted");
+        // Candidates may create a new application directly in the initial assessment stage.
+        allow create: if isCreatingOwn() && (request.resource.data.status == "draft" || request.resource.data.status == "submitted" || request.resource.data.status == "tes_kepribadian");
         
         // UPDATE: A candidate can update their own DRAFT. Internal users can update any. candidateUid cannot be changed.
         allow update: if (

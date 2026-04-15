@@ -592,6 +592,47 @@ export default function ApplicationDetailPage() {
     return !!application.interviewCompleted;
   }, [application]);
 
+  const isHRD =
+    userProfile?.role === "hrd" || userProfile?.role === "super-admin";
+
+  const showOfferingTab = useMemo(() => {
+    if (!application || !isHRD) return false;
+
+    const interviewAndAfterStatuses = [
+      "interview",
+      "post_interview",
+      "offered",
+      "offering",
+      "offer_sent",
+      "offer_accepted",
+      "offer_rejected",
+      "hired",
+      "rejected",
+      "offer_received",
+      "process_complete",
+    ];
+
+    const matchesStatus = interviewAndAfterStatuses.includes(
+      application.status,
+    );
+    const matchesCandidateStatus =
+      application.candidateStatus &&
+      interviewAndAfterStatuses.includes(application.candidateStatus);
+    const matchesOfferStatus =
+      application.offerStatus &&
+      interviewAndAfterStatuses.includes(application.offerStatus);
+    const hasOfferTimeline = application.timeline?.some(
+      (event) => event.type === "offer_sent",
+    );
+
+    return (
+      !!matchesStatus ||
+      !!matchesCandidateStatus ||
+      !!matchesOfferStatus ||
+      !!hasOfferTimeline
+    );
+  }, [application, isHRD]);
+
   const isLoading =
     isLoadingApp ||
     isLoadingProfile ||
@@ -599,14 +640,6 @@ export default function ApplicationDetailPage() {
     isLoadingUsers ||
     isLoadingBrands ||
     isLoadingSessions;
-  const isHRD =
-    userProfile?.role === "hrd" || userProfile?.role === "super-admin";
-
-  useEffect(() => {
-    if (!isHRD && evaluationFilter === "offering") {
-      setEvaluationFilter("all");
-    }
-  }, [isHRD, evaluationFilter]);
 
   const formatSalary = (value?: number | null) => {
     if (value === undefined || value === null) return "-";
@@ -833,38 +866,34 @@ export default function ApplicationDetailPage() {
                     >
                       Pra Wawancara
                     </Button>
-                    {shouldShowPostInterview && (
-                      <Button
-                        variant={
-                          evaluationFilter === "pasca" ? "default" : "ghost"
-                        }
-                        size="sm"
-                        onClick={() => setEvaluationFilter("pasca")}
-                        className={cn(
-                          "rounded-xl text-[10px] font-black uppercase tracking-widest px-6 h-10",
-                          evaluationFilter === "pasca" &&
-                            "bg-teal-600 shadow-lg shadow-teal-600/20",
-                        )}
-                      >
-                        Pasca Wawancara
-                      </Button>
-                    )}
-                    {isHRD && (
-                      <Button
-                        variant={
-                          evaluationFilter === "offering" ? "default" : "ghost"
-                        }
-                        size="sm"
-                        onClick={() => setEvaluationFilter("offering")}
-                        className={cn(
-                          "rounded-xl text-[10px] font-black uppercase tracking-widest px-6 h-10",
-                          evaluationFilter === "offering" &&
-                            "bg-amber-600 shadow-lg shadow-amber-600/20",
-                        )}
-                      >
-                        Offering
-                      </Button>
-                    )}
+                    <Button
+                      variant={
+                        evaluationFilter === "pasca" ? "default" : "ghost"
+                      }
+                      size="sm"
+                      onClick={() => setEvaluationFilter("pasca")}
+                      className={cn(
+                        "rounded-xl text-[10px] font-black uppercase tracking-widest px-6 h-10",
+                        evaluationFilter === "pasca" &&
+                          "bg-teal-600 shadow-lg shadow-teal-600/20",
+                      )}
+                    >
+                      Pasca Wawancara
+                    </Button>
+                    <Button
+                      variant={
+                        evaluationFilter === "offering" ? "default" : "ghost"
+                      }
+                      size="sm"
+                      onClick={() => setEvaluationFilter("offering")}
+                      className={cn(
+                        "rounded-xl text-[10px] font-black uppercase tracking-widest px-6 h-10",
+                        evaluationFilter === "offering" &&
+                          "bg-amber-600 shadow-lg shadow-amber-600/20",
+                      )}
+                    >
+                      Offering
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -877,310 +906,317 @@ export default function ApplicationDetailPage() {
                 />
               )}
 
-              {shouldShowPostInterview &&
-                (evaluationFilter === "all" ||
-                  evaluationFilter === "pasca") && (
+              {(evaluationFilter === "all" || evaluationFilter === "pasca") &&
+                (shouldShowPostInterview ? (
                   <PostInterviewEvaluationSection
                     application={application}
                     job={job}
                     internalUsers={internalUsers}
                   />
-                )}
+                ) : evaluationFilter === "pasca" ? (
+                  <Card className="border border-dashed border-slate-700 bg-slate-950/70">
+                    <CardHeader>
+                      <CardTitle className="text-xl font-bold">
+                        Kandidat belum mencapai tahap pasca wawancara.
+                      </CardTitle>
+                      <CardDescription>
+                        Data akan muncul setelah proses wawancara selesai dan
+                        kandidat masuk evaluasi lanjutan.
+                      </CardDescription>
+                    </CardHeader>
+                  </Card>
+                ) : null)}
 
-              {isHRD &&
-                (evaluationFilter === "all" ||
-                  evaluationFilter === "offering") && (
-                  <div className="space-y-6">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                      <div>
-                        <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-                          Offering
-                        </p>
-                        <h2 className="text-xl font-semibold">
-                          Rekap Penawaran Kerja HRD
-                        </h2>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="uppercase">
-                          {application.offerStatus ?? "draft"}
-                        </Badge>
-                        <span className="text-sm text-muted-foreground">
-                          {hasOfferData
-                            ? "Penawaran tersedia untuk kandidat"
-                            : "Belum ada penawaran kerja dibuat"}
-                        </span>
-                      </div>
+              {(evaluationFilter === "all" && showOfferingTab) ||
+              evaluationFilter === "offering" ? (
+                <div className="space-y-6">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+                        Offering
+                      </p>
+                      <h2 className="text-xl font-semibold">
+                        Rekap Penawaran Kerja HRD
+                      </h2>
                     </div>
-
-                    {!hasOfferData ? (
-                      <Card className="border border-dashed border-muted/50 bg-muted/50">
-                        <CardHeader>
-                          <CardTitle>Belum ada penawaran kerja</CardTitle>
-                          <CardDescription>
-                            HRD dapat membuat dan mengelola penawaran kerja
-                            kandidat di tab ini. Simpan sebagai draf atau kirim
-                            penawaran resmi saat semuanya siap.
-                          </CardDescription>
-                        </CardHeader>
-                      </Card>
-                    ) : (
-                      <Card className="border border-muted/50 bg-muted/50">
-                        <CardHeader>
-                          <CardTitle>Ringkasan Penawaran</CardTitle>
-                          <CardDescription>
-                            Status, kompensasi, jadwal kerja, dan catatan HRD
-                            untuk kandidat.
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent className="grid gap-4 md:grid-cols-2">
-                          <InfoRow
-                            icon={<ShieldCheck className="h-4 w-4" />}
-                            label="Status Penawaran"
-                            value={
-                              application.offerStatus
-                                ? application.offerStatus
-                                : "draft"
-                            }
-                          />
-                          <InfoRow
-                            icon={<Users className="h-4 w-4" />}
-                            label="Posisi"
-                            value={application.jobPosition}
-                          />
-                          <InfoRow
-                            icon={<Calendar className="h-4 w-4" />}
-                            label="Kompensasi"
-                            value={
-                              application.offeredSalary
-                                ? `Rp ${formatSalary(
-                                    application.offeredSalary,
-                                  )} / bulan`
-                                : "-"
-                            }
-                          />
-                          <InfoRow
-                            icon={<Info className="h-4 w-4" />}
-                            label="Status Kerja"
-                            value={application.workDays ?? "-"}
-                          />
-                          <InfoRow
-                            icon={<MessageSquare className="h-4 w-4" />}
-                            label="Catatan HRD"
-                            value={application.offerNotes ?? "-"}
-                          />
-                          <InfoRow
-                            icon={<Calendar className="h-4 w-4" />}
-                            label="Deskripsi Penawaran"
-                            value={application.offerDescription ?? "-"}
-                          />
-                        </CardContent>
-                        {application.offerStatus === "negotiation_requested" &&
-                        application.candidateCounterOffer ? (
-                          <>
-                            <div className="mt-4 rounded-3xl border border-amber-200 bg-amber-50 p-4">
-                              <div className="flex items-center justify-between gap-4">
-                                <div>
-                                  <p className="text-sm font-semibold text-slate-900">
-                                    Usulan Negosiasi Kandidat
-                                  </p>
-                                  <p className="text-sm text-muted-foreground">
-                                    Detail gaji yang diminta kandidat dan
-                                    catatan.
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                                <InfoRow
-                                  icon={<ShieldCheck className="h-4 w-4" />}
-                                  label="Gaji awal"
-                                  value={
-                                    application.offeredSalary != null
-                                      ? `${formatSalary(application.offeredSalary)} / bulan`
-                                      : "-"
-                                  }
-                                />
-                                <InfoRow
-                                  icon={<Info className="h-4 w-4" />}
-                                  label="Gaji diminta kandidat"
-                                  value={
-                                    application.candidateCounterOffer
-                                      .requestedSalary != null
-                                      ? `${formatSalary(application.candidateCounterOffer.requestedSalary)} / bulan`
-                                      : "-"
-                                  }
-                                />
-                                <InfoRow
-                                  icon={<Users className="h-4 w-4" />}
-                                  label="Selisih nominal"
-                                  value={
-                                    application.candidateCounterOffer
-                                      .requestedSalary != null &&
-                                    application.offeredSalary != null
-                                      ? `Rp ${(application.candidateCounterOffer.requestedSalary - application.offeredSalary).toLocaleString("id-ID")}`
-                                      : "-"
-                                  }
-                                />
-                                <InfoRow
-                                  icon={<MessageSquare className="h-4 w-4" />}
-                                  label="Catatan kandidat"
-                                  value={
-                                    application.candidateCounterOffer.reason ||
-                                    "-"
-                                  }
-                                />
-                              </div>
-                            </div>
-                            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-                              <Button
-                                variant="outline"
-                                onClick={() =>
-                                  handleOfferDecision("negotiation_rejected")
-                                }
-                                disabled={isUpdatingDecision}
-                              >
-                                {isUpdatingDecision ? (
-                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                ) : null}
-                                Tolak Negosiasi
-                              </Button>
-                              <Button
-                                variant="secondary"
-                                onClick={() =>
-                                  handleOfferDecision("negotiation_approved")
-                                }
-                                disabled={isUpdatingDecision}
-                              >
-                                {isUpdatingDecision ? (
-                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                ) : null}
-                                Setuju
-                              </Button>
-                              <Button
-                                onClick={() => setIsCounterOpen(true)}
-                                disabled={isUpdatingDecision}
-                              >
-                                Ajukan Counter
-                              </Button>
-                            </div>
-                            <Dialog
-                              open={isCounterOpen}
-                              onOpenChange={setIsCounterOpen}
-                            >
-                              <DialogContent className="sm:max-w-2xl">
-                                <DialogHeader>
-                                  <DialogTitle>
-                                    Ajukan Counter Penawaran
-                                  </DialogTitle>
-                                  <DialogDescription>
-                                    Masukkan nominal gaji final yang akan
-                                    diajukan kembali kepada kandidat.
-                                  </DialogDescription>
-                                </DialogHeader>
-                                <div className="space-y-4 py-4">
-                                  <div>
-                                    <label className="text-sm font-medium text-muted-foreground">
-                                      Gaji counter
-                                    </label>
-                                    <Input
-                                      value={counterSalary}
-                                      onChange={(event) =>
-                                        setCounterSalary(event.target.value)
-                                      }
-                                      placeholder="7.000.000"
-                                      inputMode="numeric"
-                                      className="mt-2"
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="text-sm font-medium text-muted-foreground">
-                                      Catatan untuk kandidat
-                                    </label>
-                                    <Textarea
-                                      value={counterReason}
-                                      onChange={(event) =>
-                                        setCounterReason(event.target.value)
-                                      }
-                                      placeholder="Berikan alasan singkat untuk counter penawaran"
-                                      rows={5}
-                                      className="mt-2"
-                                    />
-                                  </div>
-                                </div>
-                                <DialogFooter>
-                                  <Button
-                                    variant="secondary"
-                                    type="button"
-                                    onClick={() => setIsCounterOpen(false)}
-                                    disabled={isUpdatingDecision}
-                                  >
-                                    Batal
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    onClick={() =>
-                                      handleOfferDecision(
-                                        "negotiation_countered",
-                                      )
-                                    }
-                                    disabled={isUpdatingDecision}
-                                  >
-                                    {isUpdatingDecision ? (
-                                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    ) : null}
-                                    Kirim Counter
-                                  </Button>
-                                </DialogFooter>
-                              </DialogContent>
-                            </Dialog>
-                          </>
-                        ) : null}
-                        <CardFooter className="rounded-b-xl bg-slate-100/70 dark:bg-slate-900/50 p-4">
-                          <div className="space-y-2">
-                            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                              Timeline Penawaran
-                            </p>
-                            {offerTimeline.length > 0 ? (
-                              <div className="space-y-2">
-                                {offerTimeline.map((event, index) => (
-                                  <div
-                                    key={index}
-                                    className="rounded-lg border border-slate-300/80 bg-slate-100 p-3 text-sm text-slate-900 shadow-sm dark:border-slate-700/80 dark:bg-slate-950 dark:text-slate-100"
-                                  >
-                                    <p className="font-medium">
-                                      {format(
-                                        event.at.toDate(),
-                                        "dd MMM yyyy HH:mm",
-                                      )}
-                                    </p>
-                                    <p className="text-slate-600 dark:text-slate-300">
-                                      {event.meta.note ??
-                                        "Penawaran dikirim ke kandidat."}
-                                    </p>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-sm text-slate-600 dark:text-slate-300">
-                                Belum ada aktivitas penawaran yang tercatat.
-                              </p>
-                            )}
-                          </div>
-                        </CardFooter>
-                      </Card>
-                    )}
-
-                    <OfferEditor
-                      id="offering"
-                      application={application}
-                      job={job}
-                      candidateName={profile.fullName}
-                      onSaveDraft={handleSaveOfferDraft}
-                      onSendOffer={handleSendOffer}
-                      isSavingDraft={isSavingDraft}
-                      isSendingOffer={isSendingOffer}
-                    />
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="uppercase">
+                        {application.offerStatus ?? "draft"}
+                      </Badge>
+                      <span className="text-sm text-muted-foreground">
+                        {hasOfferData
+                          ? "Penawaran tersedia untuk kandidat"
+                          : "Belum ada penawaran kerja dibuat"}
+                      </span>
+                    </div>
                   </div>
-                )}
+
+                  {!hasOfferData ? (
+                    <Card className="border border-dashed border-muted/50 bg-muted/50">
+                      <CardHeader>
+                        <CardTitle>Belum ada penawaran kerja</CardTitle>
+                        <CardDescription>
+                          HRD dapat membuat dan mengelola penawaran kerja
+                          kandidat di tab ini. Simpan sebagai draf atau kirim
+                          penawaran resmi saat semuanya siap.
+                        </CardDescription>
+                      </CardHeader>
+                    </Card>
+                  ) : (
+                    <Card className="border border-muted/50 bg-muted/50">
+                      <CardHeader>
+                        <CardTitle>Ringkasan Penawaran</CardTitle>
+                        <CardDescription>
+                          Status, kompensasi, jadwal kerja, dan catatan HRD
+                          untuk kandidat.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="grid gap-4 md:grid-cols-2">
+                        <InfoRow
+                          icon={<ShieldCheck className="h-4 w-4" />}
+                          label="Status Penawaran"
+                          value={
+                            application.offerStatus
+                              ? application.offerStatus
+                              : "draft"
+                          }
+                        />
+                        <InfoRow
+                          icon={<Users className="h-4 w-4" />}
+                          label="Posisi"
+                          value={application.jobPosition}
+                        />
+                        <InfoRow
+                          icon={<Calendar className="h-4 w-4" />}
+                          label="Kompensasi"
+                          value={
+                            application.offeredSalary
+                              ? `Rp ${formatSalary(
+                                  application.offeredSalary,
+                                )} / bulan`
+                              : "-"
+                          }
+                        />
+                        <InfoRow
+                          icon={<Info className="h-4 w-4" />}
+                          label="Status Kerja"
+                          value={application.workDays ?? "-"}
+                        />
+                        <InfoRow
+                          icon={<MessageSquare className="h-4 w-4" />}
+                          label="Catatan HRD"
+                          value={application.offerNotes ?? "-"}
+                        />
+                        <InfoRow
+                          icon={<Calendar className="h-4 w-4" />}
+                          label="Deskripsi Penawaran"
+                          value={application.offerDescription ?? "-"}
+                        />
+                      </CardContent>
+                      {application.offerStatus === "negotiation_requested" &&
+                      application.candidateCounterOffer ? (
+                        <>
+                          <div className="mt-4 rounded-3xl border border-amber-200 bg-amber-50 p-4">
+                            <div className="flex items-center justify-between gap-4">
+                              <div>
+                                <p className="text-sm font-semibold text-slate-900">
+                                  Usulan Negosiasi Kandidat
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  Detail gaji yang diminta kandidat dan catatan.
+                                </p>
+                              </div>
+                            </div>
+                            <div className="mt-4 grid gap-4 md:grid-cols-2">
+                              <InfoRow
+                                icon={<ShieldCheck className="h-4 w-4" />}
+                                label="Gaji awal"
+                                value={
+                                  application.offeredSalary != null
+                                    ? `${formatSalary(application.offeredSalary)} / bulan`
+                                    : "-"
+                                }
+                              />
+                              <InfoRow
+                                icon={<Info className="h-4 w-4" />}
+                                label="Gaji diminta kandidat"
+                                value={
+                                  application.candidateCounterOffer
+                                    .requestedSalary != null
+                                    ? `${formatSalary(application.candidateCounterOffer.requestedSalary)} / bulan`
+                                    : "-"
+                                }
+                              />
+                              <InfoRow
+                                icon={<Users className="h-4 w-4" />}
+                                label="Selisih nominal"
+                                value={
+                                  application.candidateCounterOffer
+                                    .requestedSalary != null &&
+                                  application.offeredSalary != null
+                                    ? `Rp ${(application.candidateCounterOffer.requestedSalary - application.offeredSalary).toLocaleString("id-ID")}`
+                                    : "-"
+                                }
+                              />
+                              <InfoRow
+                                icon={<MessageSquare className="h-4 w-4" />}
+                                label="Catatan kandidat"
+                                value={
+                                  application.candidateCounterOffer.reason ||
+                                  "-"
+                                }
+                              />
+                            </div>
+                          </div>
+                          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                            <Button
+                              variant="outline"
+                              onClick={() =>
+                                handleOfferDecision("negotiation_rejected")
+                              }
+                              disabled={isUpdatingDecision}
+                            >
+                              {isUpdatingDecision ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              ) : null}
+                              Tolak Negosiasi
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              onClick={() =>
+                                handleOfferDecision("negotiation_approved")
+                              }
+                              disabled={isUpdatingDecision}
+                            >
+                              {isUpdatingDecision ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              ) : null}
+                              Setuju
+                            </Button>
+                            <Button
+                              onClick={() => setIsCounterOpen(true)}
+                              disabled={isUpdatingDecision}
+                            >
+                              Ajukan Counter
+                            </Button>
+                          </div>
+                          <Dialog
+                            open={isCounterOpen}
+                            onOpenChange={setIsCounterOpen}
+                          >
+                            <DialogContent className="sm:max-w-2xl">
+                              <DialogHeader>
+                                <DialogTitle>
+                                  Ajukan Counter Penawaran
+                                </DialogTitle>
+                                <DialogDescription>
+                                  Masukkan nominal gaji final yang akan diajukan
+                                  kembali kepada kandidat.
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="space-y-4 py-4">
+                                <div>
+                                  <label className="text-sm font-medium text-muted-foreground">
+                                    Gaji counter
+                                  </label>
+                                  <Input
+                                    value={counterSalary}
+                                    onChange={(event) =>
+                                      setCounterSalary(event.target.value)
+                                    }
+                                    placeholder="7.000.000"
+                                    inputMode="numeric"
+                                    className="mt-2"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-sm font-medium text-muted-foreground">
+                                    Catatan untuk kandidat
+                                  </label>
+                                  <Textarea
+                                    value={counterReason}
+                                    onChange={(event) =>
+                                      setCounterReason(event.target.value)
+                                    }
+                                    placeholder="Berikan alasan singkat untuk counter penawaran"
+                                    rows={5}
+                                    className="mt-2"
+                                  />
+                                </div>
+                              </div>
+                              <DialogFooter>
+                                <Button
+                                  variant="secondary"
+                                  type="button"
+                                  onClick={() => setIsCounterOpen(false)}
+                                  disabled={isUpdatingDecision}
+                                >
+                                  Batal
+                                </Button>
+                                <Button
+                                  type="button"
+                                  onClick={() =>
+                                    handleOfferDecision("negotiation_countered")
+                                  }
+                                  disabled={isUpdatingDecision}
+                                >
+                                  {isUpdatingDecision ? (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  ) : null}
+                                  Kirim Counter
+                                </Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+                        </>
+                      ) : null}
+                      <CardFooter className="rounded-b-xl bg-slate-100/70 dark:bg-slate-900/50 p-4">
+                        <div className="space-y-2">
+                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            Timeline Penawaran
+                          </p>
+                          {offerTimeline.length > 0 ? (
+                            <div className="space-y-2">
+                              {offerTimeline.map((event, index) => (
+                                <div
+                                  key={index}
+                                  className="rounded-lg border border-slate-300/80 bg-slate-100 p-3 text-sm text-slate-900 shadow-sm dark:border-slate-700/80 dark:bg-slate-950 dark:text-slate-100"
+                                >
+                                  <p className="font-medium">
+                                    {format(
+                                      event.at.toDate(),
+                                      "dd MMM yyyy HH:mm",
+                                    )}
+                                  </p>
+                                  <p className="text-slate-600 dark:text-slate-300">
+                                    {event.meta.note ??
+                                      "Penawaran dikirim ke kandidat."}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-slate-600 dark:text-slate-300">
+                              Belum ada aktivitas penawaran yang tercatat.
+                            </p>
+                          )}
+                        </div>
+                      </CardFooter>
+                    </Card>
+                  )}
+
+                  <OfferEditor
+                    id="offering"
+                    application={application}
+                    job={job}
+                    candidateName={profile.fullName}
+                    onSaveDraft={handleSaveOfferDraft}
+                    onSendOffer={handleSendOffer}
+                    isSavingDraft={isSavingDraft}
+                    isSendingOffer={isSendingOffer}
+                  />
+                </div>
+              ) : null}
             </div>
           </div>
         </>

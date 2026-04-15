@@ -248,23 +248,84 @@ function ApplicationCard({
     return null;
   }, [application.interviews]);
 
-  const isRejected = application.status === "rejected";
   const isHired =
     application.status === "hired" &&
     application.internalAccessEnabled === true;
   const isOffered = application.status === "offered";
   const isInterviewStage = application.status === "interview";
-  const isAssessmentStage = application.status === "tes_kepribadian";
+  const offerHasBeenPresented = [
+    "sent",
+    "negotiation_requested",
+    "negotiation_approved",
+    "negotiation_countered",
+    "accepted",
+    "rejected",
+  ].includes(application.offerStatus ?? "");
   const isProcessing = [
     "submitted",
     "screening",
     "verification",
     "document_submission",
+    "tes_kepribadian",
+    "rejected",
   ].includes(application.status);
+
+  const currentStageLabel =
+    statusDisplayLabels[application.status] ?? "Sedang dalam proses";
+
+  const interviewWindowEnd = scheduledInterview
+    ? new Date(
+        scheduledInterview.startAt.toDate().getTime() + 2 * 60 * 60 * 1000,
+      )
+    : null;
+  const isInterviewUpcoming = scheduledInterview
+    ? now < scheduledInterview.startAt.toDate().getTime()
+    : false;
+  const isInterviewInProgress = scheduledInterview
+    ? now >= scheduledInterview.startAt.toDate().getTime() &&
+      now < interviewWindowEnd!.getTime()
+    : false;
+  const showInterviewCard =
+    isInterviewStage &&
+    (!scheduledInterview || isInterviewUpcoming || isInterviewInProgress);
 
   if (isOffered) {
     const salaryLabel =
       application.jobType === "internship" ? "Uang Saku" : "Gaji";
+    if (!offerHasBeenPresented) {
+      return (
+        <Card className="flex flex-col border-slate-300/50">
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
+              <div>
+                <CardTitle className="text-xl">
+                  Lolos ke Tahap Offering
+                </CardTitle>
+                <CardDescription>
+                  Selamat, Anda telah lolos ke tahap offering. Saat ini tim HRD
+                  kami sedang menyiapkan detail penawaran kerja untuk Anda.
+                  Apabila diperlukan, proses ini dapat mencakup penyesuaian atau
+                  pembahasan lebih lanjut sebelum penawaran resmi dikirimkan.
+                </CardDescription>
+              </div>
+              <Badge className="w-fit bg-slate-700 text-white">
+                Lolos ke Tahap Offering
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-lg border border-muted/70 bg-muted/50 p-4 text-sm">
+              <p>
+                Tim HRD kami sedang menyiapkan penawaran kerja resmi untuk Anda.
+                Mohon menunggu informasi berikutnya melalui portal ini atau
+                email.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+
     if (application.offerStatus === "sent") {
       return (
         <Card className="flex flex-col border-primary/50">
@@ -272,17 +333,17 @@ function ApplicationCard({
             <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
               <div>
                 <CardTitle className="text-xl">
-                  Penawaran Kerja: {application.jobPosition}
+                  Penawaran Kerja Telah Dikirim
                 </CardTitle>
                 <CardDescription>
-                  Berdasarkan hasil tahapan seleksi yang telah Anda ikuti, kami
-                  menyampaikan penawaran kerja untuk posisi ini. Mohon tinjau
-                  seluruh detail penawaran dengan saksama. Anda dapat mengajukan
-                  negosiasi 1 kali sebelum mengambil keputusan final.
+                  Penawaran kerja untuk posisi yang Anda lamar telah kami
+                  kirimkan. Silakan tinjau detail penawaran yang tersedia pada
+                  halaman ini dan berikan respon Anda sesuai pilihan yang
+                  tersedia.
                 </CardDescription>
               </div>
               <Badge className="w-fit bg-primary/80">
-                Menunggu Keputusan Anda
+                Penawaran Kerja Telah Dikirim
               </Badge>
             </div>
           </CardHeader>
@@ -631,12 +692,12 @@ function ApplicationCard({
         ? "Negosiasi Disetujui"
         : isCountered
           ? "HRD Mengajukan Penawaran Final"
-          : "Negosiasi Ditolak";
+          : "Pembahasan Negosiasi Selesai";
       const description = isApproved
         ? "HRD menyetujui usulan gaji Anda. Silakan terima atau tolak penawaran final."
         : isCountered
           ? "HRD mengajukan penawaran akhir. Silakan tinjau dan pilih terima atau tolak final."
-          : "HRD menolak usulan negosiasi. Anda masih dapat menerima atau menolak penawaran final.";
+          : "HRD sedang meninjau hasil pembahasan negosiasi Anda dan akan menginformasikan langkah berikutnya.";
       return (
         <Card className="flex flex-col border-slate-300/80">
           <CardHeader>
@@ -792,38 +853,146 @@ function ApplicationCard({
     );
   }
 
-  if (isAssessmentStage) {
-    return (
-      <Card className="flex flex-col border-yellow-500/50">
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
-            <div>
-              <CardTitle className="text-xl">
-                Langkah Selanjutnya: {application.jobPosition}
-              </CardTitle>
-              <CardDescription>
-                Anda diundang untuk menyelesaikan tes kepribadian sebagai bagian
-                dari proses seleksi.
-              </CardDescription>
-            </div>
-            <Badge className="w-fit bg-yellow-500/80 text-yellow-900">
-              Menunggu Tes
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="flex-grow space-y-4">
-          <div className="p-4 rounded-md border-dashed border-yellow-400 bg-yellow-50 dark:bg-yellow-900/30 text-yellow-900 dark:text-yellow-100">
-            <h3 className="font-bold text-lg mb-2 flex items-center gap-2">
-              <BrainCircuit className="h-5 w-5" /> Tes Kepribadian
+  if (showInterviewCard) {
+    if (scheduledInterview) {
+      const interviewStart = scheduledInterview.startAt.toDate();
+      const interviewEnd = interviewWindowEnd!;
+      const interviewMedia = scheduledInterview.meetingLink
+        ? "Zoom / Online"
+        : application.jobLocation || application.location || "Offline";
+      const interviewDetail = scheduledInterview.meetingLink
+        ? scheduledInterview.meetingLink
+        : application.location || "Detail lokasi akan diinformasikan";
+
+      if (now < interviewStart) {
+        return (
+          <div className="p-4 rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-100">
+            <h3 className="font-semibold text-lg flex items-center gap-2 text-blue-800 dark:text-blue-100">
+              <Calendar className="h-5 w-5" /> Lolos ke Tahap Wawancara
             </h3>
-            <p className="text-sm">
-              Hasil tes ini merupakan bagian penting dari proses seleksi kami.
-              Silakan selesaikan tes ini untuk melanjutkan ke tahap berikutnya.
-              Tes ini tidak memiliki batas waktu, namun kami sarankan untuk
-              menyelesaikannya sesegera mungkin.
-            </p>
+            <div className="text-sm mt-3 space-y-3 text-blue-800/90 dark:text-blue-200/90">
+              <p>
+                Selamat, Anda telah lolos ke tahap wawancara untuk posisi yang
+                Anda lamar.
+              </p>
+              <div className="rounded-lg border border-muted/70 bg-muted/50 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                  Hari/Tanggal
+                </p>
+                <p className="font-semibold">
+                  {format(interviewStart, "eeee, dd MMMM yyyy", { locale: id })}
+                </p>
+                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mt-3">
+                  Waktu
+                </p>
+                <p className="font-semibold">
+                  {format(interviewStart, "HH:mm", { locale: id })} WIB
+                </p>
+                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mt-3">
+                  Media
+                </p>
+                <p className="font-semibold">{interviewMedia}</p>
+                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mt-3">
+                  Link/Detail
+                </p>
+                <p className="font-semibold break-words">{interviewDetail}</p>
+              </div>
+              <p>
+                Mohon hadir tepat waktu dan mempersiapkan diri sebaik mungkin.
+                Jika terdapat perubahan jadwal, kami akan menginformasikannya
+                melalui portal ini dan email.
+              </p>
+            </div>
+            {scheduledInterview.meetingLink ? (
+              <div className="mt-4">
+                <Button asChild size="sm">
+                  <a
+                    href={scheduledInterview.meetingLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <LinkIcon className="mr-2 h-4 w-4" /> Buka Link Wawancara
+                  </a>
+                </Button>
+              </div>
+            ) : null}
           </div>
-        </CardContent>
+        );
+      }
+
+      if (now >= interviewStart && now < interviewEnd.getTime()) {
+        return (
+          <div className="p-4 rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-100">
+            <h3 className="font-semibold text-lg flex items-center gap-2 text-blue-800 dark:text-blue-100">
+              <Clock className="h-5 w-5 animate-spin" /> Lolos ke Tahap
+              Wawancara
+            </h3>
+            <div className="text-sm mt-3 space-y-3 text-blue-800/90 dark:text-blue-200/90">
+              <p>
+                Wawancara Anda sedang berlangsung untuk posisi{" "}
+                <strong>{application.jobPosition}</strong>.
+              </p>
+              <p>
+                Mohon tetap fokus dan ikuti sesi sesuai jadwal yang telah
+                ditentukan.
+              </p>
+            </div>
+          </div>
+        );
+      }
+    }
+
+    return (
+      <div className="p-4 rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-100">
+        <h3 className="font-semibold text-lg flex items-center gap-2 text-blue-800 dark:text-blue-100">
+          <Calendar className="h-5 w-5" /> Lolos ke Tahap Wawancara
+        </h3>
+        <div className="text-sm mt-3 space-y-3 text-blue-800/90 dark:text-blue-200/90">
+          <p>
+            Selamat, Anda telah lolos ke tahap wawancara. Tim HRD kami sedang
+            mengatur jadwal yang sesuai.
+          </p>
+          <p>
+            Anda akan menerima notifikasi melalui portal ini dan email setelah
+            jadwal wawancara dikonfirmasi. Mohon periksa secara berkala.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <Card className="flex flex-col border-slate-300/50">
+      <CardHeader>
+        <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
+          <div>
+            <CardTitle className="text-xl">Menunggu Hasil Evaluasi</CardTitle>
+            <CardDescription>
+              Terima kasih, data dan dokumen lamaran Anda telah kami terima
+              dengan baik. Saat ini tim rekrutmen kami sedang melakukan evaluasi
+              terhadap profil, dokumen, dan hasil tes Anda secara menyeluruh.
+            </CardDescription>
+          </div>
+          <Badge className="w-fit bg-slate-700 text-white">
+            Menunggu Hasil Evaluasi
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex-grow space-y-4">
+        <div className="p-4 rounded-md border-dashed border-slate-300 bg-slate-50 text-slate-900 dark:bg-slate-900/20 dark:text-slate-100">
+          <p className="text-sm leading-7">
+            Terima kasih, data dan dokumen lamaran Anda telah kami terima dengan
+            baik. Saat ini tim rekrutmen kami sedang melakukan evaluasi terhadap
+            profil, dokumen, dan hasil tes Anda secara menyeluruh.
+          </p>
+          <p className="text-sm leading-7 mt-3">
+            Mohon menunggu informasi selanjutnya melalui portal ini atau email.
+            Anda juga dapat memantau perkembangan lamaran Anda secara berkala
+            pada halaman ini.
+          </p>
+        </div>
+      </CardContent>
+      {application.status === "tes_kepribadian" && !hasCompletedTest ? (
         <CardFooter className="bg-muted/50 p-4 border-t flex justify-end">
           <Button asChild>
             <Link
@@ -833,249 +1002,7 @@ function ApplicationCard({
             </Link>
           </Button>
         </CardFooter>
-      </Card>
-    );
-  }
-
-  if (isInterviewStage) {
-    if (scheduledInterview) {
-      const interviewStart = scheduledInterview.startAt.toDate();
-      const interviewInProgressEnd = new Date(
-        interviewStart.getTime() + 2 * 60 * 60 * 1000,
-      );
-
-      if (now < interviewStart) {
-        // Before interview
-        return (
-          <div className="p-4 rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-100">
-            <h3 className="font-semibold text-lg flex items-center gap-2 text-blue-800 dark:text-blue-100">
-              <Calendar className="h-5 w-5" /> Wawancara Akan Dilaksanakan
-            </h3>
-            <div className="text-sm mt-3 space-y-3 text-blue-800/90 dark:text-blue-200/90 text-justify">
-              <p>
-                Anda dijadwalkan untuk mengikuti tahap wawancara untuk posisi{" "}
-                <strong>{application.jobPosition}</strong>.
-              </p>
-              <p>
-                Wawancara akan dilaksanakan pada: <br />
-                <strong>
-                  {format(interviewStart, "eeee, dd MMMM yyyy", { locale: id })}{" "}
-                  pukul {format(interviewStart, "HH:mm")} WIB
-                </strong>
-                .
-              </p>
-              <p>
-                Mohon pastikan Anda hadir tepat waktu dan mempersiapkan diri
-                dengan baik.
-              </p>
-            </div>
-          </div>
-        );
-      } else if (now >= interviewStart && now < interviewInProgressEnd) {
-        // During interview window
-        return (
-          <div className="p-4 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 text-amber-900 dark:text-amber-100">
-            <h3 className="font-semibold text-lg flex items-center gap-2 text-amber-800 dark:text-amber-100">
-              <Clock className="h-5 w-5 animate-spin" /> Wawancara Sedang
-              Berlangsung
-            </h3>
-            <div className="text-sm mt-3 space-y-3 text-amber-800/90 dark:text-amber-200/90 text-justify">
-              <p>
-                Tahap wawancara Anda sedang berlangsung. Silakan mengikuti sesi
-                sesuai jadwal yang telah ditentukan.
-              </p>
-            </div>
-          </div>
-        );
-      } else {
-        // After interview
-        return (
-          <div className="p-4 rounded-md border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-900 dark:text-indigo-100">
-            <h3 className="font-semibold text-lg flex items-center gap-2 text-indigo-800 dark:text-indigo-100">
-              <Users className="h-5 w-5" /> Tahap Wawancara Selesai, Sedang Kami
-              Tinjau
-            </h3>
-            <div className="text-sm mt-3 space-y-3 text-indigo-800/90 dark:text-indigo-200/90 text-justify">
-              <p>
-                Terima kasih telah berpartisipasi dalam tahap wawancara untuk
-                posisi <strong>{application.jobPosition}</strong>. Saat ini, tim
-                rekrutmen kami sedang melakukan evaluasi mendalam berdasarkan
-                hasil diskusi dan kualifikasi Anda secara keseluruhan.
-              </p>
-              <p>
-                Kami memahami bahwa menunggu kabar bisa jadi hal yang
-                mendebarkan. Kami berkomitmen untuk melakukan proses yang adil
-                dan teliti bagi setiap kandidat. Oleh karena itu, proses ini
-                mungkin membutuhkan sedikit waktu.
-              </p>
-              <p className="text-xs italic">
-                Kami akan segera memberikan informasi perkembangan selanjutnya
-                melalui portal ini atau email. Terima kasih atas pengertian dan
-                antusiasme Anda.
-              </p>
-            </div>
-          </div>
-        );
-      }
-    } else {
-      // No interview scheduled yet for this 'interview' stage application
-      return (
-        <div className="p-4 rounded-md border border-muted-foreground/20 bg-muted/50 text-muted-foreground">
-          <h3 className="font-semibold text-lg flex items-center gap-2">
-            <Clock className="h-5 w-5" /> Menunggu Penjadwalan Wawancara
-          </h3>
-          <div className="text-sm mt-3 space-y-3">
-            <p>
-              Selamat! Anda telah lolos ke tahap wawancara. Tim HRD kami sedang
-              mengatur jadwal yang sesuai.
-            </p>
-            <p>
-              Anda akan menerima notifikasi di portal ini dan melalui email
-              setelah jadwal wawancara Anda dikonfirmasi. Mohon periksa secara
-              berkala.
-            </p>
-          </div>
-        </div>
-      );
-    }
-  }
-
-  return (
-    <Card className="flex flex-col">
-      <CardHeader>
-        <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
-          <div>
-            <CardTitle className="text-xl">{application.jobPosition}</CardTitle>
-            <CardDescription className="flex items-center gap-2 pt-1">
-              <Building className="h-4 w-4" /> {application.brandName}
-            </CardDescription>
-          </div>
-          <Badge
-            variant={
-              isRejected ? "destructive" : isHired ? "default" : "secondary"
-            }
-            className={cn(
-              "w-fit",
-              application.offerStatus === "accepted" &&
-                "bg-blue-600 hover:bg-blue-600",
-            )}
-          >
-            {application.offerStatus === "accepted"
-              ? "Penawaran Diterima"
-              : statusDisplayLabels[application.status]}
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="flex-grow space-y-4">
-        <Separator />
-
-        {isRejected ? (
-          <div className="p-4 rounded-md border border-destructive/50 bg-destructive/10 text-destructive flex items-center gap-3">
-            <XCircle className="h-5 w-5" />
-            <div className="text-sm font-medium">
-              <p>
-                {application.offerStatus === "rejected"
-                  ? "Anda telah menolak penawaran kerja ini. Proses rekrutmen untuk posisi ini telah selesai."
-                  : "Terima kasih atas minat Anda. Saat ini kami belum dapat melanjutkan proses lamaran Anda."}
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="p-4 rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-100">
-            <h3 className="font-semibold text-lg flex items-center gap-2 text-blue-800 dark:text-blue-100">
-              <FileClock className="h-5 w-5" /> Lamaran Anda Sedang Diproses
-            </h3>
-            <div className="text-sm mt-3 space-y-3 text-blue-800/90 dark:text-blue-200/90 text-justify">
-              <p>
-                Terima kasih telah mengirimkan lamaran Anda untuk posisi{" "}
-                <strong>{application.jobPosition}</strong>. Lamaran Anda telah
-                kami terima dan saat ini sedang dalam proses peninjauan oleh tim
-                rekrutmen kami.
-              </p>
-              <p>
-                Kami menerima cukup banyak aplikasi, sehingga proses evaluasi
-                membutuhkan waktu. Kami akan menghubungi Anda apabila terdapat
-                perkembangan lebih lanjut. Anda juga dapat memantau status
-                lamaran Anda di halaman ini secara berkala.
-              </p>
-              <p className="text-xs italic">
-                Profil Anda juga akan kami simpan sebagai bagian dari
-                pertimbangan untuk peluang lain di masa mendatang. Terima kasih
-                atas minat dan kepercayaan Anda.
-              </p>
-            </div>
-            {isProcessing && !hasCompletedTest && (
-              <div className="mt-4 pt-4 border-t border-blue-200/50 dark:border-blue-800/50">
-                <p className="font-bold text-blue-900 dark:text-blue-200">
-                  Percepat proses Anda
-                </p>
-                <p className="text-xs mt-1">
-                  Selesaikan tes kepribadian untuk mempercepat proses screening.
-                  Hasil tes ini akan berlaku untuk semua lamaran Anda.
-                </p>
-                <Button asChild size="sm" className="mt-3">
-                  <Link href="/careers/portal/assessment/personality">
-                    Lanjut ke Tes Kepribadian{" "}
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
-      </CardContent>
-      <CardFooter className="bg-muted/50 p-4 border-t flex flex-col sm:flex-row justify-between items-center min-h-[76px] gap-4">
-        <div className="flex-1">
-          {isInterviewStage && scheduledInterview ? (
-            <div>
-              <p className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
-                <Calendar className="h-3.5 w-3.5" /> JADWAL WAWANCARA
-              </p>
-              <p className="text-sm font-semibold">
-                {format(
-                  scheduledInterview.startAt.toDate(),
-                  "eeee, dd MMM yyyy",
-                  { locale: id },
-                )}
-              </p>
-              <p className="text-sm font-semibold">
-                {format(scheduledInterview.startAt.toDate(), "HH:mm", {
-                  locale: id,
-                })}{" "}
-                - {format(scheduledInterview.endAt.toDate(), "HH:mm")} WIB
-              </p>
-            </div>
-          ) : application.submittedAt ? (
-            <div>
-              <p className="text-xs text-muted-foreground">Lamaran Dikirim:</p>
-              <p className="text-sm font-semibold">
-                {format(
-                  application.submittedAt.toDate(),
-                  "dd MMM yyyy, HH:mm",
-                  { locale: id },
-                )}{" "}
-                WIB
-              </p>
-            </div>
-          ) : (
-            <div></div> // Placeholder for alignment
-          )}
-        </div>
-
-        <div className="flex-shrink-0 w-full sm:w-auto">
-          {isInterviewStage && scheduledInterview && (
-            <Button asChild size="sm" className="w-full">
-              <a
-                href={scheduledInterview.meetingLink}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <LinkIcon className="mr-2 h-4 w-4" /> Buka Link Wawancara
-              </a>
-            </Button>
-          )}
-        </div>
-      </CardFooter>
+      ) : null}
     </Card>
   );
 }

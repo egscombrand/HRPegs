@@ -1,73 +1,125 @@
-'use client';
+"use client";
 
-import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
-import { useAuth } from '@/providers/auth-provider';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where } from 'firebase/firestore';
-import type { JobApplication, ApplicationInterview, Job, UserProfile, Brand } from '@/lib/types';
-import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
-import { MENU_CONFIG } from '@/lib/menu-config';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Separator } from '@/components/ui/separator';
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { format, differenceInMinutes, addDays } from 'date-fns';
-import { id as idLocale } from 'date-fns/locale';
+import { useMemo, useState, useEffect, useCallback, useRef } from "react";
+import { useAuth } from "@/providers/auth-provider";
+import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import type {
+  JobApplication,
+  ApplicationInterview,
+  Job,
+  UserProfile,
+  Brand,
+} from "@/lib/types";
+import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
+import { MENU_CONFIG } from "@/lib/menu-config";
 import {
-  ArrowRight, Briefcase, Calendar, Link as LinkIcon,
-  Clock, Users, Video, Info, ExternalLink, ChevronRight,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { format, differenceInMinutes, addDays } from "date-fns";
+import { id as idLocale } from "date-fns/locale";
+import {
+  ArrowRight,
+  Briefcase,
+  Calendar,
+  Link as LinkIcon,
+  Clock,
+  Users,
+  Video,
+  Info,
+  ExternalLink,
+  ChevronRight,
   Search,
-} from 'lucide-react';
-import Link from 'next/link';
-import { getInitials } from '@/lib/utils';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { statusDisplayLabels } from '@/components/recruitment/ApplicationStatusBadge';
+} from "lucide-react";
+import Link from "next/link";
+import { getInitials } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { statusDisplayLabels } from "@/components/recruitment/ApplicationStatusBadge";
 
 // --- Helpers ───────────────────────────────────────────────────────────────
 
 const safeToDate = (ts: any): Date | null => {
   if (!ts) return null;
-  if (typeof ts.toDate === 'function') return ts.toDate();
-  if (typeof ts.toMillis === 'function') return new Date(ts.toMillis());
+  if (typeof ts.toDate === "function") return ts.toDate();
+  if (typeof ts.toMillis === "function") return new Date(ts.toMillis());
   if (ts.seconds !== undefined) return new Date(ts.seconds * 1000);
   return null;
 };
 
-const getDisplayInterview = (app: JobApplication): ApplicationInterview | null => {
-    if (!app.interviews || app.interviews.length === 0) return null;
+const getDisplayInterview = (
+  app: JobApplication,
+): ApplicationInterview | null => {
+  if (!app.interviews || app.interviews.length === 0) return null;
 
-    const sortedInterviews = [...app.interviews]
-        .filter(iv => iv && iv.status !== 'canceled' && iv.startAt)
-        .sort((a, b) => (a.startAt?.toMillis() || 0) - (b.startAt?.toMillis() || 0));
+  const sortedInterviews = [...app.interviews]
+    .filter((iv) => iv && iv.status !== "canceled" && iv.startAt)
+    .sort(
+      (a, b) => (a.startAt?.toMillis() || 0) - (b.startAt?.toMillis() || 0),
+    );
 
-    if (sortedInterviews.length === 0) return null;
+  if (sortedInterviews.length === 0) return null;
 
-    const now = new Date();
-    // Prioritize interviews that are not yet completed or are currently happening
-    const activeOrUpcoming = sortedInterviews.filter(iv => iv.status === 'scheduled' || iv.status === 'reschedule_requested');
+  const now = new Date();
+  // Prioritize interviews that are not yet completed or are currently happening
+  const activeOrUpcoming = sortedInterviews.filter(
+    (iv) => iv.status === "scheduled" || iv.status === "reschedule_requested",
+  );
 
-    const upcoming = activeOrUpcoming.find(iv => iv.startAt.toDate() >= now);
-    if (upcoming) return upcoming;
-    
-    // If no upcoming, return the most recent active/past one
-    const past = activeOrUpcoming.sort((a,b) => b.startAt.toMillis() - a.startAt.toMillis());
-    if (past.length > 0) return past[0];
-    
-    // Fallback to any latest interview if no active ones found
-    return sortedInterviews.pop() || null;
+  const upcoming = activeOrUpcoming.find((iv) => iv.startAt.toDate() >= now);
+  if (upcoming) return upcoming;
+
+  // If no upcoming, return the most recent active/past one
+  const past = activeOrUpcoming.sort(
+    (a, b) => b.startAt.toMillis() - a.startAt.toMillis(),
+  );
+  if (past.length > 0) return past[0];
+
+  // Fallback to any latest interview if no active ones found
+  return sortedInterviews.pop() || null;
 };
-
 
 // --- Modal payload types ────────────────────────────────────────────────────
 
 type ModalData =
-  | { type: 'actual'; interview: ApplicationInterview; app: JobApplication }
-  | { type: 'template'; template: NonNullable<Job['interviewTemplate']>; app: JobApplication; jobPosition: string };
+  | { type: "actual"; interview: ApplicationInterview; app: JobApplication }
+  | {
+      type: "template";
+      template: NonNullable<Job["interviewTemplate"]>;
+      app: JobApplication;
+      jobPosition: string;
+    };
 
 // --- Interview Detail Modal ─────────────────────────────────────────────────
 
@@ -82,7 +134,7 @@ function InterviewDetailModal({
 }) {
   if (!data) return null;
 
-  const isTemplate = data.type === 'template';
+  const isTemplate = data.type === "template";
 
   const meetingLink = isTemplate
     ? data.template.meetingLink
@@ -98,10 +150,10 @@ function InterviewDetailModal({
     !isTemplate && startDate && endDate
       ? differenceInMinutes(endDate, startDate)
       : isTemplate
-      ? data.template.slotDurationMinutes
-      : null;
+        ? data.template.slotDurationMinutes
+        : null;
 
-  const panelistNames = !isTemplate ? data.interview.panelistNames ?? [] : [];
+  const panelistNames = !isTemplate ? (data.interview.panelistNames ?? []) : [];
 
   const candidateName = data.app.candidateName;
   const jobPosition = data.app.jobPosition;
@@ -113,15 +165,22 @@ function InterviewDetailModal({
         <DialogHeader>
           <div className="flex items-start gap-4">
             <Avatar className="h-14 w-14">
-              <AvatarFallback className="bg-primary/10 text-primary font-bold text-lg">{getInitials(candidateName)}</AvatarFallback>
+              <AvatarFallback className="bg-primary/10 text-primary font-bold text-lg">
+                {getInitials(candidateName)}
+              </AvatarFallback>
             </Avatar>
             <div>
-              <DialogTitle className="text-xl mb-1">{candidateName}</DialogTitle>
+              <DialogTitle className="text-xl mb-1">
+                {candidateName}
+              </DialogTitle>
               <DialogDescription>
                 {jobPosition} &middot; {brandName}
               </DialogDescription>
               {isTemplate && (
-                <Badge variant="outline" className="mt-2 text-xs gap-1.5 border-amber-500/50 bg-amber-500/10 text-amber-500">
+                <Badge
+                  variant="outline"
+                  className="mt-2 text-xs gap-1.5 border-amber-500/50 bg-amber-500/10 text-amber-500"
+                >
                   <Info className="h-3 w-3" />
                   Jadwal dari Template (Belum Final)
                 </Badge>
@@ -133,93 +192,123 @@ function InterviewDetailModal({
         <Separator />
 
         <div className="grid md:grid-cols-2 gap-x-6 gap-y-8 py-2">
-            <div className="space-y-6">
-                <div className="flex items-start gap-3">
-                    <Calendar className="h-5 w-5 text-primary mt-1 flex-shrink-0" />
-                    <div>
-                        <p className="text-xs font-medium text-muted-foreground mb-0.5">Tanggal & Waktu</p>
-                        {startDate ? (
-                            <p className="font-semibold text-base">{format(startDate, 'EEEE, dd MMMM yyyy', { locale: idLocale })}</p>
-                        ) : (
-                            <p className="text-sm text-muted-foreground italic">Tanggal belum ditentukan</p>
-                        )}
-                        {startDate && (
-                            <p className="text-sm text-muted-foreground mt-0.5">
-                                {isTemplate ? `Mulai pukul ${data.template.workdayStartTime ?? '–'}` : `${format(startDate, 'HH:mm')}${endDate ? ` – ${format(endDate, 'HH:mm')} WIB` : ' WIB'}`}
-                            </p>
-                        )}
-                    </div>
-                </div>
-
-                {duration != null && (
-                    <div className="flex items-start gap-3">
-                        <Clock className="h-5 w-5 text-primary mt-1 flex-shrink-0" />
-                        <div>
-                        <p className="text-xs font-medium text-muted-foreground mb-0.5">Durasi</p>
-                        <p className="text-base font-semibold">{duration} menit</p>
-                        </div>
-                    </div>
-                )}
-                 {!isTemplate && panelistNames.length > 0 && (
-                    <div className="flex items-start gap-3">
-                        <Users className="h-5 w-5 text-primary mt-1 flex-shrink-0" />
-                        <div>
-                            <p className="text-xs font-medium text-muted-foreground mb-1">Pewawancara / Panelis</p>
-                            <div className="flex flex-wrap gap-1.5">
-                                {panelistNames.map((name, i) => (
-                                    <Badge key={i} variant="secondary">{name}</Badge>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </div>
-            
-            <div className="space-y-4">
-                 {meetingLink ? (
-                    <div className="flex flex-col gap-3">
-                        <div className="flex items-start gap-3">
-                            <Video className="h-5 w-5 text-primary mt-1 flex-shrink-0" />
-                            <div>
-                            <p className="text-xs font-medium text-muted-foreground mb-1">Link Meeting</p>
-                            <p className="text-xs font-mono text-muted-foreground break-all">{meetingLink}</p>
-                            </div>
-                        </div>
-                        <Button asChild className="gap-2 w-full">
-                            <a href={meetingLink} target="_blank" rel="noopener noreferrer">
-                            <Video className="h-4 w-4" />
-                            Bergabung ke Meeting
-                            <ExternalLink className="h-3.5 w-3.5 ml-auto" />
-                            </a>
-                        </Button>
-                    </div>
+          <div className="space-y-6">
+            <div className="flex items-start gap-3">
+              <Calendar className="h-5 w-5 text-primary mt-1 flex-shrink-0" />
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-0.5">
+                  Tanggal & Waktu
+                </p>
+                {startDate ? (
+                  <p className="font-semibold text-base">
+                    {format(startDate, "EEEE, dd MMMM yyyy", {
+                      locale: idLocale,
+                    })}
+                  </p>
                 ) : (
-                    <div className="flex items-start gap-3 p-4 bg-muted/50 rounded-lg">
-                        <Video className="h-5 w-5 text-muted-foreground mt-1 flex-shrink-0" />
-                        <div>
-                        <p className="text-xs font-medium text-muted-foreground mb-1">Link Meeting</p>
-                        <p className="text-sm font-semibold text-muted-foreground">Belum tersedia</p>
-                        </div>
-                    </div>
+                  <p className="text-sm text-muted-foreground italic">
+                    Tanggal belum ditentukan
+                  </p>
                 )}
-                 {!isTemplate && data.interview.notes && (
-                    <div className="flex items-start gap-3 p-4 bg-muted/50 rounded-lg">
-                        <Info className="h-5 w-5 text-muted-foreground mt-1 flex-shrink-0" />
-                        <div>
-                        <p className="text-xs font-medium text-muted-foreground mb-1">Catatan</p>
-                        <p className="text-sm">{data.interview.notes}</p>
-                        </div>
-                    </div>
+                {startDate && (
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    {isTemplate
+                      ? `Mulai pukul ${data.template.workdayStartTime ?? "–"}`
+                      : `${format(startDate, "HH:mm")}${endDate ? ` – ${format(endDate, "HH:mm")} WIB` : " WIB"}`}
+                  </p>
                 )}
+              </div>
             </div>
+
+            {duration != null && (
+              <div className="flex items-start gap-3">
+                <Clock className="h-5 w-5 text-primary mt-1 flex-shrink-0" />
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-0.5">
+                    Durasi
+                  </p>
+                  <p className="text-base font-semibold">{duration} menit</p>
+                </div>
+              </div>
+            )}
+            {!isTemplate && panelistNames.length > 0 && (
+              <div className="flex items-start gap-3">
+                <Users className="h-5 w-5 text-primary mt-1 flex-shrink-0" />
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1">
+                    Pewawancara / Panelis
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {panelistNames.map((name, i) => (
+                      <Badge key={i} variant="secondary">
+                        {name}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-4">
+            {meetingLink ? (
+              <div className="flex flex-col gap-3">
+                <div className="flex items-start gap-3">
+                  <Video className="h-5 w-5 text-primary mt-1 flex-shrink-0" />
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1">
+                      Link Meeting
+                    </p>
+                    <p className="text-xs font-mono text-muted-foreground break-all">
+                      {meetingLink}
+                    </p>
+                  </div>
+                </div>
+                <Button asChild className="gap-2 w-full">
+                  <a
+                    href={meetingLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Video className="h-4 w-4" />
+                    Bergabung ke Meeting
+                    <ExternalLink className="h-3.5 w-3.5 ml-auto" />
+                  </a>
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-start gap-3 p-4 bg-muted/50 rounded-lg">
+                <Video className="h-5 w-5 text-muted-foreground mt-1 flex-shrink-0" />
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1">
+                    Link Meeting
+                  </p>
+                  <p className="text-sm font-semibold text-muted-foreground">
+                    Belum tersedia
+                  </p>
+                </div>
+              </div>
+            )}
+            {!isTemplate && data.interview.notes && (
+              <div className="flex items-start gap-3 p-4 bg-muted/50 rounded-lg">
+                <Info className="h-5 w-5 text-muted-foreground mt-1 flex-shrink-0" />
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1">
+                    Catatan
+                  </p>
+                  <p className="text-sm">{data.interview.notes}</p>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         <DialogFooter>
-            <Button asChild variant="outline" size="sm" className="gap-1.5">
-                <Link href={`/admin/recruitment/applications/${data.app.id}`}>
-                Lihat Profil Kandidat <ChevronRight className="h-4 w-4" />
-                </Link>
-            </Button>
+          <Button asChild variant="outline" size="sm" className="gap-1.5">
+            <Link href={`/admin/recruitment/applications/${data.app.id}`}>
+              Lihat Profil Kandidat <ChevronRight className="h-4 w-4" />
+            </Link>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -250,46 +339,124 @@ export default function MyRecruitmentTasksPage() {
   const directAssignmentQuery = useMemoFirebase(() => {
     if (!userProfile?.uid) return null;
     return query(
-      collection(firestore, 'applications'),
-      where('internalReviewConfig.assignedReviewerUids', 'array-contains', userProfile.uid)
+      collection(firestore, "applications"),
+      where(
+        "internalReviewConfig.assignedReviewerUids",
+        "array-contains",
+        userProfile.uid,
+      ),
     );
   }, [firestore, userProfile?.uid]);
 
   const panelistAssignmentQuery = useMemoFirebase(() => {
     if (!userProfile?.uid) return null;
     return query(
-      collection(firestore, 'applications'),
-      where('allPanelistIds', 'array-contains', userProfile.uid)
+      collection(firestore, "applications"),
+      where("allPanelistIds", "array-contains", userProfile.uid),
     );
   }, [firestore, userProfile?.uid]);
 
-  const { data: directApps, isLoading: loadingDirect } = useCollection<JobApplication>(directAssignmentQuery);
-  const { data: panelistApps, isLoading: loadingPanelist } = useCollection<JobApplication>(panelistAssignmentQuery);
+  const assignedJobsQuery = useMemoFirebase(() => {
+    if (!userProfile?.uid) return null;
+    return query(
+      collection(firestore, "jobs"),
+      where("assignedUserIds", "array-contains", userProfile.uid),
+    );
+  }, [firestore, userProfile?.uid]);
+
+  const { data: directApps, isLoading: loadingDirect } =
+    useCollection<JobApplication>(directAssignmentQuery);
+  const { data: panelistApps, isLoading: loadingPanelist } =
+    useCollection<JobApplication>(panelistAssignmentQuery);
+  const { data: assignedJobs, isLoading: loadingAssignedJobs } =
+    useCollection<Job>(assignedJobsQuery);
+
+  const [assignedJobApps, setAssignedJobApps] = useState<JobApplication[]>([]);
+  const [loadingAssignedJobApps, setLoadingAssignedJobApps] = useState(false);
+
+  const assignedJobIds = useMemo(() => {
+    return (assignedJobs || [])
+      .map((job) => job.id)
+      .filter((id): id is string => Boolean(id));
+  }, [assignedJobs]);
+
+  useEffect(() => {
+    let canceled = false;
+    const loadAssignedJobApplications = async () => {
+      if (!assignedJobIds.length) {
+        setAssignedJobApps([]);
+        return;
+      }
+
+      setLoadingAssignedJobApps(true);
+      try {
+        const results: JobApplication[] = [];
+        for (let i = 0; i < assignedJobIds.length; i += 10) {
+          const chunk = assignedJobIds.slice(i, i + 10);
+          const querySnapshot = await getDocs(
+            query(
+              collection(firestore, "applications"),
+              where("jobId", "in", chunk),
+            ),
+          );
+          querySnapshot.forEach((doc) => {
+            results.push({ id: doc.id, ...doc.data() } as JobApplication);
+          });
+        }
+        if (!canceled) {
+          setAssignedJobApps(results);
+        }
+      } catch (error) {
+        console.error("Failed to load applications for assigned jobs", error);
+      } finally {
+        if (!canceled) {
+          setLoadingAssignedJobApps(false);
+        }
+      }
+    };
+
+    loadAssignedJobApplications();
+    return () => {
+      canceled = true;
+    };
+  }, [assignedJobIds, firestore]);
 
   const applications = useMemo(() => {
-    const all = [...(directApps || []), ...(panelistApps || [])];
-    const unique = Array.from(new Map(all.map(a => [a.id, a])).values());
+    const all = [
+      ...(directApps || []),
+      ...(panelistApps || []),
+      ...assignedJobApps,
+    ];
+    const unique = Array.from(new Map(all.map((a) => [a.id, a])).values());
     return unique.sort((a, b) => {
-      const timeA = a.updatedAt?.toMillis?.() || (a.updatedAt as any)?.seconds || 0;
-      const timeB = b.updatedAt?.toMillis?.() || (b.updatedAt as any)?.seconds || 0;
+      const timeA =
+        a.updatedAt?.toMillis?.() || (a.updatedAt as any)?.seconds || 0;
+      const timeB =
+        b.updatedAt?.toMillis?.() || (b.updatedAt as any)?.seconds || 0;
       return timeB - timeA;
     });
-  }, [directApps, panelistApps]);
+  }, [directApps, panelistApps, assignedJobApps]);
 
   const allRelevantJobIds = useMemo(() => {
     if (!applications) return [];
-    return Array.from(new Set(applications.map(app => app.jobId)));
+    return Array.from(new Set(applications.map((app) => app.jobId)));
   }, [applications]);
 
   const allJobsQuery = useMemoFirebase(() => {
     if (allRelevantJobIds.length === 0) return null;
-    return query(collection(firestore, 'jobs'), where('__name__', 'in', allRelevantJobIds.slice(0, 30)));
+    return query(
+      collection(firestore, "jobs"),
+      where("__name__", "in", allRelevantJobIds.slice(0, 30)),
+    );
   }, [firestore, allRelevantJobIds]);
-  const { data: allRelevantJobs, isLoading: loadingAllJobs } = useCollection<Job>(allJobsQuery);
+  const { data: allRelevantJobs, isLoading: loadingAllJobs } =
+    useCollection<Job>(allJobsQuery);
 
   const jobMap = useMemo(() => {
     const map = new Map<string, Job>();
-    (allRelevantJobs || []).forEach(j => { if (j.id) map.set(j.id, j); });
+    (allRelevantJobs || []).forEach((j) => {
+      if (j.id) map.set(j.id, j);
+    });
     return map;
   }, [allRelevantJobs]);
 
@@ -297,19 +464,22 @@ export default function MyRecruitmentTasksPage() {
     authLoading ||
     loadingDirect ||
     loadingPanelist ||
+    loadingAssignedJobs ||
+    loadingAssignedJobApps ||
     loadingAllJobs;
-    
-  const [searchTerm, setSearchTerm] = useState('');
-  const [stageFilter, setStageFilter] = useState('all');
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [stageFilter, setStageFilter] = useState("all");
 
   const filteredApplications = useMemo(() => {
     if (!applications) return [];
-    return applications.filter(app => {
-        const stageMatch = stageFilter === 'all' || app.status === stageFilter;
-        const searchMatch = searchTerm === '' || 
-            app.candidateName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-            app.jobPosition.toLowerCase().includes(searchTerm.toLowerCase());
-        return stageMatch && searchMatch;
+    return applications.filter((app) => {
+      const stageMatch = stageFilter === "all" || app.status === stageFilter;
+      const searchMatch =
+        searchTerm === "" ||
+        app.candidateName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        app.jobPosition.toLowerCase().includes(searchTerm.toLowerCase());
+      return stageMatch && searchMatch;
     });
   }, [applications, stageFilter, searchTerm]);
 
@@ -319,28 +489,38 @@ export default function MyRecruitmentTasksPage() {
     <DashboardLayout pageTitle="Tugas Rekrutmen Saya" menuConfig={menuConfig}>
       <div className="space-y-6">
         <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-bold tracking-tight">Tugas Rekrutmen Saya</h1>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Tugas Rekrutmen Saya
+          </h1>
           <p className="text-muted-foreground">
-            Daftar kandidat yang ditugaskan kepada Anda untuk dilakukan evaluasi internal atau wawancara.
+            Daftar kandidat yang ditugaskan kepada Anda untuk dilakukan evaluasi
+            internal atau wawancara.
           </p>
         </div>
-        
+
         <div className="flex items-center gap-2">
-            <div className="relative flex-grow">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Cari kandidat atau posisi..." className="pl-8" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-            </div>
-            <Select value={stageFilter} onValueChange={setStageFilter}>
-                <SelectTrigger className="w-[240px]">
-                    <SelectValue placeholder="Filter tahap..." />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="all">Semua Tahap</SelectItem>
-                    {Object.entries(statusDisplayLabels).map(([key, label]) => (
-                        <SelectItem key={key} value={key}>{label}</SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
+          <div className="relative flex-grow">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Cari kandidat atau posisi..."
+              className="pl-8"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <Select value={stageFilter} onValueChange={setStageFilter}>
+            <SelectTrigger className="w-[240px]">
+              <SelectValue placeholder="Filter tahap..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Tahap</SelectItem>
+              {Object.entries(statusDisplayLabels).map(([key, label]) => (
+                <SelectItem key={key} value={key}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {isLoading ? (
@@ -357,7 +537,8 @@ export default function MyRecruitmentTasksPage() {
               <h3 className="text-xl font-semibold">Tidak Ada Tugas Review</h3>
               <p className="text-muted-foreground max-w-sm mx-auto mt-2 text-sm">
                 Saat ini belum ada kandidat yang membutuhkan tindakan dari Anda.
-                Tugas akan muncul di sini jika HRD menambahkan Anda sebagai reviewer.
+                Tugas akan muncul di sini jika HRD menambahkan Anda sebagai
+                reviewer.
               </p>
             </CardContent>
           </Card>
@@ -374,7 +555,7 @@ export default function MyRecruitmentTasksPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredApplications.map(app => {
+                {filteredApplications.map((app) => {
                   const interview = getDisplayInterview(app);
                   const jobTemplate = !interview
                     ? jobMap.get(app.jobId)?.interviewTemplate
@@ -384,14 +565,23 @@ export default function MyRecruitmentTasksPage() {
                     : null;
 
                   return (
-                    <TableRow key={app.id} className="hover:bg-muted/30 transition-colors">
+                    <TableRow
+                      key={app.id}
+                      className="hover:bg-muted/30 transition-colors"
+                    >
                       {/* Kandidat */}
                       <TableCell>
                         <div className="flex items-center gap-3">
-                          <Avatar className="h-10 w-10"><AvatarFallback>{getInitials(app.candidateName)}</AvatarFallback></Avatar>
+                          <Avatar className="h-10 w-10">
+                            <AvatarFallback>
+                              {getInitials(app.candidateName)}
+                            </AvatarFallback>
+                          </Avatar>
                           <div>
                             <p className="font-bold">{app.candidateName}</p>
-                            <p className="text-xs text-muted-foreground">{app.candidateEmail}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {app.candidateEmail}
+                            </p>
                           </div>
                         </div>
                       </TableCell>
@@ -399,12 +589,16 @@ export default function MyRecruitmentTasksPage() {
                       {/* Posisi */}
                       <TableCell>
                         <p className="text-sm font-medium">{app.jobPosition}</p>
-                        <p className="text-xs text-muted-foreground">{app.brandName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {app.brandName}
+                        </p>
                       </TableCell>
 
                       {/* Status */}
                       <TableCell>
-                        <Badge variant="outline">{statusDisplayLabels[app.status]}</Badge>
+                        <Badge variant="outline">
+                          {statusDisplayLabels[app.status]}
+                        </Badge>
                       </TableCell>
 
                       {/* Jadwal Wawancara — klikable buka modal */}
@@ -413,42 +607,64 @@ export default function MyRecruitmentTasksPage() {
                           <Button
                             variant="ghost"
                             className="text-left p-0 h-auto font-normal group"
-                            onClick={() => openModal({ type: 'actual', interview, app })}
+                            onClick={() =>
+                              openModal({ type: "actual", interview, app })
+                            }
                           >
                             <div className="flex items-center gap-2">
                               <Calendar className="h-4 w-4 text-primary" />
                               <p className="font-semibold text-sm group-hover:text-primary transition-colors">
-                                {format(safeToDate(interview.startAt)!, 'dd MMM, HH:mm')}
+                                {format(
+                                  safeToDate(interview.startAt)!,
+                                  "dd MMM, HH:mm",
+                                )}
                               </p>
                             </div>
                           </Button>
-                        ) : jobTemplate && (templateDate || jobTemplate.meetingLink) ? (
+                        ) : jobTemplate &&
+                          (templateDate || jobTemplate.meetingLink) ? (
                           <Button
                             variant="ghost"
                             className="text-left p-0 h-auto font-normal group"
-                            onClick={() => openModal({ type: 'template', template: jobTemplate, app, jobPosition: app.jobPosition })}
+                            onClick={() =>
+                              openModal({
+                                type: "template",
+                                template: jobTemplate,
+                                app,
+                                jobPosition: app.jobPosition,
+                              })
+                            }
                           >
                             <div className="flex items-center gap-2">
                               <Info className="h-4 w-4 text-sky-500" />
                               <div className="leading-tight">
                                 <p className="font-semibold text-sm group-hover:text-primary transition-colors">
-                                    Jadwal dari Template
+                                  Jadwal dari Template
                                 </p>
                               </div>
                             </div>
                           </Button>
                         ) : (
                           <span className="text-xs text-muted-foreground italic">
-                            {app.status === 'interview' ? 'Menunggu penjadwalan' : 'Belum terjadwal'}
+                            {app.status === "interview"
+                              ? "Menunggu penjadwalan"
+                              : "Belum terjadwal"}
                           </span>
                         )}
                       </TableCell>
-                      
+
                       {/* Aksi */}
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" asChild className="rounded-xl group">
-                          <Link href={`/admin/recruitment/applications/${app.id}`}>
-                            Buka Detail{' '}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          asChild
+                          className="rounded-xl group"
+                        >
+                          <Link
+                            href={`/admin/recruitment/applications/${app.id}`}
+                          >
+                            Buka Detail{" "}
                             <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
                           </Link>
                         </Button>
