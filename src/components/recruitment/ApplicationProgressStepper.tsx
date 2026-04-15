@@ -8,7 +8,6 @@ import {
   Users,
   Award,
   Search,
-  BrainCircuit,
   CheckCircle,
 } from "lucide-react";
 
@@ -28,10 +27,11 @@ function mapStage(
     "document_submission",
     "tes_kepribadian",
     "assessment",
+    "verification",
   ];
 
   if (screeningStages.includes(status)) return "screening";
-  if (status === "interview") return "interview";
+  if (status === "interview" || status === "waiting_evaluation") return "interview";
   if (status === "offered") return "offering";
   if (status === "hired") return "hired";
 
@@ -44,7 +44,7 @@ const statusToVisualStepIndex = (status: string): number => {
 };
 
 interface ApplicationProgressStepperProps {
-  currentStatus: JobApplicationStatus;
+  currentStatus: JobApplicationStatus | "waiting_evaluation";
 }
 
 export function ApplicationProgressStepper({

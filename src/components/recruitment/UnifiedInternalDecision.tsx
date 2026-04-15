@@ -198,7 +198,12 @@ export function UnifiedInternalDecision({
       const appRef = doc(firestore, "applications", application.id);
 
       const nextStage =
-        pascaDecision === "lanjut" ? "offered" : application.status;
+        pascaDecision === "lanjut" 
+          ? "offered" 
+          : pascaDecision === "tidak_lanjut" 
+            ? "rejected" 
+            : application.status;
+            
       const updatePayload: any = {
         postInterviewDecision: {
           status: pascaDecision,
@@ -207,15 +212,22 @@ export function UnifiedInternalDecision({
           decidedByName: userProfile.fullName,
           decidedAt: serverTimestamp(),
         },
-        candidateStatus: pascaDecision === "lanjut" ? "lolos" : "menunggu",
-        finalDecisionLocked: pascaDecision === "lanjut",
+        candidateStatus: 
+          pascaDecision === "lanjut" 
+            ? "lolos" 
+            : pascaDecision === "tidak_lanjut"
+              ? "rejected"
+              : "menunggu",
+        finalDecisionLocked: pascaDecision === "lanjut" || pascaDecision === "tidak_lanjut",
         status: nextStage,
         updatedAt: serverTimestamp(),
         timeline: [
           ...(application.timeline || []),
           {
             type:
-              pascaDecision === "lanjut" ? "stage_changed" : "status_changed",
+              pascaDecision === "lanjut" || pascaDecision === "tidak_lanjut" 
+                ? "stage_changed" 
+                : "status_changed",
             at: Timestamp.now(),
             by: userProfile.uid,
             meta: {
@@ -226,7 +238,7 @@ export function UnifiedInternalDecision({
                   ? "Kandidat lolos pasca wawancara dan maju ke tahap offering."
                   : pascaDecision === "pending"
                     ? "Keputusan pasca wawancara ditunda; kandidat tetap berada di tahap wawancara."
-                    : "Kandidat tidak dilanjutkan setelah wawancara.",
+                    : "Kandidat tidak dilanjutkan setelah wawancara (Rejected).",
             },
           },
         ],

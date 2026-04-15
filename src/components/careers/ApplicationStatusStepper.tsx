@@ -165,6 +165,8 @@ export function ApplicationStatusStepper({
               "Aplikasi Anda sedang diproses. Pastikan profil dan dokumen sudah lengkap.",
           };
         case "interview":
+          const isEvaluated = application?.postInterviewDecision != null;
+
           const getMostRelevantInterview = () => {
             if (!application?.interviews || application.interviews.length === 0)
               return null;
@@ -195,6 +197,15 @@ export function ApplicationStatusStepper({
           const scheduledInterview = getMostRelevantInterview();
 
           if (scheduledInterview) {
+            const isPast = scheduledInterview.startAt.toDate() < new Date();
+
+            if (isPast && !isEvaluated) {
+              return {
+                status: "waiting",
+                reason: "Wawancara selesai, sedang ditinjau.",
+              };
+            }
+
             return {
               status: "active",
               reason: `Wawancara terjadwal: ${format(

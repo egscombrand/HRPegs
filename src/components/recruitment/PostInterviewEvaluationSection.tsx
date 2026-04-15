@@ -213,13 +213,23 @@ export function PostInterviewEvaluationSection({
       }
     });
 
-    // 2. Fallback: allPanelistIds from application
+    // 2. allPanelistIds from application
     application.allPanelistIds?.forEach((uid: string) => {
       addReviewer(uid, "", "Recruitment Team");
     });
 
+    // 3. User assigned to the job
+    job?.assignedUserIds?.forEach((uid) => {
+      addReviewer(uid, "", "Recruitment Team");
+    });
+
+    // 4. Assigned internal reviewers
+    application.internalReviewConfig?.assignedReviewerUids?.forEach((uid) => {
+      addReviewer(uid, "", "Internal Reviewer");
+    });
+
     return list;
-  }, [application, internalUsers, reviews]);
+  }, [application, internalUsers, reviews, job]);
 
   const isReviewer = useMemo(() => {
     return potentialReviewers.some((p) => p.uid === userProfile?.uid);
@@ -228,11 +238,34 @@ export function PostInterviewEvaluationSection({
   const canSeeDashboard = isHRD || isReviewer;
 
   const canReview = useMemo(() => {
-    if (!userProfile) return false;
-    if (userProfile.role === "hrd" || userProfile.role === "super-admin")
-      return true;
-    return potentialReviewers.some((p) => p.uid === userProfile.uid);
-  }, [userProfile, potentialReviewers]);
+    if (!userProfile || !application) return false;
+
+    const isHrd = userProfile.role === "hrd";
+    const isSuperAdmin = userProfile.role === "super-admin";
+
+    const isPanelist =
+      application.interviews?.some(
+        (iv) =>
+          iv.status !== "canceled" && iv.panelistIds?.includes(userProfile.uid),
+      ) || application.allPanelistIds?.includes(userProfile.uid);
+
+    const isInternalRecruitmentTeam = job?.assignedUserIds?.includes(
+      userProfile.uid,
+    );
+
+    const isAssignedReviewer =
+      application.internalReviewConfig?.assignedReviewerUids?.includes(
+        userProfile.uid,
+      );
+
+    return !!(
+      isHrd ||
+      isSuperAdmin ||
+      isPanelist ||
+      isInternalRecruitmentTeam ||
+      isAssignedReviewer
+    );
+  }, [userProfile, application, job]);
 
   const handleSubmit = async () => {
     if (!userProfile || !application.id || !recommendation) return;
@@ -345,7 +378,9 @@ export function PostInterviewEvaluationSection({
     }
   };
 
-  if (!canReview && (!reviews || reviews.length === 0) && !isHRD) return null;
+  // Show header even if no reviews yet
+  const hasReviews = reviews && reviews.length > 0;
+  if (!canReview && !hasReviews && !isHRD) return null;
 
   const submittedReviewers = potentialReviewers.filter((p) =>
     reviews?.some((r) => r.reviewerUid === p.uid),
