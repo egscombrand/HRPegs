@@ -31,8 +31,12 @@ const InfoRow = ({
   value?: React.ReactNode;
 }) => (
   <div>
-    <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
-    <dd className="text-base font-semibold mt-0.5">{value || "-"}</dd>
+    <dt className="text-xs font-medium text-slate-600 dark:text-muted-foreground">
+      {label}
+    </dt>
+    <dd className="text-base font-semibold mt-0.5 text-foreground">
+      {value || "-"}
+    </dd>
   </div>
 );
 
@@ -65,8 +69,10 @@ const AddressView = ({
 
   return (
     <div className="space-y-1">
-      <p className="text-xs font-medium text-muted-foreground">{title}</p>
-      <div className="text-sm font-semibold">
+      <p className="text-xs font-medium text-slate-600 dark:text-muted-foreground">
+        {title}
+      </p>
+      <div className="text-sm font-semibold text-foreground">
         <p>
           {address.street}, RT {address.rt}/RW {address.rw}
         </p>
@@ -85,13 +91,15 @@ const AddressView = ({
 const EducationView = ({ item }: { item: Education }) => (
   <div className="text-sm border-b pb-3 last:border-0 last:pb-0">
     <p className="font-semibold text-base">{item.institution}</p>
-    <p className="text-muted-foreground">
+    <p className="text-slate-600 dark:text-muted-foreground">
       {item.level} - {item.fieldOfStudy}
     </p>
     {item.gpa && (
-      <p className="text-xs text-muted-foreground">IPK/Nilai: {item.gpa}</p>
+      <p className="text-xs text-slate-600 dark:text-muted-foreground">
+        IPK/Nilai: {item.gpa}
+      </p>
     )}
-    <p className="text-muted-foreground text-xs mt-1">
+    <p className="text-slate-600 dark:text-muted-foreground text-xs mt-1">
       {item.startDate} - {item.isCurrent ? "Sekarang" : item.endDate}
     </p>
     {item.thesisTitle && (
@@ -104,15 +112,15 @@ const EducationView = ({ item }: { item: Education }) => (
 const WorkExperienceView = ({ item }: { item: WorkExperience }) => (
   <div className="text-sm border-b pb-3 last:border-0 last:pb-0">
     <p className="font-semibold text-base">{item.position}</p>
-    <p className="capitalize font-medium text-muted-foreground">
+    <p className="capitalize font-medium text-slate-600 dark:text-muted-foreground">
       {item.jobType ? JOB_TYPE_LABELS[item.jobType] : ""} di {item.company}
     </p>
-    <p className="text-muted-foreground text-xs mt-1">
+    <p className="text-slate-600 dark:text-muted-foreground text-xs mt-1">
       {item.startDate} - {item.isCurrent ? "Sekarang" : item.endDate}
     </p>
     {item.description && <p className="mt-2 text-xs">{item.description}</p>}
     {!item.isCurrent && item.reasonForLeaving && (
-      <p className="mt-1 text-sm italic text-muted-foreground">
+      <p className="mt-1 text-sm italic text-slate-600 dark:text-muted-foreground">
         Alasan berhenti: {item.reasonForLeaving}
       </p>
     )}
@@ -123,8 +131,10 @@ const WorkExperienceView = ({ item }: { item: WorkExperience }) => (
 const OrgExperienceView = ({ item }: { item: OrganizationalExperience }) => (
   <div className="text-sm border-b pb-3 last:border-0 last:pb-0">
     <p className="font-semibold text-base">{item.position}</p>
-    <p className="text-muted-foreground">{item.organization}</p>
-    <p className="text-muted-foreground text-xs mt-1">
+    <p className="text-slate-600 dark:text-muted-foreground">
+      {item.organization}
+    </p>
+    <p className="text-slate-600 dark:text-muted-foreground text-xs mt-1">
       {item.startDate} - {item.isCurrent ? "Sekarang" : item.endDate}
     </p>
     {item.description && <p className="mt-2 text-xs">{item.description}</p>}
@@ -204,7 +214,7 @@ export function ProfileView({ profile }: { profile: Profile }) {
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <AddressView title="Alamat KTP" address={profile.addressKtp} />
           {profile.isDomicileSameAsKtp ? (
-            <p className="text-sm text-muted-foreground self-center">
+            <p className="text-sm text-slate-600 dark:text-muted-foreground self-center">
               Alamat domisili sama dengan alamat KTP.
             </p>
           ) : (
@@ -275,7 +285,7 @@ export function ProfileView({ profile }: { profile: Profile }) {
                 value={profile.usedToDeadline ? "Ya" : "Tidak"}
               />
               {profile.usedToDeadline && (
-                <p className="text-sm mt-2 text-muted-foreground">
+                <p className="text-sm mt-2 text-slate-600 dark:text-muted-foreground">
                   {profile.deadlineExperience}
                 </p>
               )}
@@ -296,7 +306,7 @@ export function ProfileView({ profile }: { profile: Profile }) {
               <EducationView key={i} item={item} />
             ))
           ) : (
-            <p className="text-sm text-muted-foreground p-4 text-center">
+            <p className="text-sm text-slate-600 dark:text-muted-foreground p-4 text-center">
               Belum ada riwayat pendidikan.
             </p>
           )}

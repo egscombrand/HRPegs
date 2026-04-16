@@ -345,18 +345,18 @@ export function InternalEvaluationSection({
   );
 
   return (
-    <Card className="shadow-2xl border-none rounded-[3rem] bg-[#020617]/40 backdrop-blur-xl overflow-hidden border-t-8 border-indigo-500/20 ring-1 ring-white/5">
-      <CardHeader className="bg-indigo-500/[0.03] pb-10">
+    <Card className="shadow-2xl rounded-[3rem] overflow-hidden border border-slate-200/70 bg-slate-50/90 ring-1 ring-slate-200/60 border-t-8 border-indigo-500/15 dark:bg-[#020617]/40 dark:border-none dark:ring-white/5 dark:border-t-indigo-500/20">
+      <CardHeader className="bg-indigo-500/10 pb-10 dark:bg-indigo-500/[0.03]">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
           <div className="flex items-center gap-6">
             <div className="p-4 rounded-[1.5rem] bg-indigo-600 text-white shadow-2xl shadow-indigo-500/20">
               <ClipboardCheck className="h-7 w-7" />
             </div>
             <div>
-              <CardTitle className="text-3xl font-black tracking-tighter uppercase text-slate-100">
+              <CardTitle className="text-3xl font-black tracking-tighter uppercase text-slate-900 dark:text-slate-100">
                 Evaluasi Internal
               </CardTitle>
-              <CardDescription className="text-slate-400 font-bold italic">
+              <CardDescription className="text-slate-600 font-bold italic dark:text-slate-400">
                 Panel kendali & monitoring kualitatif tim rekrutmen.
               </CardDescription>
             </div>
@@ -369,28 +369,28 @@ export function InternalEvaluationSection({
         {canSeeDashboard && (
           <div className="space-y-12 animate-in fade-in slide-in-from-top-6 duration-1000">
             {/* 1. Dashboard Header - Dark Theme Harmonized */}
-            <div className="flex flex-col lg:flex-row items-center justify-between gap-8 p-10 rounded-[2.5rem] bg-slate-950/40 border border-slate-800 shadow-2xl ring-1 ring-white/5">
+            <div className="flex flex-col lg:flex-row items-center justify-between gap-8 p-10 rounded-[2.5rem] bg-white shadow-lg border border-slate-200/80 ring-1 ring-slate-200/60 dark:bg-slate-950/40 dark:border-slate-800 dark:ring-white/5">
               <div className="flex items-center gap-6">
                 <div className="h-16 w-16 rounded-[1.8rem] bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center shadow-2xl shadow-indigo-500/20">
                   <Activity className="h-8 w-8" />
                 </div>
                 <div>
-                  <h3 className="text-2xl font-black uppercase tracking-tighter text-slate-100 italic">
+                  <h3 className="text-2xl font-black uppercase tracking-tighter text-slate-900 italic dark:text-slate-100">
                     Progress Penilaian Tim
                   </h3>
                   <div className="space-y-1">
-                    <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">
-                      <span className="text-indigo-400">
+                    <p className="text-sm font-bold text-slate-600 uppercase tracking-widest dark:text-slate-500">
+                      <span className="text-indigo-700 dark:text-indigo-400">
                         {reviews?.length || 0}
                       </span>{" "}
                       dari{" "}
-                      <span className="text-slate-300">
+                      <span className="text-slate-700 dark:text-slate-300">
                         {potentialReviewers.length}
                       </span>{" "}
                       reviewer sudah submit
                     </p>
                     {reviews && reviews.length > 0 && (
-                      <p className="text-[10px] font-bold text-slate-500 uppercase">
+                      <p className="text-[10px] font-bold text-slate-600 uppercase dark:text-slate-500">
                         Terakhir oleh:{" "}
                         <span className="text-emerald-400">
                           {
@@ -436,11 +436,11 @@ export function InternalEvaluationSection({
                 <div className="flex flex-col items-center gap-1.5 min-w-[100px]">
                   <Badge
                     variant="outline"
-                    className="border-slate-700 bg-slate-900/50 text-slate-300 px-6 py-2 rounded-2xl font-black text-xs w-full justify-center"
+                    className="border-slate-300 bg-slate-100 text-slate-900 px-6 py-2 rounded-2xl font-black text-xs w-full justify-center dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300"
                   >
                     {potentialReviewers.length} TOTAL
                   </Badge>
-                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
+                  <span className="text-[9px] font-black text-slate-600 uppercase tracking-widest dark:text-slate-500">
                     Team Size
                   </span>
                 </div>
@@ -456,7 +456,7 @@ export function InternalEvaluationSection({
                     <div className="h-10 w-10 rounded-[1rem] bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/20">
                       <CheckCircle className="h-5 w-5" />
                     </div>
-                    <span className="text-sm font-black uppercase tracking-widest text-slate-200">
+                    <span className="text-sm font-black uppercase tracking-widest text-slate-900 dark:text-slate-200">
                       Sudah Menilai
                     </span>
                   </div>
@@ -475,16 +475,16 @@ export function InternalEvaluationSection({
                     return (
                       <div
                         key={p.uid}
-                        className="p-6 rounded-[2.2rem] bg-slate-900/40 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-6 group hover:border-emerald-500/40 hover:bg-slate-900/60 transition-all duration-500"
+                        className="p-6 rounded-[2.2rem] bg-white/90 border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-6 group hover:border-emerald-500/40 hover:bg-slate-50 transition-all duration-500 dark:bg-slate-900/40 dark:border-slate-800"
                       >
                         <div className="flex items-center gap-6">
-                          <Avatar className="h-16 w-16 rounded-[1.4rem] border-4 border-slate-800 shadow-2xl group-hover:scale-105 transition-transform duration-500 ring-2 ring-emerald-500/10">
+                          <Avatar className="h-16 w-16 rounded-[1.4rem] border-4 border-slate-200 shadow-2xl group-hover:scale-105 transition-transform duration-500 ring-2 ring-emerald-500/10 dark:border-slate-800">
                             <AvatarFallback className="bg-gradient-to-br from-emerald-500 to-green-600 text-white font-black text-xl">
                               {p.name.charAt(0)}
                             </AvatarFallback>
                           </Avatar>
                           <div>
-                            <p className="font-black text-lg uppercase tracking-tight text-slate-100 leading-none mb-2">
+                            <p className="font-black text-lg uppercase tracking-tight text-slate-900 leading-none mb-2 dark:text-slate-100">
                               {p.name}
                             </p>
                             <div className="flex items-center gap-3">
@@ -496,8 +496,8 @@ export function InternalEvaluationSection({
                               >
                                 {scoreLabels[review.score]}
                               </Badge>
-                              <p className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1.5 bg-slate-950/40 px-3 py-1 rounded-full border border-slate-800/50">
-                                <Clock className="h-3 w-3 text-emerald-400" />
+                              <p className="text-[10px] font-bold text-slate-600 uppercase flex items-center gap-1.5 bg-slate-100 px-3 py-1 rounded-full border border-slate-200/60 dark:bg-slate-950/40 dark:border-slate-800/50 dark:text-slate-500">
+                                <Clock className="h-3 w-3 text-emerald-500" />
                                 {format(
                                   review.updatedAt.toDate(),
                                   "dd MMM, HH:mm",
@@ -507,10 +507,10 @@ export function InternalEvaluationSection({
                           </div>
                         </div>
                         <div className="flex flex-col items-end gap-2">
-                          <span className="text-[9px] font-black text-slate-600 uppercase tracking-widest">
+                          <span className="text-[9px] font-black text-slate-700 uppercase tracking-widest dark:text-slate-300">
                             Progress
                           </span>
-                          <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[9px] font-black uppercase">
+                          <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 text-[9px] font-black uppercase dark:text-emerald-400">
                             <ShieldCheck className="h-3.5 w-3.5" />
                             SUBMITTED
                           </div>
@@ -519,9 +519,9 @@ export function InternalEvaluationSection({
                     );
                   })}
                   {submittedReviewers.length === 0 && (
-                    <div className="p-16 text-center rounded-[2.5rem] bg-slate-900/20 border-2 border-dashed border-slate-800">
-                      <AlertCircle className="h-12 w-12 mx-auto text-slate-700 mb-4" />
-                      <p className="text-slate-500 text-sm font-bold italic uppercase tracking-widest">
+                    <div className="p-16 text-center rounded-[2.5rem] bg-slate-100 border-2 border-dashed border-slate-300 dark:bg-slate-900/20 dark:border-slate-800">
+                      <AlertCircle className="h-12 w-12 mx-auto text-slate-600 mb-4 dark:text-slate-300" />
+                      <p className="text-slate-700 text-sm font-bold italic uppercase tracking-widest dark:text-slate-500">
                         Belum ada tim yang submit.
                       </p>
                     </div>
@@ -533,10 +533,10 @@ export function InternalEvaluationSection({
               <div className="space-y-8">
                 <div className="flex items-center justify-between px-6">
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-[1rem] bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/20">
+                    <div className="h-10 w-10 rounded-[1rem] bg-amber-500/10 text-amber-600 flex items-center justify-center border border-amber-500/20">
                       <Clock className="h-5 w-5 animate-pulse" />
                     </div>
-                    <span className="text-sm font-black uppercase tracking-widest text-slate-200">
+                    <span className="text-sm font-black uppercase tracking-widest text-slate-900 dark:text-slate-200">
                       Menunggu Penilaian
                     </span>
                   </div>
@@ -551,45 +551,45 @@ export function InternalEvaluationSection({
                   {pendingReviewers.map((p) => (
                     <div
                       key={p.uid}
-                      className="p-6 rounded-[2.2rem] bg-slate-900/20 border border-slate-800/60 flex items-center justify-between gap-6 group hover:bg-slate-900/40 hover:border-amber-500/40 transition-all duration-500"
+                      className="p-6 rounded-[2.2rem] bg-slate-50 border border-slate-200/80 flex items-center justify-between gap-6 group hover:bg-slate-100 hover:border-amber-500/40 transition-all duration-500 dark:bg-slate-900/20 dark:border-slate-800/60"
                     >
-                      <div className="flex items-center gap-6 opacity-60 group-hover:opacity-100 transition-all duration-500">
-                        <Avatar className="h-16 w-16 rounded-[1.4rem] border-4 border-slate-900/50 shadow-sm opacity-40 filter grayscale group-hover:grayscale-0 group-hover:opacity-100 transition-all">
-                          <AvatarFallback className="bg-slate-800 text-slate-500 font-black text-xl">
+                      <div className="flex items-center gap-6 opacity-80 group-hover:opacity-100 transition-all duration-500">
+                        <Avatar className="h-16 w-16 rounded-[1.4rem] border-4 border-slate-200 shadow-sm opacity-70 filter grayscale group-hover:grayscale-0 group-hover:opacity-100 transition-all dark:border-slate-800">
+                          <AvatarFallback className="bg-slate-800 text-slate-200 font-black text-xl">
                             {p.name.charAt(0)}
                           </AvatarFallback>
                         </Avatar>
                         <div>
-                          <p className="font-black text-lg uppercase tracking-tight text-slate-400 group-hover:text-slate-100 transition-colors leading-none mb-2">
+                          <p className="font-black text-lg uppercase tracking-tight text-slate-900 group-hover:text-slate-900 transition-colors leading-none mb-2 dark:text-slate-100">
                             {p.name}
                           </p>
                           <div className="flex items-center gap-3">
                             <Badge
                               variant="outline"
-                              className="text-[8px] px-3 py-1 rounded-full font-black uppercase border-slate-800 text-slate-500 group-hover:text-amber-400 group-hover:border-amber-500/20 transition-all"
+                              className="text-[8px] px-3 py-1 rounded-full font-black uppercase border-slate-300 text-slate-700 group-hover:text-amber-600 group-hover:border-amber-500/20 transition-all dark:border-slate-700 dark:text-slate-400"
                             >
                               {p.source}
                             </Badge>
-                            <p className="text-[9px] font-black uppercase text-amber-500/40 tracking-widest animate-pulse">
+                            <p className="text-[9px] font-black uppercase text-amber-700 tracking-widest animate-pulse dark:text-amber-400">
                               Awaiting assessment...
                             </p>
                           </div>
                         </div>
                       </div>
                       <div className="flex flex-col items-end gap-2">
-                        <span className="text-[9px] font-black text-slate-700 uppercase tracking-widest">
+                        <span className="text-[9px] font-black text-slate-700 uppercase tracking-widest dark:text-slate-300">
                           Status
                         </span>
-                        <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-500/5 border border-amber-500/10 text-amber-500/40 text-[9px] font-black uppercase">
+                        <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-700 text-[9px] font-black uppercase dark:text-amber-400">
                           PENDING
                         </div>
                       </div>
                     </div>
                   ))}
                   {pendingReviewers.length === 0 && (
-                    <div className="p-16 text-center rounded-[2.5rem] bg-emerald-500/5 border-2 border-emerald-500/20 shadow-2xl shadow-emerald-500/5">
-                      <ShieldCheck className="h-12 w-12 mx-auto text-emerald-500/40 mb-4 animate-bounce" />
-                      <p className="text-emerald-400 text-sm font-black uppercase tracking-widest italic">
+                    <div className="p-16 text-center rounded-[2.5rem] bg-emerald-100 border-2 border-emerald-200 shadow-2xl shadow-emerald-200/70 dark:bg-emerald-500/5 dark:border-emerald-500/20 dark:shadow-emerald-500/5">
+                      <ShieldCheck className="h-12 w-12 mx-auto text-emerald-600 mb-4 animate-bounce dark:text-emerald-500/40" />
+                      <p className="text-emerald-700 text-sm font-black uppercase tracking-widest italic dark:text-emerald-400">
                         All Assessments Completed!
                       </p>
                     </div>
@@ -646,16 +646,16 @@ export function InternalEvaluationSection({
         {/* 2. My Review Form - Professional Dark Container */}
         {canReview &&
           (!application.internalReviewConfig?.reviewLocked || myReview) && (
-            <div className="space-y-12 p-12 rounded-[3.5rem] bg-slate-950/40 border border-slate-800 shadow-2xl ring-1 ring-white/5">
+            <div className="space-y-12 p-12 rounded-[3.5rem] bg-white/90 border border-slate-200/80 shadow-2xl ring-1 ring-slate-200/60 dark:bg-slate-950/40 dark:border-slate-800 dark:ring-white/5">
               <div className="flex items-center gap-5">
-                <div className="h-12 w-12 rounded-[1.2rem] bg-indigo-500/10 text-indigo-400 flex items-center justify-center border border-indigo-500/20 shadow-inner">
+                <div className="h-12 w-12 rounded-[1.2rem] bg-indigo-500/10 text-indigo-600 flex items-center justify-center border border-indigo-500/20 shadow-inner dark:text-indigo-400">
                   <Brain className="h-6 w-6" />
                 </div>
                 <div>
-                  <h3 className="text-2xl font-black tracking-tight text-slate-100 uppercase italic">
+                  <h3 className="text-2xl font-black tracking-tight text-slate-900 uppercase italic dark:text-slate-100">
                     Form Penilaian Saya
                   </h3>
-                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mt-1">
+                  <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest mt-1 dark:text-slate-500">
                     Kontribusi Anda sangat berharga bagi tim rekrutmen.
                   </p>
                 </div>
@@ -663,7 +663,7 @@ export function InternalEvaluationSection({
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
                 <div className="lg:col-span-2 space-y-6">
-                  <label className="text-xs font-black text-slate-500 uppercase tracking-[0.25em] pl-4 border-l-4 border-indigo-500">
+                  <label className="text-xs font-black text-slate-600 uppercase tracking-[0.25em] pl-4 border-l-4 border-indigo-500 dark:text-slate-500">
                     HASIL EVALUASI INTERAL
                   </label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
@@ -677,7 +677,7 @@ export function InternalEvaluationSection({
                             "px-8 py-8 rounded-[2rem] border-2 text-sm font-black transition-all text-left flex items-center justify-between group relative overflow-hidden",
                             score === s
                               ? "border-emerald-500 bg-emerald-600 text-white shadow-2xl shadow-emerald-500/40 scale-[1.05]"
-                              : "border-slate-800 bg-slate-950/40 hover:border-emerald-500/30 text-slate-400",
+                              : "border-slate-200 bg-slate-100 hover:border-emerald-500/30 text-slate-700 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-400",
                           )}
                         >
                           <span className="uppercase tracking-tight leading-tight relative z-10">
@@ -698,12 +698,12 @@ export function InternalEvaluationSection({
                 </div>
 
                 <div className="md:col-span-2 space-y-5">
-                  <label className="text-xs font-black text-slate-500 uppercase tracking-[0.25em] pl-4 border-l-4 border-indigo-500">
+                  <label className="text-xs font-black text-slate-600 uppercase tracking-[0.25em] pl-4 border-l-4 border-indigo-500 dark:text-slate-400">
                     ANALISIS KUALITATIF (MIN. 15 KARAKTER)
                   </label>
                   <Textarea
                     placeholder="Tuliskan analisis kualitatif Anda mengenai kandidat ini secara detail..."
-                    className="min-h-[180px] rounded-[2.5rem] resize-none p-8 text-lg font-medium border-2 border-slate-800 bg-slate-950/60 text-slate-200 focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/5 transition-all shadow-inner"
+                    className="min-h-[180px] rounded-[2.5rem] resize-none p-8 text-lg font-medium border-2 border-slate-300 bg-slate-50 text-slate-900 placeholder:text-slate-500 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 transition-all shadow-sm dark:border-slate-700 dark:bg-slate-950/80 dark:text-slate-200 dark:placeholder:text-slate-500"
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
                   />
@@ -772,10 +772,10 @@ export function InternalEvaluationSection({
         <div className="space-y-12">
           <div className="flex items-center justify-between px-6">
             <div className="flex items-center gap-5">
-              <div className="h-12 w-12 rounded-[1.2rem] bg-indigo-500/10 text-indigo-400 flex items-center justify-center border border-indigo-500/20">
+              <div className="h-12 w-12 rounded-[1.2rem] bg-indigo-500/10 text-indigo-600 flex items-center justify-center border border-indigo-500/20 dark:text-indigo-400">
                 <MessageSquare className="h-6 w-6" />
               </div>
-              <h3 className="text-2xl font-black uppercase tracking-tighter text-slate-100 italic">
+              <h3 className="text-2xl font-black uppercase tracking-tighter text-slate-900 italic dark:text-slate-100">
                 Penilaian Tim
               </h3>
             </div>
@@ -783,7 +783,7 @@ export function InternalEvaluationSection({
               variant="outline"
               size="lg"
               onClick={() => setShowAllReviews(!showAllReviews)}
-              className="rounded-[1.5rem] font-black uppercase border-2 border-slate-800 text-slate-400 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all text-[10px] tracking-widest px-8"
+              className="rounded-[1.5rem] font-black uppercase border-2 border-slate-200 text-slate-700 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all text-[10px] tracking-widest px-8 dark:border-slate-800 dark:text-slate-400"
             >
               {showAllReviews ? (
                 <ChevronUp className="mr-2 h-4 w-4" />
@@ -799,14 +799,14 @@ export function InternalEvaluationSection({
               {myReview && (
                 <div className="space-y-8 px-6">
                   <div className="flex items-center gap-5">
-                    <div className="h-12 w-12 rounded-[1.2rem] bg-slate-900/80 text-indigo-400 flex items-center justify-center border border-indigo-500/20">
+                    <div className="h-12 w-12 rounded-[1.2rem] bg-slate-100 text-indigo-600 flex items-center justify-center border border-slate-200/70 dark:bg-slate-900/80 dark:text-indigo-400 dark:border-indigo-500/20">
                       <UserCheck className="h-6 w-6" />
                     </div>
                     <div>
-                      <h4 className="text-xl font-black uppercase tracking-tighter text-slate-100">
+                      <h4 className="text-xl font-black uppercase tracking-tighter text-slate-900 dark:text-slate-100">
                         Penilaian Saya
                       </h4>
-                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mt-1">
+                      <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest mt-1 dark:text-slate-500">
                         Hanya menampilkan penilaian Anda sendiri.
                       </p>
                     </div>
@@ -814,18 +814,18 @@ export function InternalEvaluationSection({
                   <div className="grid grid-cols-1 gap-5">
                     <div
                       key={myReview.reviewerUid}
-                      className="p-12 rounded-[4rem] bg-slate-950/20 border border-slate-800 shadow-2xl space-y-10 relative overflow-hidden ring-1 ring-white/5"
+                      className="p-12 rounded-[4rem] bg-white/90 border border-slate-200/80 shadow-2xl space-y-10 relative overflow-hidden ring-1 ring-slate-200/60 dark:bg-slate-950/20 dark:border-slate-800 dark:ring-white/5"
                     >
                       <div className="flex flex-col sm:flex-row items-start justify-between gap-8 relative z-10">
                         <div className="flex items-center gap-6">
-                          <div className="h-20 w-20 rounded-[1.8rem] bg-slate-900 border border-slate-800 shadow-inner flex items-center justify-center font-black text-3xl text-slate-600 group-hover:bg-indigo-600 group-hover:text-white transition-all duration-700">
+                          <div className="h-20 w-20 rounded-[1.8rem] bg-slate-100 border border-slate-200 shadow-inner flex items-center justify-center font-black text-3xl text-slate-900 group-hover:bg-indigo-600 group-hover:text-white transition-all duration-700 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-600">
                             {myReview.reviewerName.charAt(0)}
                           </div>
                           <div>
-                            <p className="font-black text-3xl uppercase tracking-tighter leading-tight text-slate-100 italic">
+                            <p className="font-black text-3xl uppercase tracking-tighter leading-tight text-slate-900 italic dark:text-slate-100">
                               {myReview.reviewerName}
                             </p>
-                            <div className="flex items-center gap-4 text-[10px] font-black text-slate-500 uppercase tracking-widest mt-2">
+                            <div className="flex items-center gap-4 text-[10px] font-black text-slate-600 uppercase tracking-widest mt-2 dark:text-slate-500">
                               <Badge
                                 variant="outline"
                                 className="border-indigo-500/30 text-indigo-400 font-black uppercase bg-indigo-500/5 px-4 py-1 rounded-full"
@@ -853,8 +853,8 @@ export function InternalEvaluationSection({
                         </Badge>
                       </div>
 
-                      <div className="text-2xl leading-[1.6] text-slate-300 font-medium bg-slate-900/40 p-12 rounded-[3.5rem] relative border-l-8 border-indigo-500/30 transition-all shadow-inner italic">
-                        <div className="absolute -top-4 left-10 px-6 bg-slate-950 text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em] border border-slate-800 rounded-full shadow-2xl">
+                      <div className="text-2xl leading-[1.6] text-slate-900 font-medium bg-slate-100 p-12 rounded-[3.5rem] relative border-l-8 border-indigo-500/30 transition-all shadow-inner italic dark:text-slate-300 dark:bg-slate-900/40">
+                        <div className="absolute -top-4 left-10 px-6 bg-white text-[10px] font-black text-indigo-600 uppercase tracking-[0.4em] border border-slate-200 rounded-full shadow-2xl dark:bg-slate-950 dark:text-indigo-400 dark:border-slate-800">
                           Catatan Analogi
                         </div>
                         &ldquo; {myReview.note} &rdquo;
@@ -885,14 +885,14 @@ export function InternalEvaluationSection({
 
               <div className="space-y-6 px-6">
                 <div className="flex items-center gap-5">
-                  <div className="h-12 w-12 rounded-[1.2rem] bg-slate-900/80 text-indigo-400 flex items-center justify-center border border-indigo-500/20">
+                  <div className="h-12 w-12 rounded-[1.2rem] bg-slate-100 text-indigo-600 flex items-center justify-center border border-slate-200/70 dark:bg-slate-900/80 dark:text-indigo-400 dark:border-indigo-500/20">
                     <MessageSquare className="h-6 w-6" />
                   </div>
                   <div>
-                    <h4 className="text-xl font-black uppercase tracking-tighter text-slate-100">
+                    <h4 className="text-xl font-black uppercase tracking-tighter text-slate-900 dark:text-slate-100">
                       Penilaian Tim
                     </h4>
-                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mt-1">
+                    <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest mt-1 dark:text-slate-500">
                       Hanya menampilkan penilaian evaluator lain.
                     </p>
                   </div>
@@ -902,18 +902,18 @@ export function InternalEvaluationSection({
                   sortedOtherReviews.map((review) => (
                     <div
                       key={review.reviewerUid}
-                      className="p-12 rounded-[4rem] bg-slate-950/20 border border-slate-800 shadow-2xl space-y-10 group transition-all duration-700 hover:bg-slate-950/40 hover:border-indigo-500/20 relative overflow-hidden ring-1 ring-white/5"
+                      className="p-12 rounded-[4rem] bg-white/90 border border-slate-200/80 shadow-2xl space-y-10 group transition-all duration-700 hover:bg-slate-100 hover:border-indigo-500/20 relative overflow-hidden ring-1 ring-slate-200/60 dark:bg-slate-950/20 dark:border-slate-800 dark:ring-white/5"
                     >
                       <div className="flex flex-col sm:flex-row items-start justify-between gap-8 relative z-10">
                         <div className="flex items-center gap-6">
-                          <div className="h-20 w-20 rounded-[1.8rem] bg-slate-900 border border-slate-800 shadow-inner flex items-center justify-center font-black text-3xl text-slate-600 group-hover:bg-indigo-600 group-hover:text-white transition-all duration-700">
+                          <div className="h-20 w-20 rounded-[1.8rem] bg-slate-100 border border-slate-200 shadow-inner flex items-center justify-center font-black text-3xl text-slate-900 group-hover:bg-indigo-600 group-hover:text-white transition-all duration-700 dark:bg-slate-900 dark:border-slate-800 dark:text-slate-300">
                             {review.reviewerName.charAt(0)}
                           </div>
                           <div>
-                            <p className="font-black text-3xl uppercase tracking-tighter leading-tight text-slate-100 group-hover:translate-x-1 transition-transform duration-500 italic">
+                            <p className="font-black text-3xl uppercase tracking-tighter leading-tight text-slate-900 group-hover:translate-x-1 transition-transform duration-500 italic dark:text-slate-100">
                               {review.reviewerName}
                             </p>
-                            <div className="flex items-center gap-4 text-[10px] font-black text-slate-500 uppercase tracking-widest mt-2">
+                            <div className="flex items-center gap-4 text-[10px] font-black text-slate-600 uppercase tracking-widest mt-2 dark:text-slate-500">
                               <Badge
                                 variant="outline"
                                 className="border-indigo-500/30 text-indigo-400 font-black uppercase bg-indigo-500/5 px-4 py-1 rounded-full"
@@ -941,8 +941,8 @@ export function InternalEvaluationSection({
                         </Badge>
                       </div>
 
-                      <div className="text-2xl leading-[1.6] text-slate-300 font-medium bg-slate-900/40 p-12 rounded-[3.5rem] relative border-l-8 border-indigo-500/30 group-hover:bg-slate-900/60 transition-all shadow-inner italic">
-                        <div className="absolute -top-4 left-10 px-6 bg-slate-950 text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em] border border-slate-800 rounded-full shadow-2xl">
+                      <div className="text-2xl leading-[1.6] text-slate-900 font-medium bg-slate-100 p-12 rounded-[3.5rem] relative border-l-8 border-indigo-500/30 group-hover:bg-slate-100 transition-all shadow-inner italic dark:text-slate-300 dark:bg-slate-900/40">
+                        <div className="absolute -top-4 left-10 px-6 bg-white text-[10px] font-black text-indigo-600 uppercase tracking-[0.4em] border border-slate-200 rounded-full shadow-2xl dark:bg-slate-950 dark:text-indigo-400 dark:border-slate-800">
                           Catatan Analogi
                         </div>
                         &ldquo; {review.note} &rdquo;

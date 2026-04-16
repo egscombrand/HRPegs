@@ -1120,11 +1120,21 @@ function ApplicationCard({
                   : "Terima kasih telah berpartisipasi dalam proses seleksi. Saat ini lamaran Anda sedang dalam tahap evaluasi lanjutan oleh tim kami."}
               </p>
               {application.offerStatus !== "rejected" && (
-                <p>
-                  Kami akan memberikan informasi perkembangan selanjutnya
-                  melalui portal ini atau email apabila terdapat pembaruan
-                  status. Terima kasih atas kesabaran dan minat Anda.
-                </p>
+                <>
+                  <p>
+                    Lamaran Anda telah kami terima dengan baik dan saat ini
+                    sedang dalam proses evaluasi oleh tim rekrutmen kami. Kami
+                    sedang meninjau kesesuaian profil dan hasil tahapan seleksi
+                    Anda untuk menentukan proses selanjutnya.
+                  </p>
+                  <p>
+                    Mohon menunggu informasi berikutnya yang akan kami sampaikan
+                    melalui portal ini. Kami akan memberikan informasi
+                    perkembangan selanjutnya melalui portal ini atau email
+                    apabila terdapat pembaruan status. Terima kasih atas
+                    kesabaran dan minat Anda.
+                  </p>
+                </>
               )}
             </div>
           </div>

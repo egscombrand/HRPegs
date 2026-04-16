@@ -3,13 +3,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import type { JobApplicationStatus } from "@/lib/types";
-import {
-  Check,
-  Users,
-  Award,
-  Search,
-  CheckCircle,
-} from "lucide-react";
+import { Check, Users, Award, Search, CheckCircle } from "lucide-react";
 
 // The visual steps for the candidate, in order.
 const VISUAL_STEPS = [
@@ -31,7 +25,8 @@ function mapStage(
   ];
 
   if (screeningStages.includes(status)) return "screening";
-  if (status === "interview" || status === "waiting_evaluation") return "interview";
+  if (status === "interview" || status === "waiting_evaluation")
+    return "interview";
   if (status === "offered") return "offering";
   if (status === "hired") return "hired";
 
@@ -69,7 +64,7 @@ export function ApplicationProgressStepper({
                       ? "bg-primary border-primary"
                       : isActive
                         ? "bg-primary/10 border-primary"
-                        : "bg-card border-border",
+                        : "bg-slate-50 border-slate-200 dark:bg-card dark:border-border",
                   )}
                 >
                   {isCompleted ? (
@@ -78,7 +73,9 @@ export function ApplicationProgressStepper({
                     <step.icon
                       className={cn(
                         "h-5 w-5",
-                        isActive ? "text-primary" : "text-muted-foreground",
+                        isActive
+                          ? "text-primary"
+                          : "text-slate-600 dark:text-muted-foreground",
                       )}
                     />
                   )}
@@ -88,7 +85,7 @@ export function ApplicationProgressStepper({
                     "mt-2 text-xs font-medium transition-colors duration-300",
                     isCompleted || isActive
                       ? "text-primary"
-                      : "text-muted-foreground",
+                      : "text-slate-700 dark:text-muted-foreground",
                   )}
                 >
                   {step.label}

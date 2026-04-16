@@ -122,11 +122,11 @@ const InfoRow = ({
   value: React.ReactNode;
 }) => (
   <div className="flex items-start gap-3 rounded-lg border bg-card p-3">
-    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted text-muted-foreground">
+    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted text-slate-600">
       {icon}
     </div>
     <div>
-      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      <div className="text-xs font-medium text-slate-600">{label}</div>
       <div className="text-sm font-semibold">{value || "-"}</div>
     </div>
   </div>
@@ -535,7 +535,7 @@ export default function ApplicationDetailPage() {
         status: "loading",
         text: "Memuat...",
         result: null,
-        color: "text-muted-foreground",
+        color: "text-slate-500",
       };
     }
     if (!assessmentSessions || assessmentSessions.length === 0) {
@@ -640,10 +640,10 @@ export default function ApplicationDetailPage() {
         offeringStages.includes(application.candidateStatus)) ||
       (application.offerStatus &&
         offeringStages.includes(application.offerStatus)) ||
-      (application as any).candidateStage && 
-        offeringStages.includes((application as any).candidateStage) ||
-      (application as any).currentStage &&
-        offeringStages.includes((application as any).currentStage)
+      ((application as any).candidateStage &&
+        offeringStages.includes((application as any).candidateStage)) ||
+      ((application as any).currentStage &&
+        offeringStages.includes((application as any).currentStage))
     );
   }, [application, isHRD]);
 
@@ -758,7 +758,7 @@ export default function ApplicationDetailPage() {
             <h1 className="text-2xl font-bold tracking-tight">
               Anda tidak memiliki akses
             </h1>
-            <p className="text-muted-foreground max-w-md mx-auto">
+            <p className="text-slate-700 max-w-md mx-auto">
               Halaman ini hanya dapat diakses oleh HRD, Super Admin, atau
               anggota tim yang ditugaskan untuk rekrutmen ini.
             </p>
@@ -816,13 +816,14 @@ export default function ApplicationDetailPage() {
                           {application.jobPosition}
                         </span>
                       </CardDescription>
-                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-700">
                         <span className="flex items-center gap-2">
-                          <Mail className="h-4 w-4" />{" "}
+                          <Mail className="h-4 w-4 text-slate-600" />{" "}
                           {application.candidateEmail}
                         </span>
                         <span className="flex items-center gap-2">
-                          <Phone className="h-4 w-4" /> {profile.phone}
+                          <Phone className="h-4 w-4 text-slate-600" />{" "}
+                          {profile.phone}
                         </span>
                       </div>
                     </div>
@@ -841,7 +842,7 @@ export default function ApplicationDetailPage() {
                       </Badge>
                     )}
                     {application.submittedAt && (
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-sm text-slate-700">
                         Applied on{" "}
                         {format(
                           application.submittedAt.toDate(),
@@ -875,7 +876,7 @@ export default function ApplicationDetailPage() {
 
             <div className="grid grid-cols-1 xl:grid-cols-[200px_1fr] gap-10 items-start pt-4">
               <div className="xl:sticky xl:top-24 hidden xl:block">
-                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 mb-4 px-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500/40 mb-4 px-3">
                   Navigator Profil
                 </p>
                 <CandidateStepNav
@@ -991,7 +992,8 @@ export default function ApplicationDetailPage() {
                         Kandidat belum mencapai tahap pasca wawancara.
                       </CardTitle>
                       <CardDescription>
-                        Tab ini akan aktif setelah kandidat memasuki proses wawancara.
+                        Tab ini akan aktif setelah kandidat memasuki proses
+                        wawancara.
                       </CardDescription>
                     </CardHeader>
                   </Card>
@@ -1017,7 +1019,7 @@ export default function ApplicationDetailPage() {
                     <>
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                         <div>
-                          <p className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+                          <p className="text-[10px] uppercase tracking-[0.3em] text-slate-600">
                             Offering
                           </p>
                           <h2 className="text-xl font-semibold">
@@ -1028,7 +1030,7 @@ export default function ApplicationDetailPage() {
                           <Badge variant="secondary" className="uppercase">
                             {application.offerStatus ?? "draft"}
                           </Badge>
-                          <span className="text-sm text-muted-foreground">
+                          <span className="text-sm text-slate-600">
                             {hasOfferData
                               ? "Penawaran tersedia untuk kandidat"
                               : "Belum ada penawaran kerja dibuat"}
@@ -1108,7 +1110,7 @@ export default function ApplicationDetailPage() {
                                     <p className="text-sm font-semibold text-slate-900">
                                       Usulan Negosiasi Kandidat
                                     </p>
-                                    <p className="text-sm text-muted-foreground">
+                                    <p className="text-sm text-slate-600">
                                       Detail gaji yang diminta kandidat dan
                                       catatan.
                                     </p>
@@ -1203,7 +1205,7 @@ export default function ApplicationDetailPage() {
                                   </DialogHeader>
                                   <div className="space-y-4 py-4">
                                     <div>
-                                      <label className="text-sm font-medium text-muted-foreground">
+                                      <label className="text-sm font-medium text-slate-600">
                                         Gaji counter
                                       </label>
                                       <Input
@@ -1217,7 +1219,7 @@ export default function ApplicationDetailPage() {
                                       />
                                     </div>
                                     <div>
-                                      <label className="text-sm font-medium text-muted-foreground">
+                                      <label className="text-sm font-medium text-slate-600">
                                         Catatan untuk kandidat
                                       </label>
                                       <Textarea

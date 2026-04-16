@@ -1,7 +1,7 @@
-'use client';
-    
-import { useState, useEffect, useCallback } from 'react';
-import { getAuth } from 'firebase/auth';
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { getAuth } from "firebase/auth";
 import {
   DocumentReference,
   onSnapshot,
@@ -9,9 +9,9 @@ import {
   FirestoreError,
   DocumentSnapshot,
   getDoc,
-} from 'firebase/firestore';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
+} from "firebase/firestore";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 /** Utility type to add an 'id' field to a given type T. */
 type WithId<T> = T & { id: string };
@@ -22,7 +22,7 @@ type WithId<T> = T & { id: string };
  */
 export interface UseDocResult<T> {
   data: WithId<T> | null; // Document data with ID, or null.
-  isLoading: boolean;       // True if loading.
+  isLoading: boolean; // True if loading.
   error: FirestoreError | Error | null; // Error object, or null.
   mutate: () => void; // Function to manually refetch data.
 }
@@ -30,7 +30,7 @@ export interface UseDocResult<T> {
 /**
  * React hook to subscribe to a single Firestore document in real-time.
  * Handles nullable references.
- * 
+ *
  * IMPORTANT! YOU MUST MEMOIZE the inputted memoizedTargetRefOrQuery or BAD THINGS WILL HAPPEN
  * use useMemo to memoize it per React guidence.  Also make sure that it's dependencies are stable
  * references
@@ -42,7 +42,10 @@ export interface UseDocResult<T> {
  * @returns {UseDocResult<T>} Object with data, isLoading, error.
  */
 export function useDoc<T = any>(
-  memoizedDocRef: (DocumentReference<DocumentData> & {__memo?: boolean}) | null | undefined,
+  memoizedDocRef:
+    | (DocumentReference<DocumentData> & { __memo?: boolean })
+    | null
+    | undefined,
 ): UseDocResult<T> {
   type StateDataType = WithId<T> | null;
 
@@ -55,21 +58,22 @@ export function useDoc<T = any>(
     setIsLoading(true);
     try {
       const docSnap = await getDoc(memoizedDocRef);
-       if (docSnap.exists()) {
-          setData({ ...(docSnap.data() as T), id: docSnap.id });
-        } else {
-          setData(null);
-        }
+      if (docSnap.exists()) {
+        setData({ ...(docSnap.data() as T), id: docSnap.id });
+      } else {
+        setData(null);
+      }
     } catch (e: any) {
-       setError(e);
+      setError(e);
     } finally {
-        setIsLoading(false);
+      setIsLoading(false);
     }
   }, [memoizedDocRef]);
 
-
   useEffect(() => {
     if (!memoizedDocRef) {
+      setData(null);
+      setError(null);
       setIsLoading(false);
       return;
     }
@@ -91,17 +95,17 @@ export function useDoc<T = any>(
       (error: FirestoreError) => {
         try {
           const auth = getAuth();
-          if (error.code === 'permission-denied' && !auth.currentUser) {
+          if (error.code === "permission-denied" && !auth.currentUser) {
             setIsLoading(false);
             return; // Suppress error during logout.
           }
         } catch (e) {
-            // Firebase app is likely unmounted, safe to ignore.
-            return;
+          // Firebase app is likely unmounted, safe to ignore.
+          return;
         }
 
         const contextualError = new FirestorePermissionError({
-          operation: 'get',
+          operation: "get",
           path: memoizedDocRef.path,
         });
 
@@ -110,15 +114,15 @@ export function useDoc<T = any>(
         setIsLoading(false);
 
         if (contextualError.request.auth) {
-          errorEmitter.emit('permission-error', contextualError);
+          errorEmitter.emit("permission-error", contextualError);
         }
-      }
+      },
     );
 
     return () => unsubscribe();
   }, [memoizedDocRef]);
 
-  if(memoizedDocRef && (memoizedDocRef as any).__memo !== true) {
+  if (memoizedDocRef && (memoizedDocRef as any).__memo !== true) {
     // This check helps prevent infinite loops by ensuring the docRef is memoized.
     // console.warn('useDoc detected a non-memoized docRef. This can lead to performance issues. Wrap the doc() call in useMemoFirebase().', memoizedDocRef);
   }
