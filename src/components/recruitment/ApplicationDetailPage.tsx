@@ -171,6 +171,7 @@ export default function ApplicationDetailPage() {
       contractEndDate: offerData.contractEndDate
         ? Timestamp.fromDate(offerData.contractEndDate)
         : null,
+      offerSections: offerData.offerSections,
       offerDescription: offerData.offerDescription,
       workDays: offerData.workDays,
       offerNotes: offerData.offerNotes,
@@ -220,6 +221,7 @@ export default function ApplicationDetailPage() {
       contractEndDate: offerData.contractEndDate
         ? Timestamp.fromDate(offerData.contractEndDate)
         : null,
+      offerSections: offerData.offerSections,
       offerDescription: offerData.offerDescription,
       workDays: offerData.workDays,
       offerNotes: offerData.offerNotes,
@@ -379,7 +381,7 @@ export default function ApplicationDetailPage() {
                     <Avatar className="h-16 w-16 border">
                       <AvatarImage
                         src={
-                          profile.photoUrl ||
+                          application.candidatePhotoUrl ||
                           `https://picsum.photos/seed/${application.candidateUid}/100/100`
                         }
                         alt={profile.fullName}
@@ -516,6 +518,7 @@ export default function ApplicationDetailPage() {
               <div className="lg:sticky lg:top-24 space-y-6">
                 <CandidateDocumentsCard
                   application={application}
+                  profile={profile}
                   onVerificationChange={mutateApplication}
                 />
                 <ApplicationNotes

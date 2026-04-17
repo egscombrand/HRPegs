@@ -302,7 +302,7 @@ service cloud.firestore {
         }
         function isInternalStatusUpdate() {
             let changedKeys = request.resource.data.diff(resource.data).affectedKeys();
-            let allowedKeys = ['status', 'candidateStatus', 'decisionAt', 'updatedAt', 'personalityTestAssignedAt', 'cvVerified', 'ijazahVerified', 'timeline', 'interviews', 'allPanelistIds', 'offerStatus', 'offeredSalary', 'probationDurationMonths', 'contractStartDate', 'contractDurationMonths', 'contractEndDate', 'offerNotes', 'offerDescription', 'workDays', 'internalAccessEnabled', 'internalReviewSummary', 'postInterviewEvaluation'];
+            let allowedKeys = ['status', 'candidateStatus', 'decisionAt', 'updatedAt', 'personalityTestAssignedAt', 'cvVerified', 'ijazahVerified', 'timeline', 'interviews', 'allPanelistIds', 'offerStatus', 'offeredSalary', 'probationDurationMonths', 'contractStartDate', 'contractDurationMonths', 'contractEndDate', 'offerNotes', 'offerDescription', 'workDays', 'internalAccessEnabled', 'internalReviewSummary', 'postInterviewEvaluation', 'masterTemplateId', 'offerLetterNumber'];
             let hrdOnlyKeys = ['internalReviewConfig', 'recruitmentInternalDecision'];
             
             if (changedKeys.hasAny(hrdOnlyKeys)) {
@@ -518,6 +518,17 @@ service cloud.firestore {
       allow get: if isHrd() || isSuperAdmin() || (isSignedIn() && evaluationId.split('_')[0] == request.auth.uid) || (isSignedIn() && isSupervisor(evaluationId.split('_')[0]));
       allow create, update: if isHrd() || isSuperAdmin() || (isSignedIn() && isSupervisor(request.resource.data.internUid));
       allow delete: if isSuperAdmin();
+    }
+
+    /**
+     * /recruitment_offering_templates/{templateId}
+     * - These are the master templates for job offers.
+     * - Super Admin and HRD can manage these.
+     * - Signed-in recruitment staff (internal) can read active ones.
+     */
+    match /recruitment_offering_templates/{templateId} {
+      allow read: if isInternal();
+      allow write: if isHrd() || isSuperAdmin() || getUserData().role in ['hrd', 'super-admin'];
     }
   }
 }

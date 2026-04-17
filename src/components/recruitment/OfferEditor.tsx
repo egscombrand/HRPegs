@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useFieldArray, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { addMonths, format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
@@ -37,8 +37,96 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { GoogleDatePicker } from "@/components/ui/google-date-picker";
 import type { Job, JobApplication } from "@/lib/types";
+import type { OfferFormData } from "./OfferDialog";
 export type { OfferFormData } from "./OfferDialog";
 import { offerSchema } from "./OfferDialog";
+import { RichTextEditor } from "@/components/ui/RichTextEditor";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { useFirestore } from "@/firebase";
+import { useAuth } from "@/providers/auth-provider";
+import type { OfferingTemplate } from "@/lib/types";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { 
+  FileCheck,
+  FileText, 
+  UserCheck, 
+  Leaf, 
+  Globe,
+  GraduationCap,
+  PlusCircle,
+  Trash2,
+  ChevronUp,
+  ChevronDown,
+  Layout,
+  Download
+} from "lucide-react";
+import { generateOfferingPDF } from "@/lib/recruitment/pdf-generator";
+
+const OFFER_TEMPLATES = {
+  internship: `
+    <p>Halo [Nama Kandidat],</p>
+    <p>Kami sangat berkesan dengan kualifikasi dan pengalaman Anda di bidang <strong>[Posisi]</strong>. Oleh karena itu, kami dengan senang hati menawarkan posisi <strong>Magang (Internship)</strong> di [Nama Perusahaan].</p>
+    <p><strong>Ketentuan Umum:</strong></p>
+    <ul>
+      <li>Durasi Magang: [Durasi] bulan.</li>
+      <li>Lokasi: [Lokasi].</li>
+      <li>Jam Kerja: [Jam Kerja].</li>
+    </ul>
+    <p><strong>Uang Saku & Fasilitas:</strong></p>
+    <ul>
+      <li>Uang saku bulanan sebesar Rp [Gaji].</li>
+      <li>Surat keterangan magang (setelah periode selesai).</li>
+      <li>Akses ke training internal.</li>
+    </ul>
+    <p>Silakan tinjau penawaran ini dan berikan respons Anda melalui portal ini.</p>
+  `,
+  fulltime: `
+    <p>Halo [Nama Kandidat],</p>
+    <p>Selamat! Kami senang dapat menawarkan posisi <strong>Karyawan Full-time</strong> sebagai <strong>[Posisi]</strong> di [Nama Perusahaan]. Kami percaya kontribusi Anda akan menjadi aset berharga bagi tim kami.</p>
+    <p><strong>Ketentuan Pekerjaan:</strong></p>
+    <ul>
+      <li>Tanggal Mulai: [Tanggal].</li>
+      <li>Masa Percobaan: [Masa Probation] bulan.</li>
+      <li>Waktu Kerja: [Hari Kerja], [Jam Kerja].</li>
+    </ul>
+    <p><strong>Kompensasi & Benefit:</strong></p>
+    <ul>
+      <li>Gaji bulanan: Rp [Gaji] (Gross/Nett).</li>
+      <li>BPJS Kesehatan & Ketenagakerjaan.</li>
+      <li>Tunjangan Hari Raya (THR).</li>
+      <li>Cuti Tahunan sesuai kebijakan perusahaan.</li>
+    </ul>
+    <p>Kami sangat menantikan kehadiran Anda sebagai bagian dari tim kami.</p>
+  `,
+  greenskills: `
+    <p>Halo [Nama Kandidat],</p>
+    <p>Kami dengan senang hati mengajak Anda bergabung dalam inisiatif <strong>GreenSkill Program</strong> sebagai <strong>[Posisi]</strong>. Program ini bertujuan untuk mengembangkan kompetensi di bidang lingkungan dan keberlanjutan.</p>
+    <p><strong>Detail Program:</strong></p>
+    <ul>
+      <li>Fokus: Keberlanjutan Lingkungan.</li>
+      <li>Kompensasi: Rp [Gaji].</li>
+      <li>Sertifikasi: Sertifikat Kompetensi GreenSkill.</li>
+    </ul>
+    <p>Mari berkontribusi untuk masa depan yang lebih hijau.</p>
+  `,
+  egs: `
+    <p>Halo [Nama Kandidat],</p>
+    <p>Terkait dengan evaluasi yang telah dilakukan, kami menawarkan posisi dalam tim <strong>EGS (Environmental, Global, Social)</strong> sebagai <strong>[Posisi]</strong>.</p>
+    <p><strong>Ketentuan Utama:</strong></p>
+    <ul>
+      <li>Gaji: Rp [Gaji].</li>
+      <li>Cakupan Kerja: Global & Social Impact.</li>
+      <li>Lokasi: [Lokasi].</li>
+    </ul>
+    <p>Kami yakin passion Anda sejalan dengan nilai-nilai EGS kami.</p>
+  `,
+};
 
 interface OfferEditorProps {
   id?: string;
@@ -73,6 +161,11 @@ export function OfferEditor({
   isSavingDraft = false,
   isSendingOffer = false,
 }: OfferEditorProps) {
+  const [masterTemplates, setMasterTemplates] = useState<OfferingTemplate[]>([]);
+  const [selectedMasterId, setSelectedMasterId] = useState<string>("");
+  const firestore = useFirestore();
+  const { userProfile } = useAuth();
+
   const isEditable = !["sent", "accepted", "rejected"].includes(
     application.offerStatus ?? "",
   );
@@ -94,6 +187,15 @@ export function OfferEditor({
           application.contractStartDate?.toDate() ?? new Date(),
           application.contractDurationMonths ?? 12,
         ),
+      offerSections: application.offerSections?.length
+        ? application.offerSections
+        : [
+            {
+              title: "Isi Penawaran / Ketentuan Penawaran",
+              content:
+                application.offerDescription || application.offerNotes || "",
+            },
+          ],
       probationDurationMonths:
         application.probationDurationMonths ??
         (job.statusJob === "fulltime" ? 3 : null),
@@ -119,9 +221,61 @@ export function OfferEditor({
 
   const handleConfirmSend = async () => {
     if (!previewData) return;
-    await onSendOffer(previewData);
+    await onSendOffer({
+      ...previewData,
+      masterTemplateId: selectedMasterId || null,
+      offerLetterNumber: `OL/${(masterTemplates.find(t => t.id === selectedMasterId)?.brandName || "ENV").substring(0,3).toUpperCase()}/${format(new Date(), "yyyyMMdd")}/${application.id?.substring(0,4)}`
+    });
     setIsPreviewOpen(false);
     setHasConfirmedPreview(false);
+  };
+
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      try {
+        const q = query(
+          collection(firestore, "recruitment_offering_templates"),
+          where("isActive", "==", true)
+        );
+        const snapshot = await getDocs(q);
+        const templates = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as OfferingTemplate));
+        setMasterTemplates(templates);
+      } catch (err) {
+        console.error("Error fetching master templates:", err);
+      }
+    };
+    fetchTemplates();
+  }, [firestore]);
+
+  const applyMasterTemplate = (templateId: string) => {
+    const template = masterTemplates.find(t => t.id === templateId);
+    if (!template) return;
+
+    setSelectedMasterId(templateId);
+    
+    // Process placeholders
+    let content = template.htmlContent;
+    const data: any = {
+      candidateName,
+      jobTitle: application.jobPosition,
+      brandName: template.brandName,
+      startDate: startDate ? format(startDate, "dd MMMM yyyy", { locale: idLocale }) : "[Tanggal Mulai]",
+      contractEndDate: contractEndDate ? format(contractEndDate, "dd MMMM yyyy", { locale: idLocale }) : "[Tanggal Selesai]",
+      salary: formatSalary(watch("offeredSalary")),
+      signerName: userProfile?.fullName || "[Signer Name]",
+      signerTitle: "HR Manager",
+      letterNumber: `OL/${template.brandName.substring(0,3).toUpperCase()}/${format(new Date(), "yyyyMMdd")}/${application.id?.substring(0,4)}`,
+      responseDeadline: format(addMonths(new Date(), 1), "dd MMMM yyyy", { locale: idLocale })
+    };
+
+    Object.keys(data).forEach(key => {
+      const regex = new RegExp(`{{${key}}}`, "g");
+      content = content.replace(regex, data[key]);
+    });
+
+    setValue("offerSections.0.content", content);
+    setValue("offerSections.0.title", "Ketentuan Penawaran (Master Template)");
+    setValue("offerNotes", `Menggunakan Master Template: ${template.templateName}`);
   };
 
   useEffect(() => {
@@ -136,6 +290,15 @@ export function OfferEditor({
           application.contractStartDate?.toDate() ?? new Date(),
           application.contractDurationMonths ?? 12,
         ),
+      offerSections: application.offerSections?.length
+        ? application.offerSections
+        : [
+            {
+              title: "Isi Penawaran / Ketentuan Penawaran",
+              content:
+                application.offerDescription || application.offerNotes || "",
+            },
+          ],
       probationDurationMonths:
         application.probationDurationMonths ??
         (job.statusJob === "fulltime" ? 3 : null),
@@ -144,6 +307,28 @@ export function OfferEditor({
       offerNotes: application.offerNotes ?? "",
     });
   }, [application, defaultStartTime, job.statusJob, reset]);
+
+  const applyTemplate = (templateKey: keyof typeof OFFER_TEMPLATES) => {
+    let content = OFFER_TEMPLATES[templateKey];
+
+    content = content
+      .replace(/\[Nama Kandidat\]/g, candidateName)
+      .replace(/\[Posisi\]/g, application.jobPosition || "")
+      .replace(/\[Nama Perusahaan\]/g, job.brandName || "Environesia")
+      .replace(/\[Gaji\]/g, formatSalary(watch("offeredSalary")))
+      .replace(/\[Durasi\]/g, watch("contractDurationMonths").toString())
+      .replace(/\[Masa Probation\]/g, (watch("probationDurationMonths") || 3).toString())
+      .replace(/\[Hari Kerja\]/g, watch("workDays") || "Senin - Jumat")
+      .replace(/\[Jam Kerja\]/g, watch("startTime") || "09:00")
+      .replace(/\[Lokasi\]/g, job.location || "Kantor")
+      .replace(
+        /\[Tanggal\]/g,
+        startDate ? format(startDate, "dd MMMM yyyy", { locale: idLocale }) : ""
+      );
+
+    setValue("offerSections.0.content", content);
+    setValue("offerSections.0.title", "Isi Penawaran / Ketentuan Penawaran");
+  };
 
   useEffect(() => {
     if (startDate && duration > 0) {
@@ -203,7 +388,7 @@ export function OfferEditor({
               <div className="flex justify-between">
                 <span>Divisi</span>
                 <span className="font-medium capitalize">
-                  {job.department ?? job.location ?? "-"}
+                  {job.division ?? job.location ?? "-"}
                 </span>
               </div>
             </div>
@@ -358,6 +543,107 @@ export function OfferEditor({
               />
             )}
 
+            <div className="space-y-6 rounded-3xl border border-primary/20 bg-primary/5 p-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-base font-bold text-primary">Isi & Ketentuan Penawaran</p>
+                  <p className="text-sm text-muted-foreground">
+                    Tulis detail penawaran secara profesional atau gunakan template yang tersedia.
+                  </p>
+                </div>
+              </div>
+
+              {isEditable && masterTemplates.length > 0 && (
+                <div className="space-y-3 p-4 border rounded-2xl bg-background shadow-sm">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Layout className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-semibold">Gunakan Master Template Perusahaan</span>
+                  </div>
+                  <Select onValueChange={applyMasterTemplate} value={selectedMasterId}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Pilih Master Template Resmi..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {masterTemplates.map(t => (
+                        <SelectItem key={t.id} value={t.id!}>
+                          {t.templateName} ({t.brandName})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                    <FileCheck className="h-3 w-3" /> 
+                    Menggunakan master template memastikan output PDF 1:1 dengan format resmi perusahaan.
+                  </p>
+                </div>
+              )}
+
+              {isEditable && (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 bg-background hover:bg-primary/10"
+                    onClick={() => applyTemplate("fulltime")}
+                  >
+                    <UserCheck className="h-4 w-4 text-blue-500" />
+                    Template Fulltime
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 bg-background hover:bg-primary/10"
+                    onClick={() => applyTemplate("internship")}
+                  >
+                    <GraduationCap className="h-4 w-4 text-amber-500" />
+                    Template Internship
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 bg-background hover:bg-primary/10"
+                    onClick={() => applyTemplate("greenskills")}
+                  >
+                    <Leaf className="h-4 w-4 text-emerald-500" />
+                    Template GreenSkill
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 bg-background hover:bg-primary/10"
+                    onClick={() => applyTemplate("egs")}
+                  >
+                    <Globe className="h-4 w-4 text-indigo-500" />
+                    Template EGS
+                  </Button>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="offerSections.0.content"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormControl>
+                        <RichTextEditor
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder="Tuliskan detail informasi penawaran di sini..."
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <input type="hidden" {...form.register("offerSections.0.title")} value="Isi Penawaran / Ketentuan Penawaran" />
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <FormField
                 control={form.control}
@@ -464,6 +750,21 @@ export function OfferEditor({
               <Badge className="self-start bg-primary/10 text-primary">
                 Preview – Belum Dikirim
               </Badge>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="gap-2"
+                onClick={() => {
+                  if (previewData?.offerSections?.[0]?.content) {
+                    generateOfferingPDF(
+                      previewData.offerSections[0].content, 
+                      `Offering_${candidateName.replace(/\s+/g, '_')}.pdf`
+                    );
+                  }
+                }}
+              >
+                <Download className="h-4 w-4" /> Download PDF
+              </Button>
             </div>
           </DialogHeader>
 
@@ -535,24 +836,18 @@ export function OfferEditor({
                   <p className="text-sm text-muted-foreground">
                     Ringkasan Penawaran
                   </p>
-                  <div className="mt-4 space-y-4 text-sm text-muted-foreground">
-                    <div>
-                      <p className="font-semibold text-foreground">
-                        Deskripsi Penawaran
-                      </p>
-                      <p className="mt-2 text-sm text-foreground">
-                        {previewData?.offerDescription ||
-                          "Tidak ada deskripsi tambahan."}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-foreground">
-                        Catatan HRD
-                      </p>
-                      <p className="mt-2 text-sm text-foreground">
-                        {previewData?.offerNotes || "Tidak ada catatan."}
-                      </p>
-                    </div>
+                  <div className="mt-4 space-y-6 text-sm">
+                    {previewData?.offerSections?.map((section: { title: string; content: string }, index: number) => (
+                      <div key={index} className="rounded-2xl border border-muted/50 bg-background p-4">
+                        <p className="font-bold text-primary mb-3">
+                          {section.title}
+                        </p>
+                        <div 
+                          className="prose prose-sm max-w-none dark:prose-invert"
+                          dangerouslySetInnerHTML={{ __html: section.content }}
+                        />
+                      </div>
+                    ))}
                     <div className="rounded-2xl border border-muted/60 bg-background p-4">
                       <p className="text-sm text-muted-foreground">
                         Estimasi Pengiriman

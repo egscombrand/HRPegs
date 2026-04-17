@@ -26,6 +26,7 @@ const RECRUITMENT_MENU_ITEMS: MenuGroup = {
         { key: 'recruitment.dashboard', href: '/admin/hrd/dashboard-rekrutmen', label: 'Dashboard Rekrutmen', icon: createElement(Users) },
         { key: 'recruitment.jobs', href: '/admin/jobs', label: 'Job Postings', icon: createElement(Briefcase) },
         { key: 'recruitment.applications', href: '/admin/recruitment', label: 'Manajemen Aplikasi', icon: createElement(FolderKanban) },
+        { key: 'recruitment.templates', href: '/admin/recruitment/templates', label: 'Master Template Offering', icon: createElement(FileText) },
         { key: 'recruitment.assessments', href: '/admin/hrd/assessments', label: 'Assessments', icon: createElement(ClipboardCheck) },
     ]
 };

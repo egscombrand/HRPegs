@@ -42,6 +42,73 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { RichTextEditor } from "@/components/ui/RichTextEditor";
+import { 
+  UserCheck, 
+  Leaf, 
+  Globe,
+  GraduationCap
+} from "lucide-react";
+
+const OFFER_TEMPLATES = {
+  internship: `
+    <p>Halo [Nama Kandidat],</p>
+    <p>Kami sangat berkesan dengan kualifikasi dan pengalaman Anda di bidang <strong>[Posisi]</strong>. Oleh karena itu, kami dengan senang hati menawarkan posisi <strong>Magang (Internship)</strong> di [Nama Perusahaan].</p>
+    <p><strong>Ketentuan Umum:</strong></p>
+    <ul>
+      <li>Durasi Magang: [Durasi] bulan.</li>
+      <li>Lokasi: [Lokasi].</li>
+      <li>Jam Kerja: [Jam Kerja].</li>
+    </ul>
+    <p><strong>Uang Saku & Fasilitas:</strong></p>
+    <ul>
+      <li>Uang saku bulanan sebesar Rp [Gaji].</li>
+      <li>Surat keterangan magang (setelah periode selesai).</li>
+      <li>Akses ke training internal.</li>
+    </ul>
+    <p>Silakan tinjau penawaran ini dan berikan respons Anda melalui portal ini.</p>
+  `,
+  fulltime: `
+    <p>Halo [Nama Kandidat],</p>
+    <p>Selamat! Kami senang dapat menawarkan posisi <strong>Karyawan Full-time</strong> sebagai <strong>[Posisi]</strong> di [Nama Perusahaan]. Kami percaya kontribusi Anda akan menjadi aset berharga bagi tim kami.</p>
+    <p><strong>Ketentuan Pekerjaan:</strong></p>
+    <ul>
+      <li>Tanggal Mulai: [Tanggal].</li>
+      <li>Masa Percobaan: [Masa Probation] bulan.</li>
+      <li>Waktu Kerja: [Hari Kerja], [Jam Kerja].</li>
+    </ul>
+    <p><strong>Kompensasi & Benefit:</strong></p>
+    <ul>
+      <li>Gaji bulanan: Rp [Gaji] (Gross/Nett).</li>
+      <li>BPJS Kesehatan & Ketenagakerjaan.</li>
+      <li>Tunjangan Hari Raya (THR).</li>
+      <li>Cuti Tahunan sesuai kebijakan perusahaan.</li>
+    </ul>
+    <p>Kami sangat menantikan kehadiran Anda sebagai bagian dari tim kami.</p>
+  `,
+  greenskills: `
+    <p>Halo [Nama Kandidat],</p>
+    <p>Kami dengan senang hati mengajak Anda bergabung dalam inisiatif <strong>GreenSkill Program</strong> sebagai <strong>[Posisi]</strong>. Program ini bertujuan untuk mengembangkan kompetensi di bidang lingkungan dan keberlanjutan.</p>
+    <p><strong>Detail Program:</strong></p>
+    <ul>
+      <li>Fokus: Keberlanjutan Lingkungan.</li>
+      <li>Kompensasi: Rp [Gaji].</li>
+      <li>Sertifikasi: Sertifikat Kompetensi GreenSkill.</li>
+    </ul>
+    <p>Mari berkontribusi untuk masa depan yang lebih hijau.</p>
+  `,
+  egs: `
+    <p>Halo [Nama Kandidat],</p>
+    <p>Terkait dengan evaluasi yang telah dilakukan, kami menawarkan posisi dalam tim <strong>EGS (Environmental, Global, Social)</strong> sebagai <strong>[Posisi]</strong>.</p>
+    <p><strong>Ketentuan Utama:</strong></p>
+    <ul>
+      <li>Gaji: Rp [Gaji].</li>
+      <li>Cakupan Kerja: Global & Social Impact.</li>
+      <li>Lokasi: [Lokasi].</li>
+    </ul>
+    <p>Kami yakin passion Anda sejalan dengan nilai-nilai EGS kami.</p>
+  `,
+};
 
 export const offerSchema = z.object({
   offeredSalary: z.coerce.number().min(1, "Gaji yang ditawarkan harus diisi."),
@@ -58,9 +125,19 @@ export const offerSchema = z.object({
     .min(1, "Durasi kontrak minimal 1 bulan."),
   contractEndDate: z.date().optional(),
   probationDurationMonths: z.coerce.number().int().min(0).optional().nullable(),
+  offerSections: z
+    .array(
+      z.object({
+        title: z.string().min(1, "Judul bagian harus diisi."),
+        content: z.string().min(1, "Isi bagian harus diisi."),
+      }),
+    )
+    .min(1, "Setidaknya satu bagian penawaran harus ditambahkan."),
   offerDescription: z.string().optional(),
   workDays: z.string().optional(),
   offerNotes: z.string().optional(),
+  masterTemplateId: z.string().optional().nullable(),
+  offerLetterNumber: z.string().optional().nullable(),
 });
 
 export type OfferFormData = z.infer<typeof offerSchema>;
@@ -106,6 +183,12 @@ export function OfferDialog({
       startTime: "09:00",
       contractDurationMonths: 12,
       probationDurationMonths: job.statusJob === "fulltime" ? 3 : null,
+      offerSections: [
+        {
+          title: "Ringkasan Penawaran",
+          content: "",
+        },
+      ],
       offerDescription: "",
       workDays: "",
       offerNotes: "",
@@ -149,6 +232,28 @@ export function OfferDialog({
     job.statusJob === "internship"
       ? "Uang Saku (per bulan)"
       : "Gaji / Kompensasi (per bulan)";
+
+  const applyTemplate = (templateKey: keyof typeof OFFER_TEMPLATES) => {
+    let content = OFFER_TEMPLATES[templateKey];
+
+    content = content
+      .replace(/\[Nama Kandidat\]/g, candidateName)
+      .replace(/\[Posisi\]/g, job.position || "")
+      .replace(/\[Nama Perusahaan\]/g, job.brandName || "Environesia")
+      .replace(/\[Gaji\]/g, formatSalary(watch("offeredSalary")))
+      .replace(/\[Durasi\]/g, watch("contractDurationMonths").toString())
+      .replace(/\[Masa Probation\]/g, (watch("probationDurationMonths") || 3).toString())
+      .replace(/\[Hari Kerja\]/g, watch("workDays") || "Senin - Jumat")
+      .replace(/\[Jam Kerja\]/g, watch("startTime") || "09:00")
+      .replace(/\[Lokasi\]/g, job.location || "Kantor")
+      .replace(
+        /\[Tanggal\]/g,
+        startDate ? format(startDate, "dd MMMM yyyy", { locale: idLocale }) : ""
+      );
+
+    setValue("offerSections.0.content", content);
+    setValue("offerSections.0.title", "Isi Penawaran / Ketentuan Penawaran");
+  };
 
   return (
     <>
@@ -320,43 +425,117 @@ export function OfferDialog({
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="offerDescription"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>
-                        Deskripsi Singkat Penawaran (Opsional)
-                      </FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="Contoh: Kontrak ini mencakup fleksibilitas jam kerja dan tunjangan transportasi."
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className="space-y-4 rounded-xl border border-primary/20 bg-primary/5 p-4 mt-6">
+                  <div>
+                    <p className="text-sm font-bold text-primary">Isi & Ketentuan Penawaran</p>
+                    <p className="text-xs text-muted-foreground">
+                      Gunakan template untuk mempercepat penulisan.
+                    </p>
+                  </div>
+                  
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-[10px] gap-1 bg-background"
+                      onClick={() => applyTemplate("fulltime")}
+                    >
+                      <UserCheck className="h-3 w-3 text-blue-500" />
+                      Fulltime
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-[10px] gap-1 bg-background"
+                      onClick={() => applyTemplate("internship")}
+                    >
+                      <GraduationCap className="h-3 w-3 text-amber-500" />
+                      Internship
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-[10px] gap-1 bg-background"
+                      onClick={() => applyTemplate("greenskills")}
+                    >
+                      <Leaf className="h-3 w-3 text-emerald-500" />
+                      GreenSkill
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-[10px] gap-1 bg-background"
+                      onClick={() => applyTemplate("egs")}
+                    >
+                      <Globe className="h-3 w-3 text-indigo-500" />
+                      EGS
+                    </Button>
+                  </div>
 
-                <FormField
-                  control={form.control}
-                  name="offerNotes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Catatan Penawaran (Opsional)</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="Contoh: Termasuk tunjangan transportasi dan makan."
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                  <FormField
+                    control={form.control}
+                    name="offerSections.0.content"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <RichTextEditor
+                            value={field.value}
+                            onChange={field.onChange}
+                            placeholder="Tuliskan detail informasi penawaran di sini..."
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <input type="hidden" {...form.register("offerSections.0.title")} value="Isi Penawaran / Ketentuan Penawaran" />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="offerDescription"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>
+                          Deskripsi Singkat (Opsional)
+                        </FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder="Contoh: Kontrak ini mencakup fleksibilitas jam kerja..."
+                            {...field}
+                            value={field.value ?? ""}
+                            rows={2}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="offerNotes"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Catatan (Opsional)</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder="Contoh: Termasuk tunjangan transportasi..."
+                            {...field}
+                            value={field.value ?? ""}
+                            rows={2}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
 
                 <Alert
                   variant="default"

@@ -74,26 +74,58 @@ export type EmployeeProfile = {
   // --- Data Pribadi ---
   fullName: string;
   nickName?: string;
+  nationality?: string;
   phone: string;
+  personalEmail?: string;
   email: string;
+  profilePhotoUrl?: string;
   gender?: "Laki-laki" | "Perempuan" | "Lainnya";
   birthPlace?: string;
   birthDate?: string; // YYYY-MM-DD
   maritalStatus?: "Belum Kawin" | "Kawin" | "Cerai Hidup" | "Cerai Mati";
   religion?: string;
   address?: Address;
+  addressKtp?: Address;
+  addressCurrent?: string;
+  isDomicileSameAsKtp?: boolean;
   contact?: {
     phone: string;
     email: string;
   };
 
-  // --- Informasi Pekerjaan ---
-  employeeNumber?: string; // NIK
+  // --- Identitas & Dokumen ---
+  nik?: string;
+  ktpPhotoUrl?: string;
+  simNumber?: string;
+  simPhotoUrl?: string;
+  npwp?: string;
+  npwpPhotoUrl?: string;
+  bpjsKesehatan?: string;
+  bpjsKetenagakerjaan?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  bankAccountHolderName?: string;
+  bankDocumentUrl?: string;
+  identityVerificationStatus?: VerificationStatus;
+  documentVerificationStatus?: VerificationStatus;
+  documents?: DocumentRecord[];
+
+  // --- Kontak Darurat ---
+  emergencyContactName?: string;
+  emergencyContactRelation?: string;
+  emergencyContactPhone?: string;
+  emergencyContactAddress?: string;
+
+  // --- Pendidikan & Pelatihan ---
+  education?: Education[];
+  certifications?: Certification[];
+  trainingHistory?: TrainingRecord[];
+
+  // --- Informasi Kepegawaian ---
+  employeeNumber?: string; // NIK internal
   positionTitle?: string; // Jabatan/Posisi
   division?: string; // Departemen/Bagian
-  joinDate?: Timestamp;
-  employmentType?: EmploymentType;
-  employmentStatus?: EmploymentStatus;
+  department?: string;
   brandId?: string;
   brandName?: string;
   workLocation?: string; // Office Site ID or 'Remote'
@@ -101,22 +133,14 @@ export type EmployeeProfile = {
   managerName?: string;
   supervisorUid?: string; // Used for interns, synonymous with managerUid
   supervisorName?: string;
-
-  // --- Data Administratif ---
-  nik?: string; // No KTP/SIM
-  hasNpwp?: boolean;
-  npwp?: string;
-  hasBpjsKesehatan?: boolean;
-  bpjsKesehatan?: string;
-  hasBpjsKetenagakerjaan?: boolean;
-  bpjsKetenagakerjaan?: string;
-  bankName?: string;
-  bankAccountNumber?: string;
-  bankAccountHolderName?: string;
-
-  // --- Riwayat Pendidikan & Pelatihan ---
-  education?: Education[];
-  certifications?: Certification[];
+  joinDate?: Timestamp;
+  contractEndDate?: Timestamp;
+  contractType?: string;
+  employmentType?: EmploymentType;
+  employmentStatus?: EmploymentStatus;
+  employmentStage?: EmploymentStage;
+  probationEndDate?: Timestamp;
+  isActive?: boolean;
 
   // --- Riwayat Karir & Kinerja ---
   careerHistory?: {
@@ -125,26 +149,17 @@ export type EmployeeProfile = {
     description: string;
     notes?: string;
   }[];
+  careerEvents?: CareerEventRecord[];
 
-  // --- Kehadiran & Cuti (Biasanya di koleksi terpisah, tapi bisa ada summary di sini) ---
-  leaveBalance?: {
-    annual: number;
-    sick: number;
-  };
+  // --- Kehadiran & Cuti ---
+  leaveBalance?: LeaveBalanceSummary;
 
   // --- Data Penggajian (Hanya untuk HRD) ---
   payroll?: {
     baseSalary?: number;
     allowances?: Record<string, number>;
   };
-
-  // --- Kontak Darurat ---
-  emergencyContactName: string;
-  emergencyContactRelation: string;
-  emergencyContactPhone: string;
-
-  // --- Legacy Intern Fields ---
-  internSubtype?: "intern_education" | "intern_pre_probation";
+  payrollSummary?: PayrollSummary;
 
   // --- Metadata ---
   dataSource?: "register" | "import" | "manual";
@@ -156,6 +171,7 @@ export type EmployeeProfile = {
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
   hrdNotes?: string;
+  internalNotes?: string;
   additionalFields?: Record<string, any>;
 };
 
@@ -290,10 +306,9 @@ export type ApplicationTimelineEvent = {
     | "interview_scheduled"
     | "interview_updated"
     | "offer_sent"
-    | "negotiation_requested"
-    | "negotiation_approved"
-    | "negotiation_rejected"
-    | "negotiation_countered"
+    | "offer_viewed"
+    | "offer_accepted"
+    | "offer_rejected"
     | "assessment_graded"
     | "status_changed"
     | "panelists_updated";
@@ -377,32 +392,25 @@ export type JobApplication = {
   ijazahVerified?: boolean;
 
   // New offer fields
-  offerStatus?:
-    | "sent"
-    | "negotiation_requested"
-    | "negotiation_approved"
-    | "negotiation_rejected"
-    | "negotiation_countered"
-    | "accepted"
-    | "rejected"
-    | "withdrawn";
+  offerStatus?: "sent" | "viewed" | "accepted" | "rejected";
   offeredSalary?: number | null;
   probationDurationMonths?: number | null;
   contractStartDate?: Timestamp | null;
   contractDurationMonths?: number | null;
   contractEndDate?: Timestamp | null;
+  offerSections?: Array<{
+    title: string;
+    content: string;
+  }>;
   offerDescription?: string | null;
   workDays?: string | null;
   offerNotes?: string | null;
+  masterTemplateId?: string | null;
+  offerLetterNumber?: string | null;
+  offerSentAt?: Timestamp | null;
+  offerViewedAt?: Timestamp | null;
+  offerRejectionReason?: string | null;
   candidateOfferDecisionAt?: Timestamp | null;
-  candidateNegotiationUsed?: boolean;
-  candidateCounterOffer?: {
-    requestedSalary: number | null;
-    requestedContractDurationMonths?: number | null;
-    requestedWorkType?: string | null;
-    reason: string;
-    submittedAt: Timestamp;
-  } | null;
   internalAccessEnabled?: boolean;
 
   // Denormalized data
@@ -643,6 +651,69 @@ export type Address = {
   city: string;
   province: string;
   postalCode: string;
+};
+
+export type DocumentType =
+  | "ktp"
+  | "sim"
+  | "npwp"
+  | "bpjs_kesehatan"
+  | "bpjs_ketenagakerjaan"
+  | "bank_account"
+  | "profile_photo";
+
+export type VerificationStatus = "pending" | "verified" | "rejected";
+
+export type PayrollSummary = {
+  baseSalary?: number;
+  allowances?: Record<string, number>;
+  bonuses?: number;
+  incentives?: number;
+  deductions?: Record<string, number>;
+  taxDeduction?: number;
+  paymentMethod?: string;
+  lastUpdatedAt?: Timestamp;
+};
+
+export type TrainingRecord = {
+  id: string;
+  name: string;
+  provider: string;
+  startDate: string;
+  endDate?: string;
+  certificateUrl?: string;
+  notes?: string;
+};
+
+export type DocumentRecord = {
+  id: string;
+  type: DocumentType;
+  fileUrl: string;
+  fileName?: string;
+  issuedNumber?: string;
+  status?: VerificationStatus;
+  uploadedAt?: Timestamp;
+  verifiedBy?: string;
+  verifiedAt?: Timestamp;
+  notes?: string;
+};
+
+export type CareerEventRecord = {
+  id: string;
+  eventType: "promotion" | "mutation" | "appraisal" | "award" | "sanction";
+  effectiveDate: string;
+  title: string;
+  description?: string;
+  isVisibleToEmployee?: boolean;
+  createdBy?: string;
+  createdAt?: Timestamp;
+};
+
+export type LeaveBalanceSummary = {
+  annual?: number;
+  sick?: number;
+  remainingAnnual?: number;
+  remainingSick?: number;
 };
 
 export type Profile = {
@@ -1276,3 +1347,16 @@ export function isActionableStatus(
 
   return false;
 }
+
+export type OfferingTemplate = {
+  id?: string;
+  templateName: string;
+  brandName: string;
+  employmentType: "fulltime" | "internship" | "contract";
+  referencePdfUrl?: string;
+  htmlContent: string;
+  isActive: boolean;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  createdBy: string;
+};

@@ -43,6 +43,30 @@ const SectionTitle = ({
   </h3>
 );
 
+const formatAddress = (address?: {
+  street?: string;
+  rt?: string;
+  rw?: string;
+  village?: string;
+  district?: string;
+  city?: string;
+  province?: string;
+  postalCode?: string;
+}) => {
+  if (!address) return "Belum diisi.";
+  const parts = [
+    address.street,
+    address.rt ? `RT ${address.rt}` : undefined,
+    address.rw ? `RW ${address.rw}` : undefined,
+    address.village,
+    address.district,
+    address.city,
+    address.province,
+    address.postalCode,
+  ].filter(Boolean);
+  return parts.length ? parts.join(", ") : "Belum diisi.";
+};
+
 export function EmployeeProfileDisplay({
   employeeProfile,
   userProfile,
@@ -98,6 +122,10 @@ export function EmployeeProfileDisplay({
                 value={employeeProfile.nickName}
               />
               <InfoRow
+                label="Email Pribadi"
+                value={employeeProfile.personalEmail}
+              />
+              <InfoRow
                 label="Tempat, Tgl Lahir"
                 value={`${employeeProfile.birthPlace || "-"}, ${
                   employeeProfile.birthDate
@@ -110,7 +138,59 @@ export function EmployeeProfileDisplay({
                     : "-"
                 }`}
               />
+              <InfoRow
+                label="Status Pernikahan"
+                value={employeeProfile.maritalStatus}
+              />
               <InfoRow label="Jenis Kelamin" value={employeeProfile.gender} />
+              <InfoRow label="Agama" value={employeeProfile.religion} />
+              <InfoRow
+                label="Kewarganegaraan"
+                value={employeeProfile.nationality}
+              />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <SectionTitle icon={<ShieldAlert className="h-5 w-5" />}>
+                Identitas & Dokumen
+              </SectionTitle>
+              <CardDescription>
+                Ringkasan dokumen yang Anda unggah atau sambungkan.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-1">
+              <InfoRow label="NIK" value={employeeProfile.nik} />
+              <InfoRow label="Nomor SIM" value={employeeProfile.simNumber} />
+              <InfoRow label="NPWP" value={employeeProfile.npwp} />
+              <InfoRow
+                label="No. BPJS Kesehatan"
+                value={employeeProfile.bpjsKesehatan}
+              />
+              <InfoRow
+                label="No. BPJS Ketenagakerjaan"
+                value={employeeProfile.bpjsKetenagakerjaan}
+              />
+              <InfoRow
+                label="URL Foto Profil"
+                value={employeeProfile.profilePhotoUrl}
+              />
+              <InfoRow
+                label="URL Foto KTP"
+                value={employeeProfile.ktpPhotoUrl}
+              />
+              <InfoRow
+                label="URL Foto SIM"
+                value={employeeProfile.simPhotoUrl}
+              />
+              <InfoRow
+                label="URL Bukti NPWP"
+                value={employeeProfile.npwpPhotoUrl}
+              />
+              <InfoRow
+                label="URL Bukti Rekening"
+                value={employeeProfile.bankDocumentUrl}
+              />
             </CardContent>
           </Card>
         </div>
@@ -130,6 +210,11 @@ export function EmployeeProfileDisplay({
                 {typeof employeeProfile.addressCurrent === "string"
                   ? employeeProfile.addressCurrent
                   : "Belum diisi."}
+              </p>
+              <Separator className="my-4" />
+              <p className="text-sm text-muted-foreground">
+                <strong>Alamat KTP:</strong>{" "}
+                {formatAddress(employeeProfile.addressKtp)}
               </p>
             </CardContent>
           </Card>
