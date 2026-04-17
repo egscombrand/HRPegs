@@ -41,7 +41,15 @@ import type { OfferFormData } from "./OfferDialog";
 export type { OfferFormData } from "./OfferDialog";
 import { offerSchema } from "./OfferDialog";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  addDoc,
+  serverTimestamp,
+  Timestamp,
+} from "firebase/firestore";
 import { useFirestore } from "@/firebase";
 import { useAuth } from "@/providers/auth-provider";
 import type { OfferingTemplate } from "@/lib/types";
@@ -52,11 +60,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { 
+import {
   FileCheck,
-  FileText, 
-  UserCheck, 
-  Leaf, 
+  FileText,
+  UserCheck,
+  Leaf,
   Globe,
   GraduationCap,
   PlusCircle,
@@ -64,9 +72,12 @@ import {
   ChevronUp,
   ChevronDown,
   Layout,
-  Download
+  Download,
 } from "lucide-react";
-import { generateOfferingPDF } from "@/lib/recruitment/pdf-generator";
+import {
+  generateOfferingPDF,
+  buildOfferingHtml,
+} from "@/lib/recruitment/pdf-generator";
 
 const OFFER_TEMPLATES = {
   internship: `
@@ -128,6 +139,57 @@ const OFFER_TEMPLATES = {
   `,
 };
 
+const DESCRIPTION_TEMPLATES = {
+  addition: `
+    <p>Dalam peran ini, Anda akan menjadi kontributor utama untuk proyek inti tim. Pekerjaan meliputi:</p>
+    <ul>
+      <li>Koordinasi dengan tim lintas fungsi.</li>
+      <li>Penyusunan laporan berkala.</li>
+      <li>Pengembangan skill profesional di area yang relevan.</li>
+    </ul>
+    <p>Silakan gunakan kesempatan ini untuk menunjukkan inisiatif dan etos kerja yang proaktif.</p>
+  `,
+  benefits: `
+    <p>Benefit tambahan yang akan Anda peroleh:</p>
+    <ul>
+      <li>Tunjangan transportasi dan makan.</li>
+      <li>BPJS Kesehatan dan Ketenagakerjaan.</li>
+      <li>Program pelatihan internal dan pengembangan karier.</li>
+    </ul>
+  `,
+  policies: `
+    <p>Sebagai bagian dari tim, Anda harus mematuhi peraturan kerja berikut:</p>
+    <ul>
+      <li>Presensi masuk sesuai jadwal yang sudah ditetapkan.</li>
+      <li>Etika komunikasi profesional di lingkungan kerja.</li>
+      <li>Penggunaan fasilitas perusahaan hanya untuk keperluan pekerjaan.</li>
+    </ul>
+  `,
+  notes: `
+    <p>Catatan penting:</p>
+    <ul>
+      <li>Permintaan perubahan jadwal kerja harus disampaikan minimal 2 hari kerja sebelumnya.</li>
+      <li>Evaluasi kinerja akan dilakukan secara berkala.</li>
+      <li>Semua dokumen pendukung harus diserahkan pada saat orientasi.</li>
+    </ul>
+  `,
+};
+
+interface DescriptionSnippet {
+  id: string;
+  name: string;
+  content: string;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
+}
+
+interface DescriptionHistoryItem {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: Timestamp;
+}
+
 interface OfferEditorProps {
   id?: string;
   application: JobApplication;
@@ -161,8 +223,23 @@ export function OfferEditor({
   isSavingDraft = false,
   isSendingOffer = false,
 }: OfferEditorProps) {
-  const [masterTemplates, setMasterTemplates] = useState<OfferingTemplate[]>([]);
+  const [masterTemplates, setMasterTemplates] = useState<OfferingTemplate[]>(
+    [],
+  );
   const [selectedMasterId, setSelectedMasterId] = useState<string>("");
+  const [descriptionMode, setDescriptionMode] = useState<
+    "template" | "history" | "manual"
+  >("template");
+  const [descriptionTemplates, setDescriptionTemplates] = useState<
+    DescriptionSnippet[]
+  >([]);
+  const [descriptionHistory, setDescriptionHistory] = useState<
+    DescriptionHistoryItem[]
+  >([]);
+  const [selectedDescriptionSource, setSelectedDescriptionSource] =
+    useState<string>("");
+  const [isSavingDescriptionTemplate, setIsSavingDescriptionTemplate] =
+    useState(false);
   const firestore = useFirestore();
   const { userProfile } = useAuth();
 
@@ -202,6 +279,11 @@ export function OfferEditor({
       offerDescription: application.offerDescription ?? "",
       workDays: application.workDays ?? "",
       offerNotes: application.offerNotes ?? "",
+      masterTemplateId: application.masterTemplateId ?? null,
+      offerLetterNumber: application.offerLetterNumber ?? "",
+      responseDeadline: application.responseDeadline?.toDate() ?? null,
+      signerName: application.signerName ?? userProfile?.fullName ?? "",
+      signerTitle: application.signerTitle ?? "HRD",
     },
   });
 
@@ -219,63 +301,212 @@ export function OfferEditor({
     setIsPreviewOpen(true);
   });
 
+  const getDescriptionTitle = (content: string) => {
+    const plain = content
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (!plain) return "Deskripsi Penawaran";
+    return plain.length > 60 ? `${plain.slice(0, 57)}...` : plain;
+  };
+
+  const saveDescriptionHistory = async (content: string) => {
+    if (!userProfile || !content?.trim()) return;
+
+    const payload = {
+      title: getDescriptionTitle(content),
+      content,
+      createdAt: serverTimestamp(),
+      createdBy: userProfile.uid,
+    };
+
+    try {
+      const docRef = await addDoc(
+        collection(firestore, "recruitment_offer_description_history"),
+        payload,
+      );
+
+      setDescriptionHistory((prev) => [
+        {
+          id: docRef.id,
+          title: payload.title,
+          content: payload.content,
+          createdAt: Timestamp.now(),
+        },
+        ...prev,
+      ]);
+    } catch (err) {
+      console.error("Failed to save description history:", err);
+    }
+  };
+
+  const saveDescriptionTemplate = async (content: string) => {
+    if (!userProfile || !content?.trim()) return;
+
+    const payload = {
+      name: getDescriptionTitle(content),
+      content,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      createdBy: userProfile.uid,
+    };
+
+    try {
+      setIsSavingDescriptionTemplate(true);
+      const docRef = await addDoc(
+        collection(firestore, "recruitment_offer_description_templates"),
+        payload,
+      );
+
+      setDescriptionTemplates((prev) => [
+        {
+          id: docRef.id,
+          name: payload.name,
+          content: payload.content,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+        },
+        ...prev,
+      ]);
+      setSelectedDescriptionSource(docRef.id);
+      setDescriptionMode("template");
+    } catch (err) {
+      console.error("Failed to save description template:", err);
+    } finally {
+      setIsSavingDescriptionTemplate(false);
+    }
+  };
+
+  const handleSaveDraft = async (data: OfferFormData) => {
+    await saveDescriptionHistory(data.offerSections?.[0]?.content || "");
+    await onSaveDraft({
+      ...data,
+      masterTemplateId: selectedMasterId || null,
+    });
+  };
+
   const handleConfirmSend = async () => {
     if (!previewData) return;
+    await saveDescriptionHistory(previewData.offerSections?.[0]?.content || "");
     await onSendOffer({
       ...previewData,
       masterTemplateId: selectedMasterId || null,
-      offerLetterNumber: `OL/${(masterTemplates.find(t => t.id === selectedMasterId)?.brandName || "ENV").substring(0,3).toUpperCase()}/${format(new Date(), "yyyyMMdd")}/${application.id?.substring(0,4)}`
+      offerLetterNumber:
+        previewData.offerLetterNumber ||
+        `OL/${(masterTemplates.find((t) => t.id === selectedMasterId)?.brandName || "ENV").substring(0, 3).toUpperCase()}/${format(new Date(), "yyyyMMdd")}/${application.id?.substring(0, 4)}`,
     });
     setIsPreviewOpen(false);
     setHasConfirmedPreview(false);
   };
 
+  const getFinalOfferHtml = (data: OfferFormData) => {
+    const master = masterTemplates.find((t) => t.id === selectedMasterId);
+    const descriptionHtml = data.offerSections?.[0]?.content || "";
+    const templateHtml = master?.htmlTemplate || master?.htmlContent || "";
+
+    return buildOfferingHtml(
+      templateHtml,
+      {
+        letterNumber:
+          data.offerLetterNumber ||
+          `OL/${(master?.brandName || "ENV").substring(0, 3).toUpperCase()}/${format(new Date(), "yyyyMMdd")}/${application.id?.substring(0, 4)}`,
+        candidateName,
+        jobTitle: application.jobPosition,
+        brandName: master?.brandName || application.brandName || "",
+        startDate: data.contractStartDate
+          ? format(data.contractStartDate, "dd MMMM yyyy", {
+              locale: idLocale,
+            })
+          : "",
+        contractEndDate: data.contractEndDate
+          ? format(data.contractEndDate, "dd MMMM yyyy", {
+              locale: idLocale,
+            })
+          : "",
+        salary: formatSalary(data.offeredSalary),
+        signerName: data.signerName || userProfile?.fullName || "",
+        signerTitle: data.signerTitle || "",
+        responseDeadline: data.responseDeadline
+          ? format(data.responseDeadline, "dd MMMM yyyy", {
+              locale: idLocale,
+            })
+          : "",
+      },
+      descriptionHtml,
+    );
+  };
+
   useEffect(() => {
     const fetchTemplates = async () => {
       try {
-        const q = query(
+        const masterQuery = query(
           collection(firestore, "recruitment_offering_templates"),
-          where("isActive", "==", true)
+          where("isActive", "==", true),
         );
-        const snapshot = await getDocs(q);
-        const templates = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as OfferingTemplate));
+        const masterSnapshot = await getDocs(masterQuery);
+        const templates = masterSnapshot.docs.map(
+          (doc) => ({ id: doc.id, ...doc.data() }) as OfferingTemplate,
+        );
         setMasterTemplates(templates);
+
+        if (!userProfile) return;
+
+        const descriptionTemplateQuery = query(
+          collection(firestore, "recruitment_offer_description_templates"),
+          where("createdBy", "==", userProfile.uid),
+        );
+        const historyQuery = query(
+          collection(firestore, "recruitment_offer_description_history"),
+          where("createdBy", "==", userProfile.uid),
+        );
+
+        const [descriptionSnapshot, historySnapshot] = await Promise.all([
+          getDocs(descriptionTemplateQuery),
+          getDocs(historyQuery),
+        ]);
+
+        setDescriptionTemplates(
+          descriptionSnapshot.docs.map(
+            (doc) =>
+              ({
+                id: doc.id,
+                ...(doc.data() as Omit<DescriptionSnippet, "id">),
+              }) as DescriptionSnippet,
+          ),
+        );
+
+        setDescriptionHistory(
+          historySnapshot.docs
+            .map(
+              (doc) =>
+                ({
+                  id: doc.id,
+                  ...(doc.data() as Omit<DescriptionHistoryItem, "id">),
+                }) as DescriptionHistoryItem,
+            )
+            .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()),
+        );
       } catch (err) {
-        console.error("Error fetching master templates:", err);
+        console.error("Error fetching templates and history:", err);
       }
     };
     fetchTemplates();
-  }, [firestore]);
+  }, [firestore, userProfile]);
 
   const applyMasterTemplate = (templateId: string) => {
-    const template = masterTemplates.find(t => t.id === templateId);
+    const template = masterTemplates.find((t) => t.id === templateId);
     if (!template) return;
 
     setSelectedMasterId(templateId);
-    
-    // Process placeholders
-    let content = template.htmlContent;
-    const data: any = {
-      candidateName,
-      jobTitle: application.jobPosition,
-      brandName: template.brandName,
-      startDate: startDate ? format(startDate, "dd MMMM yyyy", { locale: idLocale }) : "[Tanggal Mulai]",
-      contractEndDate: contractEndDate ? format(contractEndDate, "dd MMMM yyyy", { locale: idLocale }) : "[Tanggal Selesai]",
-      salary: formatSalary(watch("offeredSalary")),
-      signerName: userProfile?.fullName || "[Signer Name]",
-      signerTitle: "HR Manager",
-      letterNumber: `OL/${template.brandName.substring(0,3).toUpperCase()}/${format(new Date(), "yyyyMMdd")}/${application.id?.substring(0,4)}`,
-      responseDeadline: format(addMonths(new Date(), 1), "dd MMMM yyyy", { locale: idLocale })
-    };
-
-    Object.keys(data).forEach(key => {
-      const regex = new RegExp(`{{${key}}}`, "g");
-      content = content.replace(regex, data[key]);
-    });
-
-    setValue("offerSections.0.content", content);
-    setValue("offerSections.0.title", "Ketentuan Penawaran (Master Template)");
-    setValue("offerNotes", `Menggunakan Master Template: ${template.templateName}`);
+    setValue(
+      "offerLetterNumber",
+      `OL/${template.brandName.substring(0, 3).toUpperCase()}/${format(new Date(), "yyyyMMdd")}/${application.id?.substring(0, 4)}`,
+    );
+    setValue(
+      "offerNotes",
+      `Menggunakan Master Template: ${template.templateName}`,
+    );
   };
 
   useEffect(() => {
@@ -305,8 +536,13 @@ export function OfferEditor({
       offerDescription: application.offerDescription ?? "",
       workDays: application.workDays ?? "",
       offerNotes: application.offerNotes ?? "",
+      masterTemplateId: application.masterTemplateId ?? null,
+      offerLetterNumber: application.offerLetterNumber ?? "",
+      responseDeadline: application.responseDeadline?.toDate() ?? null,
+      signerName: application.signerName ?? userProfile?.fullName ?? "",
+      signerTitle: application.signerTitle ?? "HRD",
     });
-  }, [application, defaultStartTime, job.statusJob, reset]);
+  }, [application, defaultStartTime, job.statusJob, reset, userProfile]);
 
   const applyTemplate = (templateKey: keyof typeof OFFER_TEMPLATES) => {
     let content = OFFER_TEMPLATES[templateKey];
@@ -317,13 +553,18 @@ export function OfferEditor({
       .replace(/\[Nama Perusahaan\]/g, job.brandName || "Environesia")
       .replace(/\[Gaji\]/g, formatSalary(watch("offeredSalary")))
       .replace(/\[Durasi\]/g, watch("contractDurationMonths").toString())
-      .replace(/\[Masa Probation\]/g, (watch("probationDurationMonths") || 3).toString())
+      .replace(
+        /\[Masa Probation\]/g,
+        (watch("probationDurationMonths") || 3).toString(),
+      )
       .replace(/\[Hari Kerja\]/g, watch("workDays") || "Senin - Jumat")
       .replace(/\[Jam Kerja\]/g, watch("startTime") || "09:00")
       .replace(/\[Lokasi\]/g, job.location || "Kantor")
       .replace(
         /\[Tanggal\]/g,
-        startDate ? format(startDate, "dd MMMM yyyy", { locale: idLocale }) : ""
+        startDate
+          ? format(startDate, "dd MMMM yyyy", { locale: idLocale })
+          : "",
       );
 
     setValue("offerSections.0.content", content);
@@ -543,12 +784,216 @@ export function OfferEditor({
               />
             )}
 
+            <div className="space-y-6 rounded-3xl border border-slate-200 bg-slate-50 p-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-base font-semibold">
+                    Sistem Template Deskripsi
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Pilih template deskripsi, gunakan riwayat HRD, atau tulis
+                    manual untuk mengisi bagian deskripsi penawaran.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(["template", "history", "manual"] as const).map((mode) => (
+                    <Button
+                      key={mode}
+                      type="button"
+                      variant={descriptionMode === mode ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setDescriptionMode(mode)}
+                      disabled={!isEditable}
+                    >
+                      {mode === "template"
+                        ? "Pilih Template"
+                        : mode === "history"
+                          ? "Pilih dari Riwayat"
+                          : "Tulis Manual"}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {descriptionMode === "template" && (
+                <div className="space-y-4">
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={!isEditable}
+                      onClick={() =>
+                        setValue(
+                          "offerSections.0.content",
+                          DESCRIPTION_TEMPLATES.addition,
+                        )
+                      }
+                    >
+                      Tambahan
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={!isEditable}
+                      onClick={() =>
+                        setValue(
+                          "offerSections.0.content",
+                          DESCRIPTION_TEMPLATES.benefits,
+                        )
+                      }
+                    >
+                      Benefit
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={!isEditable}
+                      onClick={() =>
+                        setValue(
+                          "offerSections.0.content",
+                          DESCRIPTION_TEMPLATES.policies,
+                        )
+                      }
+                    >
+                      Peraturan Kantor
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={!isEditable}
+                      onClick={() =>
+                        setValue(
+                          "offerSections.0.content",
+                          DESCRIPTION_TEMPLATES.notes,
+                        )
+                      }
+                    >
+                      Catatan Umum
+                    </Button>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="text-sm font-medium">
+                      Template Deskripsi Resmi
+                    </div>
+                    <Select
+                      onValueChange={(value) => {
+                        const selected = descriptionTemplates.find(
+                          (item) => item.id === value,
+                        );
+                        if (selected) {
+                          setValue("offerSections.0.content", selected.content);
+                          setSelectedDescriptionSource(value);
+                        }
+                      }}
+                      value={selectedDescriptionSource}
+                      disabled={!isEditable}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Pilih template deskripsi..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {descriptionTemplates.map((item) => (
+                          <SelectItem key={item.id} value={item.id}>
+                            {item.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+
+              {descriptionMode === "history" && (
+                <div className="space-y-3">
+                  {descriptionHistory.length > 0 ? (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {descriptionHistory.slice(0, 6).map((item) => (
+                        <div
+                          key={item.id}
+                          className="rounded-2xl border border-muted/50 bg-background p-4"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="font-semibold text-sm">
+                              {item.title}
+                            </p>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setValue(
+                                  "offerSections.0.content",
+                                  item.content,
+                                );
+                                setSelectedDescriptionSource(item.id);
+                              }}
+                              disabled={!isEditable}
+                            >
+                              Gunakan
+                            </Button>
+                          </div>
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            {item.createdAt
+                              .toDate()
+                              .toLocaleDateString("id-ID", {
+                                day: "2-digit",
+                                month: "long",
+                                year: "numeric",
+                              })}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Belum ada riwayat deskripsi. Simpan penulisan deskripsi
+                      Anda saat menyimpan draf atau mengirim penawaran.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {descriptionMode === "manual" && (
+                <div className="rounded-2xl border border-muted/50 bg-background p-4 text-sm text-muted-foreground">
+                  Gunakan editor di bawah untuk menulis deskripsi secara
+                  langsung. Konten ini disimpan secara otomatis ke riwayat saat
+                  Anda menyimpan atau mengirim penawaran.
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() =>
+                    saveDescriptionTemplate(
+                      watch("offerSections.0.content") || "",
+                    )
+                  }
+                  disabled={!isEditable || isSavingDescriptionTemplate}
+                >
+                  {isSavingDescriptionTemplate
+                    ? "Menyimpan..."
+                    : "Simpan sebagai Template"}
+                </Button>
+              </div>
+            </div>
+
             <div className="space-y-6 rounded-3xl border border-primary/20 bg-primary/5 p-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-base font-bold text-primary">Isi & Ketentuan Penawaran</p>
+                  <p className="text-base font-bold text-primary">
+                    Isi & Ketentuan Penawaran
+                  </p>
                   <p className="text-sm text-muted-foreground">
-                    Tulis detail penawaran secara profesional atau gunakan template yang tersedia.
+                    Tulis detail penawaran secara profesional atau gunakan
+                    template yang tersedia.
                   </p>
                 </div>
               </div>
@@ -557,14 +1002,19 @@ export function OfferEditor({
                 <div className="space-y-3 p-4 border rounded-2xl bg-background shadow-sm">
                   <div className="flex items-center gap-2 mb-2">
                     <Layout className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-semibold">Gunakan Master Template Perusahaan</span>
+                    <span className="text-sm font-semibold">
+                      Gunakan Master Template Perusahaan
+                    </span>
                   </div>
-                  <Select onValueChange={applyMasterTemplate} value={selectedMasterId}>
+                  <Select
+                    onValueChange={applyMasterTemplate}
+                    value={selectedMasterId}
+                  >
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Pilih Master Template Resmi..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {masterTemplates.map(t => (
+                      {masterTemplates.map((t) => (
                         <SelectItem key={t.id} value={t.id!}>
                           {t.templateName} ({t.brandName})
                         </SelectItem>
@@ -572,8 +1022,9 @@ export function OfferEditor({
                     </SelectContent>
                   </Select>
                   <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-                    <FileCheck className="h-3 w-3" /> 
-                    Menggunakan master template memastikan output PDF 1:1 dengan format resmi perusahaan.
+                    <FileCheck className="h-3 w-3" />
+                    Menggunakan master template memastikan output PDF 1:1 dengan
+                    format resmi perusahaan.
                   </p>
                 </div>
               )}
@@ -640,7 +1091,11 @@ export function OfferEditor({
                     </FormItem>
                   )}
                 />
-                <input type="hidden" {...form.register("offerSections.0.title")} value="Isi Penawaran / Ketentuan Penawaran" />
+                <input
+                  type="hidden"
+                  {...form.register("offerSections.0.title")}
+                  value="Isi Penawaran / Ketentuan Penawaran"
+                />
               </div>
             </div>
 
@@ -665,13 +1120,13 @@ export function OfferEditor({
 
               <FormField
                 control={form.control}
-                name="offerDescription"
+                name="offerLetterNumber"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Deskripsi Singkat Penawaran</FormLabel>
+                    <FormLabel>Nomor Surat Offering</FormLabel>
                     <FormControl>
-                      <Textarea
-                        placeholder="Contoh: Kontrak ini mencakup fleksibilitas jam kerja dan tunjangan transportasi."
+                      <Input
+                        placeholder="Contoh: OL/ENV/20260417/ABCD"
                         {...field}
                         value={field.value ?? ""}
                         disabled={!isEditable}
@@ -682,6 +1137,83 @@ export function OfferEditor({
                 )}
               />
             </div>
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <FormField
+                control={form.control}
+                name="signerName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nama Penandatangan</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Contoh: Budi Santoso"
+                        {...field}
+                        value={field.value ?? ""}
+                        disabled={!isEditable}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="signerTitle"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Jabatan Penandatangan</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Contoh: HR Manager"
+                        {...field}
+                        value={field.value ?? ""}
+                        disabled={!isEditable}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="responseDeadline"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Batas Respons</FormLabel>
+                    <FormControl>
+                      <GoogleDatePicker
+                        value={field.value}
+                        onChange={field.onChange}
+                        disabled={!isEditable}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={form.control}
+              name="offerDescription"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Deskripsi Singkat Penawaran</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Contoh: Kontrak ini mencakup fleksibilitas jam kerja dan tunjangan transportasi."
+                      {...field}
+                      value={field.value ?? ""}
+                      disabled={!isEditable}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <FormField
               control={form.control}
@@ -717,7 +1249,7 @@ export function OfferEditor({
       <CardFooter className="flex flex-col gap-2 sm:flex-row justify-end">
         <Button
           variant="secondary"
-          onClick={form.handleSubmit(onSaveDraft)}
+          onClick={form.handleSubmit(handleSaveDraft)}
           disabled={!isEditable || isSavingDraft}
         >
           {isSavingDraft ? "Menyimpan..." : "Simpan Draf"}
@@ -750,17 +1282,21 @@ export function OfferEditor({
               <Badge className="self-start bg-primary/10 text-primary">
                 Preview – Belum Dikirim
               </Badge>
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 className="gap-2"
                 onClick={() => {
-                  if (previewData?.offerSections?.[0]?.content) {
-                    generateOfferingPDF(
-                      previewData.offerSections[0].content, 
-                      `Offering_${candidateName.replace(/\s+/g, '_')}.pdf`
-                    );
-                  }
+                  if (!previewData) return;
+                  const template = masterTemplates.find(
+                    (t) => t.id === selectedMasterId,
+                  );
+                  const content = getFinalOfferHtml(previewData);
+                  generateOfferingPDF(
+                    content,
+                    `Offering_${candidateName.replace(/\s+/g, "_")}.pdf`,
+                    template?.cssTemplate || "",
+                  );
                 }}
               >
                 <Download className="h-4 w-4" /> Download PDF
@@ -837,17 +1373,39 @@ export function OfferEditor({
                     Ringkasan Penawaran
                   </p>
                   <div className="mt-4 space-y-6 text-sm">
-                    {previewData?.offerSections?.map((section: { title: string; content: string }, index: number) => (
-                      <div key={index} className="rounded-2xl border border-muted/50 bg-background p-4">
-                        <p className="font-bold text-primary mb-3">
-                          {section.title}
-                        </p>
-                        <div 
-                          className="prose prose-sm max-w-none dark:prose-invert"
-                          dangerouslySetInnerHTML={{ __html: section.content }}
-                        />
-                      </div>
-                    ))}
+                    {previewData?.offerSections?.map(
+                      (
+                        section: { title: string; content: string },
+                        index: number,
+                      ) => {
+                        const template = masterTemplates.find(
+                          (t) => t.id === selectedMasterId,
+                        );
+                        return (
+                          <div
+                            key={index}
+                            className="rounded-2xl border border-muted/50 bg-background p-4 overflow-hidden"
+                          >
+                            <p className="font-bold text-primary mb-3">
+                              {section.title}
+                            </p>
+                            <div
+                              className={
+                                selectedMasterId
+                                  ? ""
+                                  : "prose prose-sm max-w-none dark:prose-invert"
+                              }
+                              dangerouslySetInnerHTML={{
+                                __html: `
+                              ${template?.cssTemplate ? `<style>${template.cssTemplate}</style>` : ""}
+                              ${getFinalOfferHtml(previewData || ({} as OfferFormData))}
+                            `,
+                              }}
+                            />
+                          </div>
+                        );
+                      },
+                    )}
                     <div className="rounded-2xl border border-muted/60 bg-background p-4">
                       <p className="text-sm text-muted-foreground">
                         Estimasi Pengiriman

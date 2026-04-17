@@ -306,9 +306,13 @@ function ApplicationCard({
                   size="sm" 
                   className="gap-2 h-8"
                   onClick={() => {
-                    const content = application.offerSections?.[0]?.content;
-                    if (content) {
-                      generateOfferingPDF(content, `Offering_${application.jobPosition.replace(/\s+/g, '_')}.pdf`);
+                    if (application.finalOfferingUrl) {
+                      window.open(application.finalOfferingUrl, "_blank");
+                    } else {
+                      const content = application.offerSections?.[0]?.content;
+                      if (content) {
+                        generateOfferingPDF(content, `Offering_${application.jobPosition.replace(/\s+/g, '_')}.pdf`);
+                      }
                     }
                   }}
                 >

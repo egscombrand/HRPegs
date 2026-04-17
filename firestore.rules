@@ -527,8 +527,30 @@ service cloud.firestore {
      * - Signed-in recruitment staff (internal) can read active ones.
      */
     match /recruitment_offering_templates/{templateId} {
-      allow read: if isInternal();
+      allow get, list: if isInternal();
       allow write: if isHrd() || isSuperAdmin() || getUserData().role in ['hrd', 'super-admin'];
+    }
+
+    /**
+     * /recruitment_offer_description_templates/{templateId}
+     * - Reusable HRD offering description templates.
+     * - Only internal HRD staff or super admins should read and create them.
+     */
+    match /recruitment_offer_description_templates/{templateId} {
+      allow get, list: if isInternal();
+      allow create: if isHrd() || isSuperAdmin();
+      allow update, delete: if isHrd() || isSuperAdmin();
+    }
+
+    /**
+     * /recruitment_offer_description_history/{historyId}
+     * - History of past proposal descriptions.
+     * - Only internal HRD staff or super admins should read and create them.
+     */
+    match /recruitment_offer_description_history/{historyId} {
+      allow get, list: if isInternal();
+      allow create: if isHrd() || isSuperAdmin();
+      allow update, delete: if false;
     }
   }
 }

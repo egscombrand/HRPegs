@@ -407,11 +407,15 @@ export type JobApplication = {
   offerNotes?: string | null;
   masterTemplateId?: string | null;
   offerLetterNumber?: string | null;
+  responseDeadline?: Timestamp | null;
+  signerName?: string | null;
+  signerTitle?: string | null;
   offerSentAt?: Timestamp | null;
   offerViewedAt?: Timestamp | null;
   offerRejectionReason?: string | null;
   candidateOfferDecisionAt?: Timestamp | null;
   internalAccessEnabled?: boolean;
+  finalOfferingUrl?: string | null;
 
   // Denormalized data
   candidateName: string;
@@ -1351,12 +1355,19 @@ export function isActionableStatus(
 export type OfferingTemplate = {
   id?: string;
   templateName: string;
+  brandId: string;
   brandName: string;
   employmentType: "fulltime" | "internship" | "contract";
-  referencePdfUrl?: string;
-  htmlContent: string;
+  referenceFileUrl?: string;
+  referenceFileName?: string;
+  htmlTemplate: string;
+  cssTemplate: string;
+  placeholders: string[];
   isActive: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
   createdBy: string;
+  // Legacy support
+  htmlContent?: string;
+  referencePdfUrl?: string;
 };

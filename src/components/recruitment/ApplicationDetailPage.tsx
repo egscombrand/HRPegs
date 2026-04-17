@@ -15,7 +15,16 @@ import {
   updateDoc,
   writeBatch,
   Timestamp,
+  collection,
+  query,
+  where,
+  getDocs,
 } from "firebase/firestore";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import {
+  generateOfferingPDFBlob,
+  buildOfferingHtml,
+} from "@/lib/recruitment/pdf-generator";
 import type {
   JobApplication,
   Profile,
@@ -46,6 +55,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getInitials } from "@/lib/utils";
 import { format } from "date-fns";
+import { id as idLocale } from "date-fns/locale";
 import { ApplicationProgressStepper } from "@/components/recruitment/ApplicationProgressStepper";
 import { CandidateDocumentsCard } from "@/components/recruitment/CandidateDocumentsCard";
 import { CandidateFitAnalysis } from "@/components/recruitment/CandidateFitAnalysis";
@@ -175,6 +185,13 @@ export default function ApplicationDetailPage() {
       offerDescription: offerData.offerDescription,
       workDays: offerData.workDays,
       offerNotes: offerData.offerNotes,
+      masterTemplateId: offerData.masterTemplateId || null,
+      offerLetterNumber: offerData.offerLetterNumber || null,
+      responseDeadline: offerData.responseDeadline
+        ? Timestamp.fromDate(offerData.responseDeadline)
+        : null,
+      signerName: offerData.signerName || null,
+      signerTitle: offerData.signerTitle || null,
       updatedAt: serverTimestamp(),
     };
 
@@ -207,38 +224,107 @@ export default function ApplicationDetailPage() {
       meta: { note: "Penawaran kerja resmi telah dikirimkan kepada kandidat." },
     };
 
-    const [hours, minutes] = offerData.startTime.split(":").map(Number);
-    const combinedDate = new Date(offerData.contractStartDate);
-    combinedDate.setHours(hours, minutes);
-
-    const updatePayload = {
-      status: "offered" as const,
-      offerStatus: "sent" as const,
-      offeredSalary: offerData.offeredSalary,
-      probationDurationMonths: offerData.probationDurationMonths,
-      contractStartDate: Timestamp.fromDate(combinedDate),
-      contractDurationMonths: offerData.contractDurationMonths,
-      contractEndDate: offerData.contractEndDate
-        ? Timestamp.fromDate(offerData.contractEndDate)
-        : null,
-      offerSections: offerData.offerSections,
-      offerDescription: offerData.offerDescription,
-      workDays: offerData.workDays,
-      offerNotes: offerData.offerNotes,
-      updatedAt: serverTimestamp(),
-      timeline: [...(application.timeline || []), timelineEvent],
-    };
-
     try {
       setIsSendingOffer(true);
+
+      // 1. Fetch template for CSS and HTML if exists
+      let cssTemplate = "";
+      let templateHtml = "";
+      if (offerData.masterTemplateId) {
+        const templatesRef = collection(
+          firestore,
+          "recruitment_offering_templates",
+        );
+        const q = query(
+          templatesRef,
+          where("__name__", "==", offerData.masterTemplateId),
+        );
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const templateData = snap.docs[0].data();
+          cssTemplate = templateData?.cssTemplate || "";
+          templateHtml =
+            templateData?.htmlTemplate || templateData?.htmlContent || "";
+        }
+      }
+
+      // 2. Generate PDF Blob using master template + dynamic description content
+      const mergedHtml = buildOfferingHtml(
+        templateHtml,
+        {
+          letterNumber: offerData.offerLetterNumber || "",
+          candidateName: application.candidateName,
+          jobTitle: application.jobPosition,
+          brandName: application.brandName,
+          startDate: offerData.contractStartDate
+            ? format(offerData.contractStartDate.toDate(), "dd MMMM yyyy", {
+                locale: idLocale,
+              })
+            : "",
+          contractEndDate: offerData.contractEndDate
+            ? format(offerData.contractEndDate.toDate(), "dd MMMM yyyy", {
+                locale: idLocale,
+              })
+            : "",
+          salary: offerData.offeredSalary?.toLocaleString("id-ID") || "",
+          signerName: offerData.signerName || "",
+          signerTitle: offerData.signerTitle || "",
+          responseDeadline: offerData.responseDeadline
+            ? format(offerData.responseDeadline.toDate(), "dd MMMM yyyy", {
+                locale: idLocale,
+              })
+            : "",
+        },
+        offerData.offerSections?.[0]?.content || "",
+      );
+      const pdfBlob = await generateOfferingPDFBlob(mergedHtml, cssTemplate);
+
+      // 3. Upload to Storage
+      const storage = getStorage();
+      const pdfPath = `final_offerings/${application.id}/Offering_${application.candidateName.replace(/\s+/g, "_")}.pdf`;
+      const storageRef = ref(storage, pdfPath);
+      await uploadBytes(storageRef, pdfBlob);
+      const downloadUrl = await getDownloadURL(storageRef);
+
+      const [hours, minutes] = offerData.startTime.split(":").map(Number);
+      const combinedDate = new Date(offerData.contractStartDate);
+      combinedDate.setHours(hours, minutes);
+
+      const updatePayload = {
+        status: "offered" as const,
+        offerStatus: "sent" as const,
+        offeredSalary: offerData.offeredSalary,
+        probationDurationMonths: offerData.probationDurationMonths,
+        contractStartDate: Timestamp.fromDate(combinedDate),
+        contractDurationMonths: offerData.contractDurationMonths,
+        contractEndDate: offerData.contractEndDate
+          ? Timestamp.fromDate(offerData.contractEndDate)
+          : null,
+        offerSections: offerData.offerSections,
+        offerDescription: offerData.offerDescription,
+        workDays: offerData.workDays,
+        offerNotes: offerData.offerNotes,
+        masterTemplateId: offerData.masterTemplateId || null,
+        offerLetterNumber: offerData.offerLetterNumber || null,
+        responseDeadline: offerData.responseDeadline
+          ? Timestamp.fromDate(offerData.responseDeadline)
+          : null,
+        signerName: offerData.signerName || null,
+        signerTitle: offerData.signerTitle || null,
+        finalOfferingUrl: downloadUrl,
+        offerSentAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        timeline: [...(application.timeline || []), timelineEvent],
+      };
+
       await updateDoc(applicationRef!, updatePayload);
       mutateApplication();
       toast({
         title: "Penawaran Terkirim",
-        description:
-          "Kandidat sekarang dapat melihat dan merespons penawaran Anda.",
+        description: "PDF Penawaran telah dibuat dan dikirim ke kandidat.",
       });
     } catch (e: any) {
+      console.error("Error sending offer:", e);
       toast({
         variant: "destructive",
         title: "Gagal Mengirim Penawaran",

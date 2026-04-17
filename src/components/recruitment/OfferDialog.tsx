@@ -43,12 +43,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
-import { 
-  UserCheck, 
-  Leaf, 
-  Globe,
-  GraduationCap
-} from "lucide-react";
+import { UserCheck, Leaf, Globe, GraduationCap } from "lucide-react";
 
 const OFFER_TEMPLATES = {
   internship: `
@@ -138,6 +133,9 @@ export const offerSchema = z.object({
   offerNotes: z.string().optional(),
   masterTemplateId: z.string().optional().nullable(),
   offerLetterNumber: z.string().optional().nullable(),
+  responseDeadline: z.date().optional().nullable(),
+  signerName: z.string().optional().nullable(),
+  signerTitle: z.string().optional().nullable(),
 });
 
 export type OfferFormData = z.infer<typeof offerSchema>;
@@ -242,13 +240,18 @@ export function OfferDialog({
       .replace(/\[Nama Perusahaan\]/g, job.brandName || "Environesia")
       .replace(/\[Gaji\]/g, formatSalary(watch("offeredSalary")))
       .replace(/\[Durasi\]/g, watch("contractDurationMonths").toString())
-      .replace(/\[Masa Probation\]/g, (watch("probationDurationMonths") || 3).toString())
+      .replace(
+        /\[Masa Probation\]/g,
+        (watch("probationDurationMonths") || 3).toString(),
+      )
       .replace(/\[Hari Kerja\]/g, watch("workDays") || "Senin - Jumat")
       .replace(/\[Jam Kerja\]/g, watch("startTime") || "09:00")
       .replace(/\[Lokasi\]/g, job.location || "Kantor")
       .replace(
         /\[Tanggal\]/g,
-        startDate ? format(startDate, "dd MMMM yyyy", { locale: idLocale }) : ""
+        startDate
+          ? format(startDate, "dd MMMM yyyy", { locale: idLocale })
+          : "",
       );
 
     setValue("offerSections.0.content", content);
@@ -427,12 +430,14 @@ export function OfferDialog({
 
                 <div className="space-y-4 rounded-xl border border-primary/20 bg-primary/5 p-4 mt-6">
                   <div>
-                    <p className="text-sm font-bold text-primary">Isi & Ketentuan Penawaran</p>
+                    <p className="text-sm font-bold text-primary">
+                      Isi & Ketentuan Penawaran
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       Gunakan template untuk mempercepat penulisan.
                     </p>
                   </div>
-                  
+
                   <div className="flex flex-wrap gap-2">
                     <Button
                       type="button"
@@ -492,7 +497,11 @@ export function OfferDialog({
                       </FormItem>
                     )}
                   />
-                  <input type="hidden" {...form.register("offerSections.0.title")} value="Isi Penawaran / Ketentuan Penawaran" />
+                  <input
+                    type="hidden"
+                    {...form.register("offerSections.0.title")}
+                    value="Isi Penawaran / Ketentuan Penawaran"
+                  />
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -501,9 +510,7 @@ export function OfferDialog({
                     name="offerDescription"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>
-                          Deskripsi Singkat (Opsional)
-                        </FormLabel>
+                        <FormLabel>Deskripsi Singkat (Opsional)</FormLabel>
                         <FormControl>
                           <Textarea
                             placeholder="Contoh: Kontrak ini mencakup fleksibilitas jam kerja..."
