@@ -114,7 +114,7 @@ function InterviewManagement({ application, onUpdate, allUsers, allBrands, job }
                     endAt: Timestamp.fromDate(add(data.dateTime, { minutes: data.duration })),
                     panelistIds: panelistIds,
                     panelistNames: panelistNames,
-                    meetingLink: data.meetingLink,
+                    meetingLink: data.meetingLink || "",
                     notes: data.notes,
                 };
                 newTimeline.push({
@@ -155,7 +155,7 @@ function InterviewManagement({ application, onUpdate, allUsers, allBrands, job }
                 panelistIds: panelistIds,
                 panelistNames: panelistNames,
                 status: 'scheduled',
-                meetingLink: data.meetingLink,
+                meetingLink: data.meetingLink || "",
                 notes: data.notes,
                 meetingPublished: false,
             };
@@ -325,7 +325,7 @@ function InterviewManagement({ application, onUpdate, allUsers, allBrands, job }
                                                 {iv.rescheduleRequest.proposedSlots.map((slot, slotIndex) => (
                                                     <li key={slotIndex} className="flex items-center justify-between text-sm p-2 bg-background/50 rounded-md">
                                                         <span>{format(slot.startAt.toDate(), 'eeee, dd MMM yyyy - HH:mm', { locale: idLocale })}</span>
-                                                        <Button size="xs" onClick={() => handleApproveReschedule(iv, slot)} disabled={isSubmitting}>Setujui</Button>
+                                                        <Button size="sm" onClick={() => handleApproveReschedule(iv, slot)} disabled={isSubmitting}>Setujui</Button>
                                                     </li>
                                                 ))}
                                             </ul>
@@ -368,6 +368,7 @@ function InterviewManagement({ application, onUpdate, allUsers, allBrands, job }
             interview={activeInterview}
             currentUser={userProfile}
             allUsers={allUsers}
+            allBrands={allBrands}
             onSuccess={onUpdate}
         />
       )}
@@ -524,6 +525,7 @@ export default function ApplicationDetailPage() {
           <ApplicationActionBar 
             application={application} 
             onStageChange={handleStageChange}
+            onSendOfferClick={() => {}}
           />
           
           <Card>
@@ -531,7 +533,7 @@ export default function ApplicationDetailPage() {
               <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
                 <div className="flex items-start gap-4">
                   <Avatar className="h-16 w-16 border">
-                     <AvatarImage src={profile.photoUrl || `https://picsum.photos/seed/${application.candidateUid}/100/100`} alt={profile.fullName} data-ai-hint="profile avatar" />
+                     <AvatarImage src={application.candidatePhotoUrl || `https://picsum.photos/seed/${application.candidateUid}/100/100`} alt={profile.fullName} data-ai-hint="profile avatar" />
                      <AvatarFallback className="text-xl">{getInitials(profile.fullName)}</AvatarFallback>
                   </Avatar>
                   <div>
@@ -568,7 +570,7 @@ export default function ApplicationDetailPage() {
                 <ProfileView profile={profile} />
             </div>
             <div className="lg:sticky lg:top-24 space-y-6">
-                <CandidateDocumentsCard application={application} onVerificationChange={mutateApplication}/>
+                <CandidateDocumentsCard application={application} profile={profile} onVerificationChange={mutateApplication}/>
                 <ApplicationNotes application={application} onNoteAdded={mutateApplication} />
             </div>
           </div>

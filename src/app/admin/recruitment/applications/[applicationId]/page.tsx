@@ -320,25 +320,41 @@ export default function ApplicationDetailPage() {
     if (!application) return;
     setIsSavingDraft(true);
 
-    const [hours, minutes] = offerData.startTime.split(":").map(Number);
-    const combinedDate = new Date(offerData.contractStartDate);
-    combinedDate.setHours(hours, minutes);
-
     try {
-      await updateDoc(applicationRef!, {
-        offeredSalary: offerData.offeredSalary,
-        probationDurationMonths: offerData.probationDurationMonths,
-        contractStartDate: Timestamp.fromDate(combinedDate),
-        contractDurationMonths: offerData.contractDurationMonths,
-        contractEndDate: offerData.contractEndDate
-          ? Timestamp.fromDate(offerData.contractEndDate)
+      // Safely combine response deadline date and time
+      let responseDeadline: Date | null = null;
+      if (offerData.responseDeadline) {
+        responseDeadline = new Date(offerData.responseDeadline);
+        if (
+          offerData.responseDeadlineTime &&
+          typeof offerData.responseDeadlineTime === "string"
+        ) {
+          const [hh, mm] = offerData.responseDeadlineTime
+            .split(":")
+            .map((x) => parseInt(x));
+          if (!isNaN(hh) && !isNaN(mm)) {
+            responseDeadline.setHours(hh, mm, 0, 0);
+          }
+        }
+      }
+
+      const updatePayload: any = {
+        responseDeadline: responseDeadline
+          ? Timestamp.fromDate(responseDeadline)
           : null,
-        offerSections: offerData.offerSections,
-        offerDescription: offerData.offerDescription,
-        workDays: offerData.workDays,
-        offerNotes: offerData.offerNotes,
+        offeringDetails: {
+          salary: offerData.salary || "",
+          startDate: offerData.startDate || "",
+          contractDurationMonths: offerData.contractDurationMonths || "",
+          firstDayTime: offerData.firstDayTime || "",
+          firstDayLocation: offerData.firstDayLocation || "",
+          hrContact: offerData.hrContact || "",
+        },
+        additionalNotes: offerData.additionalNotes || "",
         updatedAt: serverTimestamp(),
-      });
+      };
+
+      await updateDoc(applicationRef!, updatePayload);
       mutateApplication();
       toast({
         title: "Draf Disimpan",
@@ -359,38 +375,59 @@ export default function ApplicationDetailPage() {
     if (!application || !userProfile) return;
     setIsSendingOffer(true);
 
-    const [hours, minutes] = offerData.startTime.split(":").map(Number);
-    const combinedDate = new Date(offerData.contractStartDate);
-    combinedDate.setHours(hours, minutes);
-
-    const timelineEvent: ApplicationTimelineEvent = {
-      type: "offer_sent",
-      at: Timestamp.now(),
-      by: userProfile.uid,
-      meta: {
-        note: "Penawaran kerja resmi telah dikirimkan kepada kandidat.",
-      },
-    };
-
     try {
-      await updateDoc(applicationRef!, {
+      // Safely combine response deadline date and time
+      let responseDeadline: Date | null = null;
+      if (offerData.responseDeadline) {
+        responseDeadline = new Date(offerData.responseDeadline);
+        if (
+          offerData.responseDeadlineTime &&
+          typeof offerData.responseDeadlineTime === "string"
+        ) {
+          const [hh, mm] = offerData.responseDeadlineTime
+            .split(":")
+            .map((x) => parseInt(x));
+          if (!isNaN(hh) && !isNaN(mm)) {
+            responseDeadline.setHours(hh, mm, 0, 0);
+          }
+        }
+      }
+
+      const timelineEvent: ApplicationTimelineEvent = {
+        type: "offer_sent",
+        at: Timestamp.now(),
+        by: userProfile.uid,
+        meta: {
+          note: "Penawaran kerja resmi telah dikirimkan kepada kandidat.",
+        },
+      };
+
+      const updatePayload: any = {
         status: "offered",
-        offerStatus: "sent",
-        offeredSalary: offerData.offeredSalary,
-        probationDurationMonths: offerData.probationDurationMonths,
-        contractStartDate: Timestamp.fromDate(combinedDate),
-        contractDurationMonths: offerData.contractDurationMonths,
-        contractEndDate: offerData.contractEndDate
-          ? Timestamp.fromDate(offerData.contractEndDate)
+        responseDeadline: responseDeadline
+          ? Timestamp.fromDate(responseDeadline)
           : null,
-        offerSections: offerData.offerSections,
-        offerDescription: offerData.offerDescription,
-        workDays: offerData.workDays,
-        offerNotes: offerData.offerNotes,
-        offerSentAt: Timestamp.now(),
+        offeringDetails: {
+          salary: offerData.salary || "",
+          startDate: offerData.startDate || "",
+          contractDurationMonths: offerData.contractDurationMonths || "",
+          firstDayTime: offerData.firstDayTime || "",
+          firstDayLocation: offerData.firstDayLocation || "",
+          hrContact: offerData.hrContact || "",
+        },
+        additionalNotes: offerData.additionalNotes || "",
+        sentAt: Timestamp.now(),
+        sentBy: userProfile.uid,
+        viewedAtFirst: null,
+        viewedAtLast: null,
+        viewCount: 0,
+        respondedAt: null,
+        responseType: null,
         updatedAt: serverTimestamp(),
         timeline: [...(application.timeline || []), timelineEvent],
-      });
+      };
+
+      await updateDoc(applicationRef!, updatePayload);
       mutateApplication();
       toast({
         title: "Penawaran Terkirim",
