@@ -1,0 +1,105 @@
+/* Rich Text Editor Styling */
+
+/* Content wrapper */
+.rich-text-editor-content {
+  @apply min-h-[120px] w-full;
+}
+
+/* ProseMirror editor container */
+.rich-text-editor-content .ProseMirror {
+  @apply outline-none min-h-[120px] p-4 text-foreground w-full max-w-none mx-0;
+}
+
+.rich-text-editor-content .ProseMirror > * {
+  @apply w-full max-w-none;
+}
+
+/* Dark mode - ensure text is visible */
+.dark .rich-text-editor-content .ProseMirror {
+  @apply text-foreground;
+}
+
+/* Headings */
+.rich-text-editor-content .ProseMirror h1 {
+  @apply text-lg font-bold text-foreground my-2;
+}
+
+.rich-text-editor-content .ProseMirror h2 {
+  @apply text-base font-bold text-foreground my-2;
+}
+
+.rich-text-editor-content .ProseMirror h3 {
+  @apply text-base font-semibold text-foreground my-2;
+}
+
+/* Paragraph */
+.rich-text-editor-content .ProseMirror p {
+  @apply text-foreground my-2 leading-relaxed;
+}
+
+/* Bold */
+.rich-text-editor-content .ProseMirror strong {
+  @apply font-bold text-foreground;
+}
+
+/* Italic */
+.rich-text-editor-content .ProseMirror em {
+  @apply italic text-foreground;
+}
+
+/* Lists */
+.rich-text-editor-content .ProseMirror ul,
+.rich-text-editor-content .ProseMirror ol {
+  @apply text-foreground my-2 pl-6;
+}
+
+.rich-text-editor-content .ProseMirror li {
+  @apply text-foreground my-1;
+}
+
+.rich-text-editor-content .ProseMirror ul li::marker {
+  @apply text-foreground;
+}
+
+.rich-text-editor-content .ProseMirror ol li::marker {
+  @apply text-foreground;
+}
+
+/* Code block */
+.rich-text-editor-content .ProseMirror code {
+  @apply text-foreground bg-muted px-1.5 py-0.5 rounded text-sm font-mono;
+}
+
+.rich-text-editor-content .ProseMirror pre {
+  @apply bg-muted text-foreground p-4 rounded-md overflow-x-auto my-2;
+}
+
+.rich-text-editor-content .ProseMirror pre code {
+  @apply bg-transparent px-0 py-0;
+}
+
+/* Blockquote */
+.rich-text-editor-content .ProseMirror blockquote {
+  @apply border-l-4 border-primary pl-4 text-foreground italic my-2;
+}
+
+/* Horizontal rule */
+.rich-text-editor-content .ProseMirror hr {
+  @apply border-border my-4;
+}
+
+/* Link (if needed) */
+.rich-text-editor-content .ProseMirror a {
+  @apply text-primary hover:underline;
+}
+
+/* Selection color - make sure selection is visible */
+.rich-text-editor-content .ProseMirror ::selection {
+  @apply bg-primary/20;
+}
+
+/* Empty state - show placeholder-like text */
+.rich-text-editor-content .ProseMirror:empty::before {
+  @apply text-muted-foreground pointer-events-none absolute;
+  content: attr(data-placeholder);
+}

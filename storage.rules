@@ -56,5 +56,16 @@ service firebase.storage {
         get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'super-admin'
       );
     }
+
+    // Rules for job offerings PDFs
+    match /offerings/{applicationId}/{allPaths=**} {
+      // HRD can upload, everyone can read
+      allow read;
+      allow write: if request.auth != null && (
+        exists(/databases/(default)/documents/roles_admin/$(request.auth.uid)) ||
+        get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'hrd' ||
+        get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'super-admin'
+      );
+    }
   }
 }

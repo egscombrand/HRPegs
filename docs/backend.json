@@ -24,9 +24,9 @@
           "description": "The role of the user within the application (super-admin, hrd, manager, kandidat, karyawan)."
         },
         "employmentType": {
-            "type": "string",
-            "description": "The type of employment for the user.",
-            "enum": ["karyawan", "magang", "training"]
+          "type": "string",
+          "description": "The type of employment for the user.",
+          "enum": ["karyawan", "magang", "training"]
         },
         "isActive": {
           "type": "boolean",
@@ -38,8 +38,8 @@
           "format": "date-time"
         },
         "createdBy": {
-            "type": "string",
-            "description": "UID of the user who created this user profile."
+          "type": "string",
+          "description": "UID of the user who created this user profile."
         },
         "brandId": {
           "type": "string",
@@ -75,14 +75,7 @@
           "description": "The user's specific job title, e.g., 'Kepala Divisi Creative' or 'Staf Keuangan'."
         }
       },
-      "required": [
-        "uid",
-        "fullName",
-        "email",
-        "role",
-        "isActive",
-        "createdAt"
-      ]
+      "required": ["uid", "fullName", "email", "role", "isActive", "createdAt"]
     },
     "EcosystemSection": {
       "title": "Ecosystem Section",
@@ -113,10 +106,24 @@
       "description": "Represents a company within the Environesia ecosystem, displayed on the landing page.",
       "properties": {
         "name": { "type": "string", "description": "The name of the company." },
-        "iconUrl": { "type": "string", "format": "uri", "description": "URL of the company's logo." },
-        "websiteUrl": { "type": "string", "format": "uri", "description": "Link to the company's website." },
-        "isActive": { "type": "boolean", "description": "Controls visibility on the landing page." },
-        "sortOrder": { "type": "number", "description": "Order of appearance, lower numbers first." },
+        "iconUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL of the company's logo."
+        },
+        "websiteUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "Link to the company's website."
+        },
+        "isActive": {
+          "type": "boolean",
+          "description": "Controls visibility on the landing page."
+        },
+        "sortOrder": {
+          "type": "number",
+          "description": "Order of appearance, lower numbers first."
+        },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
@@ -129,14 +136,26 @@
       "properties": {
         "brandId": { "type": "string" },
         "brandName": { "type": "string" },
-        "employmentType": { "type": "string", "enum": ["karyawan", "magang", "training"] },
+        "employmentType": {
+          "type": "string",
+          "enum": ["karyawan", "magang", "training"]
+        },
         "totalSlots": { "type": "number" },
         "claimedSlots": { "type": "number" },
         "createdBy": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["brandId", "brandName", "employmentType", "totalSlots", "claimedSlots", "createdBy", "createdAt", "updatedAt"]
+      "required": [
+        "brandId",
+        "brandName",
+        "employmentType",
+        "totalSlots",
+        "claimedSlots",
+        "createdBy",
+        "createdAt",
+        "updatedAt"
+      ]
     },
     "Brand": {
       "title": "Brand",
@@ -152,9 +171,7 @@
           "description": "A short description of the brand."
         }
       },
-      "required": [
-        "name"
-      ]
+      "required": ["name"]
     },
     "Division": {
       "title": "Division",
@@ -186,9 +203,18 @@
       "type": "object",
       "description": "Stores detailed profile information for an employee (intern, full-time, etc.).",
       "properties": {
-        "uid": { "type": "string", "description": "Matches Firebase Auth UID." },
-        "employmentType": { "type": "string", "enum": ["magang", "training", "karyawan"] },
-        "employmentStatus": { "type": "string", "enum": ["active", "probation", "resigned", "terminated"] },
+        "uid": {
+          "type": "string",
+          "description": "Matches Firebase Auth UID."
+        },
+        "employmentType": {
+          "type": "string",
+          "enum": ["magang", "training", "karyawan"]
+        },
+        "employmentStatus": {
+          "type": "string",
+          "enum": ["active", "probation", "resigned", "terminated"]
+        },
         "employeeNumber": { "type": "string" },
         "joinDate": { "type": "string", "format": "date" },
         "positionTitle": { "type": "string" },
@@ -203,10 +229,16 @@
         "phone": { "type": "string" },
         "email": { "type": "string", "format": "email" },
         "nik": { "type": "string" },
-        "gender": { "type": "string", "enum": ["Laki-laki", "Perempuan", "Lainnya"] },
+        "gender": {
+          "type": "string",
+          "enum": ["Laki-laki", "Perempuan", "Lainnya"]
+        },
         "birthPlace": { "type": "string" },
         "birthDate": { "type": "string", "format": "date" },
-        "maritalStatus": { "type": "string", "enum": ["Belum Kawin", "Kawin", "Cerai Hidup", "Cerai Mati"] },
+        "maritalStatus": {
+          "type": "string",
+          "enum": ["Belum Kawin", "Kawin", "Cerai Hidup", "Cerai Mati"]
+        },
         "religion": { "type": "string" },
         "address": { "$ref": "#/backend/entities/Address" },
         "bankName": { "type": "string" },
@@ -228,7 +260,10 @@
             "bankProofUrl": { "type": "string", "format": "uri" },
             "ijazahUrl": { "type": "string", "format": "uri" },
             "cvUrl": { "type": "string", "format": "uri" },
-            "certificateUrls": { "type": "array", "items": { "type": "string", "format": "uri" } }
+            "certificateUrls": {
+              "type": "array",
+              "items": { "type": "string", "format": "uri" }
+            }
           }
         },
         "hrdNotes": { "type": "string" },
@@ -241,7 +276,10 @@
             "completedAt": { "type": "string", "format": "date-time" }
           }
         },
-        "internSubtype": { "type": "string", "enum": ["intern_education", "intern_pre_probation"] }
+        "internSubtype": {
+          "type": "string",
+          "enum": ["intern_education", "intern_pre_probation"]
+        }
       },
       "required": ["uid", "employmentType", "fullName", "phone", "email"]
     },
@@ -262,10 +300,7 @@
           }
         }
       },
-      "required": [
-        "role",
-        "visibleMenuItems"
-      ]
+      "required": ["role", "visibleMenuItems"]
     },
     "Job": {
       "title": "Job Posting",
@@ -283,11 +318,7 @@
         "statusJob": {
           "type": "string",
           "description": "The employment type.",
-          "enum": [
-            "fulltime",
-            "internship",
-            "contract"
-          ]
+          "enum": ["fulltime", "internship", "contract"]
         },
         "division": {
           "type": "string",
@@ -300,11 +331,7 @@
         "workMode": {
           "type": "string",
           "description": "The work arrangement.",
-          "enum": [
-            "onsite",
-            "hybrid",
-            "remote"
-          ]
+          "enum": ["onsite", "hybrid", "remote"]
         },
         "brandId": {
           "type": "string",
@@ -326,11 +353,7 @@
         "publishStatus": {
           "type": "string",
           "description": "The visibility status of the job posting.",
-          "enum": [
-            "draft",
-            "published",
-            "closed"
-          ]
+          "enum": ["draft", "published", "closed"]
         },
         "applyDeadline": {
           "type": "string",
@@ -425,12 +448,31 @@
         "internalStatus": {
           "type": "string",
           "description": "The internal status of the application, visible only to HR.",
-          "enum": ["draft", "submitted", "screening", "assessment", "verification", "document_submission", "interview", "offer", "hired", "on_hold", "rejected"]
+          "enum": [
+            "draft",
+            "submitted",
+            "screening",
+            "assessment",
+            "verification",
+            "document_submission",
+            "interview",
+            "offer",
+            "hired",
+            "on_hold",
+            "rejected"
+          ]
         },
         "candidateStatus": {
           "type": "string",
           "description": "The status visible to the candidate.",
-          "enum": ["submitted", "under_review", "assessment", "interview_scheduled", "offer_received", "process_complete"]
+          "enum": [
+            "submitted",
+            "under_review",
+            "assessment",
+            "interview_scheduled",
+            "offer_received",
+            "process_complete"
+          ]
         },
         "createdAt": {
           "type": "string",
@@ -510,6 +552,169 @@
         "updatedAt"
       ]
     },
+    "Offering": {
+      "title": "Job Offering",
+      "type": "object",
+      "description": "Represents a job offering sent to a candidate via PDF link with additional structured information and tracking.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique ID of the offering."
+        },
+        "applicationId": {
+          "type": "string",
+          "description": "ID of the related job application."
+        },
+        "candidateName": {
+          "type": "string",
+          "description": "Name of the candidate."
+        },
+        "candidateEmail": {
+          "type": "string",
+          "description": "Email of the candidate."
+        },
+        "pdfUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL to the offering PDF file."
+        },
+        "responseDeadline": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Deadline for the candidate to respond."
+        },
+        "status": {
+          "type": "string",
+          "description": "Status of the offering.",
+          "enum": ["draft", "sent", "viewed", "accepted", "rejected", "expired"]
+        },
+        "offeringDetails": {
+          "type": "object",
+          "description": "Structured offering details visible to candidate.",
+          "properties": {
+            "salary": {
+              "type": "string",
+              "description": "Offered salary information."
+            },
+            "startDate": {
+              "type": "string",
+              "format": "date",
+              "description": "Employment start date."
+            },
+            "firstDayTime": {
+              "type": "string",
+              "description": "First day reporting time."
+            },
+            "firstDayLocation": {
+              "type": "string",
+              "description": "First day reporting location."
+            },
+            "hrContact": {
+              "type": "string",
+              "description": "HR contact person information."
+            }
+          }
+        },
+        "additionalNotes": {
+          "type": "string",
+          "description": "Rich text additional notes and information for candidate."
+        },
+        "sentAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the offering was sent to candidate."
+        },
+        "sentBy": {
+          "type": "string",
+          "description": "UID of the user who sent the offering."
+        },
+        "viewedAtFirst": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the offering was first viewed by candidate."
+        },
+        "viewedAtLast": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the offering was last viewed by candidate."
+        },
+        "viewCount": {
+          "type": "integer",
+          "description": "Number of times the offering has been viewed.",
+          "minimum": 0
+        },
+        "acceptedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the offering was accepted."
+        },
+        "rejectedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the offering was rejected."
+        },
+        "expiredAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the offering expired."
+        },
+        "interactions": {
+          "type": "array",
+          "description": "History of interactions with the offering.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["view", "accept", "reject", "question", "sent", "expired"]
+              },
+              "message": {
+                "type": "string",
+                "description": "Optional message for questions or rejections."
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "userId": {
+                "type": "string",
+                "description": "UID of the user who performed the action."
+              }
+            },
+            "required": ["type", "timestamp"]
+          }
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the offering was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the offering was last updated."
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "UID of the user who created the offering."
+        }
+      },
+      "required": [
+        "applicationId",
+        "candidateName",
+        "candidateEmail",
+        "pdfUrl",
+        "responseDeadline",
+        "status",
+        "offeringDetails",
+        "createdAt",
+        "updatedAt",
+        "createdBy"
+      ]
+        "updatedAt",
+        "createdBy"
+      ]
+    },
     "SavedJob": {
       "title": "Saved Job",
       "type": "object",
@@ -544,20 +749,32 @@
       "required": ["userId", "jobId", "savedAt"]
     },
     "Address": {
-        "title": "Address",
-        "type": "object",
-        "description": "Represents a detailed address in Indonesia.",
-        "properties": {
-          "street": { "type": "string", "description": "Street name and number." },
-          "rt": { "type": "string", "description": "RT number." },
-          "rw": { "type": "string", "description": "RW number." },
-          "village": { "type": "string", "description": "Kelurahan atau Desa." },
-          "district": { "type": "string", "description": "Kecamatan." },
-          "city": { "type": "string", "description": "Kota atau Kabupaten." },
-          "province": { "type": "string", "description": "Provinsi." },
-          "postalCode": { "type": "string", "description": "Postal code." }
+      "title": "Address",
+      "type": "object",
+      "description": "Represents a detailed address in Indonesia.",
+      "properties": {
+        "street": {
+          "type": "string",
+          "description": "Street name and number."
         },
-        "required": ["street", "rt", "rw", "village", "district", "city", "province", "postalCode"]
+        "rt": { "type": "string", "description": "RT number." },
+        "rw": { "type": "string", "description": "RW number." },
+        "village": { "type": "string", "description": "Kelurahan atau Desa." },
+        "district": { "type": "string", "description": "Kecamatan." },
+        "city": { "type": "string", "description": "Kota atau Kabupaten." },
+        "province": { "type": "string", "description": "Provinsi." },
+        "postalCode": { "type": "string", "description": "Postal code." }
+      },
+      "required": [
+        "street",
+        "rt",
+        "rw",
+        "village",
+        "district",
+        "city",
+        "province",
+        "postalCode"
+      ]
     },
     "OrganizationalExperience": {
       "title": "Organizational Experience",
@@ -592,178 +809,295 @@
       "required": ["uid", "createdAt"]
     },
     "Profile": {
-        "title": "Candidate Profile",
-        "type": "object",
-        "description": "Stores detailed profile information for a candidate.",
-        "properties": {
-            "fullName": { "type": "string", "description": "Candidate's full name." },
-            "nickname": { "type": "string", "description": "Candidate's nickname." },
-            "email": { "type": "string", "format": "email", "description": "Candidate's email." },
-            "phone": { "type": "string", "description": "Candidate's phone number." },
-            "eKtpNumber": { "type": "string", "description": "16-digit e-KTP number." },
-            "nikHash": {
-              "type": "string",
-              "description": "A server-side SHA-256 hash of the user's NIK, used for uniqueness checks."
-            },
-            "gender": { "type": "string", "description": "Candidate's gender.", "enum": ["Laki-laki", "Perempuan"] },
-            "birthPlace": { "type": "string", "description": "Candidate's place of birth." },
-            "birthDate": { "type": "string", "format": "date-time", "description": "Candidate's date of birth." },
-            "addressKtp": { "$ref": "#/backend/entities/Address", "description": "Candidate's address as per e-KTP." },
-            "addressDomicile": { "$ref": "#/backend/entities/Address", "description": "Candidate's current domicile address." },
-            "isDomicileSameAsKtp": { "type": "boolean", "description": "Whether domicile address is the same as KTP address." },
-            "hasNpwp": { "type": "boolean", "description": "Indicates if the candidate has an NPWP." },
-            "npwpNumber": { "type": "string", "description": "Candidate's NPWP number (if any)." },
-            "willingToWfo": { "type": "boolean", "description": "Indicates if the candidate is willing to work from the office." },
-            "linkedinUrl": { "type": "string", "format": "uri", "description": "URL to LinkedIn profile." },
-            "websiteUrl": { "type": "string", "format": "uri", "description": "URL to personal website/portfolio." },
-            "cvUrl": { "type": "string", "format": "uri", "description": "URL to the candidate's uploaded CV." },
-            "cvFileName": { "type": "string", "description": "The original file name of the CV." },
-            "ijazahUrl": { "type": "string", "format": "uri", "description": "URL to the candidate's uploaded Ijazah/SKL." },
-            "ijazahFileName": { "type": "string", "description": "The original file name of the Ijazah/SKL." },
-            "education": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "id": { "type": "string" },
-                        "institution": { "type": "string" },
-                        "level": {
-                          "type": "string",
-                          "description": "The level of education, e.g., S1, SMA/SMK.",
-                          "enum": ["SMA/SMK", "D3", "S1", "S2", "S3"]
-                        },
-                        "fieldOfStudy": { "type": "string" },
-                        "gpa": {
-                          "type": "string",
-                          "description": "Grade Point Average (IPK) or final average score."
-                        },
-                        "startDate": { "type": "string" },
-                        "endDate": { "type": "string" },
-                        "isCurrent": { "type": "boolean" },
-                        "thesisTitle": { "type": "string", "description": "Judul karya ilmiah (skripsi, tesis, dll)." }
-                    },
-                    "required": ["id", "institution", "level", "startDate"]
-                }
-            },
-            "workExperience": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "id": { "type": "string" },
-                        "company": { "type": "string" },
-                        "position": { "type": "string" },
-                        "jobType": {
-                            "type": "string",
-                            "description": "Tipe pekerjaan, misal: Internship, Kontrak, Tetap.",
-                            "enum": [
-                                "internship",
-                                "pkwt",
-                                "kwtt",
-                                "outsourcing",
-                                "freelance"
-                            ]
-                        },
-                        "startDate": { "type": "string" },
-                        "endDate": { "type": "string" },
-                        "isCurrent": { "type": "boolean" },
-                        "description": { "type": "string", "description": "Peran dan tanggung jawab selama bekerja." },
-                        "reasonForLeaving": { "type": "string", "description": "Alasan berhenti dari pekerjaan ini." }
-                    },
-                    "required": ["id", "company", "position", "startDate", "jobType"]
-                }
-            },
-            "organizationalExperience": {
-              "type": "array",
-              "items": {
-                "$ref": "#/backend/entities/OrganizationalExperience"
+      "title": "Candidate Profile",
+      "type": "object",
+      "description": "Stores detailed profile information for a candidate.",
+      "properties": {
+        "fullName": {
+          "type": "string",
+          "description": "Candidate's full name."
+        },
+        "nickname": {
+          "type": "string",
+          "description": "Candidate's nickname."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Candidate's email."
+        },
+        "phone": {
+          "type": "string",
+          "description": "Candidate's phone number."
+        },
+        "eKtpNumber": {
+          "type": "string",
+          "description": "16-digit e-KTP number."
+        },
+        "nikHash": {
+          "type": "string",
+          "description": "A server-side SHA-256 hash of the user's NIK, used for uniqueness checks."
+        },
+        "gender": {
+          "type": "string",
+          "description": "Candidate's gender.",
+          "enum": ["Laki-laki", "Perempuan"]
+        },
+        "birthPlace": {
+          "type": "string",
+          "description": "Candidate's place of birth."
+        },
+        "birthDate": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Candidate's date of birth."
+        },
+        "addressKtp": {
+          "$ref": "#/backend/entities/Address",
+          "description": "Candidate's address as per e-KTP."
+        },
+        "addressDomicile": {
+          "$ref": "#/backend/entities/Address",
+          "description": "Candidate's current domicile address."
+        },
+        "isDomicileSameAsKtp": {
+          "type": "boolean",
+          "description": "Whether domicile address is the same as KTP address."
+        },
+        "hasNpwp": {
+          "type": "boolean",
+          "description": "Indicates if the candidate has an NPWP."
+        },
+        "npwpNumber": {
+          "type": "string",
+          "description": "Candidate's NPWP number (if any)."
+        },
+        "willingToWfo": {
+          "type": "boolean",
+          "description": "Indicates if the candidate is willing to work from the office."
+        },
+        "linkedinUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL to LinkedIn profile."
+        },
+        "websiteUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL to personal website/portfolio."
+        },
+        "cvUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL to the candidate's uploaded CV."
+        },
+        "cvFileName": {
+          "type": "string",
+          "description": "The original file name of the CV."
+        },
+        "ijazahUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL to the candidate's uploaded Ijazah/SKL."
+        },
+        "ijazahFileName": {
+          "type": "string",
+          "description": "The original file name of the Ijazah/SKL."
+        },
+        "education": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "institution": { "type": "string" },
+              "level": {
+                "type": "string",
+                "description": "The level of education, e.g., S1, SMA/SMK.",
+                "enum": ["SMA/SMK", "D3", "S1", "S2", "S3"]
+              },
+              "fieldOfStudy": { "type": "string" },
+              "gpa": {
+                "type": "string",
+                "description": "Grade Point Average (IPK) or final average score."
+              },
+              "startDate": { "type": "string" },
+              "endDate": { "type": "string" },
+              "isCurrent": { "type": "boolean" },
+              "thesisTitle": {
+                "type": "string",
+                "description": "Judul karya ilmiah (skripsi, tesis, dll)."
               }
             },
-            "skills": {
-                "type": "array",
-                "items": { "type": "string" }
-            },
-            "certifications": {
-                "type": "array",
-                "description": "A list of the candidate's professional certifications.",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "id": { "type": "string" },
-                        "name": { "type": "string", "description": "The name of the certification." },
-                        "organization": { "type": "string", "description": "The issuing organization." },
-                        "issueDate": { "type": "string", "description": "The month and year the certification was issued (YYYY-MM)." },
-                        "expirationDate": { "type": "string", "description": "The month and year the certification expires (YYYY-MM), if applicable." }
-                    },
-                    "required": ["id", "name", "organization", "issueDate"]
-                }
-            },
-            "selfDescription": {
-              "type": "string",
-              "description": "A brief summary of the candidate's character, personality, work attitude, strengths, and weaknesses."
-            },
-            "salaryExpectation": {
-              "type": "string",
-              "description": "The candidate's expected salary range or value."
-            },
-            "salaryExpectationReason": {
-                "type": "string",
-                "description": "The candidate's reasoning for their salary expectation."
-            },
-            "motivation": {
-              "type": "string",
-              "description": "The candidate's motivation and reasons for choosing the desired position."
-            },
-            "workStyle": {
-                "type": "string",
-                "description": "Candidate's preferred working style (e.g., independent, team-based)."
-            },
-            "improvementArea": {
-                "type": "string",
-                "description": "One thing the candidate wants to improve about themselves."
-            },
-            "availability": {
-                "type": "string",
-                "description": "When the candidate can start working.",
-                "enum": ["Secepatnya", "1 minggu", "2 minggu", "1 bulan", "3 bulan", "6 bulan", "Lainnya"]
-            },
-            "availabilityOther": {
-                "type": "string",
-                "description": "Details if 'Lainnya' is selected for availability."
-            },
-            "usedToDeadline": {
-                "type": "boolean",
-                "description": "Indicates if the candidate is used to working with targets or deadlines."
-            },
-            "deadlineExperience": {
-                "type": "string",
-                "description": "Candidate's experience with working under deadlines."
-            },
-            "declaration": {
-              "type": "boolean",
-              "description": "Confirmation that the provided data is true and accurate."
-            },
-            "profileStatus": {
-              "type": "string",
-              "description": "The completion status of the profile.",
-              "enum": ["draft", "completed"]
-            },
-            "profileStep": {
-              "type": "number",
-              "description": "The last completed step in the profile wizard."
-            },
-            "updatedAt": {
-              "type": "string",
-              "format": "date-time",
-              "description": "Timestamp of the last profile update."
-            },
-            "completedAt": {
-              "type": "string",
-              "format": "date-time",
-              "description": "Timestamp when the profile was marked as complete."
-            }
+            "required": ["id", "institution", "level", "startDate"]
+          }
         },
-        "required": ["fullName", "nickname", "email", "phone", "eKtpNumber", "gender", "birthPlace", "birthDate", "addressKtp", "willingToWfo", "education", "declaration", "selfDescription", "salaryExpectation", "salaryExpectationReason", "motivation", "workStyle", "improvementArea", "availability", "usedToDeadline"]
+        "workExperience": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "company": { "type": "string" },
+              "position": { "type": "string" },
+              "jobType": {
+                "type": "string",
+                "description": "Tipe pekerjaan, misal: Internship, Kontrak, Tetap.",
+                "enum": [
+                  "internship",
+                  "pkwt",
+                  "kwtt",
+                  "outsourcing",
+                  "freelance"
+                ]
+              },
+              "startDate": { "type": "string" },
+              "endDate": { "type": "string" },
+              "isCurrent": { "type": "boolean" },
+              "description": {
+                "type": "string",
+                "description": "Peran dan tanggung jawab selama bekerja."
+              },
+              "reasonForLeaving": {
+                "type": "string",
+                "description": "Alasan berhenti dari pekerjaan ini."
+              }
+            },
+            "required": ["id", "company", "position", "startDate", "jobType"]
+          }
+        },
+        "organizationalExperience": {
+          "type": "array",
+          "items": {
+            "$ref": "#/backend/entities/OrganizationalExperience"
+          }
+        },
+        "skills": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "certifications": {
+          "type": "array",
+          "description": "A list of the candidate's professional certifications.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": {
+                "type": "string",
+                "description": "The name of the certification."
+              },
+              "organization": {
+                "type": "string",
+                "description": "The issuing organization."
+              },
+              "issueDate": {
+                "type": "string",
+                "description": "The month and year the certification was issued (YYYY-MM)."
+              },
+              "expirationDate": {
+                "type": "string",
+                "description": "The month and year the certification expires (YYYY-MM), if applicable."
+              }
+            },
+            "required": ["id", "name", "organization", "issueDate"]
+          }
+        },
+        "selfDescription": {
+          "type": "string",
+          "description": "A brief summary of the candidate's character, personality, work attitude, strengths, and weaknesses."
+        },
+        "salaryExpectation": {
+          "type": "string",
+          "description": "The candidate's expected salary range or value."
+        },
+        "salaryExpectationReason": {
+          "type": "string",
+          "description": "The candidate's reasoning for their salary expectation."
+        },
+        "motivation": {
+          "type": "string",
+          "description": "The candidate's motivation and reasons for choosing the desired position."
+        },
+        "workStyle": {
+          "type": "string",
+          "description": "Candidate's preferred working style (e.g., independent, team-based)."
+        },
+        "improvementArea": {
+          "type": "string",
+          "description": "One thing the candidate wants to improve about themselves."
+        },
+        "availability": {
+          "type": "string",
+          "description": "When the candidate can start working.",
+          "enum": [
+            "Secepatnya",
+            "1 minggu",
+            "2 minggu",
+            "1 bulan",
+            "3 bulan",
+            "6 bulan",
+            "Lainnya"
+          ]
+        },
+        "availabilityOther": {
+          "type": "string",
+          "description": "Details if 'Lainnya' is selected for availability."
+        },
+        "usedToDeadline": {
+          "type": "boolean",
+          "description": "Indicates if the candidate is used to working with targets or deadlines."
+        },
+        "deadlineExperience": {
+          "type": "string",
+          "description": "Candidate's experience with working under deadlines."
+        },
+        "declaration": {
+          "type": "boolean",
+          "description": "Confirmation that the provided data is true and accurate."
+        },
+        "profileStatus": {
+          "type": "string",
+          "description": "The completion status of the profile.",
+          "enum": ["draft", "completed"]
+        },
+        "profileStep": {
+          "type": "number",
+          "description": "The last completed step in the profile wizard."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of the last profile update."
+        },
+        "completedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the profile was marked as complete."
+        }
+      },
+      "required": [
+        "fullName",
+        "nickname",
+        "email",
+        "phone",
+        "eKtpNumber",
+        "gender",
+        "birthPlace",
+        "birthDate",
+        "addressKtp",
+        "willingToWfo",
+        "education",
+        "declaration",
+        "selfDescription",
+        "salaryExpectation",
+        "salaryExpectationReason",
+        "motivation",
+        "workStyle",
+        "improvementArea",
+        "availability",
+        "usedToDeadline"
+      ]
     },
     "Assessment": {
       "title": "Assessment",
@@ -784,7 +1118,13 @@
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["name", "version", "isActive", "scoringConfig", "resultTemplates"]
+      "required": [
+        "name",
+        "version",
+        "isActive",
+        "scoringConfig",
+        "resultTemplates"
+      ]
     },
     "AssessmentQuestion": {
       "title": "Assessment Question",
@@ -809,7 +1149,14 @@
         "weight": { "type": "number" },
         "reverse": { "type": "boolean" }
       },
-      "required": ["assessmentId", "order", "text", "choices", "dimensionKey", "weight"]
+      "required": [
+        "assessmentId",
+        "order",
+        "text",
+        "choices",
+        "dimensionKey",
+        "weight"
+      ]
     },
     "AssessmentSession": {
       "title": "Assessment Session",
@@ -827,11 +1174,17 @@
           "properties": {
             "discType": { "type": "string" },
             "mbtiArchetype": {
-                "type": "object",
-                "properties": {
-                    "archetype": { "type": "string", "description": "The MBTI-like archetype name, e.g., Komandan." },
-                    "code": { "type": "string", "description": "The MBTI-like code, e.g., ENTJ-T." }
+              "type": "object",
+              "properties": {
+                "archetype": {
+                  "type": "string",
+                  "description": "The MBTI-like archetype name, e.g., Komandan."
+                },
+                "code": {
+                  "type": "string",
+                  "description": "The MBTI-like code, e.g., ENTJ-T."
                 }
+              }
             },
             "report": { "type": "object" }
           }
@@ -840,9 +1193,9 @@
         "updatedAt": { "type": "string", "format": "date-time" },
         "completedAt": { "type": "string", "format": "date-time" },
         "hrdDecision": {
-            "type": "string",
-            "description": "The HRD's final decision on the assessment result.",
-            "enum": ["pending", "approved", "rejected"]
+          "type": "string",
+          "description": "The HRD's final decision on the assessment result.",
+          "enum": ["pending", "approved", "rejected"]
         },
         "hrdDecisionAt": {
           "type": "string",
@@ -883,81 +1236,110 @@
       "required": ["summary", "score", "strengths", "weaknesses"]
     },
     "AttendanceSite": {
-        "title": "Attendance Site",
-        "description": "Stores site-specific attendance rules.",
-        "type": "object",
-        "properties": {
-            "name": { "type": "string", "description": "Human-readable name for the site (e.g., 'Kantor Pusat Yogyakarta')." },
-            "brandId": { "type": "string", "description": "The brand this site belongs to." },
-            "isActive": { "type": "boolean", "description": "Whether this site configuration is currently active." },
-            "office": {
-                "type": "object",
-                "properties": {
-                    "lat": { "type": "number" },
-                    "lng": { "type": "number" }
-                },
-                "required": ["lat", "lng"]
-            },
-            "radiusM": {
-                "type": "number",
-                "description": "Office radius in meters for onsite validation."
-            },
-            "timezone": {
-                "type": "string",
-                "default": "Asia/Jakarta"
-            },
-            "workDays": {
-                "type": "array",
-                "items": { "type": "string" }
-            },
-            "shift": {
-                "type": "object",
-                "properties": {
-                    "startTime": { "type": "string", "format": "time" },
-                    "endTime": { "type": "string", "format": "time" },
-                    "graceLateMinutes": { "type": "number" }
-                },
-                "required": ["startTime", "endTime", "graceLateMinutes"]
-            },
-            "updatedAt": { "type": "string", "format": "date-time" },
-            "updatedBy": { "type": "string" }
+      "title": "Attendance Site",
+      "description": "Stores site-specific attendance rules.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Human-readable name for the site (e.g., 'Kantor Pusat Yogyakarta')."
         },
-        "required": ["name", "brandId", "isActive", "office", "radiusM", "shift"]
+        "brandId": {
+          "type": "string",
+          "description": "The brand this site belongs to."
+        },
+        "isActive": {
+          "type": "boolean",
+          "description": "Whether this site configuration is currently active."
+        },
+        "office": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          },
+          "required": ["lat", "lng"]
+        },
+        "radiusM": {
+          "type": "number",
+          "description": "Office radius in meters for onsite validation."
+        },
+        "timezone": {
+          "type": "string",
+          "default": "Asia/Jakarta"
+        },
+        "workDays": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "shift": {
+          "type": "object",
+          "properties": {
+            "startTime": { "type": "string", "format": "time" },
+            "endTime": { "type": "string", "format": "time" },
+            "graceLateMinutes": { "type": "number" }
+          },
+          "required": ["startTime", "endTime", "graceLateMinutes"]
+        },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["name", "brandId", "isActive", "office", "radiusM", "shift"]
     },
     "AttendanceEvent": {
-        "title": "Attendance Event",
-        "description": "Represents a single clock-in or clock-out event.",
-        "type": "object",
-        "properties": {
-            "uid": { "type": "string", "description": "User ID" },
-            "type": { "type": "string", "enum": ["tap_in", "tap_out"], "description": "Event type" },
-            "timestamp": { "type": "string", "format": "date-time" },
-            "workMode": { "type": "string", "enum": ["onsite", "offsite"], "description": "Work mode" },
-            "location": { "type": "object", "properties": { "lat": {"type": "number"}, "lng": {"type": "number"} } },
-            "photoUrl": { "type": "string", "format": "uri" }
+      "title": "Attendance Event",
+      "description": "Represents a single clock-in or clock-out event.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "User ID" },
+        "type": {
+          "type": "string",
+          "enum": ["tap_in", "tap_out"],
+          "description": "Event type"
         },
-        "required": ["uid", "type", "timestamp", "workMode"]
+        "timestamp": { "type": "string", "format": "date-time" },
+        "workMode": {
+          "type": "string",
+          "enum": ["onsite", "offsite"],
+          "description": "Work mode"
+        },
+        "location": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          }
+        },
+        "photoUrl": { "type": "string", "format": "uri" }
+      },
+      "required": ["uid", "type", "timestamp", "workMode"]
     },
     "OvertimeLog": {
-        "title": "Overtime Log",
-        "description": "Represents a log of overtime work.",
-        "type": "object",
-        "properties": {
-            "uid": { "type": "string" },
-            "brandId": { "type": "string" },
-            "date": { "type": "string", "format": "date" },
-            "minutes": { "type": "number", "description": "Overtime duration in minutes" },
-            "source": { "type": "string", "enum": ["manual", "auto"] },
-            "note": { "type": "string" },
-            "createdAt": { "type": "string", "format": "date-time" }
+      "title": "Overtime Log",
+      "description": "Represents a log of overtime work.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "brandId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "minutes": {
+          "type": "number",
+          "description": "Overtime duration in minutes"
         },
-        "required": ["uid", "date", "minutes", "source", "createdAt"]
+        "source": { "type": "string", "enum": ["manual", "auto"] },
+        "note": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "date", "minutes", "source", "createdAt"]
     },
     "OvertimeSubmission": {
       "title": "Overtime Submission",
       "description": "Represents an employee's request to work overtime, including details and an approval workflow.",
       "properties": {
-        "uid": { "type": "string", "description": "UID of the user submitting the request." },
+        "uid": {
+          "type": "string",
+          "description": "UID of the user submitting the request."
+        },
         "fullName": { "type": "string" },
         "brandId": { "type": "string" },
         "division": { "type": "string" },
@@ -966,7 +1348,10 @@
         "startTime": { "type": "string", "format": "date-time" },
         "endTime": { "type": "string", "format": "date-time" },
         "totalDurationMinutes": { "type": "number" },
-        "overtimeType": { "type": "string", "enum": ["hari_kerja", "hari_libur", "urgent"] },
+        "overtimeType": {
+          "type": "string",
+          "enum": ["hari_kerja", "hari_libur", "urgent"]
+        },
         "tasks": {
           "type": "array",
           "items": {
@@ -983,12 +1368,28 @@
         "reason": { "type": "string" },
         "location": { "type": "string", "enum": ["kantor", "remote", "site"] },
         "employeeNotes": { "type": "string" },
-        "attachments": { "type": "array", "items": { "type": "string", "format": "uri" } },
+        "attachments": {
+          "type": "array",
+          "items": { "type": "string", "format": "uri" }
+        },
         "status": {
           "type": "string",
-          "enum": ["draft", "pending_manager", "rejected_manager", "revision_manager", "approved_by_manager", "pending_hrd", "rejected_hrd", "revision_hrd", "approved"]
+          "enum": [
+            "draft",
+            "pending_manager",
+            "rejected_manager",
+            "revision_manager",
+            "approved_by_manager",
+            "pending_hrd",
+            "rejected_hrd",
+            "revision_hrd",
+            "approved"
+          ]
         },
-        "managerUid": { "type": "string", "description": "UID of the manager responsible for approval." },
+        "managerUid": {
+          "type": "string",
+          "description": "UID of the manager responsible for approval."
+        },
         "managerNotes": { "type": "string" },
         "managerDecisionAt": { "type": "string", "format": "date-time" },
         "hrdReviewerUid": { "type": "string" },
@@ -997,156 +1398,303 @@
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["uid", "fullName", "brandId", "division", "date", "startTime", "endTime", "overtimeType", "tasks", "reason", "location", "status", "createdAt", "updatedAt"]
+      "required": [
+        "uid",
+        "fullName",
+        "brandId",
+        "division",
+        "date",
+        "startTime",
+        "endTime",
+        "overtimeType",
+        "tasks",
+        "reason",
+        "location",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
     },
     "PermissionRequest": {
-        "title": "Permission Request",
-        "description": "Represents an employee's request for various types of leave or permission.",
-        "type": "object",
-        "properties": {
-            "uid": { "type": "string" },
-            "fullName": { "type": "string" },
-            "brandId": { "type": "string" },
-            "division": { "type": "string" },
-            "positionTitle": { "type": "string" },
-            "type": {
-                "type": "string",
-                "enum": ["cuti", "sakit", "keluar_kantor", "tidak_masuk", "duka", "akademik", "lainnya"]
-            },
-            "reason": { "type": "string", "description": "The main reason/description for the permission request." },
-            "startDate": { "type": "string", "format": "date-time" },
-            "endDate": { "type": "string", "format": "date-time" },
-            "totalDurationMinutes": { "type": "number" },
-            "attachments": { "type": "array", "items": { "type": "string", "format": "uri" } },
-            "attachmentStatus": { "type": "string", "enum": ["provided", "not_provided", "verification_needed"] },
-            "status": {
-              "type": "string",
-              "enum": ["draft", "pending_manager", "rejected_manager", "revision_manager", "approved_by_manager", "pending_hrd", "rejected_hrd", "revision_hrd", "approved", "reported", "returned", "verified_manager", "closed"]
-            },
-            "managerUid": { "type": "string" },
-            "managerNotes": { "type": "string" },
-            "managerDecisionAt": { "type": "string", "format": "date-time" },
-            "hrdReviewerUid": { "type": "string" },
-            "hrdNotes": { "type": "string" },
-            "hrdDecisionAt": { "type": "string", "format": "date-time" },
-            "createdAt": { "type": "string", "format": "date-time" },
-            "updatedAt": { "type": "string", "format": "date-time" },
-            "destination": { "type": "string", "description": "For 'keluar_kantor': The location/destination." },
-            "sicknessDescription": { "type": "string", "description": "For 'sakit': A brief description of the illness." },
-            "familyRelation": { "type": "string", "description": "For 'duka': The relationship to the deceased." },
-            "academicActivityName": { "type": "string", "description": "For 'akademik': The name of the academic event." },
-            "academicInstitution": { "type": "string" },
-            "otherLeaveTitle": { "type": "string", "description": "For 'lainnya': The custom title for the leave." }
+      "title": "Permission Request",
+      "description": "Represents an employee's request for various types of leave or permission.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "fullName": { "type": "string" },
+        "brandId": { "type": "string" },
+        "division": { "type": "string" },
+        "positionTitle": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": [
+            "cuti",
+            "sakit",
+            "keluar_kantor",
+            "tidak_masuk",
+            "duka",
+            "akademik",
+            "lainnya"
+          ]
         },
-        "required": ["uid", "fullName", "brandId", "division", "type", "reason", "startDate", "endDate", "totalDurationMinutes", "status", "createdAt", "updatedAt"]
+        "reason": {
+          "type": "string",
+          "description": "The main reason/description for the permission request."
+        },
+        "startDate": { "type": "string", "format": "date-time" },
+        "endDate": { "type": "string", "format": "date-time" },
+        "totalDurationMinutes": { "type": "number" },
+        "attachments": {
+          "type": "array",
+          "items": { "type": "string", "format": "uri" }
+        },
+        "attachmentStatus": {
+          "type": "string",
+          "enum": ["provided", "not_provided", "verification_needed"]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "pending_manager",
+            "rejected_manager",
+            "revision_manager",
+            "approved_by_manager",
+            "pending_hrd",
+            "rejected_hrd",
+            "revision_hrd",
+            "approved",
+            "reported",
+            "returned",
+            "verified_manager",
+            "closed"
+          ]
+        },
+        "managerUid": { "type": "string" },
+        "managerNotes": { "type": "string" },
+        "managerDecisionAt": { "type": "string", "format": "date-time" },
+        "hrdReviewerUid": { "type": "string" },
+        "hrdNotes": { "type": "string" },
+        "hrdDecisionAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "destination": {
+          "type": "string",
+          "description": "For 'keluar_kantor': The location/destination."
+        },
+        "sicknessDescription": {
+          "type": "string",
+          "description": "For 'sakit': A brief description of the illness."
+        },
+        "familyRelation": {
+          "type": "string",
+          "description": "For 'duka': The relationship to the deceased."
+        },
+        "academicActivityName": {
+          "type": "string",
+          "description": "For 'akademik': The name of the academic event."
+        },
+        "academicInstitution": { "type": "string" },
+        "otherLeaveTitle": {
+          "type": "string",
+          "description": "For 'lainnya': The custom title for the leave."
+        }
+      },
+      "required": [
+        "uid",
+        "fullName",
+        "brandId",
+        "division",
+        "type",
+        "reason",
+        "startDate",
+        "endDate",
+        "totalDurationMinutes",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
     },
     "FieldTrackingEntry": {
-        "title": "Field Tracking Entry",
-        "description": "Represents a location update from an employee on field duty.",
-        "type": "object",
-        "properties": {
-            "uid": { "type": "string" },
-            "lat": { "type": "number" },
-            "lng": { "type": "number" },
-            "accuracyM": { "type": "number" },
-            "address": { "type": "string", "description": "Reverse-geocoded address" },
-            "status": { "type": "string", "enum": ["dinas", "normal"] },
-            "updatedAt": { "type": "string", "format": "date-time" }
+      "title": "Field Tracking Entry",
+      "description": "Represents a location update from an employee on field duty.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "accuracyM": { "type": "number" },
+        "address": {
+          "type": "string",
+          "description": "Reverse-geocoded address"
         },
-        "required": ["uid", "lat", "lng", "status", "updatedAt"]
+        "status": { "type": "string", "enum": ["dinas", "normal"] },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "lat", "lng", "status", "updatedAt"]
     },
     "TrainingVideo": {
-        "title": "Training Video",
-        "description": "Represents a training video in the library.",
-        "type": "object",
-        "properties": {
-            "title": { "type": "string" },
-            "description": { "type": "string" },
-            "url": { "type": "string", "format": "uri" },
-            "durationMin": { "type": "number" },
-            "category": { "type": "string" },
-            "isActive": { "type": "boolean" },
-            "createdAt": { "type": "string", "format": "date-time" }
-        },
-        "required": ["title", "url", "durationMin", "category", "isActive", "createdAt"]
+      "title": "Training Video",
+      "description": "Represents a training video in the library.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "url": { "type": "string", "format": "uri" },
+        "durationMin": { "type": "number" },
+        "category": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "title",
+        "url",
+        "durationMin",
+        "category",
+        "isActive",
+        "createdAt"
+      ]
     },
     "TrainingProgress": {
-        "title": "Training Progress",
-        "description": "Tracks an employee's progress on a training video.",
-        "type": "object",
-        "properties": {
-            "uid": { "type": "string" },
-            "videoId": { "type": "string" },
-            "progressPercent": { "type": "number" },
-            "completedAt": { "type": "string", "format": "date-time" },
-            "updatedAt": { "type": "string", "format": "date-time" }
-        },
-        "required": ["uid", "videoId", "progressPercent", "updatedAt"]
+      "title": "Training Progress",
+      "description": "Tracks an employee's progress on a training video.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "videoId": { "type": "string" },
+        "progressPercent": { "type": "number" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "videoId", "progressPercent", "updatedAt"]
     },
     "DailyReport": {
       "title": "Daily Report",
       "description": "An intern's daily activity report.",
       "type": "object",
       "properties": {
-          "uid": { "type": "string", "description": "Intern's user ID" },
-          "date": { "type": "string", "format": "date" },
-          "status": { "type": "string", "enum": ["draft", "submitted", "needs_revision", "approved"] },
-          "activity": { "type": "string" },
-          "learning": { "type": "string" },
-          "obstacle": { "type": "string" },
-          "brandId": { "type": "string" },
-          "supervisorUid": { "type": "string" },
-          "reviewerNotes": { "type": "string" },
-          "reviewedByUid": { "type": "string" },
-          "reviewedByName": { "type": "string" },
-          "createdAt": { "type": "string", "format": "date-time" },
-          "updatedAt": { "type": "string", "format": "date-time" },
-          "submittedAt": { "type": "string", "format": "date-time" },
-          "reviewedAt": { "type": "string", "format": "date-time" }
+        "uid": { "type": "string", "description": "Intern's user ID" },
+        "date": { "type": "string", "format": "date" },
+        "status": {
+          "type": "string",
+          "enum": ["draft", "submitted", "needs_revision", "approved"]
+        },
+        "activity": { "type": "string" },
+        "learning": { "type": "string" },
+        "obstacle": { "type": "string" },
+        "brandId": { "type": "string" },
+        "supervisorUid": { "type": "string" },
+        "reviewerNotes": { "type": "string" },
+        "reviewedByUid": { "type": "string" },
+        "reviewedByName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "submittedAt": { "type": "string", "format": "date-time" },
+        "reviewedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["uid", "date", "status", "activity", "learning", "obstacle", "createdAt", "updatedAt"]
+      "required": [
+        "uid",
+        "date",
+        "status",
+        "activity",
+        "learning",
+        "obstacle",
+        "createdAt",
+        "updatedAt"
+      ]
     },
     "MonthlyEvaluation": {
       "title": "Monthly Evaluation",
       "description": "An HRD's or Mentor's monthly evaluation of an intern's performance.",
       "properties": {
-        "internUid": { "type": "string", "description": "The UID of the intern being evaluated." },
-        "evaluationMonth": { "type": "string", "format": "date", "description": "The first day of the month being evaluated (e.g., '2024-07-01')." },
-        "evaluatorUid": { "type": "string", "description": "The UID of the user who performed the evaluation or set the focus." },
-        "evaluatorName": { "type": "string", "description": "The name of the user." },
+        "internUid": {
+          "type": "string",
+          "description": "The UID of the intern being evaluated."
+        },
+        "evaluationMonth": {
+          "type": "string",
+          "format": "date",
+          "description": "The first day of the month being evaluated (e.g., '2024-07-01')."
+        },
+        "evaluatorUid": {
+          "type": "string",
+          "description": "The UID of the user who performed the evaluation or set the focus."
+        },
+        "evaluatorName": {
+          "type": "string",
+          "description": "The name of the user."
+        },
         "monthlyFocus": {
-            "type": "string",
-            "description": "A brief focus or goal for the intern for the current month, set by the mentor."
+          "type": "string",
+          "description": "A brief focus or goal for the intern for the current month, set by the mentor."
         },
         "ratings": {
           "type": "object",
           "properties": {
-            "attendance": { "type": "string", "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"] },
-            "discipline": { "type": "string", "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"] },
-            "attitude": { "type": "string", "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"] },
-            "responsibility": { "type": "string", "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"] },
-            "communication": { "type": "string", "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"] },
-            "initiative": { "type": "string", "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"] },
-            "teamwork": { "type": "string", "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"] },
-            "workQuality": { "type": "string", "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"] },
-            "learningAbility": { "type": "string", "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"] },
-            "consistency": { "type": "string", "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"] }
+            "attendance": {
+              "type": "string",
+              "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"]
+            },
+            "discipline": {
+              "type": "string",
+              "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"]
+            },
+            "attitude": {
+              "type": "string",
+              "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"]
+            },
+            "responsibility": {
+              "type": "string",
+              "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"]
+            },
+            "communication": {
+              "type": "string",
+              "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"]
+            },
+            "initiative": {
+              "type": "string",
+              "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"]
+            },
+            "teamwork": {
+              "type": "string",
+              "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"]
+            },
+            "workQuality": {
+              "type": "string",
+              "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"]
+            },
+            "learningAbility": {
+              "type": "string",
+              "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"]
+            },
+            "consistency": {
+              "type": "string",
+              "enum": ["Sangat Baik", "Baik", "Cukup", "Perlu Perbaikan"]
+            }
           }
         },
-        "hrdComment": { "type": "string", "description": "General comments from HRD." },
-        "mainStrengths": { "type": "string", "description": "Observed main strengths during the period." },
-        "improvementAreas": { "type": "string", "description": "Areas for the intern to improve upon." },
-        "nextMonthRecommendation": { "type": "string", "description": "Recommendations or focus for the next month." }
+        "hrdComment": {
+          "type": "string",
+          "description": "General comments from HRD."
+        },
+        "mainStrengths": {
+          "type": "string",
+          "description": "Observed main strengths during the period."
+        },
+        "improvementAreas": {
+          "type": "string",
+          "description": "Areas for the intern to improve upon."
+        },
+        "nextMonthRecommendation": {
+          "type": "string",
+          "description": "Recommendations or focus for the next month."
+        }
       },
       "required": ["internUid", "evaluationMonth", "createdAt", "updatedAt"]
     }
   },
   "auth": {
-    "providers": [
-      "password",
-      "anonymous",
-      "google.com"
-    ]
+    "providers": ["password", "anonymous", "google.com"]
   },
   "firestore": {
     "structure": [
@@ -1175,7 +1723,7 @@
           "description": "Stores batches of invitations with a shared quota."
         }
       },
-       {
+      {
         "path": "/employee_profiles/{uid}",
         "definition": {
           "schema": { "$ref": "#/backend/entities/EmployeeProfile" },
@@ -1369,7 +1917,12 @@
           "entityName": "Assessment",
           "schema": { "$ref": "#/backend/entities/Assessment" },
           "description": "Stores assessment configurations.",
-          "params": [{ "name": "assessmentId", "description": "The unique ID of the assessment." }]
+          "params": [
+            {
+              "name": "assessmentId",
+              "description": "The unique ID of the assessment."
+            }
+          ]
         }
       },
       {
@@ -1378,7 +1931,12 @@
           "entityName": "AssessmentQuestion",
           "schema": { "$ref": "#/backend/entities/AssessmentQuestion" },
           "description": "Stores questions for assessments.",
-          "params": [{ "name": "questionId", "description": "The unique ID for the question." }]
+          "params": [
+            {
+              "name": "questionId",
+              "description": "The unique ID for the question."
+            }
+          ]
         }
       },
       {
@@ -1387,16 +1945,27 @@
           "entityName": "AssessmentSession",
           "schema": { "$ref": "#/backend/entities/AssessmentSession" },
           "description": "Stores candidate assessment attempts and results.",
-          "params": [{ "name": "sessionId", "description": "The unique ID for the session." }]
+          "params": [
+            {
+              "name": "sessionId",
+              "description": "The unique ID for the session."
+            }
+          ]
         }
       },
       {
         "path": "/attendance_sites/{siteId}",
-        "definition": { "schema": { "$ref": "#/backend/entities/AttendanceSite" }, "description": "Stores attendance rules for a specific office site/location." }
+        "definition": {
+          "schema": { "$ref": "#/backend/entities/AttendanceSite" },
+          "description": "Stores attendance rules for a specific office site/location."
+        }
       },
       {
         "path": "/attendance_events/{eventId}",
-        "definition": { "schema": { "$ref": "#/backend/entities/AttendanceEvent" }, "description": "Employee attendance events (tap in/out)." }
+        "definition": {
+          "schema": { "$ref": "#/backend/entities/AttendanceEvent" },
+          "description": "Employee attendance events (tap in/out)."
+        }
       },
       {
         "path": "/overtime_submissions/{submissionId}",
@@ -1414,28 +1983,37 @@
       },
       {
         "path": "/field_tracking/{uid}/entries/{entryId}",
-        "definition": { "schema": { "$ref": "#/backend/entities/FieldTrackingEntry" }, "description": "Location entries for an employee on field duty." }
+        "definition": {
+          "schema": { "$ref": "#/backend/entities/FieldTrackingEntry" },
+          "description": "Location entries for an employee on field duty."
+        }
       },
       {
         "path": "/training_videos/{videoId}",
-        "definition": { "schema": { "$ref": "#/backend/entities/TrainingVideo" }, "description": "Training video library." }
+        "definition": {
+          "schema": { "$ref": "#/backend/entities/TrainingVideo" },
+          "description": "Training video library."
+        }
       },
       {
         "path": "/training_progress/{progressId}",
-        "definition": { "schema": { "$ref": "#/backend/entities/TrainingProgress" }, "description": "Employee progress on training videos. ID is {uid}_{videoId}." }
+        "definition": {
+          "schema": { "$ref": "#/backend/entities/TrainingProgress" },
+          "description": "Employee progress on training videos. ID is {uid}_{videoId}."
+        }
       },
       {
         "path": "/daily_reports/{reportId}",
         "definition": {
-            "schema": { "$ref": "#/backend/entities/DailyReport" },
-            "description": "Stores daily reports submitted by interns."
+          "schema": { "$ref": "#/backend/entities/DailyReport" },
+          "description": "Stores daily reports submitted by interns."
         }
       },
       {
         "path": "/monthly_evaluations/{evaluationId}",
         "definition": {
-            "schema": { "$ref": "#/backend/entities/MonthlyEvaluation" },
-            "description": "Stores HRD's monthly evaluations of interns."
+          "schema": { "$ref": "#/backend/entities/MonthlyEvaluation" },
+          "description": "Stores HRD's monthly evaluations of interns."
         }
       }
     ],

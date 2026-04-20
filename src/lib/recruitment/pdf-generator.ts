@@ -1,10 +1,10 @@
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
+import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 
 export function buildOfferingHtml(
   templateHtml: string,
-  replacements: Record<string, string>,
-  descriptionHtml: string,
+  replacements: Record<string, string>
 ) {
   let html = templateHtml || "";
 
@@ -12,16 +12,6 @@ export function buildOfferingHtml(
     const safeValue = value ?? "";
     html = html.replace(new RegExp(`{{${key}}}`, "g"), safeValue);
   });
-
-  if (!/{{description}}/.test(html)) {
-    if (html.match(/<\/body>/i)) {
-      html = html.replace(/<\/body>/i, `${descriptionHtml}</body>`);
-    } else if (html.match(/<\/html>/i)) {
-      html = html.replace(/<\/html>/i, `${descriptionHtml}</html>`);
-    } else {
-      html = `${html}${descriptionHtml}`;
-    }
-  }
 
   return html;
 }
@@ -134,3 +124,4 @@ export async function generateOfferingPDFBlob(
     document.body.removeChild(container);
   }
 }
+

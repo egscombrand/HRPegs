@@ -467,6 +467,54 @@ export type JobApplication = {
   interviewCompletionSource?: "manual" | "auto_time";
 };
 
+export type Offering = {
+  id?: string;
+  applicationId: string;
+  candidateName: string;
+  candidateEmail: string;
+  documentUrl: string;
+  documentName?: string;
+  documentType?: string;
+  responseDeadline: Timestamp;
+  status: "draft" | "sent" | "viewed" | "accepted" | "rejected" | "expired";
+  offeringDetails: {
+    salary?: string;
+    startDate?: string;
+    firstDayTime?: string;
+    firstDayLocation?: string;
+    hrContact?: string;
+  };
+  additionalNotes?: string;
+  sentAt?: Timestamp;
+  sentBy?: string;
+  viewedAtFirst?: Timestamp;
+  viewedAtLast?: Timestamp;
+  viewCount?: number;
+  respondedAt?: Timestamp;
+  responseType?: "accepted" | "rejected";
+  history: Array<{
+    type:
+      | "draft_created"
+      | "draft_updated"
+      | "document_uploaded"
+      | "details_updated"
+      | "notes_updated"
+      | "deadline_updated"
+      | "sent"
+      | "cancelled"
+      | "viewed"
+      | "accepted"
+      | "rejected"
+      | "expired";
+    description?: string;
+    at: Timestamp;
+    by?: string;
+  }>;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  createdBy: string;
+};
+
 export type InternalReviewScore =
   | "direkomendasikan"
   | "dipertimbangkan"

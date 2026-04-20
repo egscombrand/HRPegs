@@ -180,10 +180,12 @@ service cloud.firestore {
     /**
      * /roles_hrd/{userId}
      * - This is a private lookup table for HRD checks.
-     * - Only super admins can manage this collection.
+     * - The logged-in user must be able to verify their own HRD role document.
      */
     match /roles_hrd/{userId} {
-      allow read, write: if request.auth.token.email == 'super_admin@gmail.com' || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super-admin';
+      allow get: if request.auth.uid == userId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super-admin';
+      allow list: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super-admin';
+      allow create, update, delete: if get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super-admin';
     }
 
     /**
@@ -551,6 +553,23 @@ service cloud.firestore {
       allow get, list: if isInternal();
       allow create: if isHrd() || isSuperAdmin();
       allow update, delete: if false;
+    }
+
+    /**
+     * /offerings/{offeringId}
+     * - Job offerings sent to candidates via PDF links.
+     * - HRD can create, update, read.
+     * - Candidates can read their own offerings and update status/interactions.
+     */
+    match /offerings/{offeringId} {
+      allow get, list: if isHrd() || isSuperAdmin() || (isCandidate() && resource.data.candidateEmail == request.auth.token.email);
+      allow create: if isHrd() || isSuperAdmin();
+      allow update: if
+        (isHrd() || isSuperAdmin()) ||
+        (isCandidate() &&
+         resource.data.candidateEmail == request.auth.token.email &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'viewedAt', 'acceptedAt', 'rejectedAt', 'interactions', 'updatedAt']));
+      allow delete: if false;
     }
   }
 }
