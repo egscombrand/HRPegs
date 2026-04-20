@@ -56,6 +56,9 @@ export type UserProfile = {
   division?: string | null;
   positionTitle?: string | null;
 
+  // Hidden offerings - temporary solution for candidate to hide old offerings
+  hiddenOfferingIds?: string[];
+
   updatedAt?: Timestamp;
 };
 
@@ -416,6 +419,7 @@ export type JobApplication = {
   candidateOfferDecisionAt?: Timestamp | null;
   internalAccessEnabled?: boolean;
   finalOfferingUrl?: string | null;
+  activeOfferingId?: string | null; // New field to track the active offering ID
 
   // Denormalized data
   candidateName: string;
@@ -476,10 +480,20 @@ export type Offering = {
   documentName?: string;
   documentType?: string;
   responseDeadline: Timestamp;
-  status: "draft" | "sent" | "viewed" | "accepted" | "rejected" | "expired";
+  status:
+    | "draft"
+    | "sent"
+    | "viewed"
+    | "responded"
+    | "accepted"
+    | "rejected"
+    | "withdrawn"
+    | "expired";
+  isActive: boolean; // New field to track active offerings
   offeringDetails: {
     salary?: string;
     startDate?: string;
+    contractDurationMonths?: string;
     firstDayTime?: string;
     firstDayLocation?: string;
     hrContact?: string;
@@ -490,8 +504,14 @@ export type Offering = {
   viewedAtFirst?: Timestamp;
   viewedAtLast?: Timestamp;
   viewCount?: number;
+  downloadedAtFirst?: Timestamp;
+  downloadedAtLast?: Timestamp;
+  downloadCount?: number;
   respondedAt?: Timestamp;
   responseType?: "accepted" | "rejected";
+  withdrawnAt?: Timestamp;
+  withdrawnBy?: string;
+  expiredAt?: Timestamp;
   history: Array<{
     type:
       | "draft_created"
@@ -503,8 +523,11 @@ export type Offering = {
       | "sent"
       | "cancelled"
       | "viewed"
+      | "downloaded"
+      | "responded"
       | "accepted"
       | "rejected"
+      | "withdrawn"
       | "expired";
     description?: string;
     at: Timestamp;

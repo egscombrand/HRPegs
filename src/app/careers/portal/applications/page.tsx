@@ -22,6 +22,9 @@ import {
   where,
   doc,
   serverTimestamp,
+  writeBatch,
+  deleteField,
+  deleteDoc,
 } from "firebase/firestore";
 import type {
   Job,
@@ -65,6 +68,7 @@ import {
   Loader2,
   Clock,
   Download,
+  Trash2,
 } from "lucide-react";
 import { generateOfferingPDF } from "@/lib/recruitment/pdf-generator";
 import { cn } from "@/lib/utils";
@@ -174,6 +178,60 @@ function ApplicationCard({
       toast({
         variant: "destructive",
         title: "Gagal Menyimpan Keputusan",
+        description: error.message,
+      });
+    } finally {
+      setIsDeciding(false);
+    }
+  };
+
+  const handleDismissOffering = async () => {
+    if (!firebaseUser || !application.id) return;
+    
+    if (!window.confirm("Apakah Anda yakin ingin menghapus tampilan penawaran ini? Tindakan ini bersifat permanen untuk tampilan Anda.")) {
+      return;
+    }
+
+    setIsDeciding(true);
+    try {
+      const batch = writeBatch(firestore);
+      
+      // 1. Deactivate/Delete the offering document if possible
+      if (application.activeOfferingId) {
+        const offeringRef = doc(firestore, "offerings", application.activeOfferingId);
+        batch.update(offeringRef, { 
+          isActive: false,
+          status: "withdrawn", // Or dismissed
+          updatedAt: serverTimestamp()
+        });
+      }
+
+      // 2. Clear all offering fields in the application document
+      const appRef = doc(firestore, "applications", application.id);
+      batch.update(appRef, {
+        offerStatus: deleteField(),
+        offeredSalary: null,
+        contractStartDate: null,
+        contractDurationMonths: null,
+        probationDurationMonths: null,
+        offerNotes: null,
+        offerDescription: null,
+        activeOfferingId: null,
+        // Revert status to something neutral so the card doesn't show as 'offered'
+        status: "interview" 
+      });
+
+      await batch.commit();
+      
+      toast({
+        title: "Tampilan Dihapus",
+        description: "Penawaran kerja telah dihapus dari tampilan Anda.",
+      });
+    } catch (error: any) {
+      console.error("Failed to dismiss offering:", error);
+      toast({
+        variant: "destructive",
+        title: "Gagal Menghapus",
         description: error.message,
       });
     } finally {
@@ -409,6 +467,17 @@ function ApplicationCard({
               {isDeciding && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Terima Penawaran
             </Button>
+            
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleDismissOffering}
+              disabled={isDeciding}
+              className="w-full sm:w-auto text-muted-foreground hover:text-destructive"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Hapus Offering Ini
+            </Button>
           </CardFooter>
 
           <Dialog
@@ -589,6 +658,22 @@ function ApplicationCard({
         </Card>
       );
     }
+
+    return (
+      <Card className="p-8 text-center border-dashed">
+        <CardContent className="space-y-4 pt-6">
+          <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+            <FileClock className="text-muted-foreground h-6 w-6" />
+          </div>
+          <div className="space-y-2">
+            <CardTitle className="text-lg">Penawaran Kerja</CardTitle>
+            <CardDescription>
+              Saat ini belum ada penawaran kerja aktif.
+            </CardDescription>
+          </div>
+        </CardContent>
+      </Card>
+    );
   }
 
   if (isHired) {

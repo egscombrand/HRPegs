@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useDoc, useFirestore, updateDocumentNonBlocking } from "@/firebase";
-import { doc, serverTimestamp, Timestamp } from "firebase/firestore";
+import { doc, serverTimestamp, Timestamp, updateDoc } from "firebase/firestore";
+import { useAuth } from "@/providers/auth-provider";
 import type { Offering } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,6 +32,7 @@ import {
   Activity,
   FileText,
   Send,
+  EyeOff,
 } from "lucide-react";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
@@ -50,9 +52,16 @@ export default function OfferPage() {
   const [rejectionReason, setRejectionReason] = useState("");
   const [question, setQuestion] = useState("");
   const [isSubmittingQuestion, setIsSubmittingQuestion] = useState(false);
+  const [isHiding, setIsHiding] = useState(false);
+  const { userProfile } = useAuth();
 
   useEffect(() => {
     if (offering) {
+      // Check if offering is active - if not, don't proceed with any updates
+      if (!offering.isActive) {
+        return;
+      }
+
       const now = new Date();
       const deadline = offering.responseDeadline.toDate();
       const isExpired = deadline < now;
@@ -68,7 +77,8 @@ export default function OfferPage() {
             ...(offering.history || []),
             {
               type: "expired",
-              description: "Penawaran kedaluwarsa (batas waktu respons terlewat)",
+              description:
+                "Penawaran kedaluwarsa (batas waktu respons terlewat)",
               at: serverTimestamp(),
             },
           ],
@@ -197,6 +207,43 @@ export default function OfferPage() {
     }
   };
 
+  const handleHideOffering = async () => {
+    if (!offering || !userProfile) return;
+    setIsHiding(true);
+    try {
+      const userRef = doc(firestore, "users", userProfile.uid);
+      const hiddenIds = userProfile.hiddenOfferingIds || [];
+
+      // Only add if not already in the list
+      if (!hiddenIds.includes(offerId)) {
+        hiddenIds.push(offerId);
+      }
+
+      await updateDoc(userRef, {
+        hiddenOfferingIds: hiddenIds,
+        updatedAt: serverTimestamp(),
+      });
+
+      toast({
+        title: "Offering Disembunyikan",
+        description: "Penawaran ini telah disembunyikan dari tampilan Anda.",
+      });
+
+      // Redirect after hiding
+      setTimeout(() => {
+        window.location.href = "/careers/portal/applications";
+      }, 1000);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Gagal Menyembunyikan",
+        description: error.message,
+      });
+    } finally {
+      setIsHiding(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -219,13 +266,44 @@ export default function OfferPage() {
     );
   }
 
+  if (!offering.isActive) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6">
+            <p className="text-center text-muted-foreground">
+              Saat ini belum ada penawaran kerja aktif.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (userProfile?.hiddenOfferingIds?.includes(offerId)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6">
+            <p className="text-center text-muted-foreground">
+              Penawaran ini telah Anda sembunyikan. Hubungi HRD jika Anda ingin
+              membuka kembali.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   const isExpired = offering.responseDeadline.toDate() < new Date();
-  const statusColors = {
+  const statusColors: Record<string, string> = {
     draft: "bg-gray-500",
     sent: "bg-blue-500",
     viewed: "bg-yellow-500",
+    responded: "bg-purple-500",
     accepted: "bg-green-500",
     rejected: "bg-red-500",
+    withdrawn: "bg-orange-500",
     expired: "bg-gray-500",
   };
 
@@ -537,53 +615,71 @@ export default function OfferPage() {
                   <CardTitle>Respons Anda</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="flex gap-4">
-                    <Button
-                      onClick={handleAccept}
-                      disabled={isAccepting}
-                      className="flex-1"
-                      size="lg"
-                    >
-                      <CheckCircle className="h-4 w-4 mr-2" />
-                      {isAccepting ? "Menerima..." : "Terima Penawaran"}
-                    </Button>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex gap-4">
+                      <Button
+                        onClick={handleAccept}
+                        disabled={isAccepting}
+                        className="flex-1"
+                        size="lg"
+                      >
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                        {isAccepting ? "Menerima..." : "Terima Penawaran"}
+                      </Button>
 
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button
-                          variant="destructive"
-                          className="flex-1"
-                          size="lg"
-                        >
-                          <XCircle className="h-4 w-4 mr-2" />
-                          Tolak Penawaran
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>Tolak Penawaran</DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-4">
-                          <Textarea
-                            placeholder="Berikan alasan penolakan (opsional)"
-                            value={rejectionReason}
-                            onChange={(e: any) => setRejectionReason(e.target.value)}
-                          />
-                          <div className="flex gap-2">
-                            <Button
-                              onClick={handleReject}
-                              disabled={isRejecting || !rejectionReason.trim()}
-                              variant="destructive"
-                              className="flex-1"
-                            >
-                              {isRejecting
-                                ? "Menolak..."
-                                : "Konfirmasi Penolakan"}
-                            </Button>
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button
+                            variant="destructive"
+                            className="flex-1"
+                            size="lg"
+                          >
+                            <XCircle className="h-4 w-4 mr-2" />
+                            Tolak Penawaran
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Tolak Penawaran</DialogTitle>
+                          </DialogHeader>
+                          <div className="space-y-4">
+                            <Textarea
+                              placeholder="Berikan alasan penolakan (opsional)"
+                              value={rejectionReason}
+                              onChange={(e: any) =>
+                                setRejectionReason(e.target.value)
+                              }
+                            />
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={handleReject}
+                                disabled={
+                                  isRejecting || !rejectionReason.trim()
+                                }
+                                variant="destructive"
+                                className="flex-1"
+                              >
+                                {isRejecting
+                                  ? "Menolak..."
+                                  : "Konfirmasi Penolakan"}
+                              </Button>
+                            </div>
                           </div>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+                    <Button
+                      onClick={handleHideOffering}
+                      disabled={isHiding}
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                    >
+                      <EyeOff className="h-4 w-4 mr-2" />
+                      {isHiding
+                        ? "Menyembunyikan..."
+                        : "Sembunyikan Offering Ini"}
+                    </Button>
                   </div>
 
                   <Separator />

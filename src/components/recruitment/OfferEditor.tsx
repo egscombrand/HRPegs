@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -44,13 +44,28 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
+  Trash2,
 } from "lucide-react";
-import { addDoc, collection, serverTimestamp, doc } from "firebase/firestore";
+import { addDoc, collection, serverTimestamp, doc, writeBatch, updateDoc, deleteDoc, deleteField } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useFirestore, useStorage } from "@/firebase";
 import { useAuth } from "@/providers/auth-provider";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { updateDocumentNonBlocking } from "@/firebase";
+
+import { format } from "date-fns";
+import { id as idLocale } from "date-fns/locale";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 const fileMetadataSchema = z.object({
   url: z.string().url(),
@@ -87,7 +102,6 @@ const offerSchema = z.object({
   firstDayTime: z.string().optional(),
   firstDayLocation: z.string().optional(),
   hrContact: z.string().optional(),
-  // Catatan tambahan (rich text)
   additionalNotes: z.string().optional(),
 });
 
@@ -102,9 +116,10 @@ interface OfferEditorProps {
   onSendOffer: (data: any) => Promise<void>;
   isSavingDraft?: boolean;
   isSendingOffer?: boolean;
-  currentOfferingId?: string;
+  activeOfferingId?: string;
   currentOfferingStatus?: "draft" | "sent" | "viewed" | "accepted" | "rejected";
   offering?: Offering;
+  allOfferings?: Offering[];
 }
 
 // Helper function to format numbers in Indonesian format (with period separators)
@@ -123,7 +138,7 @@ function getCurrentTimeString(): string {
 
 function combineDateAndTime(date: Date, time?: string): Date {
   const timeStr = typeof time === "string" ? time : "";
-  
+
   if (!timeStr || !timeStr.includes(":")) {
     return new Date(date);
   }
@@ -146,9 +161,10 @@ export function OfferEditor({
   onSendOffer,
   isSavingDraft = false,
   isSendingOffer = false,
-  currentOfferingId,
+  activeOfferingId,
   currentOfferingStatus,
   offering,
+  allOfferings = [],
 }: OfferEditorProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<z.infer<
@@ -178,6 +194,41 @@ export function OfferEditor({
       additionalNotes: "",
     },
   });
+
+  useEffect(() => {
+    if (!offering) return;
+
+    const documentMetadata = {
+      url: offering.documentUrl,
+      name: offering.documentName || "Penawaran Kandidat",
+      size: 0,
+      type: offering.documentType || "application/pdf",
+    };
+
+    const deadlineDate = offering.responseDeadline?.toDate
+      ? offering.responseDeadline.toDate()
+      : new Date();
+    const deadlineTime = `${String(deadlineDate.getHours()).padStart(
+      2,
+      "0",
+    )}:${String(deadlineDate.getMinutes()).padStart(2, "0")}`;
+
+    setSelectedFile(null);
+    setFilePreview(documentMetadata);
+    form.reset({
+      documentFile: documentMetadata,
+      responseDeadline: deadlineDate,
+      responseDeadlineTime: deadlineTime,
+      salary: offering.offeringDetails?.salary ?? "",
+      startDate: offering.offeringDetails?.startDate ?? "",
+      contractDurationMonths:
+        offering.offeringDetails?.contractDurationMonths ?? "",
+      firstDayTime: offering.offeringDetails?.firstDayTime ?? "",
+      firstDayLocation: offering.offeringDetails?.firstDayLocation ?? "",
+      hrContact: offering.offeringDetails?.hrContact ?? "",
+      additionalNotes: offering.additionalNotes ?? "",
+    });
+  }, [offering, form]);
 
   const uploadDocument = async (
     fileOrMetadata: File | z.infer<typeof fileMetadataSchema>,
@@ -265,6 +316,19 @@ export function OfferEditor({
 
     setIsUploading(true);
     try {
+      // Deactivate other offerings first if this is a new one or becoming active
+      const activeOtherOfferings = allOfferings?.filter((o: Offering) => o.id !== offering?.id && o.isActive) || [];
+      if (activeOtherOfferings.length > 0) {
+        const batch = writeBatch(firestore);
+        activeOtherOfferings.forEach((o: Offering) => {
+          if (o.id) {
+            const oRef = doc(firestore, "offerings", o.id);
+            batch.update(oRef, { isActive: false, updatedAt: serverTimestamp() });
+          }
+        });
+        await batch.commit();
+      }
+
       const documentUrl = await uploadDocument(data.documentFile);
 
       const responseDeadline = combineDateAndTime(
@@ -272,7 +336,7 @@ export function OfferEditor({
         data.responseDeadlineTime,
       );
 
-      const offeringData = {
+      const offeringPayload = {
         applicationId: application.id!,
         candidateName,
         candidateEmail: application.candidateEmail,
@@ -281,46 +345,73 @@ export function OfferEditor({
         documentType: data.documentFile.type,
         responseDeadline,
         status: "draft",
+        isActive: true, // New field to mark as active
         offeringDetails: {
           salary: data.salary,
           startDate: data.startDate,
+          contractDurationMonths: data.contractDurationMonths,
           firstDayTime: data.firstDayTime,
           firstDayLocation: data.firstDayLocation,
           hrContact: data.hrContact,
         },
         additionalNotes: data.additionalNotes,
-        history: [
-          {
-            type: "draft_created",
-            description: "Draft penawaran kerja dibuat",
-            at: Date.now(),
-            by: userProfile.uid,
-          },
-          {
-            type: "document_uploaded",
-            description: `Dokumen "${data.documentFile.name}" diunggah`,
-            at: Date.now(),
-            by: userProfile.uid,
-          },
-        ],
-        createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-        createdBy: userProfile.uid,
       };
 
-      // Save to offerings collection
-      const docRef = await addDoc(
-        collection(firestore, "offerings"),
-        offeringData,
-      );
+      if (offering?.id) {
+        const offeringRef = doc(firestore, "offerings", offering.id);
+        await updateDoc(offeringRef, {
+          ...offeringPayload,
+          history: [
+            ...(offering.history || []),
+            {
+              type: "draft_updated",
+              description: "Draft penawaran kerja disimpan",
+              at: Date.now(),
+              by: userProfile.uid,
+            },
+          ],
+        });
 
-      toast({
-        title: "Draft Tersimpan",
-        description: "Draft penawaran berhasil disimpan.",
-      });
+        toast({
+          title: "Draft Diperbarui",
+          description: "Draft penawaran berhasil disimpan.",
+        });
 
-      // Call the original onSaveDraft if needed
-      await onSaveDraft({ ...data, offeringId: docRef.id });
+        await onSaveDraft({ ...data, offeringId: offering.id });
+      } else {
+        const offeringData = {
+          ...offeringPayload,
+          history: [
+            {
+              type: "draft_created",
+              description: "Draft penawaran kerja dibuat",
+              at: Date.now(),
+              by: userProfile.uid,
+            },
+            {
+              type: "document_uploaded",
+              description: `Dokumen "${data.documentFile.name}" diunggah`,
+              at: Date.now(),
+              by: userProfile.uid,
+            },
+          ],
+          createdAt: serverTimestamp(),
+          createdBy: userProfile.uid,
+        };
+
+        const docRef = await addDoc(
+          collection(firestore, "offerings"),
+          offeringData,
+        );
+
+        toast({
+          title: "Draft Tersimpan",
+          description: "Draft penawaran berhasil disimpan.",
+        });
+
+        await onSaveDraft({ ...data, offeringId: docRef.id });
+      }
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -332,24 +423,25 @@ export function OfferEditor({
     }
   };
 
-  const handleUndoSend = async (offeringId: string) => {
+  const handleWithdrawOffer = async (offeringId: string) => {
     if (!userProfile) return;
 
     try {
-      setIsUndoing(true);
+      setIsUndoing(true); // Using isUndoing for loading state
       const offeringRef = doc(firestore, "offerings", offeringId);
-      await updateDocumentNonBlocking(offeringRef, {
-        status: "draft",
-        sentAt: null,
-        sentBy: null,
-        viewedAtFirst: null,
-        viewedAtLast: null,
-        viewCount: 0,
+      // Batch update to keep offering and application in sync
+      const batch = writeBatch(firestore);
+      
+      batch.update(offeringRef, {
+        status: "withdrawn",
+        isActive: false,
+        withdrawnAt: serverTimestamp(),
+        withdrawnBy: userProfile.uid,
         history: [
+          ...(allOfferings?.find(o => o.id === offeringId)?.history || []),
           {
-            type: "cancelled",
-            description:
-              "Pengiriman penawaran dibatalkan, kembali ke status draft",
+            type: "withdrawn",
+            description: "Penawaran kerja ditarik oleh HRD",
             at: Date.now(),
             by: userProfile.uid,
           },
@@ -357,9 +449,73 @@ export function OfferEditor({
         updatedAt: serverTimestamp(),
       });
 
+      // Reset offering fields in application document to prevent ghost offerings
+      const appRef = doc(firestore, "applications", application.id!);
+      batch.update(appRef, {
+        offerStatus: deleteField(),
+        offeredSalary: null,
+        contractStartDate: null,
+        contractDurationMonths: null,
+        probationDurationMonths: null,
+        offerNotes: null,
+        offerDescription: null,
+        activeOfferingId: null,
+        // Also revert status if currently in offered/offering stage
+        status: (application.status === "offered") 
+                ? "interview" 
+                : application.status
+      });
+
+      await batch.commit();
+
       toast({
-        title: "Pengiriman Dibatalkan",
-        description: "Penawaran telah dikembalikan ke status draft.",
+        title: "Penawaran Ditarik",
+        description: "Penawaran telah dinonaktifkan dan tidak lagi tampil di kandidat.",
+      });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    } finally {
+      setIsUndoing(false);
+    }
+  };
+  
+  const handleDeleteOffering = async (offeringId: string) => {
+    if (!userProfile) return;
+
+    try {
+      setIsUndoing(true);
+      const offeringRef = doc(firestore, "offerings", offeringId);
+      
+      const batch = writeBatch(firestore);
+      batch.delete(offeringRef);
+
+      // If this was the active offering, reset the application fields
+      if (application.activeOfferingId === offeringId) {
+        const appRef = doc(firestore, "applications", application.id!);
+        batch.update(appRef, {
+          offerStatus: deleteField(),
+          offeredSalary: null,
+          contractStartDate: null,
+          contractDurationMonths: null,
+          probationDurationMonths: null,
+          offerNotes: null,
+          offerDescription: null,
+          activeOfferingId: null,
+          status: (application.status === "offered") 
+                  ? "interview" 
+                  : application.status
+        });
+      }
+
+      await batch.commit();
+
+      toast({
+        title: "Riwayat Dihapus",
+        description: "Dokumen penawaran telah dihapus secara permanen.",
       });
     } catch (error: any) {
       toast({
@@ -377,6 +533,23 @@ export function OfferEditor({
 
     setIsUploading(true);
     try {
+      // Deactivate all other offerings before sending a new one
+      const activeOtherOfferings = allOfferings?.filter((o: Offering) => o.id !== offering?.id && o.isActive) || [];
+      if (activeOtherOfferings.length > 0) {
+        const batch = writeBatch(firestore);
+        activeOtherOfferings.forEach((o: Offering) => {
+          if (o.id) {
+            const oRef = doc(firestore, "offerings", o.id);
+            batch.update(oRef, { 
+              isActive: false, 
+              status: o.status === "sent" || o.status === "viewed" ? "withdrawn" : o.status, 
+              updatedAt: serverTimestamp() 
+            });
+          }
+        });
+        await batch.commit();
+      }
+
       const documentUrl = await uploadDocument(data.documentFile);
 
       const responseDeadline = combineDateAndTime(
@@ -384,7 +557,7 @@ export function OfferEditor({
         data.responseDeadlineTime,
       );
 
-      const offeringData = {
+      const offeringPayload = {
         applicationId: application.id!,
         candidateName,
         candidateEmail: application.candidateEmail,
@@ -393,9 +566,11 @@ export function OfferEditor({
         documentType: data.documentFile.type,
         responseDeadline,
         status: "sent",
+        isActive: true, // New field to mark as active
         offeringDetails: {
           salary: data.salary,
           startDate: data.startDate,
+          contractDurationMonths: data.contractDurationMonths,
           firstDayTime: data.firstDayTime,
           firstDayLocation: data.firstDayLocation,
           hrContact: data.hrContact,
@@ -408,47 +583,66 @@ export function OfferEditor({
         viewCount: 0,
         respondedAt: null,
         responseType: null,
-        history: [
-          {
-            type: "draft_created",
-            description: "Draft penawaran kerja dibuat",
-            at: Date.now(),
-            by: userProfile.uid,
-          },
-          {
-            type: "document_uploaded",
-            description: `Dokumen "${data.documentFile.name}" diunggah`,
-            at: Date.now(),
-            by: userProfile.uid,
-          },
-          {
-            type: "sent",
-            description: "Penawaran kerja dikirim ke kandidat",
-            at: Date.now(),
-            by: userProfile.uid,
-          },
-        ],
-        createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-        createdBy: userProfile.uid,
       };
 
-      // Save to offerings collection
-      const docRef = await addDoc(
-        collection(firestore, "offerings"),
-        offeringData,
-      );
+      let offeringId = offering?.id;
+      if (offeringId) {
+        const offeringRef = doc(firestore, "offerings", offeringId);
+        await updateDoc(offeringRef, {
+          ...offeringPayload,
+          history: [
+            ...(offering?.history || []),
+            {
+              type: "sent",
+              description: "Penawaran kerja dikirim ke kandidat",
+              at: Date.now(),
+              by: userProfile.uid,
+            },
+          ],
+        });
+      } else {
+        const offeringData = {
+          ...offeringPayload,
+          history: [
+            {
+              type: "draft_created",
+              description: "Draft penawaran kerja dibuat",
+              at: Date.now(),
+              by: userProfile.uid,
+            },
+            {
+              type: "document_uploaded",
+              description: `Dokumen "${data.documentFile.name}" diunggah`,
+              at: Date.now(),
+              by: userProfile.uid,
+            },
+            {
+              type: "sent",
+              description: "Penawaran kerja dikirim ke kandidat",
+              at: Date.now(),
+              by: userProfile.uid,
+            },
+          ],
+          createdAt: serverTimestamp(),
+          createdBy: userProfile.uid,
+        };
 
-      // Generate link
-      const offerLink = `${window.location.origin}/offer/${docRef.id}`;
+        const docRef = await addDoc(
+          collection(firestore, "offerings"),
+          offeringData,
+        );
+        offeringId = docRef.id;
+      }
+
+      const offerLink = `${window.location.origin}/offer/${offeringId}`;
 
       toast({
         title: "Penawaran Dikirim",
         description: `Link penawaran: ${offerLink}`,
       });
 
-      // Call the original onSendOffer if needed
-      await onSendOffer({ ...data, offeringId: docRef.id, offerLink });
+      await onSendOffer({ ...data, offeringId, offerLink });
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -738,8 +932,9 @@ export function OfferEditor({
                   const startDate = form.watch("startDate");
                   const duration = parseInt(field.value || "0");
                   let endDateText = "";
-                  
-                  const startDateStr = typeof startDate === "string" ? startDate : "";
+
+                  const startDateStr =
+                    typeof startDate === "string" ? startDate : "";
 
                   if (
                     startDateStr &&
@@ -987,11 +1182,11 @@ export function OfferEditor({
                     : "Kirim Penawaran"}
                 </Button>
 
-                {currentOfferingStatus === "sent" && currentOfferingId && (
+                {(currentOfferingStatus === "sent" || currentOfferingStatus === "viewed") && activeOfferingId && (
                   <Button
                     type="button"
                     variant="destructive"
-                    onClick={() => handleUndoSend(currentOfferingId)}
+                    onClick={() => handleWithdrawOffer(activeOfferingId)}
                     disabled={isUndoing}
                     className="flex-1 min-w-[150px]"
                   >
@@ -1004,71 +1199,219 @@ export function OfferEditor({
           </CardContent>
         </Card>
 
-        {/* Aktivitas Terakhir (Compact) */}
-        {offering?.history && offering.history.length > 0 && (
-          <div className="mt-4 p-4 bg-muted/30 rounded-lg border border-muted-foreground/10">
-            <div className="flex items-center gap-2 mb-3">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <h3 className="text-sm font-semibold">Aktivitas Terakhir</h3>
-              <span className="text-xs text-muted-foreground ml-auto">
-                {offering.history.length} aktivitas
-              </span>
+        {/* Offering List Section (Active and History) */}
+        {allOfferings && allOfferings.length > 0 && (
+          <div className="space-y-6">
+            <div className="flex items-center gap-2 border-b pb-2">
+              <FileCheck className="h-5 w-5 text-primary" />
+              <h3 className="text-lg font-bold">Semua Penawaran (Audit Log)</h3>
             </div>
-            <div className="space-y-2">
-              {offering.history
-                .slice(-5)
-                .reverse()
-                .map((activity, index) => {
-                  const activityDate = activity.at
-                    ? new Date(
-                        (activity.at as any).seconds
-                          ? (activity.at as any).seconds * 1000
-                          : (activity.at as any),
-                      )
-                    : new Date();
-                  const timeAgo = (() => {
-                    const now = new Date();
-                    const diffMs = now.getTime() - activityDate.getTime();
-                    const diffMins = Math.floor(diffMs / 60000);
-                    const diffHours = Math.floor(diffMs / 3600000);
-                    const diffDays = Math.floor(diffMs / 86400000);
 
-                    if (diffMins < 1) return "Baru saja";
-                    if (diffMins < 60) return `${diffMins}m lalu`;
-                    if (diffHours < 24) return `${diffHours}j lalu`;
-                    return `${diffDays}h lalu`;
-                  })();
+            {/* SECTION 1: OFFERING AKTIF */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                  Offering Aktif
+                </h4>
+                <Badge variant="outline" className="bg-green-50/50 text-green-700 border-green-200">
+                  {allOfferings.filter((o: Offering) => o.isActive).length} Aktif
+                </Badge>
+              </div>
+              
+              <div className="grid gap-4">
+                {allOfferings.filter((o: Offering) => o.isActive).map((offeringItem: Offering) => (
+                  <OfferingAuditCard 
+                    key={offeringItem.id} 
+                    offering={offeringItem} 
+                    isActive 
+                  />
+                ))}
+                {allOfferings.filter((o: Offering) => o.isActive).length === 0 && (
+                  <p className="text-sm text-muted-foreground italic p-4 border border-dashed rounded-md text-center">
+                    Tidak ada penawaran aktif saat ini.
+                  </p>
+                )}
+              </div>
+            </div>
 
-                  return (
-                    <div
-                      key={index}
-                      className="flex items-start gap-2 text-sm pb-2 border-b border-muted-foreground/5 last:border-0 last:pb-0"
-                    >
-                      <div className="mt-0.5 flex-shrink-0">
-                        {getActivityIcon(activity.type)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p
-                          className={`text-xs font-medium ${getActivityColor(activity.type)}`}
-                        >
-                          {getActivityLabel(activity.type)}
-                        </p>
-                        {activity.description && (
-                          <p className="text-xs text-muted-foreground truncate">
-                            {activity.description}
-                          </p>
-                        )}
-                      </div>
-                      <span className="text-xs text-muted-foreground flex-shrink-0 whitespace-nowrap ml-2">
-                        {timeAgo}
-                      </span>
-                    </div>
-                  );
-                })}
+            {/* SECTION 2: RIWAYAT OFFERING */}
+            <div className="space-y-4 pt-4">
+              <h4 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                <RotateCcw className="h-3 w-3" />
+                Riwayat Offering / Nonaktif
+              </h4>
+              <div className="grid gap-4">
+                {allOfferings
+                  .filter((o: Offering) => !o.isActive)
+                  .sort((a: Offering, b: Offering) => {
+                    const dateA = a.updatedAt?.toDate?.() || new Date(0);
+                    const dateB = b.updatedAt?.toDate?.() || new Date(0);
+                    return dateB.getTime() - dateA.getTime();
+                  })
+                  .map((offeringItem: Offering) => (
+                    <OfferingAuditCard 
+                      key={offeringItem.id} 
+                      offering={offeringItem} 
+                      onDelete={() => handleDeleteOffering(offeringItem.id!)}
+                    />
+                  ))}
+                {allOfferings.filter((o: Offering) => !o.isActive).length === 0 && (
+                  <p className="text-sm text-muted-foreground italic">Belum ada riwayat penawaran lainnya.</p>
+                )}
+              </div>
             </div>
           </div>
         )}
       </div>
     </Form>
+  );
+}
+
+interface OfferingAuditCardProps {
+  offering: Offering;
+  isActive?: boolean;
+  onDelete?: () => void;
+}
+
+function OfferingAuditCard({ offering, isActive = false, onDelete }: OfferingAuditCardProps) {
+  const formatDate = (ts: any) => {
+    if (!ts) return "-";
+    const date = ts.toDate ? ts.toDate() : new Date(ts);
+    return format(date, "dd MMM yyyy, HH:mm", { locale: idLocale });
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "draft": return <Badge variant="outline" className="bg-gray-100">Draft</Badge>;
+      case "sent": return <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-200">Dikirim</Badge>;
+      case "viewed": return <Badge variant="outline" className="bg-yellow-100 text-yellow-700 border-yellow-200">Dilihat</Badge>;
+      case "accepted": return <Badge variant="outline" className="bg-green-100 text-green-700 border-green-200">Diterima</Badge>;
+      case "rejected": return <Badge variant="outline" className="bg-red-100 text-red-700 border-red-200">Ditolak</Badge>;
+      case "withdrawn": return <Badge variant="outline" className="bg-orange-100 text-orange-700 border-orange-200">Ditarik</Badge>;
+      case "expired": return <Badge variant="outline" className="bg-gray-200 text-gray-700">Kedaluwarsa</Badge>;
+      default: return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
+  return (
+    <Card className={cn(
+      "overflow-hidden transition-all border-l-4",
+      isActive ? "border-l-green-500 shadow-sm" : "border-l-muted opacity-80 grayscale-[0.3]"
+    )}>
+      <CardHeader className="py-3 px-4 bg-muted/20">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <FileText className="h-5 w-5 text-muted-foreground" />
+            <div>
+              <CardTitle className="text-sm font-bold flex items-center gap-2">
+                {offering.documentName || "Penawaran Kerja"}
+                {getStatusBadge(offering.status)}
+              </CardTitle>
+              <CardDescription className="text-xs truncate max-w-[200px]">
+                ID: {offering.id}
+              </CardDescription>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="h-8 text-xs gap-1"
+              onClick={() => window.open(offering.documentUrl, "_blank")}
+            >
+              <Eye className="h-3 w-3" />
+              Lihat File
+            </Button>
+            
+            {onDelete && !isActive && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-8 text-xs gap-1 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Hapus
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Hapus Riwayat Offering?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Tindakan ini tidak dapat dibatalkan. Dokumen penawaran "{offering.documentName}" akan dihapus secara permanen dari sistem.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Batal</AlertDialogCancel>
+                    <AlertDialogAction onClick={onDelete} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                      Hapus Permanen
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="p-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <TimelineInfo label="Dibuat" value={formatDate(offering.createdAt)} icon={<Calendar className="h-3 w-3" />} />
+          <TimelineInfo label="Dikirim" value={formatDate(offering.sentAt)} icon={<Send className="h-3 w-3" />} />
+          <TimelineInfo label="Pertama Dibuka" value={formatDate(offering.viewedAtFirst)} icon={<Eye className="h-3 w-3" />} />
+          <TimelineInfo label="Terakhir Dibuka" value={formatDate(offering.viewedAtLast)} icon={<Clock className="h-3 w-3" />} />
+          
+          <TimelineInfo label="Total Dibuka" value={offering.viewCount?.toString() || "0"} icon={<Eye className="h-3 w-3" />} />
+          <TimelineInfo 
+            label="Respons" 
+            value={offering.respondedAt ? formatDate(offering.respondedAt) : "-"} 
+            subValue={offering.responseType === "accepted" ? "Diterima" : offering.responseType === "rejected" ? "Ditolak" : undefined}
+            icon={<CheckCircle className="h-3 w-3" />} 
+          />
+          {offering.withdrawnAt && (
+            <TimelineInfo label="Ditarik" value={formatDate(offering.withdrawnAt)} icon={<XCircle className="h-3 w-3 text-red-500" />} />
+          )}
+          {offering.expiredAt && (
+            <TimelineInfo label="Kedaluwarsa" value={formatDate(offering.expiredAt)} icon={<AlertCircle className="h-3 w-3" />} />
+          )}
+        </div>
+        
+        {offering.history && offering.history.length > 0 && (
+          <div className="mt-4 pt-4 border-t">
+            <h5 className="text-[10px] font-bold uppercase text-muted-foreground mb-2 flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              Timeline Audit
+            </h5>
+            <div className="flex flex-wrap gap-2">
+              {offering.history.slice(0, 8).map((h, i) => (
+                <div key={i} className="flex items-center gap-1 text-[10px] bg-muted px-1.5 py-0.5 rounded border border-muted-foreground/10" title={h.description}>
+                  <span className="font-bold">{format(h.at.toDate ? h.at.toDate() : new Date(h.at as any), "HH:mm")}</span>
+                  <span className="text-muted-foreground">{h.type}</span>
+                </div>
+              ))}
+              {offering.history.length > 8 && <span className="text-[10px] text-muted-foreground">+{offering.history.length - 8} lainnya</span>}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function TimelineInfo({ label, value, subValue, icon }: { label: string, value: string, subValue?: string, icon?: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <p className="text-[10px] uppercase font-semibold text-muted-foreground flex items-center gap-1">
+        {icon}
+        {label}
+      </p>
+      <p className="text-xs font-medium leading-none">{value}</p>
+      {subValue && (
+        <Badge variant="secondary" className="text-[9px] h-4 py-0 px-1 mt-1">
+          {subValue}
+        </Badge>
+      )}
+    </div>
   );
 }

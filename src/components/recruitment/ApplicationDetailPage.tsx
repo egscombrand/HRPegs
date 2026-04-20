@@ -32,7 +32,9 @@ import type {
   ApplicationTimelineEvent,
   ApplicationInterview,
   UserProfile,
+  Offering,
 } from "@/lib/types";
+import { useCollection } from "@/firebase";
 import { useRoleGuard } from "@/hooks/useRoleGuard";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -106,6 +108,28 @@ export default function ApplicationDetailPage() {
   );
   const { data: job, isLoading: isLoadingJob } = useDoc<Job>(jobRef);
 
+  const offeringsQuery = useMemoFirebase(
+    () =>
+      applicationId
+        ? query(
+            collection(firestore, "offerings"),
+            where("applicationId", "==", applicationId),
+          )
+        : null,
+    [firestore, applicationId],
+  );
+  const { data: offerings, isLoading: isLoadingOfferings } = useCollection<
+    Offering
+  >(offeringsQuery);
+
+  const activeOffering = useMemo(() => {
+    return offerings?.find((o) => o.isActive && o.status !== "draft") || 
+           offerings?.find((o) => o.isActive) || 
+           offerings?.[0];
+  }, [offerings]);
+
+  const isLoadingTotal = isLoadingApp || isLoadingProfile || isLoadingJob || isLoadingOfferings;
+
   const menuConfig = useMemo(() => {
     if (userProfile?.role === "super-admin") return MENU_CONFIG["super-admin"];
     if (userProfile?.role === "hrd") {
@@ -171,8 +195,15 @@ export default function ApplicationDetailPage() {
 
     try {
       setIsSavingDraft(true);
-      // Let OfferEditor manage the offerings collection.
-      // We just refresh the application state.
+      // Update application with draft details for candidate visibility (if needed)
+      const updatePayload: any = {
+        activeOfferingId: offerData.offeringId,
+        offeredSalary: offerData.salary || null,
+        contractStartDate: offerData.startDate ? Timestamp.fromDate(new Date(offerData.startDate)) : null,
+        contractDurationMonths: offerData.contractDurationMonths || null,
+        updatedAt: serverTimestamp(),
+      };
+      await updateDoc(applicationRef!, updatePayload);
       mutateApplication();
     } catch (e: any) {
       toast({
@@ -201,7 +232,10 @@ export default function ApplicationDetailPage() {
       const updatePayload = {
         status: "offered" as const,
         offerStatus: "sent" as const,
-        currentOfferingId: offerData.offeringId,
+        activeOfferingId: offerData.offeringId,
+        offeredSalary: offerData.salary || null,
+        contractStartDate: offerData.startDate ? Timestamp.fromDate(new Date(offerData.startDate)) : null,
+        contractDurationMonths: offerData.contractDurationMonths || null,
         offerSentAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         timeline: [...(application.timeline || []), timelineEvent],
@@ -318,7 +352,7 @@ export default function ApplicationDetailPage() {
     toast,
   ]);
 
-  const isLoading = isLoadingApp || isLoadingProfile || isLoadingJob;
+  const isLoading = isLoadingTotal;
 
   if (!hasAccess) {
     return (
@@ -475,6 +509,8 @@ export default function ApplicationDetailPage() {
                 onSendOffer={handleSendOffer}
                 isSavingDraft={isSavingDraft}
                 isSendingOffer={isSendingOffer}
+                offering={activeOffering}
+                allOfferings={offerings || []}
               />
             )}
 
