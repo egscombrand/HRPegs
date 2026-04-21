@@ -12,6 +12,7 @@ import {
 import { useAuth } from "@/providers/auth-provider";
 import {
   useCollection,
+  useDoc,
   useFirestore,
   useMemoFirebase,
   updateDocumentNonBlocking,
@@ -27,6 +28,7 @@ import type {
   JobApplication,
   JobApplicationStatus,
   AssessmentSession,
+  Offering,
 } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { format, addMonths } from "date-fns";
@@ -86,6 +88,41 @@ function ApplicationCard({
   const { firebaseUser } = useAuth();
   const firestore = useFirestore();
   const { toast } = useToast();
+
+  const activeOfferingId =
+    application.activeOfferingId ?? application.currentOfferingId;
+  const activeOfferingDocRef = useMemoFirebase(() => {
+    if (!activeOfferingId) return null;
+    return doc(firestore, "offerings", activeOfferingId);
+  }, [activeOfferingId, firestore]);
+
+  const { data: activeOffering, isLoading: activeOfferingLoading } =
+    useDoc<Offering>(activeOfferingDocRef);
+
+  const offerDetails = activeOffering?.offeringDetails || {};
+  const offerSalaryLabel =
+    application.jobType === "internship" ? "Uang Saku" : "Gaji";
+  const offerSalary = offerDetails.salary || "-";
+  const offerStartDate = offerDetails.startDate
+    ? new Date(offerDetails.startDate)
+    : null;
+  const offerContractDuration = offerDetails.contractDurationMonths || "-";
+  const offerFirstDayTime = offerDetails.firstDayTime || "-";
+  const offerFirstDayLocation = offerDetails.firstDayLocation || "-";
+  const offerHrContact = offerDetails.hrContact || "-";
+  const offerAdditionalNotes = activeOffering?.additionalNotes || "";
+  const activeOfferIsAvailable = !!activeOfferingId && activeOffering?.isActive;
+  const offerDocumentUrl = activeOffering?.documentUrl;
+  const offerDocumentName =
+    activeOffering?.documentName ||
+    `Offering_${application.jobPosition.replace(/\s+/g, "_")}.pdf`;
+  const offerContractEndDate =
+    offerStartDate && offerDetails.contractDurationMonths
+      ? addMonths(
+          offerStartDate,
+          parseInt(offerDetails.contractDurationMonths, 10),
+        )
+      : null;
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 60000);
@@ -327,6 +364,39 @@ function ApplicationCard({
     }
 
     if (application.offerStatus === "sent") {
+      if (!activeOfferIsAvailable) {
+        return (
+          <Card className="flex flex-col border-primary/50">
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
+                <div>
+                  <CardTitle className="text-xl">
+                    Penawaran Kerja Telah Dikirim
+                  </CardTitle>
+                  <CardDescription>
+                    Penawaran kerja telah dikirim, tetapi detail penawaran aktif
+                    belum tersedia. Silakan tunggu HRD mempublikasikan offering
+                    aktif.
+                  </CardDescription>
+                </div>
+                <Badge className="w-fit bg-primary/80">
+                  Penawaran Kerja Telah Dikirim
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Separator />
+              <div className="rounded-lg border border-muted/70 bg-muted/50 p-4 text-sm">
+                <p>
+                  Detail penawaran tidak dapat ditampilkan saat ini karena
+                  offering aktif belum ditemukan atau belum diaktifkan.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      }
+
       return (
         <Card className="flex flex-col border-primary/50">
           <CardHeader>
@@ -352,9 +422,7 @@ function ApplicationCard({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 pt-4 text-sm">
               <div>
                 <p className="text-muted-foreground">{salaryLabel}</p>
-                <p className="font-bold text-lg">
-                  {formatSalary(application.offeredSalary)} / bulan
-                </p>
+                <p className="font-bold text-lg">{offerSalary} / bulan</p>
               </div>
               <div>
                 <p className="text-muted-foreground">Tipe Pekerjaan</p>
@@ -362,66 +430,68 @@ function ApplicationCard({
                   {application.jobType}
                 </p>
               </div>
-              {application.workDays && (
-                <div>
-                  <p className="text-muted-foreground">Hari Kerja</p>
-                  <p className="font-semibold">{application.workDays}</p>
-                </div>
-              )}
               <div>
                 <p className="text-muted-foreground">Durasi Kontrak</p>
-                <p className="font-semibold">
-                  {application.contractDurationMonths} bulan
-                </p>
+                <p className="font-semibold">{offerContractDuration} bulan</p>
               </div>
-              {application.probationDurationMonths && (
+              {offerFirstDayTime && (
                 <div>
-                  <p className="text-muted-foreground">Masa Percobaan</p>
-                  <p className="font-semibold">
-                    {application.probationDurationMonths} bulan
-                  </p>
+                  <p className="text-muted-foreground">Jam Hari Pertama</p>
+                  <p className="font-semibold">{offerFirstDayTime}</p>
+                </div>
+              )}
+              {offerFirstDayLocation && (
+                <div>
+                  <p className="text-muted-foreground">Lokasi Hari Pertama</p>
+                  <p className="font-semibold">{offerFirstDayLocation}</p>
+                </div>
+              )}
+              {offerHrContact && (
+                <div>
+                  <p className="text-muted-foreground">Kontak HRD</p>
+                  <p className="font-semibold">{offerHrContact}</p>
                 </div>
               )}
               <div>
                 <p className="text-muted-foreground">Tanggal Mulai</p>
                 <p className="font-semibold">
-                  {application.contractStartDate
-                    ? format(
-                        application.contractStartDate.toDate(),
-                        "dd MMMM yyyy, HH:mm",
-                        { locale: id },
-                      )
+                  {offerStartDate
+                    ? format(offerStartDate, "dd MMMM yyyy, HH:mm", {
+                        locale: id,
+                      })
                     : "-"}
                 </p>
               </div>
-              <div>
-                <p className="text-muted-foreground">Tanggal Selesai</p>
-                <p className="font-semibold">
-                  {application.contractEndDate
-                    ? format(
-                        application.contractEndDate.toDate(),
-                        "dd MMMM yyyy",
-                        { locale: id },
-                      )
-                    : "-"}
-                </p>
-              </div>
+              {offerContractEndDate ? (
+                <div>
+                  <p className="text-muted-foreground">Tanggal Selesai</p>
+                  <p className="font-semibold">
+                    {format(offerContractEndDate, "dd MMMM yyyy", {
+                      locale: id,
+                    })}
+                  </p>
+                </div>
+              ) : null}
             </div>
-            {application.offerDescription && (
+            {offerAdditionalNotes && (
               <div className="rounded-md border border-muted/80 bg-muted/50 p-4 text-sm">
                 <p className="font-semibold">Rangkuman Penawaran</p>
                 <p className="mt-2 text-muted-foreground">
-                  {application.offerDescription}
+                  {offerAdditionalNotes}
                 </p>
               </div>
             )}
-            {application.offerNotes && (
-              <p className="text-xs text-muted-foreground italic pt-2">
-                <strong>Catatan:</strong> {application.offerNotes}
-              </p>
-            )}
           </CardContent>
           <CardFooter className="bg-muted/50 p-4 border-t flex flex-col sm:flex-row justify-end items-center gap-2">
+            {offerDocumentUrl ? (
+              <Button
+                variant="outline"
+                onClick={() => window.open(offerDocumentUrl, "_blank")}
+                className="w-full sm:w-auto"
+              >
+                <Download className="mr-2 h-4 w-4" /> Lihat Dokumen PDF
+              </Button>
+            ) : null}
             {canRequestNegotiation ? (
               <Button
                 onClick={() => setIsNegotiationOpen(true)}
@@ -485,7 +555,7 @@ function ApplicationCard({
                           Gaji yang ditawarkan
                         </p>
                         <p className="mt-1 font-semibold text-foreground">
-                          {formatSalary(application.offeredSalary)} / bulan
+                          {offerSalary} / bulan
                         </p>
                       </div>
                       <div>
@@ -501,26 +571,36 @@ function ApplicationCard({
                           Durasi kontrak
                         </p>
                         <p className="mt-1 font-semibold">
-                          {application.contractDurationMonths} bulan
+                          {offerContractDuration} bulan
                         </p>
                       </div>
-                      {application.probationDurationMonths != null && (
+                      {offerFirstDayTime && (
                         <div>
                           <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                            Masa percobaan
+                            Jam Hari Pertama
                           </p>
-                          <p className="mt-1 font-semibold">
-                            {application.probationDurationMonths} bulan
+                          <p className="mt-1 font-semibold text-foreground">
+                            {offerFirstDayTime}
                           </p>
                         </div>
                       )}
-                      {application.workDays && (
+                      {offerFirstDayLocation && (
                         <div>
                           <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                            Hari kerja
+                            Lokasi Hari Pertama
                           </p>
-                          <p className="mt-1 font-semibold">
-                            {application.workDays}
+                          <p className="mt-1 font-semibold text-foreground">
+                            {offerFirstDayLocation}
+                          </p>
+                        </div>
+                      )}
+                      {offerHrContact && (
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                            Kontak HRD
+                          </p>
+                          <p className="mt-1 font-semibold text-foreground">
+                            {offerHrContact}
                           </p>
                         </div>
                       )}
@@ -593,6 +673,9 @@ function ApplicationCard({
     }
 
     if (application.offerStatus === "negotiation_requested") {
+      if (!activeOfferIsAvailable) {
+        return renderMissingOfferDetails();
+      }
       const counter = application.candidateCounterOffer;
       return (
         <Card className="flex flex-col border-amber-500/50">
@@ -629,7 +712,7 @@ function ApplicationCard({
                   <div>
                     <p className="text-xs uppercase tracking-[0.2em]">Gaji</p>
                     <p className="mt-1 font-semibold text-foreground">
-                      {formatSalary(application.offeredSalary)} / bulan
+                      {offerSalary} / bulan
                     </p>
                   </div>
                   <div>
@@ -656,10 +739,10 @@ function ApplicationCard({
                       Selisih nominal
                     </p>
                     <p className="mt-1 font-semibold text-foreground">
-                      {counter?.requestedSalary != null &&
-                      application.offeredSalary != null
+                      {counter?.requestedSalary != null
                         ? `Rp ${(
-                            counter.requestedSalary - application.offeredSalary
+                            counter.requestedSalary -
+                            parseInt(offerDetails.salary || "0", 10)
                           ).toLocaleString("id-ID")}`
                         : "-"}
                     </p>
@@ -685,6 +768,9 @@ function ApplicationCard({
       application.offerStatus === "negotiation_countered" ||
       application.offerStatus === "negotiation_rejected"
     ) {
+      if (!activeOfferIsAvailable) {
+        return renderMissingOfferDetails();
+      }
       const counter = application.candidateCounterOffer;
       const isCountered = application.offerStatus === "negotiation_countered";
       const isApproved = application.offerStatus === "negotiation_approved";
@@ -719,7 +805,7 @@ function ApplicationCard({
                   <div>
                     <p className="text-xs uppercase tracking-[0.2em]">Gaji</p>
                     <p className="mt-1 font-semibold text-foreground">
-                      {formatSalary(application.offeredSalary)} / bulan
+                      {offerSalary} / bulan
                     </p>
                   </div>
                   <div>

@@ -123,10 +123,26 @@ export default function ApplicationDetailPage() {
   >(offeringsQuery);
 
   const activeOffering = useMemo(() => {
-    return offerings?.find((o) => o.isActive && o.status !== "draft") || 
-           offerings?.find((o) => o.isActive) || 
-           offerings?.[0];
-  }, [offerings]);
+    if (!offerings) return undefined;
+    
+    // 1. Prioritize the one pointed to by activeOfferingId or currentOfferingId
+    const pointerId = application?.activeOfferingId || application?.currentOfferingId;
+    if (pointerId) {
+      const pointed = offerings.find(o => o.id === pointerId);
+      if (pointed) return pointed;
+    }
+
+    // 2. Fallback to finding any active one that is not a draft
+    const activeSent = offerings.find((o) => o.isActive && o.status !== "draft");
+    if (activeSent) return activeSent;
+
+    // 3. Fallback to any active one
+    const anyActive = offerings.find((o) => o.isActive);
+    if (anyActive) return anyActive;
+
+    // 4. Last resort: most recent one
+    return offerings[0];
+  }, [offerings, application?.activeOfferingId, application?.currentOfferingId]);
 
   const isLoadingTotal = isLoadingApp || isLoadingProfile || isLoadingJob || isLoadingOfferings;
 
@@ -195,21 +211,14 @@ export default function ApplicationDetailPage() {
 
     try {
       setIsSavingDraft(true);
-      // Update application with draft details for candidate visibility (if needed)
-      const updatePayload: any = {
-        activeOfferingId: offerData.offeringId,
-        offeredSalary: offerData.salary || null,
-        contractStartDate: offerData.startDate ? Timestamp.fromDate(new Date(offerData.startDate)) : null,
-        contractDurationMonths: offerData.contractDurationMonths || null,
-        updatedAt: serverTimestamp(),
-      };
-      await updateDoc(applicationRef!, updatePayload);
-      mutateApplication();
-    } catch (e: any) {
+      // Logic for updating application is now handled atomically inside OfferEditor batch
+      // to ensure consistency. Use offerData for any UI state if needed.
+      setIsSavingDraft(false);
+    } catch (error: any) {
       toast({
         variant: "destructive",
         title: "Gagal Menyimpan Draf",
-        description: e.message,
+        description: error.message,
       });
     } finally {
       setIsSavingDraft(false);
@@ -219,36 +228,18 @@ export default function ApplicationDetailPage() {
   const handleSendOffer = async (offerData: any) => {
     if (!application || !userProfile) return;
 
-    const timelineEvent: ApplicationTimelineEvent = {
-      type: "offer_sent",
-      at: Timestamp.now(),
-      by: userProfile.uid,
-      meta: { note: "Penawaran kerja resmi telah dikirimkan kepada kandidat." },
-    };
-
     try {
       setIsSendingOffer(true);
 
-      const updatePayload = {
-        status: "offered" as const,
-        offerStatus: "sent" as const,
-        activeOfferingId: offerData.offeringId,
-        offeredSalary: offerData.salary || null,
-        contractStartDate: offerData.startDate ? Timestamp.fromDate(new Date(offerData.startDate)) : null,
-        contractDurationMonths: offerData.contractDurationMonths || null,
-        offerSentAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        timeline: [...(application.timeline || []), timelineEvent],
-      };
-
-      await updateDoc(applicationRef!, updatePayload);
-      mutateApplication();
-    } catch (e: any) {
-      console.error("Error sending offer:", e);
+      // Logic for updating application is now handled atomically inside OfferEditor batch
+      // along with timeline update.
+      setIsSendingOffer(false);
+    } catch (error: any) {
+      console.error("Error sending offer:", error);
       toast({
         variant: "destructive",
         title: "Gagal Mengirim Penawaran",
-        description: e.message,
+        description: error.message,
       });
     } finally {
       setIsSendingOffer(false);
@@ -436,15 +427,14 @@ export default function ApplicationDetailPage() {
                 <h3 className="font-semibold text-lg">
                   Applied for: {application.jobPosition}
                 </h3>
-                {application.status !== "rejected" ? (
-                  <ApplicationProgressStepper
-                    currentStatus={application.status}
-                  />
-                ) : (
+                <ApplicationProgressStepper
+                  currentStatus={application.status}
+                />
+                {application.status === "rejected" && (
                   <div className="p-4 rounded-md border border-destructive/50 bg-destructive/10 text-destructive flex items-center gap-3">
                     <XCircle className="h-5 w-5" />
                     <p className="text-sm font-medium">
-                      This application was rejected.
+                      Aplikasi ini telah ditolak.
                     </p>
                   </div>
                 )}

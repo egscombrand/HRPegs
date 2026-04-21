@@ -238,24 +238,15 @@ export default function ApplicationDetailPage() {
   }, [offeringsList]);
 
   const activeOffering = useMemo(() => {
-    if (!offeringsList || offeringsList.length === 0) return null;
-    // Only consider offerings that are active, not withdrawn, expired, rejected, or accepted
-    const activeOfferings = offeringsList.filter(
-      (offering) =>
-        offering.isActive === true &&
-        offering.status !== "withdrawn" &&
-        offering.status !== "expired" &&
-        offering.status !== "rejected" &&
-        offering.status !== "accepted",
+    if (!offeringsList || offeringsList.length === 0 || !application?.currentOfferingId) return null;
+
+    // Use currentOfferingId as single source of truth
+    const currentOffering = offeringsList.find(
+      (offering) => offering.id === application.currentOfferingId && offering.isActive === true
     );
-    if (activeOfferings.length === 0) return null;
-    // Return the most recently updated active offering
-    return [...activeOfferings].sort(
-      (a, b) =>
-        (b.updatedAt?.toMillis?.() || b.createdAt?.toMillis?.() || 0) -
-        (a.updatedAt?.toMillis?.() || a.createdAt?.toMillis?.() || 0),
-    )[0];
-  }, [offeringsList]);
+
+    return currentOffering || null;
+  }, [offeringsList, application?.currentOfferingId]);
 
   const menuConfig = useMemo(() => {
     if (!userProfile) return [];
@@ -391,7 +382,7 @@ export default function ApplicationDetailPage() {
 
       const offeringId = offerData.offeringId as string | undefined;
       const updatePayload: any = {
-        activeOfferingId: offeringId || application.activeOfferingId,
+        currentOfferingId: offeringId || application.currentOfferingId,
         responseDeadline: responseDeadline
           ? Timestamp.fromDate(responseDeadline)
           : null,
@@ -461,7 +452,8 @@ export default function ApplicationDetailPage() {
       const offeringId = offerData.offeringId as string | undefined;
       const updatePayload: any = {
         status: "offered",
-        activeOfferingId: offeringId || application.activeOfferingId,
+        currentOfferingId: offeringId || application.currentOfferingId,
+        offerStatus: "sent",
         responseDeadline: responseDeadline
           ? Timestamp.fromDate(responseDeadline)
           : null,
@@ -549,10 +541,11 @@ export default function ApplicationDetailPage() {
         });
       });
 
-      // Clear activeOfferingId from application
+      // Clear currentOfferingId from application
       const applicationRef = doc(firestore, "applications", applicationId);
       batch.update(applicationRef, {
-        activeOfferingId: null,
+        currentOfferingId: null,
+        offerStatus: null,
         updatedAt: serverTimestamp(),
       });
 
@@ -1347,20 +1340,20 @@ export default function ApplicationDetailPage() {
                         </CardFooter>
                       </Card>
 
-                        <OfferEditor
-                          id="offering"
-                          application={application}
-                          job={job}
-                          candidateName={profile.fullName}
-                          onSaveDraft={handleSaveOfferDraft}
-                          onSendOffer={handleSendOffer}
-                          isSavingDraft={isSavingDraft}
-                          isSendingOffer={isSendingOffer}
-                          currentOfferingId={activeOffering?.id}
-                          currentOfferingStatus={activeOffering?.status as any}
-                          offering={activeOffering || undefined}
-                          allOfferings={offeringsList || []}
-                        />
+                      <OfferEditor
+                        id="offering"
+                        application={application}
+                        job={job}
+                        candidateName={profile.fullName}
+                        onSaveDraft={handleSaveOfferDraft}
+                        onSendOffer={handleSendOffer}
+                        isSavingDraft={isSavingDraft}
+                        isSendingOffer={isSendingOffer}
+                        currentOfferingId={activeOffering?.id}
+                        currentOfferingStatus={activeOffering?.status as any}
+                        offering={activeOffering || undefined}
+                        allOfferings={offeringsList || []}
+                      />
                     </>
                   )}
                 </div>

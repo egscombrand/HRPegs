@@ -394,12 +394,13 @@ export type JobApplication = {
   cvVerified?: boolean;
   ijazahVerified?: boolean;
 
-  // New offer fields
+  // --- Legacy Offering Fields (Now moved to offerings collection) ---
+  // These may still be populated as a summary/cache but offerings/ collection is the source of truth
   offerStatus?: "sent" | "viewed" | "accepted" | "rejected";
-  offeredSalary?: number | null;
-  probationDurationMonths?: number | null;
-  contractStartDate?: Timestamp | null;
-  contractDurationMonths?: number | null;
+  offeredSalary?: number | null; // Legacy: use activeOffering.offeringDetails.salary
+  probationDurationMonths?: number | null; 
+  contractStartDate?: Timestamp | null; // Legacy: use activeOffering.offeringDetails.startDate
+  contractDurationMonths?: number | null; // Legacy: use activeOffering.offeringDetails.contractDurationMonths
   contractEndDate?: Timestamp | null;
   offerSections?: Array<{
     title: string;
@@ -419,7 +420,8 @@ export type JobApplication = {
   candidateOfferDecisionAt?: Timestamp | null;
   internalAccessEnabled?: boolean;
   finalOfferingUrl?: string | null;
-  activeOfferingId?: string | null; // New field to track the active offering ID
+  currentOfferingId?: string | null; // Single source of truth for current active offering
+  activeOfferingId?: string | null; // Alias for incoming active offering pointer
 
   // Denormalized data
   candidateName: string;

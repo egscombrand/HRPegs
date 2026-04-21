@@ -242,10 +242,11 @@ service cloud.firestore {
         // Candidates may create a new application directly in the initial assessment stage.
         allow create: if isCreatingOwn() && (request.resource.data.status == "draft" || request.resource.data.status == "submitted" || request.resource.data.status == "tes_kepribadian");
         
-        // UPDATE: A candidate can update their own DRAFT. Internal users can update any. candidateUid cannot be changed.
+        // UPDATE: A candidate can update their own DRAFT or mark an active offer as viewed. Internal users can update any. candidateUid cannot be changed.
         allow update: if (
                         (isOwner() && resource.data.status == "draft") ||
                         isDecidingOffer() ||
+                        isViewingOffer() ||
                         isSubmittingDocuments() ||
                         isUpdatingSubmittedDocuments() ||
                         isRequestingReschedule() ||
@@ -276,6 +277,15 @@ service cloud.firestore {
                                 && changedKeys.hasOnly(['offerStatus', 'candidateOfferDecisionAt', 'updatedAt', 'status']);
 
             return isOwner && isSentOffer && (isAccepting || isRejecting);
+        }
+        function isViewingOffer() {
+            let isOwner = request.auth.uid == resource.data.candidateUid;
+            let isSentOffer = resource.data.status == 'offered' && resource.data.offerStatus == 'sent';
+            let changedKeys = request.resource.data.diff(resource.data).affectedKeys();
+            return isOwner &&
+                   isSentOffer &&
+                   request.resource.data.offerStatus == 'viewed' &&
+                   changedKeys.hasOnly(['offerStatus', 'offerViewedAt', 'updatedAt']);
         }
         function isSubmittingDocuments() {
             let changedKeys = request.resource.data.diff(resource.data).affectedKeys();

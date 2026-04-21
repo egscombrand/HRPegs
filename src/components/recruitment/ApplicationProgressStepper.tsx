@@ -13,22 +13,33 @@ const VISUAL_STEPS = [
   { stage: "hired", label: "Hired", icon: CheckCircle },
 ];
 
-function mapStage(
-  status: string,
-): "screening" | "interview" | "offering" | "hired" {
+function mapStage(status: string): "screening" | "interview" | "offered" | "hired" {
   const screeningStages = [
     "screening",
     "document_submission",
     "tes_kepribadian",
     "assessment",
     "verification",
+    "submitted",
+    "draft",
   ];
 
-  if (screeningStages.includes(status)) return "screening";
-  if (status === "interview" || status === "waiting_evaluation")
-    return "interview";
-  if (status === "offered") return "offering";
+  const interviewStages = ["interview", "waiting_evaluation"];
+
+  const offeringStages = [
+    "offered",
+    "offer_received",
+    "sent",
+    "negotiation_requested",
+    "accepted",
+    "rejected",
+    "withdrawn",
+    "expired",
+  ];
+
   if (status === "hired") return "hired";
+  if (offeringStages.includes(status)) return "offered";
+  if (interviewStages.includes(status)) return "interview";
 
   return "screening";
 }

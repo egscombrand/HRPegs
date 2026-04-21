@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useDoc, useFirestore, updateDocumentNonBlocking } from "@/firebase";
 import { doc, serverTimestamp, Timestamp, updateDoc } from "firebase/firestore";
 import { useAuth } from "@/providers/auth-provider";
-import type { Offering } from "@/lib/types";
+import type { Offering, JobApplication } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -45,7 +45,24 @@ export default function OfferPage() {
   const { toast } = useToast();
 
   const offeringRef = doc(firestore, "offerings", offerId);
-  const { data: offering, isLoading } = useDoc<Offering>(offeringRef);
+  const { data: offering, isLoading: isLoadingOffering } =
+    useDoc<Offering>(offeringRef);
+
+  // Get application data to check if this is the current offering
+  const applicationRef = offering
+    ? doc(firestore, "applications", offering.applicationId)
+    : null;
+  const { data: application, isLoading: isLoadingApplication } =
+    useDoc<JobApplication>(applicationRef);
+
+  const isLoading = isLoadingOffering || isLoadingApplication;
+
+  // Check if this offering is valid for the candidate to view
+  const isValidOffering =
+    offering &&
+    application &&
+    offering.id === application.currentOfferingId &&
+    offering.isActive === true;
 
   const [isAccepting, setIsAccepting] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
@@ -56,7 +73,7 @@ export default function OfferPage() {
   const { userProfile } = useAuth();
 
   useEffect(() => {
-    if (offering) {
+    if (offering && isValidOffering) {
       // Check if offering is active - if not, don't proceed with any updates
       if (!offering.isActive) {
         return;
@@ -79,7 +96,7 @@ export default function OfferPage() {
               type: "expired",
               description:
                 "Penawaran kedaluwarsa (batas waktu respons terlewat)",
-              at: serverTimestamp(),
+              at: Timestamp.now(),
             },
           ],
           updatedAt: serverTimestamp(),
@@ -99,7 +116,7 @@ export default function OfferPage() {
             {
               type: "viewed",
               description: `Penawaran dibuka (${currentViewCount}x dibuka)`,
-              at: viewTimestamp,
+              at: Timestamp.now(),
             },
           ],
           updatedAt: viewTimestamp,
@@ -121,11 +138,19 @@ export default function OfferPage() {
           {
             type: "accepted",
             description: "Penawaran diterima oleh kandidat",
-            at: serverTimestamp(),
+            at: Timestamp.now(),
           },
         ],
         updatedAt: serverTimestamp(),
       });
+
+      if (applicationRef) {
+        await updateDocumentNonBlocking(applicationRef, {
+          offerStatus: "accepted",
+          candidateOfferDecisionAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
       toast({
         title: "Penawaran Diterima",
         description:
@@ -155,11 +180,21 @@ export default function OfferPage() {
           {
             type: "rejected",
             description: "Penawaran ditolak oleh kandidat",
-            at: serverTimestamp(),
+            at: Timestamp.now(),
           },
         ],
         updatedAt: serverTimestamp(),
       });
+
+      if (applicationRef) {
+        await updateDocumentNonBlocking(applicationRef, {
+          status: "rejected",
+          offerStatus: "rejected",
+          offerRejectionReason: rejectionReason.trim(),
+          candidateOfferDecisionAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
       toast({
         title: "Penawaran Ditolak",
         description: "Keputusan Anda telah dicatat.",
@@ -186,7 +221,7 @@ export default function OfferPage() {
           {
             type: "question",
             message: question,
-            timestamp: serverTimestamp(),
+            timestamp: Timestamp.now(),
           },
         ],
         updatedAt: serverTimestamp(),
@@ -259,6 +294,21 @@ export default function OfferPage() {
           <CardContent className="pt-6">
             <p className="text-center text-muted-foreground">
               Offering not found or expired.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!isValidOffering) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6">
+            <p className="text-center text-muted-foreground">
+              Penawaran ini sudah tidak berlaku. Silakan periksa penawaran
+              terbaru Anda.
             </p>
           </CardContent>
         </Card>
