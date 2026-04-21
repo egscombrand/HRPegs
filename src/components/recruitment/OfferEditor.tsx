@@ -458,6 +458,9 @@ export function OfferEditor({
         isActive: false,
         withdrawnAt: serverTimestamp(),
         withdrawnBy: userProfile.uid,
+        candidateUid: application.candidateUid,
+        applicationId: application.id!,
+        candidateEmail: application.candidateEmail,
         history: [
           ...(allOfferings?.find((o) => o.id === offeringId)?.history || []),
           {

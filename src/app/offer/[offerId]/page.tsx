@@ -71,6 +71,21 @@ export default function OfferPage() {
   const [question, setQuestion] = useState("");
   const [isSubmittingQuestion, setIsSubmittingQuestion] = useState(false);
   const [isHiding, setIsHiding] = useState(false);
+
+  // Negotiation states
+  const [isNegotiationDialogOpen, setIsNegotiationDialogOpen] = useState(false);
+  const [negotiationAreas, setNegotiationAreas] = useState<string[]>([]);
+  const [negotiationSalary, setNegotiationSalary] = useState<number | null>(null);
+  const [negotiationStartDate, setNegotiationStartDate] = useState("");
+  const [negotiationWorkModel, setNegotiationWorkModel] = useState("");
+  const [negotiationLocation, setNegotiationLocation] = useState("");
+  const [negotiationContractDuration, setNegotiationContractDuration] = useState<number | null>(null);
+  const [negotiationBenefitNotes, setNegotiationBenefitNotes] = useState("");
+  const [negotiationScopeNotes, setNegotiationScopeNotes] = useState("");
+  const [negotiationOtherNotes, setNegotiationOtherNotes] = useState("");
+  const [negotiationReason, setNegotiationReason] = useState("");
+  const [isNegotiating, setIsNegotiating] = useState(false);
+
   const { userProfile } = useAuth();
 
   useEffect(() => {
@@ -87,64 +102,29 @@ export default function OfferPage() {
       // Auto-expire if deadline passed and status is not final
       if (
         isExpired &&
-        !["accepted", "rejected", "expired"].includes(offering.status)
+        !["accepted", "rejected", "expired"].includes(offering.status) &&
+        applicationRef
       ) {
-        updateDocumentNonBlocking(offeringRef, {
-          status: "expired",
-          history: [
-            ...(offering.history || []),
-            {
-              type: "expired",
-              description:
-                "Penawaran kedaluwarsa (batas waktu respons terlewat)",
-              at: Timestamp.now(),
-            },
-          ],
+        // We only update status in applications
+        updateDocumentNonBlocking(applicationRef, {
+          offerStatus: "expired",
           updatedAt: serverTimestamp(),
         });
-      } else if (offering.status === "sent") {
-        // Mark as viewed and update tracking
-        const currentViewCount = (offering.viewCount || 0) + 1;
-        const viewTimestamp = serverTimestamp();
-
-        updateDocumentNonBlocking(offeringRef, {
-          status: "viewed",
-          viewedAtFirst: offering.viewedAtFirst || viewTimestamp,
-          viewedAtLast: viewTimestamp,
-          viewCount: currentViewCount,
-          history: [
-            ...(offering.history || []),
-            {
-              type: "viewed",
-              description: `Penawaran dibuka (${currentViewCount}x dibuka)`,
-              at: Timestamp.now(),
-            },
-          ],
-          updatedAt: viewTimestamp,
+      } else if (offering.status === "sent" && applicationRef && application.offerStatus === "sent") {
+        // Mark as viewed in applications
+        updateDocumentNonBlocking(applicationRef, {
+          offerStatus: "viewed",
+          offerViewedAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
         });
       }
     }
-  }, [offering, offeringRef]);
+  }, [offering, application, applicationRef, isValidOffering]);
 
   const handleAccept = async () => {
     if (!offering) return;
     setIsAccepting(true);
     try {
-      await updateDocumentNonBlocking(offeringRef, {
-        status: "accepted",
-        respondedAt: serverTimestamp(),
-        responseType: "accepted",
-        history: [
-          ...(offering.history || []),
-          {
-            type: "accepted",
-            description: "Penawaran diterima oleh kandidat",
-            at: Timestamp.now(),
-          },
-        ],
-        updatedAt: serverTimestamp(),
-      });
-
       if (applicationRef) {
         await updateDocumentNonBlocking(applicationRef, {
           offerStatus: "accepted",
@@ -172,21 +152,6 @@ export default function OfferPage() {
     if (!offering || !rejectionReason.trim()) return;
     setIsRejecting(true);
     try {
-      await updateDocumentNonBlocking(offeringRef, {
-        status: "rejected",
-        respondedAt: serverTimestamp(),
-        responseType: "rejected",
-        history: [
-          ...(offering.history || []),
-          {
-            type: "rejected",
-            description: "Penawaran ditolak oleh kandidat",
-            at: Timestamp.now(),
-          },
-        ],
-        updatedAt: serverTimestamp(),
-      });
-
       if (applicationRef) {
         await updateDocumentNonBlocking(applicationRef, {
           status: "rejected",
@@ -216,20 +181,22 @@ export default function OfferPage() {
     if (!offering || !question.trim()) return;
     setIsSubmittingQuestion(true);
     try {
-      await updateDocumentNonBlocking(offeringRef, {
-        interactions: [
-          ...((offering as any).interactions || []),
-          {
-            type: "question",
-            message: question,
-            timestamp: Timestamp.now(),
-          },
-        ],
-        updatedAt: serverTimestamp(),
-      });
+      if (applicationRef) {
+        await updateDocumentNonBlocking(applicationRef, {
+          offerInteractions: [
+            ...((application as any).offerInteractions || []),
+            {
+              type: "question",
+              message: question,
+              timestamp: Timestamp.now(),
+            },
+          ],
+          updatedAt: serverTimestamp(),
+        });
+      }
       toast({
-        title: "Question Sent",
-        description: "Your question has been sent to HR.",
+        title: "Pertanyaan Terkirim",
+        description: "Pertanyaan Anda telah dikirim ke Tim HRD.",
       });
       setQuestion("");
     } catch (error: any) {
@@ -240,6 +207,47 @@ export default function OfferPage() {
       });
     } finally {
       setIsSubmittingQuestion(false);
+    }
+  };
+
+  const handleNegotiationSubmit = async () => {
+    if (!offering || !application || !applicationRef) return;
+    if (negotiationAreas.length === 0 || !negotiationReason.trim()) return;
+
+    setIsNegotiating(true);
+    try {
+      await updateDocumentNonBlocking(applicationRef, {
+        offerStatus: "negotiation_requested" as const,
+        candidateNegotiationUsed: true,
+        candidateCounterOffer: {
+          requestedAreas: negotiationAreas,
+          requestedSalary: negotiationAreas.includes("gaji") ? negotiationSalary : null,
+          requestedStartDate: negotiationAreas.includes("tanggal_mulai") ? negotiationStartDate : null,
+          requestedWorkModel: negotiationAreas.includes("sistem_kerja") ? negotiationWorkModel : null,
+          requestedLocation: negotiationAreas.includes("lokasi") ? negotiationLocation : null,
+          requestedContractDurationMonths: negotiationAreas.includes("durasi_kontrak") ? negotiationContractDuration : null,
+          requestedBenefitNotes: negotiationAreas.includes("benefit") ? negotiationBenefitNotes : null,
+          requestedScopeNotes: negotiationAreas.includes("peran") ? negotiationScopeNotes : null,
+          requestedOtherNotes: negotiationAreas.includes("lainnya") ? negotiationOtherNotes : null,
+          reason: negotiationReason,
+          submittedAt: Timestamp.now(),
+        },
+        updatedAt: serverTimestamp(),
+      });
+
+      toast({
+        title: "Negosiasi Terkirim",
+        description: "Permintaan diskusi Anda telah terkirim ke Tim HRD.",
+      });
+      setIsNegotiationDialogOpen(false);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    } finally {
+      setIsNegotiating(false);
     }
   };
 
@@ -356,6 +364,10 @@ export default function OfferPage() {
     rejected: "bg-red-500",
     withdrawn: "bg-orange-500",
     expired: "bg-gray-500",
+    negotiation_requested: "bg-blue-600",
+    negotiation_approved: "bg-emerald-600",
+    negotiation_rejected: "bg-orange-600",
+    offered_final: "bg-indigo-600",
   };
 
   const getActivityIcon = (type: string) => {
@@ -457,9 +469,9 @@ export default function OfferPage() {
               <div className="flex items-center justify-between">
                 <CardTitle className="text-2xl">Job Offer</CardTitle>
                 <Badge
-                  className={`${statusColors[offering.status]} text-white`}
+                  className={`${statusColors[application?.offerStatus || offering.status]} text-white`}
                 >
-                  {offering.status.toUpperCase()}
+                  {(application?.offerStatus || offering.status).toUpperCase().replace("_", " ")}
                 </Badge>
               </div>
               <div className="space-y-2">
@@ -656,8 +668,11 @@ export default function OfferPage() {
 
           {/* Actions */}
           {!isExpired &&
-            offering.status !== "accepted" &&
-            offering.status !== "rejected" && (
+            application?.offerStatus !== "accepted" &&
+            application?.offerStatus !== "accepted_pending_document" &&
+            application?.offerStatus !== "document_uploaded" &&
+            application?.offerStatus !== "rejected" &&
+            application?.offerStatus !== "negotiation_requested" && (
               <Card>
                 <CardHeader>
                   <CardTitle>Respons Anda</CardTitle>
@@ -715,6 +730,128 @@ export default function OfferPage() {
                           </div>
                         </DialogContent>
                       </Dialog>
+
+                      {!application?.candidateNegotiationUsed && (
+                        <Dialog
+                          open={isNegotiationDialogOpen}
+                          onOpenChange={setIsNegotiationDialogOpen}
+                        >
+                          <DialogTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className="flex-1"
+                              size="lg"
+                            >
+                              <MessageSquare className="h-4 w-4 mr-2" />
+                              Diskusi Penawaran
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                            <DialogHeader>
+                              <DialogTitle>Ajukan Diskusi Penawaran</DialogTitle>
+                            </DialogHeader>
+                            <div className="space-y-6 py-4">
+                              <div className="p-3 bg-blue-50 text-blue-800 text-xs rounded-lg border border-blue-100">
+                                <p className="font-bold mb-1 uppercase tracking-wider">Penting:</p>
+                                <ul className="list-disc pl-4 space-y-1">
+                                  <li>Negosiasi hanya dapat diajukan satu kali.</li>
+                                  <li>Jelaskan usulan Anda secara profesional dan objektif.</li>
+                                  <li>Tim HRD akan meninjau dan merespons permintaan Anda.</li>
+                                </ul>
+                              </div>
+
+                              <div className="space-y-3">
+                                <p className="text-sm font-bold">Pilih Area Diskusi:</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {[
+                                    { id: "gaji", label: "Gaji / Kompensasi" },
+                                    { id: "tanggal_mulai", label: "Tanggal Mulai" },
+                                    { id: "sistem_kerja", label: "Sistem Kerja" },
+                                    { id: "lokasi", label: "Lokasi" },
+                                    { id: "durasi_kontrak", label: "Durasi Kontrak" },
+                                    { id: "benefit", label: "Benefit / Fasilitas" },
+                                    { id: "peran", label: "Lingkup Peran" },
+                                    { id: "lainnya", label: "Lainnya" },
+                                  ].map((area) => (
+                                    <div key={area.id} className="flex items-center space-x-2">
+                                      <input
+                                        type="checkbox"
+                                        id={`g-area-${area.id}`}
+                                        checked={negotiationAreas.includes(area.id)}
+                                        onChange={(e) => {
+                                          if (e.target.checked) setNegotiationAreas([...negotiationAreas, area.id]);
+                                          else setNegotiationAreas(negotiationAreas.filter(a => a !== area.id));
+                                        }}
+                                        className="h-4 w-4"
+                                      />
+                                      <label htmlFor={`g-area-${area.id}`} className="text-sm">{area.label}</label>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+
+                              <div className="space-y-4">
+                                {negotiationAreas.includes("gaji") && (
+                                  <div className="space-y-1.5">
+                                    <label className="text-xs font-bold text-muted-foreground uppercase">Usulan Gaji</label>
+                                    <Input
+                                      type="number"
+                                      placeholder="Contoh: 15000000"
+                                      value={negotiationSalary || ""}
+                                      onChange={(e) => setNegotiationSalary(e.target.value ? parseInt(e.target.value) : null)}
+                                    />
+                                  </div>
+                                )}
+
+                                {negotiationAreas.includes("tanggal_mulai") && (
+                                  <div className="space-y-1.5">
+                                    <label className="text-xs font-bold text-muted-foreground uppercase">Usulan Tanggal Mulai</label>
+                                    <Input
+                                      type="date"
+                                      value={negotiationStartDate}
+                                      onChange={(e) => setNegotiationStartDate(e.target.value)}
+                                    />
+                                  </div>
+                                )}
+
+                                {negotiationAreas.includes("sistem_kerja") && (
+                                  <div className="space-y-1.5">
+                                    <label className="text-xs font-bold text-muted-foreground uppercase">Sistem Kerja</label>
+                                    <select
+                                      className="w-full border rounded-md p-2 text-sm"
+                                      value={negotiationWorkModel}
+                                      onChange={(e) => setNegotiationWorkModel(e.target.value)}
+                                    >
+                                      <option value="">Pilih...</option>
+                                      <option value="Onsite">Onsite</option>
+                                      <option value="Hybrid">Hybrid</option>
+                                      <option value="Remote">Remote</option>
+                                    </select>
+                                  </div>
+                                )}
+
+                                <div className="space-y-1.5">
+                                  <label className="text-xs font-bold text-muted-foreground uppercase">Alasan & Penjelasan Profesional (Wajib)</label>
+                                  <Textarea
+                                    placeholder="Jelaskan dasar usulan Anda secara profesional..."
+                                    value={negotiationReason}
+                                    onChange={(e) => setNegotiationReason(e.target.value)}
+                                    className="min-h-[100px]"
+                                  />
+                                </div>
+                              </div>
+
+                              <Button
+                                onClick={handleNegotiationSubmit}
+                                disabled={isNegotiating || negotiationAreas.length === 0 || !negotiationReason.trim()}
+                                className="w-full"
+                              >
+                                {isNegotiating ? "Mengirim..." : "Kirim Permintaan Diskusi"}
+                              </Button>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+                      )}
                     </div>
                     <Button
                       onClick={handleHideOffering}
@@ -797,6 +934,39 @@ export default function OfferPage() {
                 <div className="flex items-center gap-2 text-gray-700 dark:text-gray-400">
                   <Clock className="h-5 w-5" />
                   <p className="font-medium">This offer has expired.</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {application?.offerStatus === "negotiation_requested" && (
+            <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950/10">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-2 text-blue-700 dark:text-blue-400">
+                  <Activity className="h-5 w-5 animate-pulse" />
+                  <p className="font-medium">Negosiasi Sedang Ditinjau</p>
+                </div>
+                <p className="text-sm text-blue-600 dark:text-blue-500 mt-1">
+                  Permintaan diskusi Anda telah diterima oleh Tim HRD dan sedang dalam tahap peninjauan. Mohon menunggu informasi selanjutnya.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {application?.offerStatus === "negotiation_rejected" && application?.candidateNegotiationResponse && (
+            <Card className="border-orange-200 bg-orange-50 dark:bg-orange-950/10">
+              <CardContent className="pt-6">
+                <div className="flex items-start gap-3">
+                  <XCircle className="h-5 w-5 text-orange-600 mt-1" />
+                  <div>
+                    <p className="font-bold text-orange-800">Negosiasi Tidak Disetujui</p>
+                    <div className="mt-2 text-sm text-orange-700 bg-white/40 p-3 rounded-lg border border-orange-200">
+                      {application.candidateNegotiationResponse.note}
+                    </div>
+                    <p className="mt-3 text-xs text-orange-500 italic">
+                      — Tim HRD • {format(application.candidateNegotiationResponse.respondedAt.toDate(), "dd MMM yyyy", { locale: idLocale })}
+                    </p>
+                  </div>
                 </div>
               </CardContent>
             </Card>

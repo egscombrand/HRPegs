@@ -153,6 +153,70 @@ export default function ApplicationDetailPage() {
   const [isWithdrawingOfferings, setIsWithdrawingOfferings] = useState(false);
   const [isUpdatingDecision, setIsUpdatingDecision] = useState(false);
   const [isActivating, setIsActivating] = useState(false);
+  const [isNegotiationResponseOpen, setIsNegotiationResponseOpen] =
+    useState(false);
+  const [negotiationResponseType, setNegotiationResponseType] = useState<
+    "accepted" | "partially_accepted" | "rejected"
+  >("accepted");
+  const [negotiationResponseNote, setNegotiationResponseNote] = useState("");
+  const [isSubmittingNegotiationResponse, setIsSubmittingNegotiationResponse] =
+    useState(false);
+
+  const handleNegotiationResponse = async () => {
+    if (!application || !applicationRef || !userProfile) return;
+    setIsSubmittingNegotiationResponse(true);
+
+    try {
+      const isReject = negotiationResponseType === "rejected";
+      const isFullAccept = negotiationResponseType === "accepted";
+      
+      const updatePayload: any = {
+        offerStatus: isReject ? "negotiation_rejected" : "offered_final",
+        candidateNegotiationResponse: {
+          type: negotiationResponseType,
+          note: negotiationResponseNote,
+          respondedAt: Timestamp.now(),
+          respondedBy: userProfile.uid,
+        },
+        updatedAt: serverTimestamp(),
+      };
+
+      // Add to timeline
+      const timelineEvent: ApplicationTimelineEvent = {
+        type: "stage_changed",
+        at: Timestamp.now(),
+        by: userProfile.uid,
+        meta: { 
+          from: "negotiation_requested", 
+          to: updatePayload.offerStatus, 
+          note: `Respons Negosiasi (${negotiationResponseType}): ${negotiationResponseNote}` 
+        },
+      };
+
+      updatePayload.timeline = [...(application.timeline || []), timelineEvent];
+
+      await updateDoc(applicationRef, updatePayload);
+      mutateApplication();
+      if (mutateOfferings) {
+        mutateOfferings();
+      }
+      setIsNegotiationResponseOpen(false);
+      setNegotiationResponseNote("");
+      
+      toast({
+        title: "Respons Terkirim",
+        description: `Kandidat telah diberikan respons "${negotiationResponseType}".`,
+      });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    } finally {
+      setIsSubmittingNegotiationResponse(false);
+    }
+  };
   const [activeProfileStep, setActiveProfileStep] = useState(1);
   const [evaluationFilter, setEvaluationFilter] = useState<
     "all" | "pra" | "pasca" | "offering"
@@ -238,11 +302,18 @@ export default function ApplicationDetailPage() {
   }, [offeringsList]);
 
   const activeOffering = useMemo(() => {
-    if (!offeringsList || offeringsList.length === 0 || !application?.currentOfferingId) return null;
+    if (
+      !offeringsList ||
+      offeringsList.length === 0 ||
+      !application?.currentOfferingId
+    )
+      return null;
 
     // Use currentOfferingId as single source of truth
     const currentOffering = offeringsList.find(
-      (offering) => offering.id === application.currentOfferingId && offering.isActive === true
+      (offering) =>
+        offering.id === application.currentOfferingId &&
+        offering.isActive === true,
     );
 
     return currentOffering || null;
@@ -926,6 +997,14 @@ export default function ApplicationDetailPage() {
                       status={displayStatus}
                       className="text-base px-4 py-1"
                     />
+                    {application.offerStatus && (
+                      <Badge
+                        variant="outline"
+                        className="uppercase text-[10px] tracking-wider px-2 py-1 border-blue-500/30 text-blue-600 bg-blue-50/50"
+                      >
+                        Offer: {application.offerStatus.replaceAll("_", " ")}
+                      </Badge>
+                    )}
                     {application.candidateStatus && (
                       <Badge
                         variant="secondary"
@@ -1110,6 +1189,126 @@ export default function ApplicationDetailPage() {
                     </Card>
                   ) : (
                     <>
+                      {application.offerStatus === "negotiation_requested" && application.candidateCounterOffer && (
+                        <Card className="border-2 border-blue-500 bg-blue-50/20 shadow-lg animate-in fade-in slide-in-from-top-4 duration-500">
+                          <CardHeader className="bg-blue-600 text-white rounded-t-xl py-4">
+                            <div className="flex items-center justify-between">
+                              <CardTitle className="text-lg flex items-center gap-2">
+                                <MessageSquare className="h-5 w-5" />
+                                Review Permintaan Negosiasi
+                              </CardTitle>
+                              <Badge className="bg-white text-blue-700 hover:bg-white/90">MENUNGGU RESPONS</Badge>
+                            </div>
+                          </CardHeader>
+                          <CardContent className="pt-6 space-y-6">
+                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                              {application.candidateCounterOffer.requestedAreas.map((area: string) => (
+                                <div key={area} className="p-3 bg-white/50 border border-blue-100 rounded-xl">
+                                  <p className="text-[10px] font-black uppercase text-blue-600 mb-1 tracking-widest">{area.replace("_", " ")}</p>
+                                  <p className="text-sm font-bold text-slate-900">
+                                    {area === "gaji" ? (
+                                      `Rp ${application.candidateCounterOffer.requestedSalary?.toLocaleString("id-ID")}`
+                                    ) : area === "tanggal_mulai" ? (
+                                      application.candidateCounterOffer.requestedStartDate
+                                    ) : area === "sistem_kerja" ? (
+                                      application.candidateCounterOffer.requestedWorkModel
+                                    ) : area === "durasi_kontrak" ? (
+                                      `${application.candidateCounterOffer.requestedContractDurationMonths} Bulan`
+                                    ) : "Lihat Penjelasan"}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="space-y-2">
+                              <p className="text-xs font-bold uppercase text-slate-500 tracking-widest">Justifikasi Kandidat</p>
+                              <div className="p-4 bg-white/80 border border-slate-200 rounded-2xl italic text-slate-700 text-sm leading-relaxed shadow-inner">
+                                "{application.candidateCounterOffer.reason}"
+                              </div>
+                            </div>
+
+                            <div className="flex justify-end gap-3 pt-2">
+                              <Button 
+                                variant="outline" 
+                                className="border-blue-200 text-blue-700 hover:bg-blue-50"
+                                onClick={() => {
+                                  setNegotiationResponseType("rejected");
+                                  setIsNegotiationResponseOpen(true);
+                                }}
+                              >
+                                Berikan Respons
+                              </Button>
+                            </div>
+                          </CardContent>
+
+                          <Dialog open={isNegotiationResponseOpen} onOpenChange={setIsNegotiationResponseOpen}>
+                            <DialogContent className="max-w-xl">
+                              <DialogHeader>
+                                <DialogTitle>Respons Negosiasi Kandidat</DialogTitle>
+                                <DialogDescription>
+                                  Pilih keputusan Anda dan berikan pesan profesional kepada kandidat.
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="space-y-6 py-4">
+                                <div className="space-y-3">
+                                  <p className="text-sm font-bold">Keputusan:</p>
+                                  <div className="grid grid-cols-3 gap-2">
+                                    {[
+                                      { id: "accepted", label: "Setujui", color: "bg-green-500", text: "text-green-600", border: "border-green-200" },
+                                      { id: "partially_accepted", label: "Sebagian", color: "bg-blue-500", text: "text-blue-600", border: "border-blue-200" },
+                                      { id: "rejected", label: "Tolak", color: "bg-red-500", text: "text-red-600", border: "border-red-200" }
+                                    ].map((opt) => (
+                                      <button
+                                        key={opt.id}
+                                        onClick={() => setNegotiationResponseType(opt.id as any)}
+                                        className={cn(
+                                          "px-3 py-4 rounded-xl border text-sm font-bold transition-all",
+                                          negotiationResponseType === opt.id 
+                                            ? `${opt.color} text-white border-transparent shadow-lg scale-105`
+                                            : `bg-white ${opt.text} ${opt.border} hover:bg-slate-50`
+                                        )}
+                                      >
+                                        {opt.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                  <label className="text-sm font-bold">Pesan Profesional (Dilihat oleh Kandidat):</label>
+                                  <Textarea 
+                                    className="min-h-[120px] rounded-2xl"
+                                    placeholder={
+                                      negotiationResponseType === "rejected" 
+                                        ? "Jelaskan mengapa usulan belum dapat dipenuhi saat ini..." 
+                                        : "Tuliskan detail poin yang disetujui dan langkah selanjutnya..."
+                                    }
+                                    value={negotiationResponseNote}
+                                    onChange={(e) => setNegotiationResponseNote(e.target.value)}
+                                  />
+                                  <p className="text-[10px] text-slate-500">
+                                    *Pesan ini akan tampil langsung di portal kandidat.
+                                  </p>
+                                </div>
+                              </div>
+                              <DialogFooter>
+                                <Button variant="ghost" onClick={() => setIsNegotiationResponseOpen(false)}>Batal</Button>
+                                <Button 
+                                  onClick={handleNegotiationResponse} 
+                                  disabled={isSubmittingNegotiationResponse || !negotiationResponseNote.trim()}
+                                  className={cn(
+                                    negotiationResponseType === "accepted" ? "bg-green-600 hover:bg-green-700" :
+                                    negotiationResponseType === "rejected" ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"
+                                  )}
+                                >
+                                  {isSubmittingNegotiationResponse && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                  Kirim Respons
+                                </Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+                        </Card>
+                      )}
                       <Card className="border border-slate-700">
                         <CardHeader className="pb-3">
                           <div className="flex items-center justify-between gap-3">

@@ -12,10 +12,10 @@ export const statusDisplayLabels: Record<JobApplicationStatus | 'waiting_evaluat
     hired: 'Diterima Kerja',
     rejected: 'Ditolak',
     waiting_evaluation: 'Menunggu Evaluasi',
+    verification: 'Verifikasi HRD',
     // Deprecated but kept for safety
     submitted: 'Lamaran Diterima',
     tes_kepribadian: 'Tes Kepribadian',
-    verification: 'Verifikasi HRD',
     document_submission: 'Dokumen',
 };
 

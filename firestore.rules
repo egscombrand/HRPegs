@@ -602,12 +602,7 @@ service cloud.firestore {
 
       allow create: if isHrd() || isSuperAdmin();
 
-      allow update: if (isHrd() || isSuperAdmin()) || 
-                      (isSignedIn() && (
-                        resource.data.get('candidateUid', '') == request.auth.uid || 
-                        resource.data.get('candidateEmail', '') == request.auth.token.email ||
-                        (resource.data.applicationId != null && get(/databases/$(database)/documents/applications/$(resource.data.applicationId)).data.candidateUid == request.auth.uid)
-                      ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'viewedAt', 'viewedAtFirst', 'viewedAtLast', 'viewCount', 'respondedAt', 'responseType', 'interactions', 'history', 'updatedAt']));
+      allow update: if isHrd() || isSuperAdmin();
       
       allow delete: if false;
     }

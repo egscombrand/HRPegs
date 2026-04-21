@@ -37,6 +37,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -82,12 +90,34 @@ function ApplicationCard({
   const [now, setNow] = useState(new Date());
   const [isDeciding, setIsDeciding] = React.useState(false);
   const [isNegotiationOpen, setIsNegotiationOpen] = useState(false);
+  const [selectedNegotiationAreas, setSelectedNegotiationAreas] = useState<
+    string[]
+  >([]);
   const [requestedSalary, setRequestedSalary] = useState("");
+  const [requestedStartDate, setRequestedStartDate] = useState("");
+  const [requestedLocation, setRequestedLocation] = useState("");
+  const [requestedWorkModel, setRequestedWorkModel] = useState("");
+  const [requestedContractDuration, setRequestedContractDuration] =
+    useState("");
+  const [requestedBenefitNotes, setRequestedBenefitNotes] = useState("");
+  const [requestedScopeNotes, setRequestedScopeNotes] = useState("");
+  const [requestedOtherNotes, setRequestedOtherNotes] = useState("");
   const [negotiationReason, setNegotiationReason] = useState("");
   const [isSubmittingNegotiation, setIsSubmittingNegotiation] = useState(false);
   const { firebaseUser } = useAuth();
   const firestore = useFirestore();
   const { toast } = useToast();
+
+  const negotiationAreas = [
+    { key: "salary", label: "Gaji / Kompensasi" },
+    { key: "startDate", label: "Tanggal Mulai Kerja" },
+    { key: "location", label: "Lokasi Kerja" },
+    { key: "workModel", label: "Sistem Kerja" },
+    { key: "contractDuration", label: "Durasi Kontrak" },
+    { key: "benefitNotes", label: "Benefit / Fasilitas" },
+    { key: "scopeNotes", label: "Ruang Lingkup Peran" },
+    { key: "otherNotes", label: "Lainnya" },
+  ];
 
   const activeOfferingId =
     application.activeOfferingId ?? application.currentOfferingId;
@@ -167,7 +197,21 @@ function ApplicationCard({
   };
 
   const canRequestNegotiation =
-    application.offerStatus === "sent" && !application.candidateNegotiationUsed;
+    ["sent", "viewed"].includes(application.offerStatus ?? "") &&
+    !application.candidateNegotiationUsed;
+
+  const resetNegotiationForm = () => {
+    setSelectedNegotiationAreas([]);
+    setRequestedSalary("");
+    setRequestedStartDate("");
+    setRequestedLocation("");
+    setRequestedWorkModel("");
+    setRequestedContractDuration("");
+    setRequestedBenefitNotes("");
+    setRequestedScopeNotes("");
+    setRequestedOtherNotes("");
+    setNegotiationReason("");
+  };
 
   const handleNegotiationSubmit = async (
     event: React.FormEvent<HTMLFormElement>,
@@ -183,11 +227,11 @@ function ApplicationCard({
       return;
     }
 
-    if (!requestedSalary.trim()) {
+    if (selectedNegotiationAreas.length === 0) {
       toast({
         variant: "destructive",
         title: "Gagal Mengirim Negosiasi",
-        description: "Gaji yang diharapkan harus diisi.",
+        description: "Pilih area yang ingin Anda ajukan untuk dibahas.",
       });
       return;
     }
@@ -201,17 +245,119 @@ function ApplicationCard({
       return;
     }
 
-    const requestedSalaryNumber = parseInt(
-      requestedSalary.replace(/\D/g, ""),
-      10,
-    );
-    if (isNaN(requestedSalaryNumber) || requestedSalaryNumber <= 0) {
-      toast({
-        variant: "destructive",
-        title: "Gagal Mengirim Negosiasi",
-        description: "Masukkan gaji yang valid.",
-      });
-      return;
+    const payloadCounter: any = {
+      requestedAreas: selectedNegotiationAreas,
+      requestedSalary: null,
+      requestedStartDate: null,
+      requestedWorkModel: null,
+      requestedLocation: null,
+      requestedContractDurationMonths: null,
+      requestedBenefitNotes: null,
+      requestedScopeNotes: null,
+      requestedOtherNotes: null,
+      reason: negotiationReason.trim(),
+      submittedAt: serverTimestamp(),
+    };
+
+    if (selectedNegotiationAreas.includes("salary")) {
+      const requestedSalaryNumber = parseInt(
+        requestedSalary.replace(/\D/g, ""),
+        10,
+      );
+      if (isNaN(requestedSalaryNumber) || requestedSalaryNumber <= 0) {
+        toast({
+          variant: "destructive",
+          title: "Gagal Mengirim Negosiasi",
+          description: "Masukkan gaji yang valid.",
+        });
+        return;
+      }
+      payloadCounter.requestedSalary = requestedSalaryNumber;
+    }
+
+    if (selectedNegotiationAreas.includes("startDate")) {
+      if (!requestedStartDate) {
+        toast({
+          variant: "destructive",
+          title: "Gagal Mengirim Negosiasi",
+          description: "Tanggal mulai yang diharapkan harus diisi.",
+        });
+        return;
+      }
+      payloadCounter.requestedStartDate = requestedStartDate;
+    }
+
+    if (selectedNegotiationAreas.includes("location")) {
+      if (!requestedLocation.trim()) {
+        toast({
+          variant: "destructive",
+          title: "Gagal Mengirim Negosiasi",
+          description: "Lokasi kerja yang diharapkan harus diisi.",
+        });
+        return;
+      }
+      payloadCounter.requestedLocation = requestedLocation.trim();
+    }
+
+    if (selectedNegotiationAreas.includes("workModel")) {
+      if (!requestedWorkModel.trim()) {
+        toast({
+          variant: "destructive",
+          title: "Gagal Mengirim Negosiasi",
+          description: "Sistem kerja yang diharapkan harus dipilih.",
+        });
+        return;
+      }
+      payloadCounter.requestedWorkModel = requestedWorkModel;
+    }
+
+    if (selectedNegotiationAreas.includes("contractDuration")) {
+      const duration = parseInt(requestedContractDuration, 10);
+      if (isNaN(duration) || duration <= 0) {
+        toast({
+          variant: "destructive",
+          title: "Gagal Mengirim Negosiasi",
+          description: "Masukkan durasi kontrak yang valid.",
+        });
+        return;
+      }
+      payloadCounter.requestedContractDurationMonths = duration;
+    }
+
+    if (selectedNegotiationAreas.includes("benefitNotes")) {
+      if (!requestedBenefitNotes.trim()) {
+        toast({
+          variant: "destructive",
+          title: "Gagal Mengirim Negosiasi",
+          description: "Harap jelaskan benefit atau fasilitas yang Anda minta.",
+        });
+        return;
+      }
+      payloadCounter.requestedBenefitNotes = requestedBenefitNotes.trim();
+    }
+
+    if (selectedNegotiationAreas.includes("scopeNotes")) {
+      if (!requestedScopeNotes.trim()) {
+        toast({
+          variant: "destructive",
+          title: "Gagal Mengirim Negosiasi",
+          description: "Harap jelaskan ruang lingkup peran yang Anda harapkan.",
+        });
+        return;
+      }
+      payloadCounter.requestedScopeNotes = requestedScopeNotes.trim();
+    }
+
+    if (selectedNegotiationAreas.includes("otherNotes")) {
+      if (!requestedOtherNotes.trim()) {
+        toast({
+          variant: "destructive",
+          title: "Gagal Mengirim Negosiasi",
+          description: "Harap jelaskan area lain yang ingin Anda bahas.",
+        });
+        return;
+      }
+      payloadCounter.requestedOtherNotes = requestedOtherNotes.trim();
     }
 
     setIsSubmittingNegotiation(true);
@@ -220,11 +366,7 @@ function ApplicationCard({
       const payload: any = {
         offerStatus: "negotiation_requested",
         candidateNegotiationUsed: true,
-        candidateCounterOffer: {
-          requestedSalary: requestedSalaryNumber,
-          reason: negotiationReason.trim(),
-          submittedAt: serverTimestamp(),
-        },
+        candidateCounterOffer: payloadCounter,
         updatedAt: serverTimestamp(),
       };
       await updateDocumentNonBlocking(appRef, payload);
@@ -233,8 +375,7 @@ function ApplicationCard({
         description: "Tim HRD akan meninjau usulan Anda dan merespons segera.",
       });
       setIsNegotiationOpen(false);
-      setRequestedSalary("");
-      setNegotiationReason("");
+      resetNegotiationForm();
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -363,7 +504,7 @@ function ApplicationCard({
       );
     }
 
-    if (application.offerStatus === "sent") {
+    if (["sent", "viewed"].includes(application.offerStatus ?? "")) {
       if (!activeOfferIsAvailable) {
         return (
           <Card className="flex flex-col border-primary/50">
@@ -492,6 +633,14 @@ function ApplicationCard({
                 <Download className="mr-2 h-4 w-4" /> Lihat Dokumen PDF
               </Button>
             ) : null}
+            <Button
+              variant="secondary"
+              onClick={() => handleDecision("rejected")}
+              disabled={isDeciding}
+              className="w-full sm:w-auto"
+            >
+              Tolak Penawaran
+            </Button>
             {canRequestNegotiation ? (
               <Button
                 onClick={() => setIsNegotiationOpen(true)}
@@ -503,7 +652,9 @@ function ApplicationCard({
               </Button>
             ) : (
               <div className="rounded-lg border border-muted/70 bg-muted/50 px-4 py-3 text-sm text-muted-foreground w-full sm:w-auto text-center">
-                Negosiasi hanya dapat dilakukan satu kali.
+                {application.candidateNegotiationUsed
+                  ? "Anda telah mengajukan negosiasi. Mohon tunggu respons HRD."
+                  : "Negosiasi hanya dapat dilakukan satu kali selama penawaran masih dalam tahap awal."}
               </div>
             )}
             <Button
@@ -512,130 +663,215 @@ function ApplicationCard({
               className="w-full sm:w-auto"
             >
               {isDeciding && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Terima Penawaran
+              Setujui & Lanjutkan
             </Button>
           </CardFooter>
 
-          <Dialog open={isNegotiationOpen} onOpenChange={setIsNegotiationOpen}>
+          <Dialog
+            open={isNegotiationOpen}
+            onOpenChange={(open) => {
+              if (!open) resetNegotiationForm();
+              setIsNegotiationOpen(open);
+            }}
+          >
             <DialogContent className="w-full max-w-5xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Ajukan Negosiasi Penawaran</DialogTitle>
                 <DialogDescription>
-                  Anda dapat mengajukan penyesuaian gaji 1 kali. Setelah
-                  pengajuan dikirim, Anda tidak dapat mengubah atau mengajukan
-                  ulang.
+                  Ajukan pembahasan area penawaran yang ingin diselaraskan. Ini
+                  bukan penolakan; ini adalah kesempatan untuk berdiskusi secara
+                  profesional.
                 </DialogDescription>
               </DialogHeader>
               <form
                 onSubmit={handleNegotiationSubmit}
                 className="space-y-6 p-4"
               >
-                <div className="grid gap-6 lg:grid-cols-2">
+                <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
                   <div className="rounded-3xl border border-muted/70 bg-muted/50 p-5">
-                    <p className="text-sm font-semibold">Penawaran Awal HRD</p>
-                    <div className="mt-4 space-y-4 text-sm text-muted-foreground">
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                          Posisi
-                        </p>
-                        <p className="mt-1 font-semibold text-foreground">
-                          {application.jobPosition}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                          Status penawaran
-                        </p>
-                        <p className="mt-1 font-semibold text-foreground">
-                          Penawaran Terkirim
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                          Gaji yang ditawarkan
-                        </p>
-                        <p className="mt-1 font-semibold text-foreground">
-                          {offerSalary} / bulan
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                          Tipe kerja
-                        </p>
-                        <p className="mt-1 font-semibold capitalize">
-                          {application.jobType}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                          Durasi kontrak
-                        </p>
-                        <p className="mt-1 font-semibold">
-                          {offerContractDuration} bulan
-                        </p>
-                      </div>
-                      {offerFirstDayTime && (
-                        <div>
-                          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                            Jam Hari Pertama
-                          </p>
-                          <p className="mt-1 font-semibold text-foreground">
-                            {offerFirstDayTime}
-                          </p>
-                        </div>
-                      )}
-                      {offerFirstDayLocation && (
-                        <div>
-                          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                            Lokasi Hari Pertama
-                          </p>
-                          <p className="mt-1 font-semibold text-foreground">
-                            {offerFirstDayLocation}
-                          </p>
-                        </div>
-                      )}
-                      {offerHrContact && (
-                        <div>
-                          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                            Kontak HRD
-                          </p>
-                          <p className="mt-1 font-semibold text-foreground">
-                            {offerHrContact}
-                          </p>
-                        </div>
-                      )}
+                    <p className="text-sm font-semibold">
+                      Pilih area pembahasan
+                    </p>
+                    <div className="mt-4 space-y-3">
+                      {negotiationAreas.map((area) => (
+                        <label
+                          key={area.key}
+                          className="flex cursor-pointer items-center gap-3 rounded-xl border border-transparent bg-slate-950/70 px-3 py-3 text-sm transition hover:border-slate-700"
+                        >
+                          <Checkbox
+                            checked={selectedNegotiationAreas.includes(
+                              area.key,
+                            )}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedNegotiationAreas((current) => [
+                                  ...current,
+                                  area.key,
+                                ]);
+                                return;
+                              }
+                              setSelectedNegotiationAreas((current) =>
+                                current.filter((item) => item !== area.key),
+                              );
+                            }}
+                          />
+                          <span>{area.label}</span>
+                        </label>
+                      ))}
                     </div>
                   </div>
 
                   <div className="rounded-3xl border border-muted/70 bg-background p-5 shadow-sm">
-                    <p className="text-sm font-semibold">Usulan Negosiasi</p>
-                    <div className="mt-4 space-y-4">
+                    <p className="text-sm font-semibold">Rincian usulan</p>
+                    <div className="mt-4 space-y-4 text-sm">
+                      {selectedNegotiationAreas.includes("salary") && (
+                        <div>
+                          <label className="text-sm font-medium text-slate-900">
+                            Gaji yang diharapkan
+                          </label>
+                          <Input
+                            value={requestedSalary}
+                            onChange={(event) =>
+                              setRequestedSalary(
+                                formatSalaryInput(event.target.value),
+                              )
+                            }
+                            placeholder="Rp 5.000.000"
+                            inputMode="numeric"
+                            className="mt-2"
+                          />
+                        </div>
+                      )}
+                      {selectedNegotiationAreas.includes("startDate") && (
+                        <div>
+                          <label className="text-sm font-medium text-slate-900">
+                            Tanggal mulai yang diinginkan
+                          </label>
+                          <Input
+                            type="date"
+                            value={requestedStartDate}
+                            onChange={(event) =>
+                              setRequestedStartDate(event.target.value)
+                            }
+                            className="mt-2"
+                          />
+                        </div>
+                      )}
+                      {selectedNegotiationAreas.includes("location") && (
+                        <div>
+                          <label className="text-sm font-medium text-slate-900">
+                            Lokasi kerja yang Anda harapkan
+                          </label>
+                          <Input
+                            value={requestedLocation}
+                            onChange={(event) =>
+                              setRequestedLocation(event.target.value)
+                            }
+                            placeholder="Misal: Remote, Jakarta, atau Surabaya"
+                            className="mt-2"
+                          />
+                        </div>
+                      )}
+                      {selectedNegotiationAreas.includes("workModel") && (
+                        <div>
+                          <label className="text-sm font-medium text-slate-900">
+                            Sistem kerja yang diharapkan
+                          </label>
+                          <Select
+                            value={requestedWorkModel}
+                            onValueChange={setRequestedWorkModel}
+                          >
+                            <SelectTrigger className="mt-2">
+                              <SelectValue placeholder="Pilih sistem kerja" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Remote">Remote</SelectItem>
+                              <SelectItem value="Hybrid">Hybrid</SelectItem>
+                              <SelectItem value="On-site">On-site</SelectItem>
+                              <SelectItem value="Fleksibel">
+                                Fleksibel
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                      {selectedNegotiationAreas.includes(
+                        "contractDuration",
+                      ) && (
+                        <div>
+                          <label className="text-sm font-medium text-slate-900">
+                            Durasi kontrak yang Anda inginkan (bulan)
+                          </label>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={requestedContractDuration}
+                            onChange={(event) =>
+                              setRequestedContractDuration(event.target.value)
+                            }
+                            placeholder="Contoh: 12"
+                            className="mt-2"
+                          />
+                        </div>
+                      )}
+                      {selectedNegotiationAreas.includes("benefitNotes") && (
+                        <div>
+                          <label className="text-sm font-medium text-slate-900">
+                            Benefit / fasilitas yang diharapkan
+                          </label>
+                          <Textarea
+                            value={requestedBenefitNotes}
+                            onChange={(event) =>
+                              setRequestedBenefitNotes(event.target.value)
+                            }
+                            placeholder="Jelaskan benefit atau fasilitas yang penting bagi Anda"
+                            className="mt-2"
+                            rows={4}
+                          />
+                        </div>
+                      )}
+                      {selectedNegotiationAreas.includes("scopeNotes") && (
+                        <div>
+                          <label className="text-sm font-medium text-slate-900">
+                            Ruang lingkup peran yang diusulkan
+                          </label>
+                          <Textarea
+                            value={requestedScopeNotes}
+                            onChange={(event) =>
+                              setRequestedScopeNotes(event.target.value)
+                            }
+                            placeholder="Tuliskan penyesuaian ruang lingkup yang Anda harapkan"
+                            className="mt-2"
+                            rows={4}
+                          />
+                        </div>
+                      )}
+                      {selectedNegotiationAreas.includes("otherNotes") && (
+                        <div>
+                          <label className="text-sm font-medium text-slate-900">
+                            Area lain yang ingin dibahas
+                          </label>
+                          <Textarea
+                            value={requestedOtherNotes}
+                            onChange={(event) =>
+                              setRequestedOtherNotes(event.target.value)
+                            }
+                            placeholder="Sebutkan hal lain yang ingin Anda diskusikan"
+                            className="mt-2"
+                            rows={4}
+                          />
+                        </div>
+                      )}
                       <div>
-                        <label className="text-sm font-medium text-muted-foreground">
-                          Gaji yang diharapkan
-                        </label>
-                        <Input
-                          value={requestedSalary}
-                          onChange={(event) =>
-                            setRequestedSalary(
-                              formatSalaryInput(event.target.value),
-                            )
-                          }
-                          placeholder="Rp 5.000.000"
-                          inputMode="numeric"
-                          className="mt-2"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium text-muted-foreground">
-                          Alasan / catatan negosiasi
+                        <label className="text-sm font-medium text-slate-900">
+                          Catatan profesional untuk HRD
                         </label>
                         <Textarea
                           value={negotiationReason}
                           onChange={(event) =>
                             setNegotiationReason(event.target.value)
                           }
-                          placeholder="Jelaskan singkat alasan penyesuaian gaji"
+                          placeholder="Jelaskan dengan singkat dan profesional mengapa area ini penting bagi Anda"
                           className="mt-2"
                           rows={5}
                         />
@@ -645,8 +881,8 @@ function ApplicationCard({
                 </div>
 
                 <div className="rounded-3xl border border-muted/70 bg-muted/50 p-4 text-sm text-muted-foreground">
-                  Negosiasi hanya dapat dilakukan 1 kali agar proses tetap
-                  profesional dan efisien.
+                  Negosiasi adalah tahap diskusi profesional. Harap fokus pada
+                  penyesuaian yang jelas agar HRD dapat merespons dengan cepat.
                 </div>
 
                 <DialogFooter>
@@ -763,6 +999,148 @@ function ApplicationCard({
       );
     }
 
+    if (application.offerStatus === "offered_final") {
+      if (!activeOfferIsAvailable) {
+        return renderMissingOfferDetails();
+      }
+      const hrdResponse = application.candidateNegotiationResponse;
+      return (
+        <Card className="flex flex-col border-blue-500/50">
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
+              <div>
+                <CardTitle className="text-xl">
+                  Penawaran Final Tersedia
+                </CardTitle>
+                <CardDescription>
+                  HRD telah menyiapkan revisi final penawaran berdasarkan
+                  diskusi. Silakan tinjau kembali detail dan berikan persetujuan
+                  akhir.
+                </CardDescription>
+              </div>
+              <Badge className="w-fit bg-blue-600 text-white">
+                Penawaran Final Tersedia
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {hrdResponse?.note ? (
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm">
+                <p className="font-semibold">Catatan HRD</p>
+                <p className="mt-2 text-muted-foreground">{hrdResponse.note}</p>
+              </div>
+            ) : null}
+            <div className="grid gap-4 lg:grid-cols-2 text-sm">
+              <div className="rounded-3xl border border-muted/70 bg-muted/50 p-5">
+                <p className="font-semibold">Penawaran Saat Ini</p>
+                <div className="mt-4 space-y-3 text-muted-foreground">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.2em]">Gaji</p>
+                    <p className="mt-1 font-semibold text-foreground">
+                      {offerSalary} / bulan
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.2em]">Posisi</p>
+                    <p className="mt-1 font-semibold capitalize">
+                      {application.jobPosition}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              {application.candidateCounterOffer ? (
+                <div className="rounded-3xl border border-muted/70 bg-background p-5 shadow-sm">
+                  <p className="font-semibold">Usulan Negosiasi Anda</p>
+                  <div className="mt-4 space-y-3 text-muted-foreground">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em]">
+                        Area yang diminta
+                      </p>
+                      <p className="mt-1 font-semibold text-foreground">
+                        {(
+                          application.candidateCounterOffer.requestedAreas || []
+                        )
+                          .map((area) =>
+                            area
+                              .replace(/([A-Z])/g, " $1")
+                              .replace(/Notes$/, "")
+                              .trim(),
+                          )
+                          .join(", ")}
+                      </p>
+                    </div>
+                    {application.candidateCounterOffer.requestedSalary !=
+                      null && (
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.2em]">
+                          Gaji yang diminta
+                        </p>
+                        <p className="mt-1 font-semibold text-foreground">
+                          {formatSalary(
+                            application.candidateCounterOffer.requestedSalary,
+                          )}{" "}
+                          / bulan
+                        </p>
+                      </div>
+                    )}
+                    {application.candidateCounterOffer.requestedStartDate && (
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.2em]">
+                          Tanggal mulai yang diusulkan
+                        </p>
+                        <p className="mt-1 font-semibold text-foreground">
+                          {application.candidateCounterOffer.requestedStartDate}
+                        </p>
+                      </div>
+                    )}
+                    {application.candidateCounterOffer.requestedLocation && (
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.2em]">
+                          Lokasi yang diusulkan
+                        </p>
+                        <p className="mt-1 font-semibold text-foreground">
+                          {application.candidateCounterOffer.requestedLocation}
+                        </p>
+                      </div>
+                    )}
+                    {application.candidateCounterOffer.requestedWorkModel && (
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.2em]">
+                          Sistem kerja yang diusulkan
+                        </p>
+                        <p className="mt-1 font-semibold text-foreground">
+                          {application.candidateCounterOffer.requestedWorkModel}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </CardContent>
+          <CardFooter className="bg-muted/50 p-4 border-t flex flex-col sm:flex-row justify-end items-center gap-2">
+            <Button
+              onClick={() => handleDecision("rejected")}
+              variant="outline"
+              disabled={isDeciding}
+              className="w-full sm:w-auto"
+            >
+              {isDeciding && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Tolak Penawaran Final
+            </Button>
+            <Button
+              onClick={() => handleDecision("accepted")}
+              disabled={isDeciding}
+              className="w-full sm:w-auto"
+            >
+              {isDeciding && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Setujui & Lanjutkan
+            </Button>
+          </CardFooter>
+        </Card>
+      );
+    }
+
     if (
       application.offerStatus === "negotiation_approved" ||
       application.offerStatus === "negotiation_countered" ||
@@ -774,16 +1152,17 @@ function ApplicationCard({
       const counter = application.candidateCounterOffer;
       const isCountered = application.offerStatus === "negotiation_countered";
       const isApproved = application.offerStatus === "negotiation_approved";
+      const isRejected = application.offerStatus === "negotiation_rejected";
       const title = isApproved
         ? "Negosiasi Disetujui"
         : isCountered
           ? "HRD Mengajukan Penawaran Final"
-          : "Pembahasan Negosiasi Selesai";
+          : "Negosiasi Ditolak HRD";
       const description = isApproved
-        ? "HRD menyetujui usulan gaji Anda. Silakan terima atau tolak penawaran final."
+        ? "HRD menyetujui usulan Anda. Silakan terima atau tolak penawaran final."
         : isCountered
           ? "HRD mengajukan penawaran akhir. Silakan tinjau dan pilih terima atau tolak final."
-          : "HRD sedang meninjau hasil pembahasan negosiasi Anda dan akan menginformasikan langkah berikutnya.";
+          : "HRD menolak usulan negosiasi. Anda dapat menerima atau menolak penawaran saat ini.";
       return (
         <Card className="flex flex-col border-slate-300/80">
           <CardHeader>

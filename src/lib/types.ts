@@ -399,10 +399,35 @@ export type JobApplication = {
   offerStatus?:
     | "sent"
     | "viewed"
+    | "negotiation_requested"
+    | "negotiation_approved"
+    | "negotiation_countered"
+    | "offered_final"
     | "accepted"
     | "accepted_pending_document"
     | "document_uploaded"
+    | "negotiation_rejected"
     | "rejected";
+  candidateNegotiationUsed?: boolean;
+  candidateCounterOffer?: {
+    requestedAreas: string[];
+    requestedSalary?: number | null;
+    requestedStartDate?: string | null;
+    requestedWorkModel?: string | null;
+    requestedLocation?: string | null;
+    requestedContractDurationMonths?: number | null;
+    requestedBenefitNotes?: string | null;
+    requestedScopeNotes?: string | null;
+    requestedOtherNotes?: string | null;
+    reason: string;
+    submittedAt: Timestamp;
+  };
+  candidateNegotiationResponse?: {
+    decision: "accepted" | "partially_accepted" | "rejected";
+    note: string;
+    respondedAt: Timestamp;
+    respondedBy: string;
+  };
   offeredSalary?: number | null; // Legacy: use activeOffering.offeringDetails.salary
   probationDurationMonths?: number | null;
   contractStartDate?: Timestamp | null; // Legacy: use activeOffering.offeringDetails.startDate
@@ -484,6 +509,7 @@ export type Offering = {
   applicationId: string;
   candidateName: string;
   candidateEmail: string;
+  candidateUid?: string; // Critical for security rules
   documentUrl: string;
   documentName?: string;
   documentType?: string;
