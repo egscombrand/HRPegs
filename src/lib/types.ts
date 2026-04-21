@@ -396,9 +396,15 @@ export type JobApplication = {
 
   // --- Legacy Offering Fields (Now moved to offerings collection) ---
   // These may still be populated as a summary/cache but offerings/ collection is the source of truth
-  offerStatus?: "sent" | "viewed" | "accepted" | "rejected";
+  offerStatus?:
+    | "sent"
+    | "viewed"
+    | "accepted"
+    | "accepted_pending_document"
+    | "document_uploaded"
+    | "rejected";
   offeredSalary?: number | null; // Legacy: use activeOffering.offeringDetails.salary
-  probationDurationMonths?: number | null; 
+  probationDurationMonths?: number | null;
   contractStartDate?: Timestamp | null; // Legacy: use activeOffering.offeringDetails.startDate
   contractDurationMonths?: number | null; // Legacy: use activeOffering.offeringDetails.contractDurationMonths
   contractEndDate?: Timestamp | null;
@@ -509,6 +515,11 @@ export type Offering = {
   downloadedAtFirst?: Timestamp;
   downloadedAtLast?: Timestamp;
   downloadCount?: number;
+  signedDocumentUrl?: string;
+  signedDocumentName?: string;
+  signedDocumentUploadedAt?: Timestamp;
+  signedDocumentStatus?: "pending_verification" | "verified" | "rejected";
+  signedDocumentVerifiedAt?: Timestamp;
   respondedAt?: Timestamp;
   responseType?: "accepted" | "rejected";
   withdrawnAt?: Timestamp;

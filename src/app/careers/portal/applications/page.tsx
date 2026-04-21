@@ -26,6 +26,12 @@ import {
   Timestamp,
   where,
 } from "firebase/firestore";
+import {
+  getStorage,
+  ref,
+  uploadBytesResumable,
+  getDownloadURL,
+} from "firebase/storage";
 import type {
   Job,
   JobApplication,
@@ -34,11 +40,17 @@ import type {
   Offering,
 } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
-import { format, addMonths, differenceInMinutes } from "date-fns";
+import {
+  format,
+  addMonths,
+  differenceInMinutes,
+  differenceInSeconds,
+} from "date-fns";
 import { id } from "date-fns/locale";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -72,6 +84,7 @@ import {
 } from "lucide-react";
 import { generateOfferingPDF } from "@/lib/recruitment/pdf-generator";
 import { cn } from "@/lib/utils";
+import SafeRichText from "@/components/ui/SafeRichText";
 import { sendNotification } from "@/lib/notifications";
 import { Separator } from "@/components/ui/separator";
 import { ORDERED_RECRUITMENT_STAGES } from "@/lib/types";
@@ -93,6 +106,10 @@ function ApplicationCard({
   const [rejectReason, setRejectReason] = useState("Gaji tidak sesuai");
   const [customRejectReason, setCustomRejectReason] = useState("");
   const [rejectionNotes, setRejectionNotes] = useState("");
+  const [signedFile, setSignedFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const { firebaseUser } = useAuth();
   const firestore = useFirestore();
   const { toast } = useToast();
@@ -113,7 +130,7 @@ function ApplicationCard({
         setActiveOffering(null);
         return;
       }
-      
+
       setActiveOfferingLoading(true);
       try {
         const snap = await getDoc(activeOfferingRef);
@@ -132,7 +149,15 @@ function ApplicationCard({
     fetchOffering();
   }, [activeOfferingRef]);
 
-  const activeOfferingId = activeOffering?.id || activeOfferingPointerId || null;
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNow(new Date());
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const activeOfferingId =
+    activeOffering?.id || activeOfferingPointerId || null;
   const isActuallyLoading = activeOfferingLoading;
 
   const offerDetails = activeOffering?.offeringDetails || {};
@@ -154,6 +179,85 @@ function ApplicationCard({
 
   // Requirement 8: Card is available only if we found an active offering and it is active.
   const activeOfferIsAvailable = !!activeOffering && activeOffering.isActive;
+
+  const parseDateValue = (value: any) => {
+    if (!value) return null;
+    if (value instanceof Date) return value;
+    if (value && typeof value.toDate === "function") return value.toDate();
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  const offerResponseDeadline = parseDateValue(
+    activeOffering?.responseDeadline,
+  );
+  const secondsLeft = offerResponseDeadline
+    ? Math.max(0, differenceInSeconds(offerResponseDeadline, now))
+    : null;
+  const hasExpired =
+    !!offerResponseDeadline && now.getTime() > offerResponseDeadline.getTime();
+  const isVeryUrgent =
+    secondsLeft !== null && !hasExpired && secondsLeft <= 10 * 60;
+  const isUrgent =
+    secondsLeft !== null &&
+    !hasExpired &&
+    secondsLeft <= 60 * 60 &&
+    secondsLeft > 10 * 60;
+  const isWarning =
+    secondsLeft !== null &&
+    !hasExpired &&
+    secondsLeft <= 24 * 60 * 60 &&
+    secondsLeft > 60 * 60;
+  const responseDeadlineLabel = offerResponseDeadline
+    ? format(offerResponseDeadline, "dd MMMM yyyy HH:mm", { locale: id })
+    : "-";
+  const countdownParts =
+    secondsLeft !== null
+      ? {
+          days: Math.floor(secondsLeft / 86400),
+          hours: Math.floor((secondsLeft % 86400) / 3600),
+          minutes: Math.floor((secondsLeft % 3600) / 60),
+          seconds: secondsLeft % 60,
+        }
+      : null;
+  const countdownLabel = countdownParts
+    ? `${countdownParts.days} hari ${String(countdownParts.hours).padStart(2, "0")} jam ${String(countdownParts.minutes).padStart(2, "0")} menit ${String(countdownParts.seconds).padStart(2, "0")} detik`
+    : "-";
+  const offerAcceptedStatuses = [
+    "accepted",
+    "accepted_pending_document",
+    "document_uploaded",
+  ];
+  const offerIsAccepted = offerAcceptedStatuses.includes(
+    application.offerStatus || "",
+  );
+
+  const candidateOfferStatusLabel = hasExpired
+    ? "Expired"
+    : offerIsAccepted
+      ? "Diterima"
+      : isVeryUrgent
+        ? "Waktu Hampir Habis"
+        : isUrgent
+          ? "Urgent"
+          : isWarning
+            ? "Hampir Habis"
+            : "Menunggu Keputusan";
+  const candidateStatusBadgeClass = hasExpired
+    ? "border-red-400/30 bg-red-950/60 text-red-100"
+    : offerIsAccepted
+      ? "border-emerald-400/30 bg-emerald-950/60 text-emerald-100"
+      : isVeryUrgent
+        ? "border-red-400/30 bg-red-950/60 text-red-100"
+        : isUrgent
+          ? "border-orange-400/30 bg-orange-950/60 text-orange-100"
+          : isWarning
+            ? "border-amber-400/30 bg-amber-950/60 text-amber-100"
+            : "border-slate-500/30 bg-slate-950/70 text-slate-100";
+  const isOfferDisabled = hasExpired;
+  const offerActionHint = hasExpired
+    ? "Penawaran ini sudah lewat batas waktu dan tidak dapat diproses lagi."
+    : `Anda memiliki waktu sampai ${responseDeadlineLabel} untuk memberikan keputusan.`;
 
   const offerContractEndDate =
     offerStartDate && offerDetails.contractDurationMonths
@@ -194,7 +298,8 @@ function ApplicationCard({
     try {
       const appRef = doc(firestore, "applications", application.id!);
       const payload: any = {
-        offerStatus: decision,
+        offerStatus:
+          decision === "accepted" ? "accepted_pending_document" : decision,
         candidateOfferDecisionAt: serverTimestamp(),
         offerRejectionReason: reason ?? null,
         updatedAt: serverTimestamp(),
@@ -262,6 +367,167 @@ function ApplicationCard({
       });
     } finally {
       setIsDeciding(false);
+    }
+  };
+
+  const handleReturnToOfferReview = async () => {
+    if (!firebaseUser || !application.id) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Tidak dapat mengembalikan ke penawaran saat ini.",
+      });
+      return;
+    }
+
+    setIsDeciding(true);
+    try {
+      const appRef = doc(firestore, "applications", application.id);
+      await updateDocumentNonBlocking(appRef, {
+        offerStatus: "viewed",
+        updatedAt: serverTimestamp(),
+      });
+
+      if (activeOfferingId) {
+        const offeringRef = doc(firestore, "offerings", activeOfferingId);
+        await updateDocumentNonBlocking(offeringRef, {
+          status: "viewed",
+          history: [
+            ...(activeOffering?.history || []),
+            {
+              type: "viewed",
+              description:
+                "Kandidat kembali ke tahap peninjauan penawaran sebelum mengunggah dokumen.",
+              at: Timestamp.now(),
+            },
+          ],
+          updatedAt: serverTimestamp(),
+        });
+      }
+
+      toast({
+        title: "Kembali ke Penawaran",
+        description:
+          "Anda sekarang dapat meninjau ulang penawaran sebelum mengunggah dokumen.",
+      });
+    } catch (error: any) {
+      console.error("Failed to return to offer review:", error);
+      toast({
+        variant: "destructive",
+        title: "Gagal Kembali",
+        description:
+          error?.message ||
+          "Terjadi kesalahan saat mengembalikan ke penawaran.",
+      });
+    } finally {
+      setIsDeciding(false);
+    }
+  };
+
+  const handleSignedDocumentUpload = async () => {
+    if (!firebaseUser) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Anda harus login untuk mengunggah dokumen.",
+      });
+      return;
+    }
+
+    if (!activeOfferingId || !activeOffering) {
+      setUploadError("Tidak ada penawaran yang aktif untuk diunggah dokumen.");
+      return;
+    }
+
+    if (!signedFile) {
+      setUploadError("Pilih file dokumen penawaran yang telah ditandatangani.");
+      return;
+    }
+
+    setUploadError(null);
+    setIsUploading(true);
+    setUploadProgress(0);
+
+    try {
+      const storage = getStorage();
+      const storageRef = ref(
+        storage,
+        `offerings/${activeOfferingId}/signed_documents/${Date.now()}_${signedFile.name}`,
+      );
+      const uploadTask = uploadBytesResumable(storageRef, signedFile, {
+        contentType: signedFile.type,
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        uploadTask.on(
+          "state_changed",
+          (snapshot) => {
+            const progress = Math.round(
+              (snapshot.bytesTransferred / snapshot.totalBytes) * 100,
+            );
+            setUploadProgress(progress);
+          },
+          (error) => {
+            setUploadError(error.message || "Gagal mengunggah dokumen.");
+            setIsUploading(false);
+            reject(error);
+          },
+          () => {
+            resolve();
+          },
+        );
+      });
+
+      const signedDocumentUrl = await getDownloadURL(uploadTask.snapshot.ref);
+      const offeringRef = doc(firestore, "offerings", activeOfferingId);
+      const appRef = doc(firestore, "applications", application.id!);
+      const historyEntry = {
+        type: "document_uploaded" as const,
+        description: "Dokumen penawaran resmi telah diunggah oleh kandidat.",
+        at: Timestamp.now(),
+      };
+
+      await updateDocumentNonBlocking(offeringRef, {
+        signedDocumentUrl,
+        signedDocumentName: signedFile.name,
+        signedDocumentUploadedAt: serverTimestamp(),
+        signedDocumentStatus: "pending_verification",
+        history: [...(activeOffering.history || []), historyEntry],
+        updatedAt: serverTimestamp(),
+      });
+
+      await updateDocumentNonBlocking(appRef, {
+        offerStatus: "document_uploaded",
+        updatedAt: serverTimestamp(),
+      });
+
+      setActiveOffering({
+        ...activeOffering,
+        signedDocumentUrl,
+        signedDocumentName: signedFile.name,
+        signedDocumentUploadedAt: Timestamp.now(),
+        signedDocumentStatus: "pending_verification",
+        history: [...(activeOffering.history || []), historyEntry],
+      });
+      setSignedFile(null);
+      setUploadProgress(100);
+
+      toast({
+        title: "Dokumen Terkirim",
+        description:
+          "Dokumen penawaran telah dikirim. Tim HRD akan memverifikasi segera.",
+      });
+    } catch (error: any) {
+      console.error("Upload signed document failed:", error);
+      setUploadError(error?.message || "Gagal mengunggah dokumen.");
+      toast({
+        variant: "destructive",
+        title: "Unggah Gagal",
+        description:
+          error?.message || "Terjadi kesalahan saat mengunggah dokumen.",
+      });
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -349,16 +615,6 @@ function ApplicationCard({
   if (isOffered) {
     const salaryLabel =
       application.jobType === "internship" ? "Uang Saku" : "Gaji";
-    const offerSections = activeOfferIsAvailable
-      ? [
-          {
-            title: "Detail Penawaran",
-            content:
-              offerAdditionalNotes || "Tidak ada informasi penawaran tambahan.",
-          },
-        ]
-      : [];
-
     const renderMissingOfferDetails = () => (
       <Card className="flex flex-col border-primary/50">
         <CardHeader>
@@ -368,7 +624,8 @@ function ApplicationCard({
                 Penawaran Kerja: {application.jobPosition}
               </CardTitle>
               <CardDescription>
-                Detail penawaran untuk posisi ini sedang disiapkan oleh Tim HRD. Mohon tunggu sampai detail penawaran dipublikasikan untuk Anda.
+                Detail penawaran untuk posisi ini sedang disiapkan oleh Tim HRD.
+                Mohon tunggu sampai detail penawaran dipublikasikan untuk Anda.
               </CardDescription>
             </div>
             <Badge className="w-fit bg-slate-500/80">
@@ -415,6 +672,23 @@ function ApplicationCard({
         return renderMissingOfferDetails();
       }
 
+      const offerStatusLabel = hasExpired
+        ? "Kedaluwarsa"
+        : application.offerStatus === "viewed"
+          ? "Sudah Dilihat"
+          : "Baru";
+
+      const offerViewStatus = activeOffering?.viewCount
+        ? `Dibuka ${activeOffering.viewCount} kali`
+        : "Belum dibuka";
+
+      const offerFirstViewed = parseDateValue(activeOffering?.viewedAtFirst);
+      const offerLastViewed = parseDateValue(activeOffering?.viewedAtLast);
+
+      const offerViewSubtitle = activeOffering?.viewCount
+        ? "Penawaran ini telah Anda akses."
+        : "Anda belum membuka detail penawaran ini.";
+
       return (
         <Card className="flex flex-col border-primary/50">
           <CardHeader>
@@ -424,121 +698,246 @@ function ApplicationCard({
                   Penawaran Kerja: {application.jobPosition}
                 </CardTitle>
                 <CardDescription>
-                  Berdasarkan hasil tahapan seleksi yang telah Anda ikuti, kami
-                  menyampaikan penawaran kerja final untuk posisi ini. Mohon
-                  tinjau semua detail dengan saksama sebelum mengambil
-                  keputusan.
+                  Berdasarkan hasil seleksi Anda, kami mengirimkan penawaran
+                  kerja resmi untuk posisi ini. Mohon baca dokumen penawaran
+                  dengan teliti dan ambil keputusan sebelum batas waktu.
                 </CardDescription>
               </div>
               <div className="flex flex-col gap-2">
-                <Badge className="w-fit bg-primary/80">
-                  Menunggu Keputusan Anda
-                </Badge>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-2 h-8"
-                  onClick={() => {
-                    if (offerDocumentUrl) {
-                      window.open(offerDocumentUrl, "_blank");
-                    } else if (offerAdditionalNotes) {
-                      generateOfferingPDF(
-                        offerAdditionalNotes,
-                        offerDocumentName,
-                      );
-                    }
-                  }}
+                <Badge
+                  className={cn(
+                    "w-fit",
+                    hasExpired
+                      ? "bg-red-600"
+                      : application.offerStatus === "viewed"
+                        ? "bg-blue-600"
+                        : "bg-primary/80",
+                  )}
                 >
-                  <Download className="h-4 w-4" /> Download PDF
-                </Button>
+                  {offerStatusLabel}
+                </Badge>
               </div>
             </div>
           </CardHeader>
-          <CardContent className="flex-grow space-y-6">
-            <Separator />
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 pt-4 text-sm">
-              <div>
-                <p className="text-muted-foreground">{salaryLabel}</p>
-                <p className="font-bold text-lg">{offerSalary} / bulan</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Tipe Pekerjaan</p>
-                <p className="font-semibold capitalize">
-                  {application.jobType}
-                </p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Durasi Kontrak</p>
-                <p className="font-semibold">{offerContractDuration} bulan</p>
-              </div>
-              {offerFirstDayTime && (
-                <div>
-                  <p className="text-muted-foreground">Jam Hari Pertama</p>
-                  <p className="font-semibold">{offerFirstDayTime}</p>
+
+          <CardContent className="space-y-6">
+            {secondsLeft !== null && (
+              <div
+                className={cn(
+                  "rounded-3xl border p-5 shadow-[0_20px_60px_-30px_rgba(15,23,42,0.75)] backdrop-blur-xl",
+                  hasExpired
+                    ? "border-red-500/30 bg-red-950/70 text-red-100"
+                    : isVeryUrgent
+                      ? "border-red-500/30 bg-red-950/70 text-red-100"
+                      : isUrgent
+                        ? "border-orange-500/30 bg-orange-950/70 text-orange-100"
+                        : isWarning
+                          ? "border-amber-500/30 bg-amber-950/70 text-amber-100"
+                          : "border-slate-700/60 bg-slate-950/80 text-slate-100",
+                )}
+              >
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                      Hitung Mundur Respons
+                    </p>
+                    <p className="mt-2 text-2xl font-semibold text-white">
+                      {countdownLabel}
+                    </p>
+                  </div>
+                  <Badge
+                    className={cn(
+                      "w-fit rounded-full px-3 py-1 text-sm border backdrop-blur-md bg-white/10 shadow-sm",
+                      candidateStatusBadgeClass,
+                    )}
+                  >
+                    {candidateOfferStatusLabel}
+                  </Badge>
                 </div>
-              )}
-              {offerFirstDayLocation && (
-                <div>
-                  <p className="text-muted-foreground">Lokasi Hari Pertama</p>
-                  <p className="font-semibold">{offerFirstDayLocation}</p>
-                </div>
-              )}
-              {offerHrContact && (
-                <div>
-                  <p className="text-muted-foreground">Kontak HRD</p>
-                  <p className="font-semibold">{offerHrContact}</p>
-                </div>
-              )}
-              <div>
-                <p className="text-muted-foreground">Tanggal Mulai</p>
-                <p className="font-semibold">
-                  {offerStartDate
-                    ? format(offerStartDate, "dd MMMM yyyy", {
-                        locale: id,
-                      })
-                    : "-"}
-                </p>
+                <p className="mt-3 text-sm text-slate-400">{offerActionHint}</p>
+                {isVeryUrgent ? (
+                  <div className="mt-4 rounded-2xl border border-red-500/20 bg-red-950/60 px-4 py-3 text-sm font-semibold text-red-100 shadow-sm animate-pulse">
+                    Waktu Hampir Habis — segera ambil keputusan sebelum
+                    penawaran kedaluwarsa.
+                  </div>
+                ) : isUrgent ? (
+                  <div className="mt-4 rounded-2xl border border-orange-500/20 bg-orange-950/60 px-4 py-3 text-sm font-semibold text-orange-100 shadow-sm">
+                    Waktu tersisa kurang dari 1 jam.
+                  </div>
+                ) : isWarning ? (
+                  <div className="mt-4 rounded-2xl border border-amber-500/20 bg-amber-950/60 px-4 py-3 text-sm font-semibold text-amber-100 shadow-sm">
+                    Penawaran hampir habis dalam 24 jam.
+                  </div>
+                ) : null}
               </div>
-              {offerContractEndDate ? (
-                <div>
-                  <p className="text-muted-foreground">Tanggal Selesai</p>
-                  <p className="font-semibold">
-                    {format(offerContractEndDate, "dd MMMM yyyy", {
-                      locale: id,
-                    })}
-                  </p>
-                </div>
-              ) : null}
-            </div>
-            <div className="space-y-4">
-              {offerSections.map((section, index) => (
-                <div
-                  key={index}
-                  className="rounded-3xl border border-muted/70 bg-muted/50 p-5"
-                >
+            )}
+
+            <div className="grid gap-6 lg:grid-cols-[0.95fr_0.85fr]">
+              <div className="space-y-6">
+                <div className="rounded-3xl border border-muted/70 bg-background p-5">
                   <p className="text-sm font-semibold text-foreground">
-                    {section.title}
+                    Dokumen Penawaran
                   </p>
-                  <div
-                    className="mt-3 text-sm text-slate-700 prose prose-sm max-w-none dark:text-slate-300"
-                    dangerouslySetInnerHTML={{ __html: section.content }}
-                  />
+                  <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+                    Buka dokumen resmi atau unduh file untuk melihat semua
+                    detail lengkap yang harus Anda tinjau.
+                  </p>
+                  <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <Button
+                      variant="outline"
+                      className="w-full sm:w-auto"
+                      onClick={() => {
+                        if (offerDocumentUrl) {
+                          window.open(offerDocumentUrl, "_blank");
+                        } else if (offerAdditionalNotes) {
+                          generateOfferingPDF(
+                            offerAdditionalNotes,
+                            offerDocumentName,
+                          );
+                        }
+                      }}
+                    >
+                      <FileSignature className="mr-2 h-4 w-4" /> Preview
+                      Offering
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      className="w-full sm:w-auto"
+                      onClick={() => {
+                        if (offerDocumentUrl) {
+                          window.open(offerDocumentUrl, "_blank");
+                        } else {
+                          generateOfferingPDF(
+                            offerAdditionalNotes,
+                            offerDocumentName,
+                          );
+                        }
+                      }}
+                    >
+                      <Download className="mr-2 h-4 w-4" /> Download PDF
+                    </Button>
+                  </div>
                 </div>
-              ))}
+
+                <div className="rounded-3xl border border-muted/70 bg-slate-50/80 dark:bg-slate-950/80 p-5">
+                  <p className="text-sm font-semibold text-foreground">
+                    Informasi Penting
+                  </p>
+                  <ul className="mt-4 list-disc space-y-3 pl-5 text-sm text-slate-900 dark:text-slate-100">
+                    <li>
+                      Pastikan Anda telah membaca dokumen penawaran sebelum
+                      mengambil keputusan.
+                    </li>
+                    <li>
+                      Keputusan diterima atau ditolak akan memengaruhi proses
+                      rekrutmen selanjutnya.
+                    </li>
+                    <li>
+                      Jika Anda menerima, silakan lanjutkan ke pengumpulan
+                      dokumen onboarding.
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="rounded-3xl border border-muted/70 bg-muted/50 p-5">
+                  <p className="text-sm font-semibold text-foreground">
+                    Ringkasan Penawaran
+                  </p>
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-muted-foreground">{salaryLabel}</p>
+                      <p className="font-semibold">{offerSalary} / bulan</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Durasi Kontrak</p>
+                      <p className="font-semibold">
+                        {offerContractDuration} bulan
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Tanggal Mulai</p>
+                      <p className="font-semibold">
+                        {offerStartDate
+                          ? format(offerStartDate, "dd MMMM yyyy", {
+                              locale: id,
+                            })
+                          : "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Tanggal Selesai</p>
+                      <p className="font-semibold">
+                        {offerContractEndDate
+                          ? format(offerContractEndDate, "dd MMMM yyyy", {
+                              locale: id,
+                            })
+                          : "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Hari Pertama</p>
+                      <p className="font-semibold">
+                        {offerFirstDayTime || "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">
+                        Lokasi Hari Pertama
+                      </p>
+                      <p className="font-semibold">
+                        {offerFirstDayLocation || "-"}
+                      </p>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <p className="text-muted-foreground">Kontak HRD</p>
+                      <p className="font-semibold">{offerHrContact || "-"}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-3xl border border-muted/70 bg-background p-5">
+                  <div className="flex items-center justify-between gap-4">
+                    <p className="text-sm font-semibold text-foreground">
+                      Detail Penawaran
+                    </p>
+                    <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                      {offerAdditionalNotes
+                        ? "Ringkas"
+                        : "Tidak ada informasi tambahan"}
+                    </p>
+                  </div>
+                  <details className="mt-4 rounded-3xl border border-muted/80 bg-slate-50/60 p-4 text-sm text-slate-700 dark:bg-slate-950/80 dark:text-slate-300">
+                    <summary className="cursor-pointer font-semibold">
+                      Lihat Selengkapnya
+                    </summary>
+                    <div className="mt-3 space-y-3">
+                      <SafeRichText
+                        html={
+                          offerAdditionalNotes ||
+                          "Tidak ada informasi penawaran tambahan."
+                        }
+                      />
+                    </div>
+                  </details>
+                </div>
+              </div>
             </div>
           </CardContent>
-          <CardFooter className="bg-muted/50 p-4 border-t flex flex-col sm:flex-row justify-end items-center gap-2">
+
+          <CardFooter className="bg-muted/50 p-4 border-t flex flex-col sm:flex-row justify-between items-center gap-2">
             <Button
               variant="outline"
               onClick={() => setIsRejectDialogOpen(true)}
-              disabled={isDeciding}
+              disabled={isDeciding || isOfferDisabled}
               className="w-full sm:w-auto"
             >
               Tolak Penawaran
             </Button>
             <Button
               onClick={() => handleDecision("accepted")}
-              disabled={isDeciding}
+              disabled={isDeciding || isOfferDisabled}
               className="w-full sm:w-auto"
             >
               {isDeciding && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -554,103 +953,116 @@ function ApplicationCard({
               <DialogHeader>
                 <DialogTitle>Tolak Penawaran</DialogTitle>
                 <DialogDescription>
-                  Pilih alasan penolakan yang paling sesuai. Kandidat dapat
-                  memberikan catatan tambahan sebelum mengirimkan keputusan.
+                  Pilih satu alasan utama untuk penolakan, lalu jelaskan
+                  pertimbangan Anda secara profesional agar tim HR dapat
+                  memahami keputusan ini.
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-6 p-4">
-                <div className="grid gap-6 lg:grid-cols-2">
-                  <div className="rounded-3xl border border-muted/70 bg-muted/50 p-5">
-                    <p className="text-sm font-semibold">Ringkasan Penawaran</p>
-                    <div className="mt-4 space-y-4 text-sm text-slate-700">
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                          Posisi
-                        </p>
-                        <p className="mt-1 font-semibold">
-                          {application.jobPosition}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                          Gaji yang ditawarkan
-                        </p>
-                        <p className="mt-1 font-semibold">
-                          {offerSalary} / bulan
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                          Tipe kerja
-                        </p>
-                        <p className="mt-1 font-semibold capitalize">
-                          {application.jobType}
-                        </p>
-                      </div>
+              <div className="space-y-8 p-6 sm:p-8">
+                <div className="rounded-3xl border border-slate-700/80 bg-slate-950/90 p-6 shadow-xl shadow-slate-950/40">
+                  <div className="flex flex-col gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-100">
+                        Alasan / Pertimbangan Penolakan
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-slate-400">
+                        Pilih satu alasan utama dan lengkapi dengan penjelasan
+                        profesional sesuai pilihan Anda.
+                      </p>
                     </div>
-                  </div>
-                  <div className="rounded-3xl border border-muted/70 bg-background p-5 shadow-sm">
-                    <p className="text-sm font-semibold">Alasan Penolakan</p>
-                    <div className="mt-4 space-y-3 text-sm">
+                    <div className="grid gap-3 sm:grid-cols-2">
                       {[
-                        "Gaji tidak sesuai",
-                        "Jenis pekerjaan atau lokasi tidak sesuai",
-                        "Memilih kesempatan lain",
+                        "Kompensasi dan paket belum sesuai",
+                        "Lokasi atau model kerja tidak cocok",
+                        "Kesempatan lain lebih sesuai dengan rencana saya",
+                        "Jadwal mulai tidak selaras dengan situasi saya",
+                        "Ruang lingkup peran tidak sejalan dengan keahlian saya",
+                        "Kesesuaian peran belum sesuai dengan harapan",
+                        "Benefit dan fasilitas belum memenuhi kebutuhan",
+                        "Saya membutuhkan pertimbangan pribadi lebih lanjut",
+                        "Perubahan rencana pribadi",
                         "Alasan lain",
                       ].map((option) => (
-                        <label
+                        <button
+                          type="button"
                           key={option}
-                          className="flex cursor-pointer items-start gap-3 rounded-2xl border border-muted/60 bg-white px-4 py-3"
+                          onClick={() => setRejectReason(option)}
+                          className={cn(
+                            "text-left rounded-3xl border px-5 py-4 transition duration-200 focus:outline-none focus:ring-2 focus:ring-slate-500/50",
+                            rejectReason === option
+                              ? "border-slate-400/80 bg-slate-900/80 shadow-[0_15px_35px_-25px_rgba(15,23,42,0.85)]"
+                              : "border-slate-700/80 bg-slate-950/80 hover:border-slate-500/70 hover:bg-slate-900/80",
+                          )}
                         >
-                          <input
-                            type="radio"
-                            name="rejectReason"
-                            value={option}
-                            checked={rejectReason === option}
-                            onChange={() => setRejectReason(option)}
-                            className="mt-1 h-4 w-4"
-                          />
-                          <div>
-                            <p className="font-semibold">{option}</p>
-                            {option === "Alasan lain" ? (
-                              <p className="text-xs text-muted-foreground">
-                                Jelaskan alasan lain jika pilihan ini dipilih.
-                              </p>
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-sm font-semibold text-slate-100">
+                              {option}
+                            </p>
+                            {rejectReason === option ? (
+                              <span className="rounded-full border border-slate-400/50 bg-slate-800/90 px-2 py-1 text-[11px] uppercase tracking-[0.24em] text-slate-100">
+                                Dipilih
+                              </span>
                             ) : null}
                           </div>
-                        </label>
+                        </button>
                       ))}
                     </div>
                   </div>
+                  <p className="mt-4 text-xs text-slate-400">
+                    Masukan Anda membantu tim HR memahami pertimbangan kandidat
+                    dengan lebih baik.
+                  </p>
                 </div>
 
-                {rejectReason === "Alasan lain" ? (
-                  <div>
-                    <label className="text-sm font-medium text-slate-600">
-                      Alasan Penolakan
+                {rejectReason ? (
+                  <div className="rounded-3xl border border-slate-700/80 bg-slate-950/90 p-5">
+                    <label className="text-sm font-semibold text-slate-100">
+                      Penjelasan Wajib
                     </label>
+                    <p className="mt-2 text-sm text-slate-400">
+                      {rejectReason === "Kompensasi dan paket belum sesuai" ||
+                      rejectReason ===
+                        "Benefit dan fasilitas belum memenuhi kebutuhan"
+                        ? "Jelaskan bagian kompensasi atau benefit yang menurut Anda belum sesuai, serta faktor lain yang memengaruhi keputusan Anda."
+                        : "Jelaskan secara profesional alasan utama Anda memilih penolakan ini."}
+                    </p>
                     <Textarea
                       value={customRejectReason}
                       onChange={(event) =>
                         setCustomRejectReason(event.target.value)
                       }
-                      placeholder="Jelaskan alasan penolakan Anda"
-                      rows={4}
-                      className="mt-2"
+                      placeholder={
+                        rejectReason === "Kompensasi dan paket belum sesuai"
+                          ? "Misalnya: gaji yang diharapkan, benefit tambahan, atau paket kompensasi ideal"
+                          : rejectReason ===
+                              "Benefit dan fasilitas belum memenuhi kebutuhan"
+                            ? "Misalnya: fasilitas yang dibutuhkan atau benefit yang menurut Anda kurang"
+                            : "Jelaskan pertimbangan utama Anda secara profesional"
+                      }
+                      rows={5}
+                      className="mt-3 bg-slate-950/90 text-slate-100 placeholder:text-slate-600"
                     />
+                    <p className="mt-2 text-xs text-slate-500">
+                      Mohon jelaskan pertimbangan Anda secara profesional agar
+                      tim HR dapat memahami keputusan Anda.
+                    </p>
                   </div>
                 ) : null}
 
-                <div>
-                  <label className="text-sm font-medium text-slate-600">
-                    Catatan tambahan (opsional)
+                <div className="rounded-3xl border border-slate-700/80 bg-slate-950/90 p-5">
+                  <label className="text-sm font-semibold text-slate-100">
+                    Catatan Tambahan (opsional)
                   </label>
+                  <p className="mt-2 text-sm text-slate-400">
+                    Jika ada detail lain yang perlu disampaikan, tuliskan di
+                    sini.
+                  </p>
                   <Textarea
                     value={rejectionNotes}
                     onChange={(event) => setRejectionNotes(event.target.value)}
                     placeholder="Tambahkan catatan singkat kepada HRD"
                     rows={4}
-                    className="mt-2"
+                    className="mt-3 bg-slate-950/90 text-slate-100 placeholder:text-slate-600"
                   />
                 </div>
               </div>
@@ -675,7 +1087,11 @@ function ApplicationCard({
                       `${finalReason}${rejectionNotes.trim() ? `: ${rejectionNotes.trim()}` : ""}`,
                     );
                   }}
-                  disabled={isDeciding}
+                  disabled={
+                    isDeciding ||
+                    !rejectReason ||
+                    customRejectReason.trim().length === 0
+                  }
                 >
                   {isDeciding ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -689,7 +1105,29 @@ function ApplicationCard({
       );
     }
 
-    if (application.offerStatus === "accepted") {
+    if (
+      application.offerStatus === "accepted" ||
+      application.offerStatus === "accepted_pending_document" ||
+      application.offerStatus === "document_uploaded"
+    ) {
+      const isDocumentUploaded = !!activeOffering?.signedDocumentUrl;
+      const showReturnToOfferButton =
+        application.offerStatus === "accepted_pending_document" &&
+        !isDocumentUploaded;
+      const expectedStatusLabel = isDocumentUploaded
+        ? "Dokumen telah dikirim"
+        : "Unggah dokumen penawaran";
+      const documentStatus = activeOffering?.signedDocumentStatus;
+      const statusMessage = documentStatus
+        ? documentStatus === "pending_verification"
+          ? "Menunggu verifikasi HRD"
+          : documentStatus === "verified"
+            ? "Dokumen sudah diverifikasi"
+            : documentStatus === "rejected"
+              ? "Dokumen ditolak, silakan unggah ulang"
+              : ""
+        : "Dokumen belum diunggah. Silakan unggah file penawaran yang telah ditandatangani.";
+
       return (
         <Card className="flex flex-col bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800">
           <CardHeader>
@@ -714,9 +1152,78 @@ function ApplicationCard({
                 penawaran kerja ini.
               </h3>
               <p className="text-sm">
-                Silakan menunggu proses aktivasi akun dan arahan onboarding dari
-                tim HRD.
+                Untuk menyelesaikan proses administrasi, unggah dokumen
+                penawaran yang sudah Anda tanda tangani ke portal berikut.
               </p>
+            </div>
+            <div className="rounded-3xl border border-blue-200 bg-white p-5 shadow-sm space-y-4">
+              <div>
+                <p className="text-sm font-semibold text-blue-900">
+                  {expectedStatusLabel}
+                </p>
+                <p className="mt-3 text-sm text-slate-700">{statusMessage}</p>
+              </div>
+              <div className="grid gap-3">
+                <label className="grid gap-2 text-sm">
+                  <span className="font-medium text-slate-900 dark:text-slate-100">
+                    File Dokumen Penawaran
+                  </span>
+                  <input
+                    type="file"
+                    accept="application/pdf,image/*"
+                    onChange={(event) => {
+                      setUploadError(null);
+                      setSignedFile(event.target.files?.[0] || null);
+                    }}
+                    disabled={isUploading}
+                    className="file:border-0 file:bg-blue-600 file:text-white file:px-4 file:py-2 file:rounded-md file:font-medium file:hover:bg-blue-700"
+                  />
+                </label>
+                {uploadError ? (
+                  <p className="text-sm text-red-500">{uploadError}</p>
+                ) : null}
+                {isUploading ? (
+                  <div className="space-y-2">
+                    <Progress value={uploadProgress} className="h-2" />
+                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                      Mengunggah {uploadProgress}%
+                    </p>
+                  </div>
+                ) : null}
+                {isDocumentUploaded && activeOffering?.signedDocumentName ? (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950/50 dark:text-slate-200">
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">
+                      Dokumen tersimpan:
+                    </p>
+                    <p>{activeOffering.signedDocumentName}</p>
+                  </div>
+                ) : null}
+                <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                  <Button
+                    type="button"
+                    onClick={handleSignedDocumentUpload}
+                    disabled={isUploading || !signedFile}
+                  >
+                    {isUploading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : null}
+                    {isDocumentUploaded
+                      ? "Unggah Ulang Dokumen"
+                      : "Kirim Dokumen"}
+                  </Button>
+                  {showReturnToOfferButton ? (
+                    <Button
+                      variant="secondary"
+                      type="button"
+                      onClick={handleReturnToOfferReview}
+                      disabled={isDeciding || isUploading}
+                      className="text-slate-900 dark:text-slate-100"
+                    >
+                      Kembali ke Penawaran
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>

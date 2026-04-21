@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import SafeRichText from "@/components/ui/SafeRichText";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -602,10 +603,7 @@ export default function OfferPage() {
                 <CardTitle>Informasi Tambahan</CardTitle>
               </CardHeader>
               <CardContent>
-                <div
-                  className="prose prose-sm max-w-none dark:prose-invert"
-                  dangerouslySetInnerHTML={{ __html: offering.additionalNotes }}
-                />
+                <SafeRichText html={offering.additionalNotes} />
               </CardContent>
             </Card>
           )}
