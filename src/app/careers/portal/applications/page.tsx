@@ -20,6 +20,7 @@ import {
 import {
   collection,
   doc,
+  getDoc,
   query,
   serverTimestamp,
   Timestamp,
@@ -103,10 +104,35 @@ function ApplicationCard({
     return doc(firestore, "offerings", activeOfferingPointerId);
   }, [activeOfferingPointerId, firestore]);
 
-  const { data: activeOffering, isLoading: activeOfferingLoading } =
-    useDoc<Offering>(activeOfferingRef);
+  const [activeOffering, setActiveOffering] = useState<Offering | null>(null);
+  const [activeOfferingLoading, setActiveOfferingLoading] = useState(false);
 
-  const activeOfferingId = activeOfferingPointerId;
+  useEffect(() => {
+    async function fetchOffering() {
+      if (!activeOfferingRef) {
+        setActiveOffering(null);
+        return;
+      }
+      
+      setActiveOfferingLoading(true);
+      try {
+        const snap = await getDoc(activeOfferingRef);
+        if (snap.exists()) {
+          setActiveOffering({ ...snap.data(), id: snap.id } as Offering);
+        } else {
+          setActiveOffering(null);
+        }
+      } catch (err) {
+        console.error("Error fetching offering:", err);
+      } finally {
+        setActiveOfferingLoading(false);
+      }
+    }
+
+    fetchOffering();
+  }, [activeOfferingRef]);
+
+  const activeOfferingId = activeOffering?.id || activeOfferingPointerId || null;
   const isActuallyLoading = activeOfferingLoading;
 
   const offerDetails = activeOffering?.offeringDetails || {};
@@ -342,13 +368,11 @@ function ApplicationCard({
                 Penawaran Kerja: {application.jobPosition}
               </CardTitle>
               <CardDescription>
-                Tim HRD telah mengirim penawaran, namun detail penawaran aktif
-                belum tersedia. Mohon tunggu sampai penawaran aktif
-                dipublikasikan dan coba refresh halaman ini nanti.
+                Detail penawaran untuk posisi ini sedang disiapkan oleh Tim HRD. Mohon tunggu sampai detail penawaran dipublikasikan untuk Anda.
               </CardDescription>
             </div>
-            <Badge className="w-fit bg-primary/80">
-              Menunggu Keputusan Anda
+            <Badge className="w-fit bg-slate-500/80">
+              Menyiapkan Penawaran
             </Badge>
           </div>
         </CardHeader>

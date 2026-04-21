@@ -254,15 +254,22 @@ service cloud.firestore {
         allow create: if isCreatingOwn() && (request.resource.data.status == "draft" || request.resource.data.status == "submitted" || request.resource.data.status == "tes_kepribadian");
         
         // UPDATE: A candidate can update their own DRAFT or mark an active offer as viewed. Internal users can update any. candidateUid cannot be changed.
-        allow update: if (
-                        (isOwner() && resource.data.status == "draft") ||
-                        isDecidingOffer() ||
-                        isViewingOffer() ||
-                        isSubmittingDocuments() ||
-                        isUpdatingSubmittedDocuments() ||
-                        isRequestingReschedule() ||
-                        (isInternal() && isInternalStatusUpdate()) ||
-                        (isInternal() && isUpdatingCvCache())
+        allow update: if 
+                      (
+                        isInternal() && (
+                          isInternalStatusUpdate() || 
+                          isUpdatingCvCache()
+                        )
+                      ) || 
+                      (
+                        isOwner() && (
+                          resource.data.status == "draft" ||
+                          isDecidingOffer() ||
+                          isViewingOffer() ||
+                          isSubmittingDocuments() ||
+                          isUpdatingSubmittedDocuments() ||
+                          isRequestingReschedule()
+                        )
                       );
 
         // DELETE: Only internal users can delete applications.
@@ -580,16 +587,26 @@ service cloud.firestore {
      * - Candidates can read their own offerings and update status/interactions.
      */
     match /offerings/{offeringId} {
-      allow get: if isHrd() || isSuperAdmin() || (isCandidate() && resource.data.candidateUid == request.auth.uid);
-      allow list: if isHrd() || isSuperAdmin() || (isCandidate() &&
-          request.query.where('candidateUid','==', request.auth.uid) &&
-          request.query.where('isActive','==', true));
+      allow get: if isHrd() || isSuperAdmin() || 
+                    (isSignedIn() && (
+                      resource.data.get('candidateUid', '') == request.auth.uid || 
+                      resource.data.get('candidateEmail', '') == request.auth.token.email
+                    ));
+      
+      allow list: if isHrd() || isSuperAdmin() || 
+                     (isSignedIn() && (
+                       request.query.where('candidateUid', '==', request.auth.uid) ||
+                       request.query.where('candidateEmail', '==', request.auth.token.email)
+                     ));
+
       allow create: if isHrd() || isSuperAdmin();
-      allow update: if
-        (isHrd() || isSuperAdmin()) ||
-        (isCandidate() &&
-         resource.data.candidateUid == request.auth.uid &&
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'viewedAt', 'acceptedAt', 'rejectedAt', 'interactions', 'updatedAt']));
+
+      allow update: if (isHrd() || isSuperAdmin()) || 
+                      (isSignedIn() && (
+                        resource.data.get('candidateUid', '') == request.auth.uid || 
+                        resource.data.get('candidateEmail', '') == request.auth.token.email
+                      ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'viewedAt', 'viewedAtFirst', 'viewedAtLast', 'viewCount', 'respondedAt', 'responseType', 'interactions', 'history', 'updatedAt']));
+      
       allow delete: if false;
     }
   }

@@ -352,6 +352,7 @@ export function OfferEditor({
         },
         additionalNotes: data.additionalNotes,
         updatedAt: serverTimestamp(),
+        candidateUid: application.candidateUid, // Critical for security rules
       };
 
       const batch = writeBatch(firestore);
@@ -373,6 +374,11 @@ export function OfferEditor({
         const offeringRef = doc(firestore, "offerings", offering.id);
         batch.update(offeringRef, {
           ...offeringPayload,
+          candidateUid: application.candidateUid,
+          applicationId: application.id!,
+          candidateEmail: application.candidateEmail,
+          status: offeringPayload.status,
+          isActive: offeringPayload.isActive,
           history: [
             ...(offering.history || []),
             {
@@ -413,7 +419,9 @@ export function OfferEditor({
         activeOfferingId: finalOfferingId,
         currentOfferingId: finalOfferingId, // Backward compatibility
         offerStatus: "draft" as const,
-        responseDeadline: responseDeadline ? Timestamp.fromDate(new Date(responseDeadline)) : null,
+        responseDeadline: responseDeadline
+          ? Timestamp.fromDate(new Date(responseDeadline))
+          : null,
         updatedAt: serverTimestamp(),
       });
 
@@ -597,19 +605,24 @@ export function OfferEditor({
         respondedAt: null,
         responseType: null,
         updatedAt: serverTimestamp(),
+        candidateUid: application.candidateUid, // Critical for security rules
       };
 
       const batch = writeBatch(firestore);
 
       // 1. Deactivate ALL other offerings for this application
-      const otherOfferings = allOfferings?.filter(o => o.id !== offering?.id) || [];
+      const otherOfferings =
+        allOfferings?.filter((o) => o.id !== offering?.id) || [];
       otherOfferings.forEach((o) => {
         if (o.id && o.isActive) {
           const oRef = doc(firestore, "offerings", o.id);
-          batch.update(oRef, { 
-            isActive: false, 
-            status: (o.status === "sent" || o.status === "viewed") ? "withdrawn" : o.status,
-            updatedAt: serverTimestamp() 
+          batch.update(oRef, {
+            isActive: false,
+            status:
+              o.status === "sent" || o.status === "viewed"
+                ? "withdrawn"
+                : o.status,
+            updatedAt: serverTimestamp(),
           });
         }
       });
@@ -621,6 +634,11 @@ export function OfferEditor({
         const offeringRef = doc(firestore, "offerings", offering.id);
         batch.update(offeringRef, {
           ...offeringPayload,
+          candidateUid: application.candidateUid,
+          applicationId: application.id!,
+          candidateEmail: application.candidateEmail,
+          status: offeringPayload.status,
+          isActive: offeringPayload.isActive,
           history: [
             ...(offering?.history || []),
             {
@@ -676,7 +694,9 @@ export function OfferEditor({
         offerStatus: "sent" as const,
         activeOfferingId: finalOfferingId,
         currentOfferingId: finalOfferingId, // Backward compatibility
-        responseDeadline: responseDeadline ? Timestamp.fromDate(new Date(responseDeadline)) : null,
+        responseDeadline: responseDeadline
+          ? Timestamp.fromDate(new Date(responseDeadline))
+          : null,
         offerSentAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         timeline: [...(application.timeline || []), timelineEvent],
