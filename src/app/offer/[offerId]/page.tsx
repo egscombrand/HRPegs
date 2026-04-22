@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import SafeRichText from "@/components/ui/SafeRichText";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -75,11 +76,14 @@ export default function OfferPage() {
   // Negotiation states
   const [isNegotiationDialogOpen, setIsNegotiationDialogOpen] = useState(false);
   const [negotiationAreas, setNegotiationAreas] = useState<string[]>([]);
-  const [negotiationSalary, setNegotiationSalary] = useState<number | null>(null);
   const [negotiationStartDate, setNegotiationStartDate] = useState("");
   const [negotiationWorkModel, setNegotiationWorkModel] = useState("");
+  const [negotiationWorkDays, setNegotiationWorkDays] = useState("");
+  const [negotiationWorkTime, setNegotiationWorkTime] = useState("");
+  const [negotiationEntryLocation, setNegotiationEntryLocation] = useState("");
   const [negotiationLocation, setNegotiationLocation] = useState("");
-  const [negotiationContractDuration, setNegotiationContractDuration] = useState<number | null>(null);
+  const [negotiationContractDuration, setNegotiationContractDuration] =
+    useState<number | null>(null);
   const [negotiationBenefitNotes, setNegotiationBenefitNotes] = useState("");
   const [negotiationScopeNotes, setNegotiationScopeNotes] = useState("");
   const [negotiationOtherNotes, setNegotiationOtherNotes] = useState("");
@@ -110,7 +114,11 @@ export default function OfferPage() {
           offerStatus: "expired",
           updatedAt: serverTimestamp(),
         });
-      } else if (offering.status === "sent" && applicationRef && application.offerStatus === "sent") {
+      } else if (
+        offering.status === "sent" &&
+        applicationRef &&
+        application.offerStatus === "sent"
+      ) {
         // Mark as viewed in applications
         updateDocumentNonBlocking(applicationRef, {
           offerStatus: "viewed",
@@ -221,14 +229,36 @@ export default function OfferPage() {
         candidateNegotiationUsed: true,
         candidateCounterOffer: {
           requestedAreas: negotiationAreas,
-          requestedSalary: negotiationAreas.includes("gaji") ? negotiationSalary : null,
-          requestedStartDate: negotiationAreas.includes("tanggal_mulai") ? negotiationStartDate : null,
-          requestedWorkModel: negotiationAreas.includes("sistem_kerja") ? negotiationWorkModel : null,
-          requestedLocation: negotiationAreas.includes("lokasi") ? negotiationLocation : null,
-          requestedContractDurationMonths: negotiationAreas.includes("durasi_kontrak") ? negotiationContractDuration : null,
-          requestedBenefitNotes: negotiationAreas.includes("benefit") ? negotiationBenefitNotes : null,
-          requestedScopeNotes: negotiationAreas.includes("peran") ? negotiationScopeNotes : null,
-          requestedOtherNotes: negotiationAreas.includes("lainnya") ? negotiationOtherNotes : null,
+          requestedStartDate: negotiationAreas.includes("tanggal_mulai")
+            ? negotiationStartDate
+            : null,
+          requestedWorkModel: negotiationAreas.includes("sistem_kerja")
+            ? [
+                negotiationWorkModel,
+                negotiationWorkDays,
+                negotiationWorkTime,
+                negotiationEntryLocation,
+              ]
+                .filter(Boolean)
+                .join(" • ")
+            : null,
+          requestedLocation: negotiationAreas.includes("lokasi")
+            ? negotiationLocation
+            : null,
+          requestedContractDurationMonths: negotiationAreas.includes(
+            "durasi_kontrak",
+          )
+            ? negotiationContractDuration
+            : null,
+          requestedBenefitNotes: negotiationAreas.includes("benefit")
+            ? negotiationBenefitNotes
+            : null,
+          requestedScopeNotes: negotiationAreas.includes("peran")
+            ? negotiationScopeNotes
+            : null,
+          requestedOtherNotes: negotiationAreas.includes("lainnya")
+            ? negotiationOtherNotes
+            : null,
           reason: negotiationReason,
           submittedAt: Timestamp.now(),
         },
@@ -471,7 +501,9 @@ export default function OfferPage() {
                 <Badge
                   className={`${statusColors[application?.offerStatus || offering.status]} text-white`}
                 >
-                  {(application?.offerStatus || offering.status).toUpperCase().replace("_", " ")}
+                  {(application?.offerStatus || offering.status)
+                    .toUpperCase()
+                    .replace("_", " ")}
                 </Badge>
               </div>
               <div className="space-y-2">
@@ -746,107 +778,329 @@ export default function OfferPage() {
                               Diskusi Penawaran
                             </Button>
                           </DialogTrigger>
-                          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl border border-slate-800 bg-slate-950 p-6 text-slate-100 shadow-2xl">
                             <DialogHeader>
-                              <DialogTitle>Ajukan Diskusi Penawaran</DialogTitle>
+                              <DialogTitle>
+                                Ajukan Diskusi Penawaran
+                              </DialogTitle>
+                              <p className="mt-2 text-sm leading-7 text-slate-400">
+                                Ajukan diskusi untuk menyelaraskan detail kerja
+                                yang penting, bukan untuk mengubah keseluruhan
+                                tawaran.
+                              </p>
                             </DialogHeader>
-                            <div className="space-y-6 py-4">
-                              <div className="p-3 bg-blue-50 text-blue-800 text-xs rounded-lg border border-blue-100">
-                                <p className="font-bold mb-1 uppercase tracking-wider">Penting:</p>
-                                <ul className="list-disc pl-4 space-y-1">
-                                  <li>Negosiasi hanya dapat diajukan satu kali.</li>
-                                  <li>Jelaskan usulan Anda secara profesional dan objektif.</li>
-                                  <li>Tim HRD akan meninjau dan merespons permintaan Anda.</li>
+                            <div className="space-y-8 py-4">
+                              <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-4 text-sm text-slate-300">
+                                <p className="font-semibold text-slate-100 mb-2">
+                                  Fokus diskusi
+                                </p>
+                                <ul className="list-disc pl-5 space-y-2">
+                                  <li>
+                                    Detail tanggal mulai, sistem kerja, lokasi /
+                                    penempatan, dan durasi kontrak.
+                                  </li>
+                                  <li>
+                                    Benefit / fasilitas, lingkup peran, dan
+                                    penyesuaian kerja sehari-hari.
+                                  </li>
+                                  <li>
+                                    Diskusi ini bukan untuk meminta revisi gaji
+                                    atau perubahan total kompensasi.
+                                  </li>
                                 </ul>
                               </div>
 
-                              <div className="space-y-3">
-                                <p className="text-sm font-bold">Pilih Area Diskusi:</p>
-                                <div className="grid grid-cols-2 gap-2">
+                              <div className="space-y-4">
+                                <div>
+                                  <p className="text-base font-semibold text-slate-100">
+                                    Pilih Area Diskusi
+                                  </p>
+                                  <p className="text-sm text-slate-400 mt-1">
+                                    Pilih area yang paling penting bagi
+                                    kebutuhan kerja Anda.
+                                  </p>
+                                </div>
+                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                   {[
-                                    { id: "gaji", label: "Gaji / Kompensasi" },
-                                    { id: "tanggal_mulai", label: "Tanggal Mulai" },
-                                    { id: "sistem_kerja", label: "Sistem Kerja" },
-                                    { id: "lokasi", label: "Lokasi" },
-                                    { id: "durasi_kontrak", label: "Durasi Kontrak" },
-                                    { id: "benefit", label: "Benefit / Fasilitas" },
+                                    {
+                                      id: "tanggal_mulai",
+                                      label: "Tanggal Mulai",
+                                    },
+                                    {
+                                      id: "sistem_kerja",
+                                      label: "Sistem Kerja",
+                                    },
+                                    {
+                                      id: "lokasi",
+                                      label: "Lokasi / Penempatan",
+                                    },
+                                    {
+                                      id: "durasi_kontrak",
+                                      label: "Durasi Kontrak",
+                                    },
+                                    {
+                                      id: "benefit",
+                                      label: "Benefit / Fasilitas",
+                                    },
                                     { id: "peran", label: "Lingkup Peran" },
                                     { id: "lainnya", label: "Lainnya" },
                                   ].map((area) => (
-                                    <div key={area.id} className="flex items-center space-x-2">
+                                    <label
+                                      key={area.id}
+                                      htmlFor={`g-area-${area.id}`}
+                                      className="flex cursor-pointer items-center gap-3 rounded-2xl border border-slate-800 bg-slate-900/90 px-4 py-3 text-sm transition hover:border-slate-700"
+                                    >
                                       <input
                                         type="checkbox"
                                         id={`g-area-${area.id}`}
-                                        checked={negotiationAreas.includes(area.id)}
+                                        checked={negotiationAreas.includes(
+                                          area.id,
+                                        )}
                                         onChange={(e) => {
-                                          if (e.target.checked) setNegotiationAreas([...negotiationAreas, area.id]);
-                                          else setNegotiationAreas(negotiationAreas.filter(a => a !== area.id));
+                                          if (e.target.checked)
+                                            setNegotiationAreas([
+                                              ...negotiationAreas,
+                                              area.id,
+                                            ]);
+                                          else
+                                            setNegotiationAreas(
+                                              negotiationAreas.filter(
+                                                (a) => a !== area.id,
+                                              ),
+                                            );
                                         }}
-                                        className="h-4 w-4"
+                                        className="h-4 w-4 accent-slate-400 text-slate-100"
                                       />
-                                      <label htmlFor={`g-area-${area.id}`} className="text-sm">{area.label}</label>
-                                    </div>
+                                      <span className="text-slate-100">
+                                        {area.label}
+                                      </span>
+                                    </label>
                                   ))}
                                 </div>
                               </div>
 
-                              <div className="space-y-4">
-                                {negotiationAreas.includes("gaji") && (
-                                  <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-muted-foreground uppercase">Usulan Gaji</label>
-                                    <Input
-                                      type="number"
-                                      placeholder="Contoh: 15000000"
-                                      value={negotiationSalary || ""}
-                                      onChange={(e) => setNegotiationSalary(e.target.value ? parseInt(e.target.value) : null)}
-                                    />
-                                  </div>
-                                )}
-
+                              <div className="space-y-5">
                                 {negotiationAreas.includes("tanggal_mulai") && (
-                                  <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-muted-foreground uppercase">Usulan Tanggal Mulai</label>
+                                  <div className="space-y-2">
+                                    <label className="block text-sm font-semibold text-slate-100">
+                                      Usulan Tanggal Mulai
+                                    </label>
                                     <Input
                                       type="date"
                                       value={negotiationStartDate}
-                                      onChange={(e) => setNegotiationStartDate(e.target.value)}
+                                      onChange={(e) =>
+                                        setNegotiationStartDate(e.target.value)
+                                      }
+                                      className="bg-slate-900 border-slate-800 text-slate-100"
                                     />
                                   </div>
                                 )}
 
                                 {negotiationAreas.includes("sistem_kerja") && (
-                                  <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-muted-foreground uppercase">Sistem Kerja</label>
-                                    <select
-                                      className="w-full border rounded-md p-2 text-sm"
-                                      value={negotiationWorkModel}
-                                      onChange={(e) => setNegotiationWorkModel(e.target.value)}
-                                    >
-                                      <option value="">Pilih...</option>
-                                      <option value="Onsite">Onsite</option>
-                                      <option value="Hybrid">Hybrid</option>
-                                      <option value="Remote">Remote</option>
-                                    </select>
+                                  <div className="space-y-4 rounded-3xl border border-slate-800 bg-slate-900/80 p-4">
+                                    <div className="flex flex-col gap-2">
+                                      <p className="text-sm font-semibold text-slate-100">
+                                        Sistem Kerja
+                                      </p>
+                                      <p className="text-sm text-slate-400">
+                                        Jelaskan model kerja yang Anda harapkan,
+                                        beserta hari kerja, jam kerja, dan
+                                        lokasi masuk jika perlu.
+                                      </p>
+                                    </div>
+                                    <div className="space-y-4">
+                                      <div className="space-y-2">
+                                        <label className="text-sm font-semibold text-slate-100">
+                                          Model Kerja
+                                        </label>
+                                        <select
+                                          className="w-full rounded-xl border border-slate-800 bg-slate-950 p-3 text-sm text-slate-100 outline-none focus:border-slate-600"
+                                          value={negotiationWorkModel}
+                                          onChange={(e) =>
+                                            setNegotiationWorkModel(
+                                              e.target.value,
+                                            )
+                                          }
+                                        >
+                                          <option
+                                            value=""
+                                            className="text-slate-500"
+                                          >
+                                            Pilih model kerja
+                                          </option>
+                                          <option value="Onsite">Onsite</option>
+                                          <option value="Hybrid">Hybrid</option>
+                                          <option value="Remote">Remote</option>
+                                        </select>
+                                      </div>
+                                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                        <div className="space-y-2">
+                                          <label className="text-sm font-semibold text-slate-100">
+                                            Hari Kerja
+                                          </label>
+                                          <Input
+                                            placeholder="Contoh: Senin - Jumat atau fleksibel"
+                                            value={negotiationWorkDays}
+                                            onChange={(e) =>
+                                              setNegotiationWorkDays(
+                                                e.target.value,
+                                              )
+                                            }
+                                            className="bg-slate-900 border-slate-800 text-slate-100"
+                                          />
+                                        </div>
+                                        <div className="space-y-2">
+                                          <label className="text-sm font-semibold text-slate-100">
+                                            Jam Kerja
+                                          </label>
+                                          <Input
+                                            placeholder="Contoh: 09:00 - 18:00 atau fleksibel"
+                                            value={negotiationWorkTime}
+                                            onChange={(e) =>
+                                              setNegotiationWorkTime(
+                                                e.target.value,
+                                              )
+                                            }
+                                            className="bg-slate-900 border-slate-800 text-slate-100"
+                                          />
+                                        </div>
+                                      </div>
+                                      <div className="space-y-2">
+                                        <label className="text-sm font-semibold text-slate-100">
+                                          Lokasi Masuk
+                                        </label>
+                                        <Input
+                                          placeholder="Contoh: Kantor pusat / coworking / remote"
+                                          value={negotiationEntryLocation}
+                                          onChange={(e) =>
+                                            setNegotiationEntryLocation(
+                                              e.target.value,
+                                            )
+                                          }
+                                          className="bg-slate-900 border-slate-800 text-slate-100"
+                                        />
+                                      </div>
+                                    </div>
                                   </div>
                                 )}
 
-                                <div className="space-y-1.5">
-                                  <label className="text-xs font-bold text-muted-foreground uppercase">Alasan & Penjelasan Profesional (Wajib)</label>
+                                {negotiationAreas.includes("lokasi") && (
+                                  <div className="space-y-2">
+                                    <label className="text-sm font-semibold text-slate-100">
+                                      Lokasi / Penempatan
+                                    </label>
+                                    <Input
+                                      placeholder="Contoh: Jakarta Selatan / remote sepenuhnya"
+                                      value={negotiationLocation}
+                                      onChange={(e) =>
+                                        setNegotiationLocation(e.target.value)
+                                      }
+                                      className="bg-slate-900 border-slate-800 text-slate-100"
+                                    />
+                                  </div>
+                                )}
+
+                                {negotiationAreas.includes(
+                                  "durasi_kontrak",
+                                ) && (
+                                  <div className="space-y-2">
+                                    <label className="text-sm font-semibold text-slate-100">
+                                      Durasi Kontrak
+                                    </label>
+                                    <Input
+                                      type="number"
+                                      min={1}
+                                      placeholder="Contoh: 12 (bulan)"
+                                      value={negotiationContractDuration || ""}
+                                      onChange={(e) =>
+                                        setNegotiationContractDuration(
+                                          e.target.value
+                                            ? parseInt(e.target.value)
+                                            : null,
+                                        )
+                                      }
+                                      className="bg-slate-900 border-slate-800 text-slate-100"
+                                    />
+                                  </div>
+                                )}
+
+                                {negotiationAreas.includes("benefit") && (
+                                  <div className="space-y-2">
+                                    <label className="text-sm font-semibold text-slate-100">
+                                      Benefit / Fasilitas
+                                    </label>
+                                    <Textarea
+                                      placeholder="Jelaskan benefit atau fasilitas tambahan yang Anda butuhkan."
+                                      value={negotiationBenefitNotes}
+                                      onChange={(e) =>
+                                        setNegotiationBenefitNotes(
+                                          e.target.value,
+                                        )
+                                      }
+                                      className="min-h-[120px] bg-slate-900 border-slate-800 text-slate-100"
+                                    />
+                                  </div>
+                                )}
+
+                                {negotiationAreas.includes("peran") && (
+                                  <div className="space-y-2">
+                                    <label className="text-sm font-semibold text-slate-100">
+                                      Lingkup Peran
+                                    </label>
+                                    <Textarea
+                                      placeholder="Ungkapkan harapan Anda terkait tugas utama dan tanggung jawab."
+                                      value={negotiationScopeNotes}
+                                      onChange={(e) =>
+                                        setNegotiationScopeNotes(e.target.value)
+                                      }
+                                      className="min-h-[120px] bg-slate-900 border-slate-800 text-slate-100"
+                                    />
+                                  </div>
+                                )}
+
+                                {negotiationAreas.includes("lainnya") && (
+                                  <div className="space-y-2">
+                                    <label className="text-sm font-semibold text-slate-100">
+                                      Lainnya
+                                    </label>
+                                    <Textarea
+                                      placeholder="Detail lain yang ingin Anda diskusikan."
+                                      value={negotiationOtherNotes}
+                                      onChange={(e) =>
+                                        setNegotiationOtherNotes(e.target.value)
+                                      }
+                                      className="min-h-[120px] bg-slate-900 border-slate-800 text-slate-100"
+                                    />
+                                  </div>
+                                )}
+
+                                <div className="space-y-2">
+                                  <label className="text-sm font-semibold text-slate-100">
+                                    Alasan & Penjelasan Profesional (Wajib)
+                                  </label>
                                   <Textarea
-                                    placeholder="Jelaskan dasar usulan Anda secara profesional..."
+                                    placeholder="Jelaskan dasar usulan Anda secara singkat dan profesional..."
                                     value={negotiationReason}
-                                    onChange={(e) => setNegotiationReason(e.target.value)}
-                                    className="min-h-[100px]"
+                                    onChange={(e) =>
+                                      setNegotiationReason(e.target.value)
+                                    }
+                                    className="min-h-[140px] bg-slate-900 border-slate-800 text-slate-100"
                                   />
                                 </div>
                               </div>
 
                               <Button
                                 onClick={handleNegotiationSubmit}
-                                disabled={isNegotiating || negotiationAreas.length === 0 || !negotiationReason.trim()}
-                                className="w-full"
+                                disabled={
+                                  isNegotiating ||
+                                  negotiationAreas.length === 0 ||
+                                  !negotiationReason.trim()
+                                }
+                                className="w-full py-3"
                               >
-                                {isNegotiating ? "Mengirim..." : "Kirim Permintaan Diskusi"}
+                                {isNegotiating
+                                  ? "Mengirim..."
+                                  : "Kirim Permintaan Diskusi"}
                               </Button>
                             </div>
                           </DialogContent>
@@ -947,30 +1201,39 @@ export default function OfferPage() {
                   <p className="font-medium">Negosiasi Sedang Ditinjau</p>
                 </div>
                 <p className="text-sm text-blue-600 dark:text-blue-500 mt-1">
-                  Permintaan diskusi Anda telah diterima oleh Tim HRD dan sedang dalam tahap peninjauan. Mohon menunggu informasi selanjutnya.
+                  Permintaan diskusi Anda telah diterima oleh Tim HRD dan sedang
+                  dalam tahap peninjauan. Mohon menunggu informasi selanjutnya.
                 </p>
               </CardContent>
             </Card>
           )}
 
-          {application?.offerStatus === "negotiation_rejected" && application?.candidateNegotiationResponse && (
-            <Card className="border-orange-200 bg-orange-50 dark:bg-orange-950/10">
-              <CardContent className="pt-6">
-                <div className="flex items-start gap-3">
-                  <XCircle className="h-5 w-5 text-orange-600 mt-1" />
-                  <div>
-                    <p className="font-bold text-orange-800">Negosiasi Tidak Disetujui</p>
-                    <div className="mt-2 text-sm text-orange-700 bg-white/40 p-3 rounded-lg border border-orange-200">
-                      {application.candidateNegotiationResponse.note}
+          {application?.offerStatus === "negotiation_rejected" &&
+            application?.candidateNegotiationResponse && (
+              <Card className="border-orange-200 bg-orange-50 dark:bg-orange-950/10">
+                <CardContent className="pt-6">
+                  <div className="flex items-start gap-3">
+                    <XCircle className="h-5 w-5 text-orange-600 mt-1" />
+                    <div>
+                      <p className="font-bold text-orange-800">
+                        Negosiasi Tidak Disetujui
+                      </p>
+                      <div className="mt-2 text-sm text-orange-700 bg-white/40 p-3 rounded-lg border border-orange-200">
+                        {application.candidateNegotiationResponse.note}
+                      </div>
+                      <p className="mt-3 text-xs text-orange-500 italic">
+                        — Tim HRD •{" "}
+                        {format(
+                          application.candidateNegotiationResponse.respondedAt.toDate(),
+                          "dd MMM yyyy",
+                          { locale: idLocale },
+                        )}
+                      </p>
                     </div>
-                    <p className="mt-3 text-xs text-orange-500 italic">
-                      — Tim HRD • {format(application.candidateNegotiationResponse.respondedAt.toDate(), "dd MMM yyyy", { locale: idLocale })}
-                    </p>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                </CardContent>
+              </Card>
+            )}
         </div>
       </div>
     </div>

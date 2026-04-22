@@ -93,10 +93,12 @@ function ApplicationCard({
   const [selectedNegotiationAreas, setSelectedNegotiationAreas] = useState<
     string[]
   >([]);
-  const [requestedSalary, setRequestedSalary] = useState("");
   const [requestedStartDate, setRequestedStartDate] = useState("");
   const [requestedLocation, setRequestedLocation] = useState("");
   const [requestedWorkModel, setRequestedWorkModel] = useState("");
+  const [requestedWorkDays, setRequestedWorkDays] = useState("");
+  const [requestedWorkTime, setRequestedWorkTime] = useState("");
+  const [requestedEntryLocation, setRequestedEntryLocation] = useState("");
   const [requestedContractDuration, setRequestedContractDuration] =
     useState("");
   const [requestedBenefitNotes, setRequestedBenefitNotes] = useState("");
@@ -109,7 +111,6 @@ function ApplicationCard({
   const { toast } = useToast();
 
   const negotiationAreas = [
-    { key: "salary", label: "Gaji / Kompensasi" },
     { key: "startDate", label: "Tanggal Mulai Kerja" },
     { key: "location", label: "Lokasi Kerja" },
     { key: "workModel", label: "Sistem Kerja" },
@@ -202,10 +203,12 @@ function ApplicationCard({
 
   const resetNegotiationForm = () => {
     setSelectedNegotiationAreas([]);
-    setRequestedSalary("");
     setRequestedStartDate("");
     setRequestedLocation("");
     setRequestedWorkModel("");
+    setRequestedWorkDays("");
+    setRequestedWorkTime("");
+    setRequestedEntryLocation("");
     setRequestedContractDuration("");
     setRequestedBenefitNotes("");
     setRequestedScopeNotes("");
@@ -247,7 +250,6 @@ function ApplicationCard({
 
     const payloadCounter: any = {
       requestedAreas: selectedNegotiationAreas,
-      requestedSalary: null,
       requestedStartDate: null,
       requestedWorkModel: null,
       requestedLocation: null,
@@ -258,22 +260,6 @@ function ApplicationCard({
       reason: negotiationReason.trim(),
       submittedAt: serverTimestamp(),
     };
-
-    if (selectedNegotiationAreas.includes("salary")) {
-      const requestedSalaryNumber = parseInt(
-        requestedSalary.replace(/\D/g, ""),
-        10,
-      );
-      if (isNaN(requestedSalaryNumber) || requestedSalaryNumber <= 0) {
-        toast({
-          variant: "destructive",
-          title: "Gagal Mengirim Negosiasi",
-          description: "Masukkan gaji yang valid.",
-        });
-        return;
-      }
-      payloadCounter.requestedSalary = requestedSalaryNumber;
-    }
 
     if (selectedNegotiationAreas.includes("startDate")) {
       if (!requestedStartDate) {
@@ -308,7 +294,21 @@ function ApplicationCard({
         });
         return;
       }
-      payloadCounter.requestedWorkModel = requestedWorkModel;
+
+      payloadCounter.requestedWorkModel = [
+        requestedWorkModel.trim(),
+        requestedWorkDays.trim()
+          ? `Hari kerja: ${requestedWorkDays.trim()}`
+          : null,
+        requestedWorkTime.trim()
+          ? `Jam kerja: ${requestedWorkTime.trim()}`
+          : null,
+        requestedEntryLocation.trim()
+          ? `Lokasi masuk: ${requestedEntryLocation.trim()}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" • ");
     }
 
     if (selectedNegotiationAreas.includes("contractDuration")) {
@@ -674,22 +674,21 @@ function ApplicationCard({
               setIsNegotiationOpen(open);
             }}
           >
-            <DialogContent className="w-full max-w-5xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
+            <DialogContent className="w-full max-w-5xl max-h-[90vh] overflow-hidden rounded-3xl border border-slate-800 bg-slate-950 text-slate-100 shadow-2xl">
+              <DialogHeader className="px-6 pt-6">
                 <DialogTitle>Ajukan Negosiasi Penawaran</DialogTitle>
-                <DialogDescription>
-                  Ajukan pembahasan area penawaran yang ingin diselaraskan. Ini
-                  bukan penolakan; ini adalah kesempatan untuk berdiskusi secara
-                  profesional.
+                <DialogDescription className="mt-2 text-sm leading-6 text-slate-400">
+                  Ajukan pembahasan area penawaran yang ingin diselaraskan.
+                  Diskusi ini fokus pada detail kerja, bukan perubahan gaji.
                 </DialogDescription>
               </DialogHeader>
               <form
                 onSubmit={handleNegotiationSubmit}
-                className="space-y-6 p-4"
+                className="space-y-6 px-6 pb-6 pt-4"
               >
                 <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
-                  <div className="rounded-3xl border border-muted/70 bg-muted/50 p-5">
-                    <p className="text-sm font-semibold">
+                  <div className="rounded-3xl border border-slate-800 bg-slate-900/90 p-5">
+                    <p className="text-sm font-semibold text-slate-100">
                       Pilih area pembahasan
                     </p>
                     <div className="mt-4 space-y-3">
@@ -721,27 +720,11 @@ function ApplicationCard({
                     </div>
                   </div>
 
-                  <div className="rounded-3xl border border-muted/70 bg-background p-5 shadow-sm">
-                    <p className="text-sm font-semibold">Rincian usulan</p>
-                    <div className="mt-4 space-y-4 text-sm">
-                      {selectedNegotiationAreas.includes("salary") && (
-                        <div>
-                          <label className="text-sm font-medium text-slate-900">
-                            Gaji yang diharapkan
-                          </label>
-                          <Input
-                            value={requestedSalary}
-                            onChange={(event) =>
-                              setRequestedSalary(
-                                formatSalaryInput(event.target.value),
-                              )
-                            }
-                            placeholder="Rp 5.000.000"
-                            inputMode="numeric"
-                            className="mt-2"
-                          />
-                        </div>
-                      )}
+                  <div className="rounded-3xl border border-slate-800 bg-slate-950/90 p-5 shadow-lg shadow-slate-950/30">
+                    <p className="text-sm font-semibold text-slate-100">
+                      Rincian usulan
+                    </p>
+                    <div className="mt-4 space-y-4 text-sm text-slate-300">
                       {selectedNegotiationAreas.includes("startDate") && (
                         <div>
                           <label className="text-sm font-medium text-slate-900">
@@ -773,26 +756,82 @@ function ApplicationCard({
                         </div>
                       )}
                       {selectedNegotiationAreas.includes("workModel") && (
-                        <div>
-                          <label className="text-sm font-medium text-slate-900">
-                            Sistem kerja yang diharapkan
-                          </label>
-                          <Select
-                            value={requestedWorkModel}
-                            onValueChange={setRequestedWorkModel}
-                          >
-                            <SelectTrigger className="mt-2">
-                              <SelectValue placeholder="Pilih sistem kerja" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Remote">Remote</SelectItem>
-                              <SelectItem value="Hybrid">Hybrid</SelectItem>
-                              <SelectItem value="On-site">On-site</SelectItem>
-                              <SelectItem value="Fleksibel">
-                                Fleksibel
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
+                        <div className="space-y-4 rounded-3xl border border-slate-800 bg-slate-900/80 p-4">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-100">
+                              Sistem kerja yang diharapkan
+                            </p>
+                            <p className="text-sm text-slate-400 mt-1">
+                              Pilih model kerja dan jelaskan hari kerja, jam
+                              kerja, serta lokasi masuk jika perlu.
+                            </p>
+                          </div>
+                          <div className="space-y-3">
+                            <div>
+                              <label className="text-sm font-medium text-slate-100">
+                                Model kerja
+                              </label>
+                              <Select
+                                value={requestedWorkModel}
+                                onValueChange={setRequestedWorkModel}
+                              >
+                                <SelectTrigger className="mt-2 bg-slate-950 border-slate-800 text-slate-100">
+                                  <SelectValue placeholder="Pilih sistem kerja" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Remote">Remote</SelectItem>
+                                  <SelectItem value="Hybrid">Hybrid</SelectItem>
+                                  <SelectItem value="On-site">
+                                    On-site
+                                  </SelectItem>
+                                  <SelectItem value="Fleksibel">
+                                    Fleksibel
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="grid gap-4 md:grid-cols-2">
+                              <div>
+                                <label className="text-sm font-medium text-slate-100">
+                                  Hari kerja
+                                </label>
+                                <Input
+                                  placeholder="Contoh: Senin - Jumat"
+                                  value={requestedWorkDays}
+                                  onChange={(event) =>
+                                    setRequestedWorkDays(event.target.value)
+                                  }
+                                  className="mt-2 bg-slate-950 border-slate-800 text-slate-100"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-sm font-medium text-slate-100">
+                                  Jam kerja
+                                </label>
+                                <Input
+                                  placeholder="Contoh: 09:00 - 18:00"
+                                  value={requestedWorkTime}
+                                  onChange={(event) =>
+                                    setRequestedWorkTime(event.target.value)
+                                  }
+                                  className="mt-2 bg-slate-950 border-slate-800 text-slate-100"
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium text-slate-100">
+                                Lokasi masuk / penempatan
+                              </label>
+                              <Input
+                                placeholder="Contoh: Kantor pusat / remote sepenuhnya"
+                                value={requestedEntryLocation}
+                                onChange={(event) =>
+                                  setRequestedEntryLocation(event.target.value)
+                                }
+                                className="mt-2 bg-slate-950 border-slate-800 text-slate-100"
+                              />
+                            </div>
+                          </div>
                         </div>
                       )}
                       {selectedNegotiationAreas.includes(
@@ -880,12 +919,12 @@ function ApplicationCard({
                   </div>
                 </div>
 
-                <div className="rounded-3xl border border-muted/70 bg-muted/50 p-4 text-sm text-muted-foreground">
+                <div className="rounded-3xl border border-slate-800 bg-slate-900/90 p-4 text-sm text-slate-300">
                   Negosiasi adalah tahap diskusi profesional. Harap fokus pada
                   penyesuaian yang jelas agar HRD dapat merespons dengan cepat.
                 </div>
 
-                <DialogFooter>
+                <DialogFooter className="gap-3">
                   <Button
                     variant="secondary"
                     type="button"
