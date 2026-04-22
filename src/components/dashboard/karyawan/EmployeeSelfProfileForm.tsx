@@ -66,70 +66,80 @@ import { format } from "date-fns";
 import { parseDateValue } from "@/lib/utils";
 
 const selfFormSchema = z.object({
-  dataDiriIdentitas: z.object({
-    fullName: z.string().min(2, "Nama lengkap harus diisi."),
-    nickName: z.string().min(1, "Nama panggilan harus diisi."),
-    personalEmail: z
-      .string()
-      .optional()
-      .refine((value) => !value || /^\S+@\S+\.\S+$/.test(value), {
-        message: "Email pribadi tidak valid.",
-      }),
-    phone: z.string().min(10, "Nomor telepon tidak valid."),
-    gender: z.enum(["Laki-laki", "Perempuan", "Lainnya"]),
-    birthPlace: z.string().min(2, "Tempat lahir harus diisi."),
-    birthDate: z
-      .string()
-      .refine((val) => val, { message: "Tanggal lahir harus diisi." }),
-    maritalStatus: z
-      .enum(["Belum Kawin", "Kawin", "Cerai Hidup", "Cerai Mati"])
-      .optional(),
-    religion: z.string().optional(),
-    nationality: z.string().optional(),
-    countryOfOrigin: z.string().optional(),
-    bloodType: z.enum(["A", "B", "AB", "O"]).optional(),
-    heightCm: z
-      .string()
-      .optional()
-      .refine((value) => !value || /^[0-9]+$/.test(value), {
-        message: "Tinggi badan hanya boleh berisi angka.",
-      }),
-    weightKg: z
-      .string()
-      .optional()
-      .refine((value) => !value || /^[0-9]+(?:\.[0-9]+)?$/.test(value), {
-        message: "Berat badan hanya boleh berisi angka.",
-      }),
-    hasPhysicalCondition: z.enum(["Ya", "Tidak"]).optional(),
-    physicalConditionDetails: z.string().optional(),
-    nik: z
-      .string()
-      .optional()
-      .refine((val) => !val || /^[0-9]{16}$/.test(val), {
-        message: "NIK harus tepat 16 digit angka.",
-      }),
-    profilePhotoUrl: z.string().url("URL foto profil tidak valid.").optional(),
-    ktpPhotoUrl: z.string().url("URL foto KTP tidak valid.").optional(),
-  }).superRefine((data, ctx) => {
-    if (data.hasPhysicalCondition === "Ya" && !data.physicalConditionDetails?.trim()) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["physicalConditionDetails"],
-        message: "Keterangan kelainan fisik harus diisi jika memilih Ya.",
-      });
-    }
-  }),
+  dataDiriIdentitas: z
+    .object({
+      fullName: z.string().min(2, "Nama lengkap harus diisi."),
+      nickName: z.string().min(1, "Nama panggilan harus diisi."),
+      personalEmail: z
+        .string()
+        .optional()
+        .refine((value) => !value || /^\S+@\S+\.\S+$/.test(value), {
+          message: "Email pribadi tidak valid.",
+        }),
+      phone: z.string().min(10, "Nomor telepon tidak valid."),
+      gender: z.enum(["Laki-laki", "Perempuan", "Lainnya"]),
+      birthPlace: z.string().min(2, "Tempat lahir harus diisi."),
+      birthDate: z
+        .string()
+        .refine((val) => val, { message: "Tanggal lahir harus diisi." }),
+      maritalStatus: z
+        .enum(["Belum Kawin", "Kawin", "Cerai Hidup", "Cerai Mati"])
+        .optional(),
+      religion: z.string().optional(),
+      nationality: z.string().optional(),
+      countryOfOrigin: z.string().optional(),
+      bloodType: z.enum(["A", "B", "AB", "O"]).nullable().optional(),
+      heightCm: z
+        .string()
+        .optional()
+        .refine((value) => !value || /^[0-9]+$/.test(value), {
+          message: "Tinggi badan hanya boleh berisi angka.",
+        }),
+      weightKg: z
+        .string()
+        .optional()
+        .refine((value) => !value || /^[0-9]+(?:\.[0-9]+)?$/.test(value), {
+          message: "Berat badan hanya boleh berisi angka.",
+        }),
+      hasPhysicalCondition: z.enum(["Ya", "Tidak"]).optional(),
+      physicalConditionDetails: z.string().optional(),
+      nik: z
+        .string()
+        .optional()
+        .refine((val) => !val || /^[0-9]{16}$/.test(val), {
+          message: "NIK harus tepat 16 digit angka.",
+        }),
+      profilePhotoUrl: z
+        .string()
+        .url("URL foto profil tidak valid.")
+        .optional(),
+      ktpPhotoUrl: z.string().url("URL foto KTP tidak valid.").optional(),
+    })
+    .superRefine((data, ctx) => {
+      if (
+        data.hasPhysicalCondition === "Ya" &&
+        !data.physicalConditionDetails?.trim()
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["physicalConditionDetails"],
+          message: "Keterangan kelainan fisik harus diisi jika memilih Ya.",
+        });
+      }
+    }),
   alamat: z.object({
-    addressKtp: z.object({
-      street: z.string().optional(),
-      rt: z.string().optional(),
-      rw: z.string().optional(),
-      village: z.string().optional(),
-      district: z.string().optional(),
-      city: z.string().optional(),
-      province: z.string().optional(),
-      postalCode: z.string().optional(),
-    }).optional(),
+    addressKtp: z
+      .object({
+        street: z.string().optional(),
+        rt: z.string().optional(),
+        rw: z.string().optional(),
+        village: z.string().optional(),
+        district: z.string().optional(),
+        city: z.string().optional(),
+        province: z.string().optional(),
+        postalCode: z.string().optional(),
+      })
+      .optional(),
     isDomicileSameAsKtp: z.boolean().optional(),
     addressCurrent: z.string().min(10, "Alamat domisili harus diisi."),
   }),
@@ -141,11 +151,17 @@ const selfFormSchema = z.object({
     noBpjsKesehatan: z.boolean().optional(),
     bpjsKesehatanFilePending: z.boolean().optional(),
     bpjsKesehatan: z.string().optional(),
-    bpjsKesehatanPhotoUrl: z.string().url("URL foto BPJS Kesehatan tidak valid.").optional(),
+    bpjsKesehatanPhotoUrl: z
+      .string()
+      .url("URL foto BPJS Kesehatan tidak valid.")
+      .optional(),
     noBpjsKetenagakerjaan: z.boolean().optional(),
     bpjsKetenagakerjaanFilePending: z.boolean().optional(),
     bpjsKetenagakerjaan: z.string().optional(),
-    bpjsKetenagakerjaanPhotoUrl: z.string().url("URL foto BPJS Ketenagakerjaan tidak valid.").optional(),
+    bpjsKetenagakerjaanPhotoUrl: z
+      .string()
+      .url("URL foto BPJS Ketenagakerjaan tidak valid.")
+      .optional(),
     simNumber: z.string().optional(),
     simPhotoUrl: z.string().url("URL foto SIM tidak valid.").optional(),
   }),
@@ -153,12 +169,19 @@ const selfFormSchema = z.object({
     bankName: z.string().optional(),
     bankAccountNumber: z.string().optional(),
     bankAccountHolderName: z.string().optional(),
-    bankDocumentUrl: z.string().url("URL bukti rekening tidak valid.").optional(),
+    bankDocumentUrl: z
+      .string()
+      .url("URL bukti rekening tidak valid.")
+      .optional(),
   }),
   kontakDarurat: z.object({
     emergencyContactName: z.string().min(2, "Nama kontak darurat harus diisi."),
-    emergencyContactRelation: z.string().min(2, "Hubungan kontak darurat harus diisi."),
-    emergencyContactPhone: z.string().min(10, "Nomor telepon darurat tidak valid."),
+    emergencyContactRelation: z
+      .string()
+      .min(2, "Hubungan kontak darurat harus diisi."),
+    emergencyContactPhone: z
+      .string()
+      .min(10, "Nomor telepon darurat tidak valid."),
     emergencyContactAddress: z.string().optional(),
   }),
 });
@@ -460,9 +483,9 @@ export function EmployeeSelfProfileForm({
         birthDate: "",
         maritalStatus: "Belum Kawin",
         religion: "",
-        nationality: "",
+        nationality: "WNI",
         countryOfOrigin: "",
-        bloodType: undefined,
+        bloodType: null,
         heightCm: "",
         weightKg: "",
         hasPhysicalCondition: "Tidak",
@@ -528,6 +551,9 @@ export function EmployeeSelfProfileForm({
     const rek = (initialProfile as any)?.dataRekening || {};
     const kd = (initialProfile as any)?.kontakDarurat || {};
 
+    console.log("DEBUG: Initial profile data:", initialProfile);
+    console.log("DEBUG: Extracted dataDiriIdentitas:", dd);
+
     form.reset({
       dataDiriIdentitas: {
         fullName: dd.fullName || initialProfile.fullName || "",
@@ -537,62 +563,139 @@ export function EmployeeSelfProfileForm({
         gender: dd.gender || initialProfile.gender || "Laki-laki",
         birthPlace: dd.birthPlace || initialProfile.birthPlace || "",
         birthDate: dd.birthDate || formattedBirthDate,
-        maritalStatus: dd.maritalStatus || initialProfile.maritalStatus || "Belum Kawin",
+        maritalStatus:
+          dd.maritalStatus || initialProfile.maritalStatus || "Belum Kawin",
         religion: dd.religion || initialProfile.religion || "",
         nationality: dd.nationality || initialProfile.nationality || "",
-        countryOfOrigin: dd.countryOfOrigin || initialProfile.additionalFields?.countryOfOrigin || initialProfile.countryOfOrigin || "",
-        bloodType: dd.bloodType || initialProfile.additionalFields?.bloodType || initialProfile.bloodType || undefined,
-        heightCm: dd.heightCm || initialProfile.additionalFields?.heightCm || initialProfile.heightCm || "",
-        weightKg: dd.weightKg || initialProfile.additionalFields?.weightKg || initialProfile.weightKg || "",
-        hasPhysicalCondition: dd.hasPhysicalCondition || initialProfile.additionalFields?.hasPhysicalCondition || initialProfile.hasPhysicalCondition || "Tidak",
-        physicalConditionDetails: dd.physicalConditionDetails || initialProfile.additionalFields?.physicalConditionDetails || initialProfile.physicalConditionDetails || "",
+        countryOfOrigin:
+          dd.countryOfOrigin ||
+          initialProfile.additionalFields?.countryOfOrigin ||
+          initialProfile.countryOfOrigin ||
+          "",
+        bloodType:
+          dd.bloodType ||
+          initialProfile.additionalFields?.bloodType ||
+          initialProfile.bloodType ||
+          null,
+        heightCm:
+          dd.heightCm ||
+          initialProfile.additionalFields?.heightCm ||
+          initialProfile.heightCm ||
+          "",
+        weightKg:
+          dd.weightKg ||
+          initialProfile.additionalFields?.weightKg ||
+          initialProfile.weightKg ||
+          "",
+        hasPhysicalCondition:
+          dd.hasPhysicalCondition ||
+          initialProfile.additionalFields?.hasPhysicalCondition ||
+          initialProfile.hasPhysicalCondition ||
+          "Tidak",
+        physicalConditionDetails:
+          dd.physicalConditionDetails ||
+          initialProfile.additionalFields?.physicalConditionDetails ||
+          initialProfile.physicalConditionDetails ||
+          "",
         nik: dd.nik || initialProfile.nik || "",
-        profilePhotoUrl: dd.profilePhotoUrl || initialProfile.profilePhotoUrl || "",
+        profilePhotoUrl:
+          dd.profilePhotoUrl || initialProfile.profilePhotoUrl || "",
         ktpPhotoUrl: dd.ktpPhotoUrl || initialProfile.ktpPhotoUrl || "",
       },
       alamat: {
         addressKtp: {
-          street: al.addressKtp?.street || initialProfile.addressKtp?.street || "",
+          street:
+            al.addressKtp?.street || initialProfile.addressKtp?.street || "",
           rt: al.addressKtp?.rt || initialProfile.addressKtp?.rt || "",
           rw: al.addressKtp?.rw || initialProfile.addressKtp?.rw || "",
-          village: al.addressKtp?.village || initialProfile.addressKtp?.village || "",
-          district: al.addressKtp?.district || initialProfile.addressKtp?.district || "",
+          village:
+            al.addressKtp?.village || initialProfile.addressKtp?.village || "",
+          district:
+            al.addressKtp?.district ||
+            initialProfile.addressKtp?.district ||
+            "",
           city: al.addressKtp?.city || initialProfile.addressKtp?.city || "",
-          province: al.addressKtp?.province || initialProfile.addressKtp?.province || "",
-          postalCode: al.addressKtp?.postalCode || initialProfile.addressKtp?.postalCode || "",
+          province:
+            al.addressKtp?.province ||
+            initialProfile.addressKtp?.province ||
+            "",
+          postalCode:
+            al.addressKtp?.postalCode ||
+            initialProfile.addressKtp?.postalCode ||
+            "",
         },
-        isDomicileSameAsKtp: al.isDomicileSameAsKtp ?? initialProfile.isDomicileSameAsKtp ?? false,
-        addressCurrent: al.addressCurrent || initialProfile.addressCurrent || "",
+        isDomicileSameAsKtp:
+          al.isDomicileSameAsKtp ?? initialProfile.isDomicileSameAsKtp ?? false,
+        addressCurrent:
+          al.addressCurrent || initialProfile.addressCurrent || "",
       },
       dokumenAdministratif: {
         noNpwp: docAdmin.noNpwp ?? initialProfile.noNpwp ?? false,
-        npwpFilePending: docAdmin.npwpFilePending ?? initialProfile.npwpFilePending ?? false,
+        npwpFilePending:
+          docAdmin.npwpFilePending ?? initialProfile.npwpFilePending ?? false,
         npwp: docAdmin.npwp || initialProfile.npwp || "",
-        npwpPhotoUrl: docAdmin.npwpPhotoUrl || initialProfile.npwpPhotoUrl || "",
-        noBpjsKesehatan: docAdmin.noBpjsKesehatan ?? initialProfile.noBpjsKesehatan ?? false,
-        bpjsKesehatanFilePending: docAdmin.bpjsKesehatanFilePending ?? initialProfile.bpjsKesehatanFilePending ?? false,
-        bpjsKesehatan: docAdmin.bpjsKesehatan || initialProfile.bpjsKesehatan || "",
-        bpjsKesehatanPhotoUrl: docAdmin.bpjsKesehatanPhotoUrl || initialProfile.bpjsKesehatanPhotoUrl || "",
-        noBpjsKetenagakerjaan: docAdmin.noBpjsKetenagakerjaan ?? initialProfile.noBpjsKetenagakerjaan ?? false,
-        bpjsKetenagakerjaanFilePending: docAdmin.bpjsKetenagakerjaanFilePending ?? initialProfile.bpjsKetenagakerjaanFilePending ?? false,
-        bpjsKetenagakerjaan: docAdmin.bpjsKetenagakerjaan || initialProfile.bpjsKetenagakerjaan || "",
-        bpjsKetenagakerjaanPhotoUrl: docAdmin.bpjsKetenagakerjaanPhotoUrl || initialProfile.bpjsKetenagakerjaanPhotoUrl || "",
+        npwpPhotoUrl:
+          docAdmin.npwpPhotoUrl || initialProfile.npwpPhotoUrl || "",
+        noBpjsKesehatan:
+          docAdmin.noBpjsKesehatan ?? initialProfile.noBpjsKesehatan ?? false,
+        bpjsKesehatanFilePending:
+          docAdmin.bpjsKesehatanFilePending ??
+          initialProfile.bpjsKesehatanFilePending ??
+          false,
+        bpjsKesehatan:
+          docAdmin.bpjsKesehatan || initialProfile.bpjsKesehatan || "",
+        bpjsKesehatanPhotoUrl:
+          docAdmin.bpjsKesehatanPhotoUrl ||
+          initialProfile.bpjsKesehatanPhotoUrl ||
+          "",
+        noBpjsKetenagakerjaan:
+          docAdmin.noBpjsKetenagakerjaan ??
+          initialProfile.noBpjsKetenagakerjaan ??
+          false,
+        bpjsKetenagakerjaanFilePending:
+          docAdmin.bpjsKetenagakerjaanFilePending ??
+          initialProfile.bpjsKetenagakerjaanFilePending ??
+          false,
+        bpjsKetenagakerjaan:
+          docAdmin.bpjsKetenagakerjaan ||
+          initialProfile.bpjsKetenagakerjaan ||
+          "",
+        bpjsKetenagakerjaanPhotoUrl:
+          docAdmin.bpjsKetenagakerjaanPhotoUrl ||
+          initialProfile.bpjsKetenagakerjaanPhotoUrl ||
+          "",
         simNumber: docAdmin.simNumber || initialProfile.simNumber || "",
         simPhotoUrl: docAdmin.simPhotoUrl || initialProfile.simPhotoUrl || "",
       },
       dataRekening: {
         bankName: rek.bankName || initialProfile.bankName || "",
-        bankAccountNumber: rek.bankAccountNumber || initialProfile.bankAccountNumber || "",
-        bankAccountHolderName: rek.bankAccountHolderName || initialProfile.bankAccountHolderName || "",
-        bankDocumentUrl: rek.bankDocumentUrl || initialProfile.bankDocumentUrl || "",
+        bankAccountNumber:
+          rek.bankAccountNumber || initialProfile.bankAccountNumber || "",
+        bankAccountHolderName:
+          rek.bankAccountHolderName ||
+          initialProfile.bankAccountHolderName ||
+          "",
+        bankDocumentUrl:
+          rek.bankDocumentUrl || initialProfile.bankDocumentUrl || "",
       },
       kontakDarurat: {
-        emergencyContactName: kd.emergencyContactName || initialProfile.emergencyContactName || "",
-        emergencyContactRelation: kd.emergencyContactRelation || initialProfile.emergencyContactRelation || "",
-        emergencyContactPhone: kd.emergencyContactPhone || initialProfile.emergencyContactPhone || "",
-        emergencyContactAddress: kd.emergencyContactAddress || initialProfile.emergencyContactAddress || "",
+        emergencyContactName:
+          kd.emergencyContactName || initialProfile.emergencyContactName || "",
+        emergencyContactRelation:
+          kd.emergencyContactRelation ||
+          initialProfile.emergencyContactRelation ||
+          "",
+        emergencyContactPhone:
+          kd.emergencyContactPhone ||
+          initialProfile.emergencyContactPhone ||
+          "",
+        emergencyContactAddress:
+          kd.emergencyContactAddress ||
+          initialProfile.emergencyContactAddress ||
+          "",
       },
     });
+    console.log("DEBUG: Form reset values:", form.getValues());
   }, [initialProfile, form]);
 
   const [currentStep, setCurrentStep] = useState(0);
@@ -601,15 +704,25 @@ export function EmployeeSelfProfileForm({
 
   const watchedAddressKtp = form.watch("alamat.addressKtp");
   const watchedDomicileSame = form.watch("alamat.isDomicileSameAsKtp");
-  const watchedHasPhysicalCondition = form.watch("dataDiriIdentitas.hasPhysicalCondition");
+  const watchedHasPhysicalCondition = form.watch(
+    "dataDiriIdentitas.hasPhysicalCondition",
+  );
   const watchedNationality = form.watch("dataDiriIdentitas.nationality");
-  
+
   const watchedNoNpwp = form.watch("dokumenAdministratif.noNpwp");
-  const watchedNpwpFilePending = form.watch("dokumenAdministratif.npwpFilePending");
+  const watchedNpwpFilePending = form.watch(
+    "dokumenAdministratif.npwpFilePending",
+  );
   const watchedNoBpjsKs = form.watch("dokumenAdministratif.noBpjsKesehatan");
-  const watchedBpjsKsFilePending = form.watch("dokumenAdministratif.bpjsKesehatanFilePending");
-  const watchedNoBpjsTk = form.watch("dokumenAdministratif.noBpjsKetenagakerjaan");
-  const watchedBpjsTkFilePending = form.watch("dokumenAdministratif.bpjsKetenagakerjaanFilePending");
+  const watchedBpjsKsFilePending = form.watch(
+    "dokumenAdministratif.bpjsKesehatanFilePending",
+  );
+  const watchedNoBpjsTk = form.watch(
+    "dokumenAdministratif.noBpjsKetenagakerjaan",
+  );
+  const watchedBpjsTkFilePending = form.watch(
+    "dokumenAdministratif.bpjsKetenagakerjaanFilePending",
+  );
 
   useEffect(() => {
     if (!watchedDomicileSame) return;
@@ -624,6 +737,8 @@ export function EmployeeSelfProfileForm({
       throw new Error("Authentication not found.");
     }
 
+    console.log("DEBUG: Form values before save:", values);
+
     const batch = writeBatch(firestore);
     const employeeProfileRef = doc(
       firestore,
@@ -632,24 +747,22 @@ export function EmployeeSelfProfileForm({
     );
     const userRef = doc(firestore, "users", firebaseUser.uid);
 
-    const employeePayload: any = {
-      ...values.dataDiriIdentitas,
-      addressKtp: values.alamat.addressKtp,
-      addressCurrent: values.alamat.addressCurrent,
-      isDomicileSameAsKtp: values.alamat.isDomicileSameAsKtp,
-      ...values.dokumenAdministratif,
-      ...values.dataRekening,
-      ...values.kontakDarurat,
-      updatedAt: serverTimestamp(),
-      completeness: isDraft
-        ? { isComplete: false }
-        : { isComplete: true, completedAt: serverTimestamp() },
+    // Payload HARUS hanya nested objects sesuai Firestore Rules
+    // JANGAN tambahkan field flat seperti ...values.dataDiriIdentitas
+    const employeePayload = {
+      uid: firebaseUser.uid,
       dataDiriIdentitas: values.dataDiriIdentitas,
       alamat: values.alamat,
       dokumenAdministratif: values.dokumenAdministratif,
       dataRekening: values.dataRekening,
       kontakDarurat: values.kontakDarurat,
+      updatedAt: serverTimestamp(),
+      completeness: isDraft
+        ? { isComplete: false }
+        : { isComplete: true, completedAt: serverTimestamp() },
     };
+
+    console.log("employeePayload", employeePayload);
 
     batch.set(employeeProfileRef, employeePayload, { merge: true });
     batch.update(userRef, {
@@ -765,7 +878,8 @@ export function EmployeeSelfProfileForm({
         toast({
           variant: "destructive",
           title: "Gagal Menyimpan Progres",
-          description: "Data Anda belum tersimpan secara otomatis. Silakan coba klik 'Simpan Draft' secara manual.",
+          description:
+            "Data Anda belum tersimpan secara otomatis. Silakan coba klik 'Simpan Draft' secara manual.",
         });
       } finally {
         setIsNavigating(false);
@@ -795,7 +909,7 @@ export function EmployeeSelfProfileForm({
                   Data dasar untuk identifikasi dan administrasi kepegawaian.
                 </p>
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
                 <FormField
                   control={form.control}
@@ -804,7 +918,11 @@ export function EmployeeSelfProfileForm({
                     <FormItem>
                       <FormLabel>Nama Lengkap*</FormLabel>
                       <FormControl>
-                        <Input {...field} value={field.value ?? ""} placeholder="Contoh: John Doe" />
+                        <Input
+                          {...field}
+                          value={field.value ?? ""}
+                          placeholder="Contoh: John Doe"
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -817,7 +935,11 @@ export function EmployeeSelfProfileForm({
                     <FormItem>
                       <FormLabel>Nama Panggilan*</FormLabel>
                       <FormControl>
-                        <Input {...field} value={field.value ?? ""} placeholder="John" />
+                        <Input
+                          {...field}
+                          value={field.value ?? ""}
+                          placeholder="John"
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -830,7 +952,11 @@ export function EmployeeSelfProfileForm({
                     <FormItem>
                       <FormLabel>Tempat Lahir*</FormLabel>
                       <FormControl>
-                        <Input {...field} value={field.value ?? ""} placeholder="Jakarta" />
+                        <Input
+                          {...field}
+                          value={field.value ?? ""}
+                          placeholder="Jakarta"
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -894,9 +1020,13 @@ export function EmployeeSelfProfileForm({
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="Belum Kawin">Belum Kawin</SelectItem>
+                          <SelectItem value="Belum Kawin">
+                            Belum Kawin
+                          </SelectItem>
                           <SelectItem value="Kawin">Kawin</SelectItem>
-                          <SelectItem value="Cerai Hidup">Cerai Hidup</SelectItem>
+                          <SelectItem value="Cerai Hidup">
+                            Cerai Hidup
+                          </SelectItem>
                           <SelectItem value="Cerai Mati">Cerai Mati</SelectItem>
                         </SelectContent>
                       </Select>
@@ -965,7 +1095,11 @@ export function EmployeeSelfProfileForm({
                       <FormItem>
                         <FormLabel>Negara Asal</FormLabel>
                         <FormControl>
-                          <Input {...field} value={field.value ?? ""} placeholder="Masukkan negara asal" />
+                          <Input
+                            {...field}
+                            value={field.value ?? ""}
+                            placeholder="Masukkan negara asal"
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -998,7 +1132,11 @@ export function EmployeeSelfProfileForm({
                     <FormItem>
                       <FormLabel>Nomor Telepon*</FormLabel>
                       <FormControl>
-                        <Input {...field} value={field.value ?? ""} placeholder="0812xxxx (WhatsApp)" />
+                        <Input
+                          {...field}
+                          value={field.value ?? ""}
+                          placeholder="0812xxxx (WhatsApp)"
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1011,7 +1149,11 @@ export function EmployeeSelfProfileForm({
                     <FormItem>
                       <FormLabel>Email Pribadi</FormLabel>
                       <FormControl>
-                        <Input {...field} value={field.value ?? ""} placeholder="example@email.com" />
+                        <Input
+                          {...field}
+                          value={field.value ?? ""}
+                          placeholder="example@email.com"
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1080,7 +1222,9 @@ export function EmployeeSelfProfileForm({
                           }}
                         />
                       </FormControl>
-                      <FormDescription className="text-[10px]">Hanya angka (cm).</FormDescription>
+                      <FormDescription className="text-[10px]">
+                        Hanya angka (cm).
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -1103,7 +1247,9 @@ export function EmployeeSelfProfileForm({
                           }}
                         />
                       </FormControl>
-                      <FormDescription className="text-[10px]">Hanya angka (kg).</FormDescription>
+                      <FormDescription className="text-[10px]">
+                        Hanya angka (kg).
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -1179,10 +1325,10 @@ export function EmployeeSelfProfileForm({
                       <FormItem>
                         <FormLabel>Nomor KTP (NIK)</FormLabel>
                         <FormControl>
-                          <Input 
-                            {...field} 
-                            value={field.value ?? ""} 
-                            placeholder="16 digit NIK" 
+                          <Input
+                            {...field}
+                            value={field.value ?? ""}
+                            placeholder="16 digit NIK"
                             maxLength={16}
                             inputMode="numeric"
                             onChange={(e) => {
@@ -1191,7 +1337,9 @@ export function EmployeeSelfProfileForm({
                             }}
                           />
                         </FormControl>
-                        <FormDescription className="text-[10px]">Pastikan tepat 16 digit angka.</FormDescription>
+                        <FormDescription className="text-[10px]">
+                          Pastikan tepat 16 digit angka.
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -1244,7 +1392,8 @@ export function EmployeeSelfProfileForm({
                   </h4>
                 </div>
                 <p className="text-sm text-slate-400">
-                  Pastikan alamat yang diisi sesuai dengan dokumen identitas resmi Anda.
+                  Pastikan alamat yang diisi sesuai dengan dokumen identitas
+                  resmi Anda.
                 </p>
               </div>
 
@@ -1256,7 +1405,11 @@ export function EmployeeSelfProfileForm({
                     <FormItem className="md:col-span-2">
                       <FormLabel>Jalan / Nama Jalan</FormLabel>
                       <FormControl>
-                        <Input {...field} value={field.value ?? ""} placeholder="Jl. Raya Utama No. 123" />
+                        <Input
+                          {...field}
+                          value={field.value ?? ""}
+                          placeholder="Jl. Raya Utama No. 123"
+                        />
                       </FormControl>
                     </FormItem>
                   )}
@@ -1268,7 +1421,13 @@ export function EmployeeSelfProfileForm({
                     <FormItem>
                       <FormLabel>RT</FormLabel>
                       <FormControl>
-                        <Input {...field} value={field.value ?? ""} placeholder="001" maxLength={3} inputMode="numeric" />
+                        <Input
+                          {...field}
+                          value={field.value ?? ""}
+                          placeholder="001"
+                          maxLength={3}
+                          inputMode="numeric"
+                        />
                       </FormControl>
                     </FormItem>
                   )}
@@ -1280,7 +1439,13 @@ export function EmployeeSelfProfileForm({
                     <FormItem>
                       <FormLabel>RW</FormLabel>
                       <FormControl>
-                        <Input {...field} value={field.value ?? ""} placeholder="002" maxLength={3} inputMode="numeric" />
+                        <Input
+                          {...field}
+                          value={field.value ?? ""}
+                          placeholder="002"
+                          maxLength={3}
+                          inputMode="numeric"
+                        />
                       </FormControl>
                     </FormItem>
                   )}
@@ -1292,7 +1457,11 @@ export function EmployeeSelfProfileForm({
                     <FormItem>
                       <FormLabel>Desa / Kelurahan</FormLabel>
                       <FormControl>
-                        <Input {...field} value={field.value ?? ""} placeholder="Mekar Jaya" />
+                        <Input
+                          {...field}
+                          value={field.value ?? ""}
+                          placeholder="Mekar Jaya"
+                        />
                       </FormControl>
                     </FormItem>
                   )}
@@ -1304,7 +1473,11 @@ export function EmployeeSelfProfileForm({
                     <FormItem>
                       <FormLabel>Kecamatan</FormLabel>
                       <FormControl>
-                        <Input {...field} value={field.value ?? ""} placeholder="Serpong" />
+                        <Input
+                          {...field}
+                          value={field.value ?? ""}
+                          placeholder="Serpong"
+                        />
                       </FormControl>
                     </FormItem>
                   )}
@@ -1316,7 +1489,11 @@ export function EmployeeSelfProfileForm({
                     <FormItem>
                       <FormLabel>Kabupaten / Kota</FormLabel>
                       <FormControl>
-                        <Input {...field} value={field.value ?? ""} placeholder="Tangerang Selatan" />
+                        <Input
+                          {...field}
+                          value={field.value ?? ""}
+                          placeholder="Tangerang Selatan"
+                        />
                       </FormControl>
                     </FormItem>
                   )}
@@ -1328,7 +1505,11 @@ export function EmployeeSelfProfileForm({
                     <FormItem>
                       <FormLabel>Provinsi</FormLabel>
                       <FormControl>
-                        <Input {...field} value={field.value ?? ""} placeholder="Banten" />
+                        <Input
+                          {...field}
+                          value={field.value ?? ""}
+                          placeholder="Banten"
+                        />
                       </FormControl>
                     </FormItem>
                   )}
@@ -1340,7 +1521,13 @@ export function EmployeeSelfProfileForm({
                     <FormItem>
                       <FormLabel>Kode Pos</FormLabel>
                       <FormControl>
-                        <Input {...field} value={field.value ?? ""} placeholder="15310" maxLength={5} inputMode="numeric" />
+                        <Input
+                          {...field}
+                          value={field.value ?? ""}
+                          placeholder="15310"
+                          maxLength={5}
+                          inputMode="numeric"
+                        />
                       </FormControl>
                     </FormItem>
                   )}
@@ -1365,7 +1552,8 @@ export function EmployeeSelfProfileForm({
                           Alamat domisili sama dengan KTP
                         </FormLabel>
                         <p className="text-[10px] text-slate-400">
-                          Centang ini jika Anda tinggal di alamat yang sama dengan yang tertera di KTP.
+                          Centang ini jika Anda tinggal di alamat yang sama
+                          dengan yang tertera di KTP.
                         </p>
                       </div>
                     </FormItem>
@@ -1386,10 +1574,11 @@ export function EmployeeSelfProfileForm({
                       </h4>
                     </div>
                     <p className="text-sm text-slate-400">
-                      Alamat tempat tinggal Anda saat ini (jika berbeda dengan KTP).
+                      Alamat tempat tinggal Anda saat ini (jika berbeda dengan
+                      KTP).
                     </p>
                   </div>
-                  
+
                   <div className="space-y-4">
                     <FormField
                       control={form.control}
@@ -1418,7 +1607,7 @@ export function EmployeeSelfProfileForm({
         );
       case 2:
         return (
-              <div key="step-dokumen" className="space-y-12">
+          <div key="step-dokumen" className="space-y-12">
             {/* NPWP */}
             <section className="space-y-6">
               <div className="flex flex-col gap-2">
@@ -1429,7 +1618,8 @@ export function EmployeeSelfProfileForm({
                   </h4>
                 </div>
                 <p className="text-sm text-slate-400">
-                  Data ini digunakan untuk pelaporan pajak penghasilan sesuai peraturan yang berlaku.
+                  Data ini digunakan untuk pelaporan pajak penghasilan sesuai
+                  peraturan yang berlaku.
                 </p>
               </div>
 
@@ -1463,13 +1653,16 @@ export function EmployeeSelfProfileForm({
                         <FormItem className="animate-in fade-in slide-in-from-top-2 duration-300">
                           <FormLabel>Nomor NPWP</FormLabel>
                           <FormControl>
-                            <Input 
-                              {...field} 
-                              value={field.value ?? ""} 
-                              placeholder="15 digit angka NPWP" 
+                            <Input
+                              {...field}
+                              value={field.value ?? ""}
+                              placeholder="15 digit angka NPWP"
                               inputMode="numeric"
                               onChange={(e) => {
-                                const val = e.target.value.replace(/[^0-9]/g, "");
+                                const val = e.target.value.replace(
+                                  /[^0-9]/g,
+                                  "",
+                                );
                                 field.onChange(val);
                               }}
                             />
@@ -1538,7 +1731,8 @@ export function EmployeeSelfProfileForm({
                   </h4>
                 </div>
                 <p className="text-sm text-slate-400">
-                  Data BPJS diperlukan untuk pendaftaran jaminan kesehatan dan ketenagakerjaan perusahaan.
+                  Data BPJS diperlukan untuk pendaftaran jaminan kesehatan dan
+                  ketenagakerjaan perusahaan.
                 </p>
               </div>
 
@@ -1578,13 +1772,16 @@ export function EmployeeSelfProfileForm({
                         <FormItem className="animate-in fade-in slide-in-from-top-2 duration-300">
                           <FormLabel>No. BPJS Kesehatan</FormLabel>
                           <FormControl>
-                            <Input 
-                              {...field} 
-                              value={field.value ?? ""} 
-                              placeholder="Nomor kartu BPJS Kesehatan" 
+                            <Input
+                              {...field}
+                              value={field.value ?? ""}
+                              placeholder="Nomor kartu BPJS Kesehatan"
                               inputMode="numeric"
                               onChange={(e) => {
-                                const val = e.target.value.replace(/[^0-9]/g, "");
+                                const val = e.target.value.replace(
+                                  /[^0-9]/g,
+                                  "",
+                                );
                                 field.onChange(val);
                               }}
                             />
@@ -1672,13 +1869,16 @@ export function EmployeeSelfProfileForm({
                         <FormItem className="animate-in fade-in slide-in-from-top-2 duration-300">
                           <FormLabel>No. BPJS Ketenagakerjaan</FormLabel>
                           <FormControl>
-                            <Input 
-                              {...field} 
-                              value={field.value ?? ""} 
-                              placeholder="Nomor kartu BPJS Ketenagakerjaan" 
+                            <Input
+                              {...field}
+                              value={field.value ?? ""}
+                              placeholder="Nomor kartu BPJS Ketenagakerjaan"
                               inputMode="numeric"
                               onChange={(e) => {
-                                const val = e.target.value.replace(/[^0-9]/g, "");
+                                const val = e.target.value.replace(
+                                  /[^0-9]/g,
+                                  "",
+                                );
                                 field.onChange(val);
                               }}
                             />
@@ -1758,7 +1958,11 @@ export function EmployeeSelfProfileForm({
                     <FormItem>
                       <FormLabel>Nama Bank</FormLabel>
                       <FormControl>
-                        <Input {...field} value={field.value ?? ""} placeholder="Contoh: Bank BCA" />
+                        <Input
+                          {...field}
+                          value={field.value ?? ""}
+                          placeholder="Contoh: Bank BCA"
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1771,10 +1975,10 @@ export function EmployeeSelfProfileForm({
                     <FormItem>
                       <FormLabel>Nomor Rekening</FormLabel>
                       <FormControl>
-                        <Input 
-                          {...field} 
-                          value={field.value ?? ""} 
-                          placeholder="Contoh: 1234567890" 
+                        <Input
+                          {...field}
+                          value={field.value ?? ""}
+                          placeholder="Contoh: 1234567890"
                           inputMode="numeric"
                           onChange={(e) => {
                             const val = e.target.value.replace(/[^0-9]/g, "");
@@ -1793,7 +1997,11 @@ export function EmployeeSelfProfileForm({
                     <FormItem>
                       <FormLabel>Nama Pemilik Rekening</FormLabel>
                       <FormControl>
-                        <Input {...field} value={field.value ?? ""} placeholder="Harus sesuai dengan nama di buku tabungan" />
+                        <Input
+                          {...field}
+                          value={field.value ?? ""}
+                          placeholder="Harus sesuai dengan nama di buku tabungan"
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1832,7 +2040,8 @@ export function EmployeeSelfProfileForm({
                   </h4>
                 </div>
                 <p className="text-sm text-slate-400">
-                  Hubungan dan kontak yang dapat dihubungi dalam keadaan darurat.
+                  Hubungan dan kontak yang dapat dihubungi dalam keadaan
+                  darurat.
                 </p>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -1843,7 +2052,11 @@ export function EmployeeSelfProfileForm({
                     <FormItem>
                       <FormLabel>Nama Lengkap Kontak Darurat*</FormLabel>
                       <FormControl>
-                        <Input {...field} value={field.value ?? ""} placeholder="Nama orang terdekat" />
+                        <Input
+                          {...field}
+                          value={field.value ?? ""}
+                          placeholder="Nama orang terdekat"
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1856,7 +2069,11 @@ export function EmployeeSelfProfileForm({
                     <FormItem>
                       <FormLabel>Hubungan*</FormLabel>
                       <FormControl>
-                        <Input {...field} value={field.value ?? ""} placeholder="Contoh: Orang Tua, Istri, Suami, atau Saudara" />
+                        <Input
+                          {...field}
+                          value={field.value ?? ""}
+                          placeholder="Contoh: Orang Tua, Istri, Suami, atau Saudara"
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1869,7 +2086,11 @@ export function EmployeeSelfProfileForm({
                     <FormItem>
                       <FormLabel>Nomor Telepon Darurat*</FormLabel>
                       <FormControl>
-                        <Input {...field} value={field.value ?? ""} placeholder="Nomor aktif orang terdekat" />
+                        <Input
+                          {...field}
+                          value={field.value ?? ""}
+                          placeholder="Nomor aktif orang terdekat"
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1902,7 +2123,6 @@ export function EmployeeSelfProfileForm({
         return null;
     }
   };
-
 
   return (
     <Card className="w-full max-w-none">

@@ -159,18 +159,8 @@ service cloud.firestore {
     match /employee_profiles/{uid} {
         function isUpdatingOwnAllowedFields() {
           let allowedFields = [
-            'fullName', 'nickName', 'phone', 'birthPlace', 'birthDate', 'gender', 'maritalStatus', 'religion',
-            'nationality', 'countryOfOrigin', 'personalEmail', 'bloodType', 'heightCm', 'weightKg',
-            'hasPhysicalCondition', 'physicalConditionDetails', 'profilePhotoUrl', 'ktpPhotoUrl',
-            'address', 'addressKtp', 'addressCurrent', 'isDomicileSameAsKtp', 'bankName', 'bankAccountNumber',
-            'bankAccountHolderName', 'bankDocumentUrl', 'npwp', 'npwpPhotoUrl', 'bpjsKesehatan',
-            'bpjsKesehatanPhotoUrl', 'bpjsKetenagakerjaan', 'bpjsKetenagakerjaanPhotoUrl',
-            'simNumber', 'simPhotoUrl', 'noNpwp', 'npwpFilePending', 'noBpjsKesehatan',
-            'bpjsKesehatanFilePending', 'noBpjsKetenagakerjaan', 'bpjsKetenagakerjaanFilePending',
-            'emergencyContactName', 'emergencyContactRelation', 'emergencyContactPhone',
-            'emergencyContactAddress', 'documents', 'updatedAt', 'completeness',
-            'hasNpwp', 'hasBpjsKesehatan', 'hasBpjsKetenagakerjaan', 'nik',
-            'dataDiriIdentitas', 'alamat', 'dokumenAdministratif', 'dataRekening', 'kontakDarurat'
+            'uid', 'dataDiriIdentitas', 'alamat', 'dokumenAdministratif',
+            'dataRekening', 'kontakDarurat', 'updatedAt', 'completeness'
           ];
           return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedFields);
         }
