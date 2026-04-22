@@ -1189,43 +1189,46 @@ export default function ApplicationDetailPage() {
                     </Card>
                   ) : (
                     <>
-                      {application.offerStatus === "negotiation_requested" && application.candidateCounterOffer && (
-                        <Card className="border-2 border-blue-500 bg-blue-50/20 shadow-lg animate-in fade-in slide-in-from-top-4 duration-500">
-                          <CardHeader className="bg-blue-600 text-white rounded-t-xl py-4">
-                            <div className="flex items-center justify-between">
-                              <CardTitle className="text-lg flex items-center gap-2">
-                                <MessageSquare className="h-5 w-5" />
-                                Review Permintaan Negosiasi
-                              </CardTitle>
-                              <Badge className="bg-white text-blue-700 hover:bg-white/90">MENUNGGU RESPONS</Badge>
-                            </div>
-                          </CardHeader>
-                          <CardContent className="pt-6 space-y-6">
-                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                              {application.candidateCounterOffer.requestedAreas.map((area: string) => (
-                                <div key={area} className="p-3 bg-white/50 border border-blue-100 rounded-xl">
-                                  <p className="text-[10px] font-black uppercase text-blue-600 mb-1 tracking-widest">{area.replace("_", " ")}</p>
-                                  <p className="text-sm font-bold text-slate-900">
-                                    {area === "gaji" ? (
-                                      `Rp ${application.candidateCounterOffer.requestedSalary?.toLocaleString("id-ID")}`
-                                    ) : area === "tanggal_mulai" ? (
-                                      application.candidateCounterOffer.requestedStartDate
-                                    ) : area === "sistem_kerja" ? (
-                                      application.candidateCounterOffer.requestedWorkModel
-                                    ) : area === "durasi_kontrak" ? (
-                                      `${application.candidateCounterOffer.requestedContractDurationMonths} Bulan`
-                                    ) : "Lihat Penjelasan"}
-                                  </p>
-                                </div>
-                              ))}
-                            </div>
-
-                            <div className="space-y-2">
-                              <p className="text-xs font-bold uppercase text-slate-500 tracking-widest">Justifikasi Kandidat</p>
-                              <div className="p-4 bg-white/80 border border-slate-200 rounded-2xl italic text-slate-700 text-sm leading-relaxed shadow-inner">
-                                "{application.candidateCounterOffer.reason}"
+                      {application.offerStatus === "negotiation_requested" && application.candidateCounterOffer && (() => {
+                        const counterOffer = application.candidateCounterOffer;
+                        return (
+                          <Card className="border-2 border-blue-500 bg-blue-50/20 shadow-lg animate-in fade-in slide-in-from-top-4 duration-500">
+                            <CardHeader className="bg-blue-600 text-white rounded-t-xl py-4">
+                              <div className="flex items-center justify-between">
+                                <CardTitle className="text-lg flex items-center gap-2">
+                                  <MessageSquare className="h-5 w-5" />
+                                  Review Permintaan Negosiasi
+                                </CardTitle>
+                                <Badge className="bg-white text-blue-700 hover:bg-white/90">MENUNGGU RESPONS</Badge>
                               </div>
-                            </div>
+                            </CardHeader>
+                            <CardContent className="pt-6 space-y-6">
+                              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                {counterOffer.requestedAreas.map((area: string) => (
+                                  <div key={area} className="p-3 bg-white/50 border border-blue-100 rounded-xl">
+                                    <p className="text-[10px] font-black uppercase text-blue-600 mb-1 tracking-widest">{area.replace("_", " ")}</p>
+                                    <p className="text-sm font-bold text-slate-900">
+                                      {area === "gaji" ? (
+                                        `Rp ${counterOffer.requestedSalary?.toLocaleString("id-ID")}`
+                                      ) : area === "tanggal_mulai" ? (
+                                        counterOffer.requestedStartDate
+                                      ) : area === "sistem_kerja" ? (
+                                        counterOffer.requestedWorkModel
+                                      ) : area === "durasi_kontrak" ? (
+                                        `${counterOffer.requestedContractDurationMonths} Bulan`
+                                      ) : "Lihat Penjelasan"}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+
+                              <div className="space-y-2">
+                                <p className="text-xs font-bold uppercase text-slate-500 tracking-widest">Justifikasi Kandidat</p>
+                                <div className="p-4 bg-white/80 border border-slate-200 rounded-2xl italic text-slate-700 text-sm leading-relaxed shadow-inner">
+                                  "{counterOffer.reason}"
+                                </div>
+                              </div>
+
 
                             <div className="flex justify-end gap-3 pt-2">
                               <Button 
@@ -1308,7 +1311,7 @@ export default function ApplicationDetailPage() {
                             </DialogContent>
                           </Dialog>
                         </Card>
-                      )}
+                      )})()}
                       <Card className="border border-slate-700">
                         <CardHeader className="pb-3">
                           <div className="flex items-center justify-between gap-3">

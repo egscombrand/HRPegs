@@ -78,6 +78,7 @@ export type EmployeeProfile = {
   fullName: string;
   nickName?: string;
   nationality?: string;
+  countryOfOrigin?: string;
   phone: string;
   personalEmail?: string;
   email: string;
@@ -87,6 +88,11 @@ export type EmployeeProfile = {
   birthDate?: string; // YYYY-MM-DD
   maritalStatus?: "Belum Kawin" | "Kawin" | "Cerai Hidup" | "Cerai Mati";
   religion?: string;
+  bloodType?: "A" | "B" | "AB" | "O";
+  heightCm?: string;
+  weightKg?: string;
+  hasPhysicalCondition?: "Ya" | "Tidak";
+  physicalConditionDetails?: string;
   address?: Address;
   addressKtp?: Address;
   addressCurrent?: string;
@@ -104,7 +110,15 @@ export type EmployeeProfile = {
   npwp?: string;
   npwpPhotoUrl?: string;
   bpjsKesehatan?: string;
+  bpjsKesehatanPhotoUrl?: string;
   bpjsKetenagakerjaan?: string;
+  bpjsKetenagakerjaanPhotoUrl?: string;
+  noNpwp?: boolean;
+  npwpFilePending?: boolean;
+  noBpjsKesehatan?: boolean;
+  bpjsKesehatanFilePending?: boolean;
+  noBpjsKetenagakerjaan?: boolean;
+  bpjsKetenagakerjaanFilePending?: boolean;
   bankName?: string;
   bankAccountNumber?: string;
   bankAccountHolderName?: string;
@@ -757,14 +771,14 @@ export type Certification = {
 };
 
 export type Address = {
-  street: string;
-  rt: string;
-  rw: string;
-  village: string;
-  district: string;
-  city: string;
-  province: string;
-  postalCode: string;
+  street?: string;
+  rt?: string;
+  rw?: string;
+  village?: string;
+  district?: string;
+  city?: string;
+  province?: string;
+  postalCode?: string;
 };
 
 export type DocumentType =
