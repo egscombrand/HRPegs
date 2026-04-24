@@ -6,16 +6,14 @@ import { useRoleGuard } from "@/hooks/useRoleGuard";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { MENU_CONFIG } from "@/lib/menu-config";
 import { useCollection, useFirestore, useMemoFirebase } from "@/firebase";
-import { collection, query, where } from "firebase/firestore";
+import { collection } from "firebase/firestore";
 import type {
   UserProfile,
   Brand,
   EmployeeProfile,
-  EmployeeMasterData,
-  EmployeeProfileWithMaster,
+  EmploymentStatus,
   Division,
 } from "@/lib/types";
-import { mergeEmployeeAndProfile } from "@/lib/employees";
 import {
   Table,
   TableBody,
@@ -35,26 +33,17 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import {
-  Edit,
   Search,
-  PlusCircle,
   Upload,
   Download,
   FileSpreadsheet,
   Users,
-  MoreHorizontal,
-  Trash2,
-  Eye,
-  Flag,
-  Archive,
   CheckCircle,
   AlertTriangle,
   XCircle,
-  Info,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { EmployeeAdminFormDialog } from "@/components/dashboard/hrd/EmployeeAdminFormDialog";
 import {
   Card,
   CardContent,
@@ -64,14 +53,6 @@ import {
 } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { ImportDialog } from "@/components/dashboard/hrd/ImportDialog";
-import { DeleteConfirmationDialog } from "@/components/dashboard/DeleteConfirmationDialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
@@ -106,14 +87,7 @@ export default function KaryawanDataPage() {
   const [brandFilter, setBrandFilter] = useState("all");
   const [completenessFilter, setCompletenessFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedUser, setSelectedUser] =
-    useState<EmployeeProfileWithMaster | null>(null);
-  const [isFormOpen, setIsFormOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
-  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
-  const [userToDelete, setUserToDelete] = useState<EmployeeProfile | null>(
-    null,
-  );
 
   const calculateProfileCompleteness = (profile: EmployeeProfile) => {
     const fields = [
@@ -223,148 +197,68 @@ export default function KaryawanDataPage() {
     }
   };
 
-  const QuickPreview = ({ profile }: { profile: EmployeeProfile }) => {
-    const addr = profile.alamat || {};
-    const pendidikan = profile.pendidikanDanPengembangan?.pendidikanTerakhir;
-    const emergencyContact = profile.kontakDarurat?.[0];
-    const keluarga = profile.dataKeluarga;
-
-    return (
-      <div className="space-y-3 p-2">
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground mb-1">
-            ALAMAT KTP
-          </p>
-          <p className="text-sm">
-            {addr.ktp?.street ? `Jl. ${addr.ktp.street}` : "Belum diisi"}
-          </p>
-          {addr.ktp?.kelurahan?.name && (
-            <p className="text-xs text-muted-foreground">
-              {addr.ktp.kelurahan.name}, {addr.ktp.kecamatan?.name},{" "}
-              {addr.ktp.kabupatenKota?.name}
-            </p>
-          )}
-        </div>
-
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground mb-1">
-            PENDIDIKAN TERAKHIR
-          </p>
-          <p className="text-sm">
-            {pendidikan?.jenjang && pendidikan?.namaInstitusi
-              ? `${pendidikan.jenjang} - ${pendidikan.namaInstitusi}`
-              : "Belum diisi"}
-          </p>
-        </div>
-
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground mb-1">
-            KONTAK DARURAT
-          </p>
-          <p className="text-sm">
-            {emergencyContact?.name
-              ? `${emergencyContact.name} (${emergencyContact.relation})`
-              : "Belum diisi"}
-          </p>
-          {emergencyContact?.phone && (
-            <p className="text-xs text-muted-foreground">
-              {emergencyContact.phone}
-            </p>
-          )}
-        </div>
-
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground mb-1">
-            STATUS KELUARGA
-          </p>
-          <p className="text-sm">
-            Status: {profile.dataDiriIdentitas?.maritalStatus || "Belum diisi"}
-          </p>
-          {keluarga?.tanggungan && keluarga.tanggungan.length > 0 && (
-            <p className="text-xs text-muted-foreground">
-              Tanggungan: {keluarga.tanggungan.length} orang
-            </p>
-          )}
-        </div>
-
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground mb-1">
-            STATUS DOKUMEN
-          </p>
-          <div className="flex gap-1 flex-wrap">
-            {profile.dokumenAdministratif?.npwp && (
-              <Badge variant="outline" className="text-xs">
-                NPWP ✓
-              </Badge>
-            )}
-            {profile.dokumenAdministratif?.bpjsKesehatan && (
-              <Badge variant="outline" className="text-xs">
-                BPJS KS ✓
-              </Badge>
-            )}
-            {profile.dokumenAdministratif?.bpjsKetenagakerjaan && (
-              <Badge variant="outline" className="text-xs">
-                BPJS TK ✓
-              </Badge>
-            )}
-            {!profile.dokumenAdministratif?.npwp &&
-              !profile.dokumenAdministratif?.bpjsKesehatan &&
-              !profile.dokumenAdministratif?.bpjsKetenagakerjaan && (
-                <span className="text-xs text-muted-foreground">
-                  Belum ada dokumen
-                </span>
-              )}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   const {
     data: employeeProfiles,
     isLoading: profilesLoading,
     mutate,
   } = useCollection<EmployeeProfile>(
     useMemoFirebase(
-      () =>
-        query(
-          collection(firestore, "employee_profiles"),
-          where("employmentType", "==", "karyawan"),
-        ),
+      () => collection(firestore, "employee_profiles"),
       [firestore],
     ),
   );
 
-  const { data: employees, isLoading: employeesLoading } =
-    useCollection<EmployeeMasterData>(
-      useMemoFirebase(
-        () =>
-          query(
-            collection(firestore, "employees"),
-            where("employmentType", "==", "karyawan"),
-          ),
-        [firestore],
-      ),
-    );
+  const normalizeEmploymentType = (
+    value?: string | null,
+  ): string | undefined => {
+    if (!value) return undefined;
+    const normalized = String(value).trim().toLowerCase();
+    if (["karyawan", "employee", "pegawai", "staff"].includes(normalized)) {
+      return "karyawan";
+    }
+    if (["magang", "intern", "internship"].includes(normalized)) {
+      return "magang";
+    }
+    if (["training", "pelatihan"].includes(normalized)) {
+      return "training";
+    }
+    return undefined;
+  };
+
+  const normalizeEmploymentStatus = (
+    value?: string | null,
+  ): EmploymentStatus | undefined => {
+    if (!value) return undefined;
+    const normalized = String(value).trim().toLowerCase();
+    if (["active", "aktif", "a"].includes(normalized)) {
+      return "active";
+    }
+    if (["probation", "percobaan", "trial"].includes(normalized)) {
+      return "probation";
+    }
+    if (["resigned", "resign", "keluar"].includes(normalized)) {
+      return "resigned";
+    }
+    if (["terminated", "terminasi", "pemutusan"].includes(normalized)) {
+      return "terminated";
+    }
+    return undefined;
+  };
+
+  const isKaryawanProfile = (profile: EmployeeProfile) =>
+    normalizeEmploymentType(profile.employmentType) !== "magang";
 
   const { data: brands, isLoading: brandsLoading } = useCollection<Brand>(
     useMemoFirebase(() => collection(firestore, "brands"), [firestore]),
   );
 
-  const mergedProfiles = useMemo(() => {
-    if (!employees) return [];
-    const profileMap = new Map(
-      employeeProfiles?.map((profile) => [profile.uid, profile]),
-    );
-    return employees.map((employee) =>
-      mergeEmployeeAndProfile(employee, profileMap.get(employee.uid) ?? null),
-    );
-  }, [employees, employeeProfiles]);
-
   const filteredProfiles = useMemo(() => {
-    if (!mergedProfiles) return [];
-    return mergedProfiles.filter((profile) => {
-      const profileStatus = profile.employmentStatus || "active";
+    if (!employeeProfiles) return [];
+    return employeeProfiles.filter((profile) => {
+      if (!isKaryawanProfile(profile)) return false;
+
+      const profileStatus =
+        normalizeEmploymentStatus(profile.employmentStatus) || "active";
       const brandMatch =
         brandFilter === "all" || profile.brandId === brandFilter;
       const searchMatch =
@@ -388,59 +282,13 @@ export default function KaryawanDataPage() {
         completenessMatch
       );
     });
-  }, [mergedProfiles, activeTab, brandFilter, searchTerm, completenessFilter]);
-
-  const handleCreateClick = () => {
-    setSelectedUser(null);
-    setIsFormOpen(true);
-  };
-
-  const handleEditClick = (profile: EmployeeProfile) => {
-    setSelectedUser(profile);
-    setIsFormOpen(true);
-  };
-
-  const handleDeleteClick = (profile: EmployeeProfile) => {
-    setUserToDelete(profile);
-    setIsDeleteOpen(true);
-  };
-
-  const handleViewDetail = (profile: EmployeeProfile) => {
-    // For now, open edit form. Later can add separate view modal
-    setSelectedUser(profile);
-    setIsFormOpen(true);
-  };
-
-  const handleMarkForRevision = (profile: EmployeeProfile) => {
-    toast({
-      title: "Tandai Perlu Revisi",
-      description: `Profile ${profile.fullName} telah ditandai untuk revisi.`,
-    });
-    // TODO: Add logic to mark profile for revision
-  };
-
-  const handleArchive = (profile: EmployeeProfile) => {
-    toast({
-      title: "Arsipkan Profile",
-      description: `Profile ${profile.fullName} telah diarsipkan.`,
-    });
-    // TODO: Add logic to archive profile (soft delete)
-  };
-
-  const confirmDelete = () => {
-    if (!userToDelete) return;
-    console.log("Deleting user:", userToDelete.fullName);
-    // Add actual deletion logic here
-    toast({
-      title: "Aksi Hapus Dikonfirmasi (Logika Belum Diimplementasikan)",
-    });
-    setIsDeleteOpen(false);
-  };
-
-  const handleFormSuccess = () => {
-    setIsFormOpen(false);
-    mutate();
-  };
+  }, [
+    employeeProfiles,
+    activeTab,
+    brandFilter,
+    searchTerm,
+    completenessFilter,
+  ]);
 
   const handleExport = () => {
     if (!filteredProfiles || filteredProfiles.length === 0) {
@@ -539,9 +387,6 @@ export default function KaryawanDataPage() {
               <Button variant="outline" onClick={handleDownloadTemplate}>
                 <FileSpreadsheet className="mr-2 h-4 w-4" /> Template
               </Button>
-              <Button onClick={handleCreateClick}>
-                <PlusCircle className="mr-2 h-4 w-4" /> Tambah Manual
-              </Button>
             </div>
           </div>
           <Card>
@@ -606,16 +451,16 @@ export default function KaryawanDataPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Nama</TableHead>
-                      <TableHead>Brand</TableHead>
-                      <TableHead>Divisi</TableHead>
-                      <TableHead>Jabatan</TableHead>
-                      <TableHead>Manager Divisi</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Alamat KTP</TableHead>
+                      <TableHead>Dokumen</TableHead>
+                      <TableHead>Rekening</TableHead>
+                      <TableHead>Pendidikan</TableHead>
                       <TableHead>Kelengkapan</TableHead>
-                      <TableHead className="text-right">Aksi</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {employeesLoading || profilesLoading ? (
+                    {profilesLoading ? (
                       <TableRow>
                         <TableCell colSpan={7} className="h-24 text-center">
                           Memuat data karyawan...
@@ -636,12 +481,22 @@ export default function KaryawanDataPage() {
                                 {profile.email}
                               </div>
                             </TableCell>
-                            <TableCell>{profile.brandName || "-"}</TableCell>
-                            <TableCell>{profile.division || "-"}</TableCell>
+                            <TableCell>{profile.email || "-"}</TableCell>
                             <TableCell>
-                              {profile.positionTitle || "-"}
+                              {profile.alamat?.ktp?.street || "-"}
                             </TableCell>
-                            <TableCell>{profile.managerName || "-"}</TableCell>
+                            <TableCell>
+                              {profile.dokumenAdministratif?.npwp
+                                ? "NPWP"
+                                : "-"}
+                            </TableCell>
+                            <TableCell>
+                              {profile.dataRekening?.bankName || "-"}
+                            </TableCell>
+                            <TableCell>
+                              {profile.pendidikanDanPengembangan
+                                ?.pendidikanTerakhir?.jenjang || "-"}
+                            </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 <span className="text-sm font-medium">
@@ -649,53 +504,6 @@ export default function KaryawanDataPage() {
                                 </span>
                                 {getCompletenessBadge(completeness.status)}
                               </div>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8"
-                                  >
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem
-                                    onSelect={() => handleViewDetail(profile)}
-                                  >
-                                    <Eye className="mr-2 h-4 w-4" /> Lihat
-                                    Detail
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onSelect={() =>
-                                      handleMarkForRevision(profile)
-                                    }
-                                  >
-                                    <AlertTriangle className="mr-2 h-4 w-4" />{" "}
-                                    Tandai Perlu Revisi
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onSelect={() => handleArchive(profile)}
-                                  >
-                                    <Archive className="mr-2 h-4 w-4" />{" "}
-                                    Arsipkan
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem
-                                    onSelect={() => handleEditClick(profile)}
-                                  >
-                                    <Edit className="mr-2 h-4 w-4" /> Edit
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    className="text-destructive"
-                                    onSelect={() => handleDeleteClick(profile)}
-                                  >
-                                    <Trash2 className="mr-2 h-4 w-4" /> Hapus
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
                             </TableCell>
                           </TableRow>
                         );
@@ -706,11 +514,11 @@ export default function KaryawanDataPage() {
                           <div className="flex flex-col items-center gap-3 text-muted-foreground">
                             <Users className="h-10 w-10" />
                             <p className="font-semibold">
-                              Belum ada data karyawan.
+                              Belum ada data karyawan yang masuk.
                             </p>
                             <p className="text-sm">
-                              Impor data dari CSV/XLSX atau tambahkan karyawan
-                              secara manual.
+                              Impor data dari CSV/XLSX untuk mulai mengisi data
+                              karyawan.
                             </p>
                             <div className="flex gap-2 mt-2">
                               <Button
@@ -718,9 +526,6 @@ export default function KaryawanDataPage() {
                                 onClick={() => setIsImportOpen(true)}
                               >
                                 Import Data
-                              </Button>
-                              <Button onClick={handleCreateClick}>
-                                Tambah Manual
                               </Button>
                             </div>
                           </div>
@@ -734,23 +539,12 @@ export default function KaryawanDataPage() {
           </Card>
         </div>
       </DashboardLayout>
-      <EmployeeAdminFormDialog
-        profile={selectedUser}
-        open={isFormOpen}
-        onOpenChange={setIsFormOpen}
-        onSuccess={handleFormSuccess}
-      />
       <ImportDialog
         open={isImportOpen}
         onOpenChange={setIsImportOpen}
-        onImportSuccess={mutate}
-      />
-      <DeleteConfirmationDialog
-        open={isDeleteOpen}
-        onOpenChange={setIsDeleteOpen}
-        onConfirm={confirmDelete}
-        itemName={userToDelete?.fullName}
-        itemType="Data Karyawan"
+        onImportSuccess={() => {
+          mutate?.();
+        }}
       />
     </>
   );
