@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -69,6 +70,12 @@ import {
   MapPin,
   Phone,
   User,
+  CreditCard,
+  ShieldCheck,
+  Wallet,
+  Car,
+  Award,
+  Info,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
@@ -110,6 +117,12 @@ const OCCUPATION_OPTIONS = [
   "Pensiunan",
   "Lainnya",
 ];
+
+const CURRENT_YEAR = new Date().getFullYear();
+const YEAR_OPTIONS = Array.from({ length: CURRENT_YEAR - 1980 + 1 }, (_, i) => 
+  (CURRENT_YEAR - i).toString()
+);
+const EXPIRED_YEAR_OPTIONS = ["Tidak ada masa berlaku", ...YEAR_OPTIONS];
 
 const OCCUPATION_STATUS_OPTIONS = [
   "Tetap",
@@ -301,7 +314,6 @@ const selfFormSchema = z.object({
       bpjsKetenagakerjaanPhotoUrl: z.string().optional(),
       simNumber: z.string().optional(),
       simPhotoUrl: z.string().optional(),
-      ijazahUrl: z.string().optional(),
     })
     .superRefine((data, ctx) => {
       // 1. NPWP Logic
@@ -486,6 +498,7 @@ const selfFormSchema = z.object({
         namaInstitusi: z.string().min(2, "Nama institusi wajib diisi."),
         jurusan: z.string().min(2, "Jurusan wajib diisi."),
         tahunLulus: z.string().min(4, "Tahun lulus wajib diisi."),
+        ijazahUrl: z.string().optional(),
       }),
       riwayatPendidikan: z
         .array(
@@ -495,6 +508,7 @@ const selfFormSchema = z.object({
             namaInstitusi: z.string().optional(),
             jurusan: z.string().optional(),
             tahunLulus: z.string().optional(),
+            ijazahUrl: z.string().optional(),
           }),
         )
         .optional(),
@@ -504,7 +518,8 @@ const selfFormSchema = z.object({
             id: z.string(),
             namaSertifikasi: z.string().optional(),
             penyelenggara: z.string().optional(),
-            tahun: z.string().optional(),
+            tahunPerolehan: z.string().optional(),
+            tahunExpired: z.string().optional(),
             buktiUrl: z.string().optional(),
           }),
         )
@@ -597,6 +612,188 @@ type FileUploadFieldProps = {
   required?: boolean;
   helperText?: string;
 };
+
+function DocumentUploadCard({ 
+  title, 
+  description, 
+  value, 
+  onChange,
+  userId,
+  fieldKey,
+  status, 
+  helperText,
+  icon: Icon
+}: { 
+  title: string; 
+  description: string; 
+  value?: string;
+  onChange: (url: string) => void;
+  userId: string;
+  fieldKey: string;
+  status: "Sudah Upload" | "Belum Upload" | "Tidak Punya";
+  helperText: string;
+  icon: any;
+}) {
+  const [isUploading, setIsUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast({
+        variant: "destructive",
+        title: "File Terlalu Besar",
+        description: "Ukuran file maksimal 10MB.",
+      });
+      return;
+    }
+
+    setIsUploading(true);
+    const storage = getStorage();
+    const storageRef = ref(
+      storage,
+      `employee_profiles/${userId}/${fieldKey}_${Date.now()}_${file.name}`,
+    );
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    uploadTask.on(
+      "state_changed",
+      (snapshot) => {
+        setProgress(
+          Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100),
+        );
+      },
+      (error) => {
+        toast({
+          variant: "destructive",
+          title: "Upload Gagal",
+          description: error.message,
+        });
+        setIsUploading(false);
+      },
+      async () => {
+        const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+        onChange(downloadUrl);
+        setIsUploading(false);
+        toast({
+          title: "Upload Berhasil",
+          description: `${title} telah diunggah.`,
+        });
+      },
+    );
+  };
+
+  return (
+    <Card className="overflow-hidden border-slate-800 bg-slate-900/40 rounded-3xl shadow-sm hover:shadow-md transition-all duration-300">
+      <CardContent className="p-0">
+        <div className="flex flex-col md:flex-row">
+          <div className="flex-1 p-6 sm:p-8 space-y-6">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-4">
+                <div className={`h-12 w-12 rounded-2xl flex items-center justify-center ${
+                  status === "Sudah Upload" ? "bg-emerald-500/10 text-emerald-500" : 
+                  status === "Belum Upload" ? "bg-amber-500/10 text-amber-500" : "bg-slate-500/10 text-slate-500"
+                }`}>
+                  <Icon className="h-6 w-6" />
+                </div>
+                <div>
+                  <h4 className="text-lg font-bold text-slate-100 tracking-tight">{title}</h4>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className={`h-1.5 w-1.5 rounded-full ${
+                      status === "Sudah Upload" ? "bg-emerald-500" : 
+                      status === "Belum Upload" ? "bg-amber-500" : "bg-slate-500"
+                    }`} />
+                    <span className={`text-[10px] font-bold uppercase tracking-widest ${
+                      status === "Sudah Upload" ? "text-emerald-500" : 
+                      status === "Belum Upload" ? "text-amber-500" : "text-slate-500"
+                    }`}>
+                      {status}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-sm text-slate-400 leading-relaxed">
+              {description}
+            </p>
+
+            <div className="flex flex-wrap items-center gap-4 pt-2">
+              <Button 
+                type="button" 
+                variant={status === "Sudah Upload" ? "outline" : "secondary"}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading || status === "Tidak Punya"}
+                className="rounded-xl px-6 h-11 font-semibold"
+              >
+                {isUploading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <FileUp className="mr-2 h-4 w-4" />
+                )}
+                {status === "Sudah Upload" ? "Ganti File" : "Upload File"}
+              </Button>
+              <p className="text-[10px] text-slate-500 italic">
+                {helperText}
+              </p>
+            </div>
+            
+            {isUploading && (
+              <div className="space-y-2 pt-2">
+                <Progress value={progress} className="h-1.5 rounded-full" />
+                <p className="text-[10px] text-right text-slate-400 font-medium">{progress}% mengunggah...</p>
+              </div>
+            )}
+          </div>
+
+          <div className={`md:w-64 lg:w-72 border-l border-slate-800 flex items-center justify-center p-6 sm:p-8 ${
+            !value ? "bg-slate-950/20 grayscale opacity-40" : "bg-slate-950/60"
+          }`}>
+            {value ? (
+              <div className="group relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 shadow-inner">
+                {/\.(jpg|jpeg|png|webp|gif)$/i.test(value) ? (
+                  <img src={value} alt={title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-slate-500">
+                    <FileText className="h-10 w-10" />
+                    <span className="text-xs font-medium uppercase tracking-widest">PDF Document</span>
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                  <Button 
+                    type="button" 
+                    variant="ghost" 
+                    size="sm" 
+                    className="text-white hover:text-primary"
+                    onClick={() => window.open(value, "_blank")}
+                  >
+                    <Eye className="mr-2 h-4 w-4" /> Lihat Detail
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="w-full aspect-[4/3] rounded-2xl border-2 border-dashed border-slate-800 flex flex-col items-center justify-center gap-3 text-slate-600">
+                <FileUp className="h-10 w-10" />
+                <span className="text-[10px] font-bold uppercase tracking-widest text-center px-4">Preview Belum Tersedia</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </CardContent>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,application/pdf"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+    </Card>
+  );
+}
 
 function FileUploadField({
   label,
@@ -912,7 +1109,6 @@ export function EmployeeSelfProfileForm({
         bpjsKetenagakerjaanPhotoUrl: "",
         simNumber: "",
         simPhotoUrl: "",
-        ijazahUrl: "",
       },
       dataRekening: {
         bankName: "",
@@ -957,6 +1153,7 @@ export function EmployeeSelfProfileForm({
           namaInstitusi: "",
           jurusan: "",
           tahunLulus: "",
+          ijazahUrl: "",
         },
         riwayatPendidikan: [],
         sertifikasiPelatihan: [],
@@ -1038,7 +1235,9 @@ export function EmployeeSelfProfileForm({
     const dk = (initialProfile as any)?.dataKeluarga || {};
     const pp = (initialProfile as any)?.pendidikanDanPengembangan || {};
 
-    console.log("DEBUG: Initial profile raw data:", initialProfile);
+    if (process.env.NODE_ENV === "development") {
+      console.log("DEBUG: Initial profile raw data:", initialProfile);
+    }
 
     // Helper to normalize dropdown values (trim and fallback to empty string)
     const normalize = (val: any) => {
@@ -1046,16 +1245,18 @@ export function EmployeeSelfProfileForm({
       return String(val).trim();
     };
 
-    console.log("DEBUG: Data Diri Identitas from DB:", dd);
-    console.log("DEBUG: Gender from DB:", dd.gender || initialProfile.gender);
-    console.log(
-      "DEBUG: Religion from DB:",
-      dd.religion || initialProfile.religion,
-    );
-    console.log(
-      "DEBUG: Marital Status from DB:",
-      dd.maritalStatus || initialProfile.maritalStatus,
-    );
+    if (process.env.NODE_ENV === "development") {
+      console.log("DEBUG: Data Diri Identitas from DB:", dd);
+      console.log("DEBUG: Gender from DB:", dd.gender || initialProfile.gender);
+      console.log(
+        "DEBUG: Religion from DB:",
+        dd.religion || initialProfile.religion,
+      );
+      console.log(
+        "DEBUG: Marital Status from DB:",
+        dd.maritalStatus || initialProfile.maritalStatus,
+      );
+    }
 
     // Explicitly normalize dropdown values for debugging and safety
     const genderValue = normalize(dd.gender || initialProfile.gender || "");
@@ -1081,14 +1282,16 @@ export function EmployeeSelfProfileForm({
         "Tidak",
     );
 
-    console.log("DEBUG: Normalized Values for Reset:", {
-      gender: genderValue,
-      maritalStatus: maritalStatusValue,
-      religion: religionValue,
-      nationality: nationalityValue,
-      golonganDarah: golonganDarahValue,
-      hasPhysicalCondition: physicalConditionValue,
-    });
+    if (process.env.NODE_ENV === "development") {
+      console.log("DEBUG: Normalized Values for Reset:", {
+        gender: genderValue,
+        maritalStatus: maritalStatusValue,
+        religion: religionValue,
+        nationality: nationalityValue,
+        golonganDarah: golonganDarahValue,
+        hasPhysicalCondition: physicalConditionValue,
+      });
+    }
 
     const resetValues = {
       dataDiriIdentitas: {
@@ -1194,7 +1397,6 @@ export function EmployeeSelfProfileForm({
           "",
         simNumber: docAdmin.simNumber || initialProfile.simNumber || "",
         simPhotoUrl: docAdmin.simPhotoUrl || initialProfile.simPhotoUrl || "",
-        ijazahUrl: docAdmin.ijazahUrl || (initialProfile as any)?.ijazahUrl || "",
       },
       dataRekening: {
         bankName: rek.bankName || initialProfile.bankName || "",
@@ -1206,7 +1408,10 @@ export function EmployeeSelfProfileForm({
           "",
         bankDocumentUrl:
           rek.bankDocumentUrl || initialProfile.bankDocumentUrl || "",
-        buktiRekeningUrl: rek.buktiRekeningUrl || (initialProfile as any)?.buktiRekeningUrl || "",
+        buktiRekeningUrl:
+          rek.buktiRekeningUrl ||
+          (initialProfile as any)?.buktiRekeningUrl ||
+          "",
       },
       kontakDarurat: Array.isArray(kd)
         ? kd.map((k: any) => ({
@@ -1304,6 +1509,7 @@ export function EmployeeSelfProfileForm({
           namaInstitusi: pp.pendidikanTerakhir?.namaInstitusi || "",
           jurusan: pp.pendidikanTerakhir?.jurusan || "",
           tahunLulus: pp.pendidikanTerakhir?.tahunLulus || "",
+          ijazahUrl: pp.pendidikanTerakhir?.ijazahUrl || "",
         },
         riwayatPendidikan: (pp.riwayatPendidikan || []).map((p: any) => ({
           id: p.id || crypto.randomUUID(),
@@ -1311,18 +1517,22 @@ export function EmployeeSelfProfileForm({
           namaInstitusi: p.namaInstitusi || "",
           jurusan: p.jurusan || "",
           tahunLulus: p.tahunLulus || "",
+          ijazahUrl: p.ijazahUrl || "",
         })),
         sertifikasiPelatihan: (pp.sertifikasiPelatihan || []).map((s: any) => ({
           id: s.id || crypto.randomUUID(),
           namaSertifikasi: s.namaSertifikasi || "",
           penyelenggara: s.penyelenggara || "",
-          tahun: s.tahun || "",
+          tahunPerolehan: s.tahunPerolehan || s.tahun || "",
+          tahunExpired: s.tahunExpired || "",
           buktiUrl: s.buktiUrl || "",
         })),
       },
     };
 
-    console.log("DEBUG: Final normalized form reset values:", resetValues);
+    if (process.env.NODE_ENV === "development") {
+      console.log("DEBUG: Final normalized form reset values:", resetValues);
+    }
     form.reset(resetValues);
     hasInitialized.current = true;
   }, [initialProfile, form]);
@@ -1398,9 +1608,33 @@ export function EmployeeSelfProfileForm({
         ? { id: region.id, name: region.name }
         : null;
 
+    const employeeDocuments = [
+      { name: "NPWP", url: values.dokumenAdministratif.npwpPhotoUrl, type: "npwp" },
+      { name: "BPJS Kesehatan", url: values.dokumenAdministratif.bpjsKesehatanPhotoUrl, type: "bpjs_ks" },
+      { name: "BPJS Ketenagakerjaan", url: values.dokumenAdministratif.bpjsKetenagakerjaanPhotoUrl, type: "bpjs_tk" },
+      { name: "Bukti Rekening", url: values.dataRekening.bankDocumentUrl, type: "bank_proof" },
+      { name: "KTP", url: values.dataDiriIdentitas.ktpPhotoUrl, type: "ktp" },
+      ...(values.pendidikanDanPengembangan?.riwayatPendidikan
+        ?.filter(p => p.ijazahUrl)
+        .map(p => ({ 
+          name: `Ijazah ${p.jenjang || ""}`, 
+          url: p.ijazahUrl, 
+          type: "education_ijazah" 
+        })) || []),
+      ...(values.pendidikanDanPengembangan?.pendidikanTerakhir?.ijazahUrl 
+        ? [{
+            name: "Ijazah Terakhir",
+            url: values.pendidikanDanPengembangan.pendidikanTerakhir.ijazahUrl,
+            type: "education_ijazah_last"
+          }] 
+        : [])
+    ].filter(doc => doc.url);
+
     const employeePayload = cleanUndefinedValues({
       uid: firebaseUser.uid,
+      // 1. Data Diri Identitas
       dataDiriIdentitas: values.dataDiriIdentitas,
+      // 2. Alamat
       alamat: {
         ...values.alamat,
         ktp: {
@@ -1418,48 +1652,32 @@ export function EmployeeSelfProfileForm({
           kelurahan: getRegionValue(values.alamat.domisili?.kelurahan),
         },
       },
+      // 3. Dokumen Administratif
       dokumenAdministratif: values.dokumenAdministratif,
+      // 4. Data Rekening
       dataRekening: values.dataRekening,
+      // 5. Data Keluarga
       dataKeluarga: values.dataKeluarga,
+      // 6. Kontak Darurat
       kontakDarurat: values.kontakDarurat,
+      // 7. Pendidikan & Pengembangan
       pendidikanDanPengembangan: values.pendidikanDanPengembangan || {},
+      // 8. employeeDocuments (Aggregated for easy access)
+      employeeDocuments,
+      // 9. Metadata
       updatedAt: serverTimestamp(),
       completeness: isDraft
         ? { isComplete: false }
         : { isComplete: true, completedAt: serverTimestamp() },
-      // --- Flat compatibility fields (fix dropdown reset on refresh) ---
+      // --- Compatibility / Quick access top-level fields ---
       fullName: values.dataDiriIdentitas.fullName,
+      email: values.dataDiriIdentitas.personalEmail || initialProfile.email || "",
       phone: values.dataDiriIdentitas.phone,
-      gender: values.dataDiriIdentitas.gender || "",
-      birthPlace: values.dataDiriIdentitas.birthPlace || "",
-      birthDate: values.dataDiriIdentitas.birthDate || "",
-      maritalStatus: values.dataDiriIdentitas.maritalStatus || "",
-      religion: values.dataDiriIdentitas.religion || "",
-      nationality: values.dataDiriIdentitas.nationality || "",
-      bloodType: values.dataDiriIdentitas.golonganDarah || "",
-      heightCm: values.dataDiriIdentitas.tinggiBadan || "",
-      weightKg: values.dataDiriIdentitas.beratBadan || "",
-      hasPhysicalCondition: values.dataDiriIdentitas.hasPhysicalCondition || "",
-      physicalConditionDetails: values.dataDiriIdentitas.physicalConditionDetails || "",
-      nik: values.dataDiriIdentitas.nik || "",
-      profilePhotoUrl: values.dataDiriIdentitas.profilePhotoUrl || "",
-      ktpPhotoUrl: values.dataDiriIdentitas.ktpPhotoUrl || "",
-      // --- Explicitly requested fields for synchronization ---
-      hasNpwp: !values.dokumenAdministratif.noNpwp,
-      npwpNumber: values.dokumenAdministratif.npwp || "",
-      npwpUrl: values.dokumenAdministratif.npwpPhotoUrl || "",
-      hasBpjsKesehatan: !values.dokumenAdministratif.noBpjsKesehatan,
-      bpjsKesehatanNumber: values.dokumenAdministratif.bpjsKesehatan || "",
-      bpjsKesehatanUrl: values.dokumenAdministratif.bpjsKesehatanPhotoUrl || "",
-      hasBpjsKetenagakerjaan: !values.dokumenAdministratif.noBpjsKetenagakerjaan,
-      bpjsKetenagakerjaanNumber: values.dokumenAdministratif.bpjsKetenagakerjaan || "",
-      bpjsKetenagakerjaanUrl: values.dokumenAdministratif.bpjsKetenagakerjaanPhotoUrl || "",
-      ijazahUrl: values.dokumenAdministratif.ijazahUrl || "",
-      buktiRekeningUrl: values.dataRekening.buktiRekeningUrl || values.dataRekening.bankDocumentUrl || "",
-      bankProofUrl: values.dataRekening.buktiRekeningUrl || values.dataRekening.bankDocumentUrl || "",
     });
 
-    console.log("FINAL PAYLOAD:", employeePayload);
+    if (process.env.NODE_ENV === "development") {
+      console.log("FINAL PAYLOAD:", employeePayload);
+    }
 
     batch.set(employeeProfileRef, employeePayload, { merge: true });
     batch.update(userRef, {
@@ -2307,182 +2525,141 @@ export function EmployeeSelfProfileForm({
         );
       case 2:
         return (
-          <div key="step-dokumen" className="space-y-12">
-            {/* NPWP */}
-            <section className="space-y-6">
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-3">
-                  <div className="h-8 w-1.5 rounded-full bg-primary" />
-                  <h4 className="text-lg font-bold text-slate-100">
-                    Dokumen Perpajakan (NPWP)
-                  </h4>
-                </div>
-                <p className="text-sm text-slate-400">
-                  Data ini digunakan untuk pelaporan pajak penghasilan sesuai
-                  peraturan yang berlaku.
-                </p>
-              </div>
+          <div key="step-dokumen" className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="space-y-2">
+              <h4 className="text-xl font-bold text-slate-100 flex items-center gap-3 tracking-tight">
+                <div className="h-2 w-2 rounded-full bg-primary" />
+                Dokumen Administratif
+              </h4>
+              <p className="text-sm text-slate-400 max-w-2xl leading-relaxed">
+                Silahkan lengkapi dokumen administratif di bawah ini. Dokumen ini sangat penting untuk proses penggajian (payroll), pajak, dan asuransi kesehatan Anda.
+              </p>
+            </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-                <div className="lg:col-span-1 space-y-6">
-                  <FormField
-                    control={form.control}
-                    name="dokumenAdministratif.noNpwp"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-2xl border border-slate-800 bg-slate-900/30 p-4">
-                        <FormControl>
+            <div className="grid grid-cols-1 gap-8">
+              {/* NPWP Card */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between px-2">
+                  <div className="flex flex-col gap-1">
+                    <FormField
+                      control={form.control}
+                      name="dokumenAdministratif.noNpwp"
+                      render={({ field }) => (
+                        <div className="flex items-center space-x-3">
                           <Checkbox
+                            id="no-npwp"
                             checked={field.value}
                             onCheckedChange={field.onChange}
+                            className="h-5 w-5 rounded-md border-slate-700 data-[state=checked]:bg-primary"
                           />
-                        </FormControl>
-                        <div className="space-y-1 leading-none">
-                          <FormLabel className="text-sm font-medium cursor-pointer">
+                          <Label htmlFor="no-npwp" className="text-xs font-bold text-slate-400 uppercase tracking-widest cursor-pointer hover:text-slate-300 transition-colors">
                             Saya belum memiliki NPWP
-                          </FormLabel>
+                          </Label>
                         </div>
-                      </FormItem>
-                    )}
-                  />
-
-                  {!watchedNoNpwp && (
-                    <FormField
-                      control={form.control}
-                      name="dokumenAdministratif.npwp"
-                      render={({ field }) => (
-                        <FormItem className="animate-in fade-in slide-in-from-top-2 duration-300">
-                          <FormLabel>Nomor NPWP</FormLabel>
-                          <FormControl>
-                            <Input
-                              {...field}
-                              value={field.value ?? ""}
-                              placeholder="15 digit angka NPWP"
-                              inputMode="numeric"
-                              onChange={(e) => {
-                                const val = e.target.value.replace(
-                                  /[^0-9]/g,
-                                  "",
-                                );
-                                field.onChange(val);
-                              }}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
                       )}
                     />
-                  )}
+                  </div>
                 </div>
 
-                <div className="lg:col-span-2 space-y-6">
-                  {!watchedNoNpwp && (
-                    <FormField
-                      control={form.control}
-                      name="dokumenAdministratif.npwpFilePending"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-2xl border border-slate-800 bg-slate-900/30 p-4">
-                          <FormControl>
-                            <Checkbox
-                              checked={field.value}
-                              onCheckedChange={field.onChange}
-                            />
-                          </FormControl>
-                          <div className="space-y-1 leading-none">
-                            <FormLabel className="text-sm font-medium cursor-pointer text-slate-300">
-                              Saya akan melengkapi file dokumen nanti
-                            </FormLabel>
-                          </div>
-                        </FormItem>
-                      )}
-                    />
-                  )}
+                {!form.watch("dokumenAdministratif.noNpwp") && (
+                  <div className="animate-in fade-in slide-in-from-top-4 duration-500 space-y-6">
+                    <div className="bg-slate-900/20 border border-slate-800/60 p-6 rounded-3xl">
+                      <FormField
+                        control={form.control}
+                        name="dokumenAdministratif.npwp"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Nomor NPWP (15 Digit)*</FormLabel>
+                            <FormControl>
+                              <Input
+                                {...field}
+                                value={field.value ?? ""}
+                                placeholder="00.000.000.0-000.000"
+                                className="bg-slate-950/40 h-12 rounded-xl border-slate-800 focus:border-primary/50 transition-all font-mono tracking-wider"
+                                inputMode="numeric"
+                                onChange={(e) => {
+                                  const val = e.target.value.replace(/[^0-9]/g, "");
+                                  field.onChange(val);
+                                }}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
 
-                  {!watchedNoNpwp && !watchedNpwpFilePending && (
                     <FormField
                       control={form.control}
                       name="dokumenAdministratif.npwpPhotoUrl"
                       render={({ field }) => (
-                        <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                          <FileUploadField
-                            label="Foto / Scan Kartu NPWP"
-                            value={field.value}
-                            onChange={field.onChange}
-                            userId={firebaseUser?.uid ?? ""}
-                            fieldKey="npwp_photo"
-                            helperText="Unggah bukti fisik NPWP dalam format JPG/PNG atau PDF."
-                          />
-                        </div>
+                        <DocumentUploadCard
+                          title="Kartu NPWP"
+                          description="Unggah foto atau scan kartu NPWP fisik Anda. Pastikan semua teks terbaca dengan jelas untuk keperluan validasi pajak."
+                          value={typeof field.value === "string" ? field.value : ""}
+                          onChange={field.onChange}
+                          userId={firebaseUser?.uid ?? ""}
+                          fieldKey="npwp_photo"
+                          status={field.value ? "Sudah Upload" : "Belum Upload"}
+                          helperText="Format: JPG, PNG, PDF (Maks. 10MB)"
+                          icon={CreditCard}
+                        />
                       )}
                     />
-                  )}
-                </div>
-              </div>
-            </section>
-
-            <Separator className="bg-slate-800/50" />
-
-            {/* BPJS */}
-            <section className="space-y-6">
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-3">
-                  <div className="h-8 w-1.5 rounded-full bg-primary" />
-                  <h4 className="text-lg font-bold text-slate-100">
-                    Asuransi & Jaminan Sosial (BPJS)
-                  </h4>
-                </div>
-                <p className="text-sm text-slate-400">
-                  Data BPJS diperlukan untuk pendaftaran jaminan kesehatan dan
-                  ketenagakerjaan perusahaan.
-                </p>
+                  </div>
+                )}
+                {form.watch("dokumenAdministratif.noNpwp") && (
+                  <div className="bg-slate-950/20 border-2 border-dashed border-slate-800/40 rounded-3xl p-10 flex flex-col items-center justify-center text-center space-y-4 opacity-60">
+                    <div className="h-16 w-16 rounded-2xl bg-slate-800/30 flex items-center justify-center">
+                      <CreditCard className="h-8 w-8 text-slate-600" />
+                    </div>
+                    <p className="text-sm text-slate-500 font-medium max-w-xs leading-relaxed italic">
+                      Anda memilih untuk melewati pengisian NPWP. Harap segera melengkapi jika sudah memiliki di kemudian hari.
+                    </p>
+                  </div>
+                )}
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-                {/* BPJS Kesehatan */}
-                <div className="space-y-6">
-                  <h5 className="text-sm font-bold text-slate-300 flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-blue-500" />
-                    BPJS Kesehatan
-                  </h5>
-
+              {/* BPJS Kesehatan Card */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between px-2">
                   <FormField
                     control={form.control}
                     name="dokumenAdministratif.noBpjsKesehatan"
                     render={({ field }) => (
-                      <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-2xl border border-slate-800 bg-slate-900/30 p-4">
-                        <FormControl>
-                          <Checkbox
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                        <div className="space-y-1 leading-none">
-                          <FormLabel className="text-sm font-medium cursor-pointer">
-                            Saya belum memiliki BPJS Kesehatan
-                          </FormLabel>
-                        </div>
-                      </FormItem>
+                      <div className="flex items-center space-x-3">
+                        <Checkbox
+                          id="no-bpjs-ks"
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          className="h-5 w-5 rounded-md border-slate-700 data-[state=checked]:bg-blue-500"
+                        />
+                        <Label htmlFor="no-bpjs-ks" className="text-xs font-bold text-slate-400 uppercase tracking-widest cursor-pointer hover:text-slate-300 transition-colors">
+                          Saya belum memiliki BPJS Kesehatan
+                        </Label>
+                      </div>
                     )}
                   />
+                </div>
 
-                  {!watchedNoBpjsKs && (
-                    <>
+                {!form.watch("dokumenAdministratif.noBpjsKesehatan") && (
+                  <div className="animate-in fade-in slide-in-from-top-4 duration-500 space-y-6">
+                    <div className="bg-slate-900/20 border border-slate-800/60 p-6 rounded-3xl">
                       <FormField
                         control={form.control}
                         name="dokumenAdministratif.bpjsKesehatan"
                         render={({ field }) => (
-                          <FormItem className="animate-in fade-in slide-in-from-top-2 duration-300">
-                            <FormLabel>No. BPJS Kesehatan*</FormLabel>
+                          <FormItem>
+                            <FormLabel className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Nomor BPJS Kesehatan*</FormLabel>
                             <FormControl>
                               <Input
                                 {...field}
                                 value={field.value ?? ""}
-                                placeholder="Nomor kartu BPJS Kesehatan"
+                                placeholder="0001234567890"
+                                className="bg-slate-950/40 h-12 rounded-xl border-slate-800 focus:border-blue-500/50 transition-all font-mono tracking-wider"
                                 inputMode="numeric"
                                 onChange={(e) => {
-                                  const val = e.target.value.replace(
-                                    /[^0-9]/g,
-                                    "",
-                                  );
+                                  const val = e.target.value.replace(/[^0-9]/g, "");
                                   field.onChange(val);
                                 }}
                               />
@@ -2491,74 +2668,69 @@ export function EmployeeSelfProfileForm({
                           </FormItem>
                         )}
                       />
+                    </div>
 
-                      <FormField
-                        control={form.control}
-                        name="dokumenAdministratif.bpjsKesehatanPhotoUrl"
-                        render={({ field }) => (
-                          <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                            <FileUploadField
-                              label="Upload Kartu BPJS Kesehatan"
-                              value={field.value}
-                              onChange={field.onChange}
-                              userId={firebaseUser?.uid ?? ""}
-                              fieldKey="bpjs_ks_photo"
-                              required
-                              helperText="Kartu digital atau foto kartu fisik."
-                            />
-                          </div>
-                        )}
-                      />
-                    </>
-                  )}
-                </div>
+                    <FormField
+                      control={form.control}
+                      name="dokumenAdministratif.bpjsKesehatanPhotoUrl"
+                      render={({ field }) => (
+                        <DocumentUploadCard
+                          title="Kartu BPJS Kesehatan"
+                          description="Unggah kartu BPJS Kesehatan (JKN-KIS) Anda. Kartu digital dari aplikasi Mobile JKN juga diperbolehkan."
+                          value={typeof field.value === "string" ? field.value : ""}
+                          onChange={field.onChange}
+                          userId={firebaseUser?.uid ?? ""}
+                          fieldKey="bpjs_ks_photo"
+                          status={field.value ? "Sudah Upload" : "Belum Upload"}
+                          helperText="Format: JPG, PNG, PDF (Maks. 10MB)"
+                          icon={ShieldCheck}
+                        />
+                      )}
+                    />
+                  </div>
+                )}
+              </div>
 
-                {/* BPJS Ketenagakerjaan */}
-                <div className="space-y-6">
-                  <h5 className="text-sm font-bold text-slate-300 flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-green-500" />
-                    BPJS Ketenagakerjaan
-                  </h5>
-
+              {/* BPJS Ketenagakerjaan Card */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between px-2">
                   <FormField
                     control={form.control}
                     name="dokumenAdministratif.noBpjsKetenagakerjaan"
                     render={({ field }) => (
-                      <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-2xl border border-slate-800 bg-slate-900/30 p-4">
-                        <FormControl>
-                          <Checkbox
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                        <div className="space-y-1 leading-none">
-                          <FormLabel className="text-sm font-medium cursor-pointer">
-                            Saya belum memiliki BPJS Ketenagakerjaan
-                          </FormLabel>
-                        </div>
-                      </FormItem>
+                      <div className="flex items-center space-x-3">
+                        <Checkbox
+                          id="no-bpjs-tk"
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          className="h-5 w-5 rounded-md border-slate-700 data-[state=checked]:bg-green-500"
+                        />
+                        <Label htmlFor="no-bpjs-tk" className="text-xs font-bold text-slate-400 uppercase tracking-widest cursor-pointer hover:text-slate-300 transition-colors">
+                          Saya belum memiliki BPJS Ketenagakerjaan
+                        </Label>
+                      </div>
                     )}
                   />
+                </div>
 
-                  {!watchedNoBpjsTk && (
-                    <>
+                {!form.watch("dokumenAdministratif.noBpjsKetenagakerjaan") && (
+                  <div className="animate-in fade-in slide-in-from-top-4 duration-500 space-y-6">
+                    <div className="bg-slate-900/20 border border-slate-800/60 p-6 rounded-3xl">
                       <FormField
                         control={form.control}
                         name="dokumenAdministratif.bpjsKetenagakerjaan"
                         render={({ field }) => (
-                          <FormItem className="animate-in fade-in slide-in-from-top-2 duration-300">
-                            <FormLabel>No. BPJS Ketenagakerjaan*</FormLabel>
+                          <FormItem>
+                            <FormLabel className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Nomor BPJS Ketenagakerjaan*</FormLabel>
                             <FormControl>
                               <Input
                                 {...field}
                                 value={field.value ?? ""}
-                                placeholder="Nomor kartu BPJS Ketenagakerjaan"
+                                placeholder="0001234567890"
+                                className="bg-slate-950/40 h-12 rounded-xl border-slate-800 focus:border-green-500/50 transition-all font-mono tracking-wider"
                                 inputMode="numeric"
                                 onChange={(e) => {
-                                  const val = e.target.value.replace(
-                                    /[^0-9]/g,
-                                    "",
-                                  );
+                                  const val = e.target.value.replace(/[^0-9]/g, "");
                                   field.onChange(val);
                                 }}
                               />
@@ -2567,65 +2739,79 @@ export function EmployeeSelfProfileForm({
                           </FormItem>
                         )}
                       />
-
-                      <FormField
-                        control={form.control}
-                        name="dokumenAdministratif.bpjsKetenagakerjaanPhotoUrl"
-                        render={({ field }) => (
-                          <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                            <FileUploadField
-                              label="Upload Kartu BPJS Ketenagakerjaan"
-                              value={field.value}
-                              onChange={field.onChange}
-                              userId={firebaseUser?.uid ?? ""}
-                              fieldKey="bpjs_tk_photo"
-                              required
-                              helperText="Kartu digital atau foto kartu fisik."
-                            />
-                          </div>
-                        )}
-                      />
-                    </>
-                  )}
-                </div>
-              </div>
-            </section>
-
-            {requiresSim && (
-              <>
-                <Separator className="bg-slate-800/50" />
-                <section className="space-y-6">
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-3">
-                      <div className="h-8 w-1.5 rounded-full bg-primary" />
-                      <h4 className="text-lg font-bold text-slate-100">
-                        Dokumen SIM (Opsional)
-                      </h4>
                     </div>
-                    <p className="text-sm text-slate-400">
-                      Digunakan untuk posisi yang membutuhkan mobilitas
-                      kendaraan.
-                    </p>
-                  </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <FormField
+                      control={form.control}
+                      name="dokumenAdministratif.bpjsKetenagakerjaanPhotoUrl"
+                      render={({ field }) => (
+                        <DocumentUploadCard
+                          title="Kartu BPJS Ketenagakerjaan"
+                          description="Unggah kartu BPJS Ketenagakerjaan (Jamsostek). Digunakan untuk keperluan pelaporan JHT, JKK, dan JP."
+                          value={typeof field.value === "string" ? field.value : ""}
+                          onChange={field.onChange}
+                          userId={firebaseUser?.uid ?? ""}
+                          fieldKey="bpjs_tk_photo"
+                          status={field.value ? "Sudah Upload" : "Belum Upload"}
+                          helperText="Format: JPG, PNG, PDF (Maks. 10MB)"
+                          icon={Briefcase}
+                        />
+                      )}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Bukti Rekening Card */}
+              <div className="space-y-4">
+                <div className="px-2">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                    Dokumen Perbankan
+                  </span>
+                </div>
+                <FormField
+                  control={form.control}
+                  name="dataRekening.bankDocumentUrl"
+                  render={({ field }) => (
+                    <DocumentUploadCard
+                      title="Bukti Rekening / Tabungan"
+                      description="Unggah foto halaman depan buku tabungan atau screenshot detail rekening dari mobile banking. Pastikan Nama dan Nomor Rekening terlihat jelas."
+                      value={typeof field.value === "string" ? field.value : ""}
+                      onChange={field.onChange}
+                      userId={firebaseUser?.uid ?? ""}
+                      fieldKey="bukti_rekening"
+                      status={field.value ? "Sudah Upload" : "Belum Upload"}
+                      helperText="Penting untuk akurasi transfer gaji."
+                      icon={Wallet}
+                    />
+                  )}
+                />
+              </div>
+
+              {/* SIM Card (Optional / Conditional) */}
+              {requiresSim && (
+                <div className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-500">
+                  <div className="px-2">
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                      Izin Mengemudi (Opsional)
+                    </span>
+                  </div>
+                  <div className="bg-slate-900/20 border border-slate-800/60 p-6 rounded-3xl mb-6">
                     <FormField
                       control={form.control}
                       name="dokumenAdministratif.simNumber"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Nomor SIM</FormLabel>
+                          <FormLabel className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Nomor SIM</FormLabel>
                           <FormControl>
                             <Input
                               {...field}
                               value={field.value ?? ""}
-                              placeholder="Nomor SIM Anda"
+                              placeholder="Masukkan nomor SIM Anda"
+                              className="bg-slate-950/40 h-12 rounded-xl border-slate-800"
                               inputMode="numeric"
                               onChange={(e) => {
-                                const val = e.target.value.replace(
-                                  /[^0-9]/g,
-                                  "",
-                                );
+                                const val = e.target.value.replace(/[^0-9]/g, "");
                                 field.onChange(val);
                               }}
                             />
@@ -2634,119 +2820,84 @@ export function EmployeeSelfProfileForm({
                         </FormItem>
                       )}
                     />
-
-                    <FormField
-                      control={form.control}
-                      name="dokumenAdministratif.simPhotoUrl"
-                      render={({ field }) => (
-                        <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                          <FileUploadField
-                            label="Upload Foto SIM"
-                            value={field.value}
-                            onChange={field.onChange}
-                            userId={firebaseUser?.uid ?? ""}
-                            fieldKey="sim_photo"
-                            helperText="Foto SIM asli yang terlihat jelas."
-                          />
-                        </div>
-                      )}
-                    />
                   </div>
-                </section>
-              </>
-            )}
-
-            <Separator className="bg-slate-800/50" />
-            
-            <section className="space-y-6">
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-3">
-                  <div className="h-8 w-1.5 rounded-full bg-primary" />
-                  <h4 className="text-lg font-bold text-slate-100">
-                    Ijazah Terakhir
-                  </h4>
-                </div>
-                <p className="text-sm text-slate-400">
-                  Unggah scan/foto Ijazah Terakhir untuk keperluan validasi pendidikan.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <FormField
-                  control={form.control}
-                  name="dokumenAdministratif.ijazahUrl"
-                  render={({ field }) => (
-                    <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                      <FileUploadField
-                        label="Upload Ijazah Terakhir"
-                        value={field.value}
+                  <FormField
+                    control={form.control}
+                    name="dokumenAdministratif.simPhotoUrl"
+                    render={({ field }) => (
+                      <DocumentUploadCard
+                        title="Surat Izin Mengemudi (SIM)"
+                        description="Unggah foto SIM Anda jika posisi Anda membutuhkan mobilitas menggunakan kendaraan perusahaan."
+                        value={typeof field.value === "string" ? field.value : ""}
                         onChange={field.onChange}
                         userId={firebaseUser?.uid ?? ""}
-                        fieldKey="ijazah_terakhir"
-                        helperText="Format JPG/PNG atau PDF. Maksimal 10MB."
+                        fieldKey="sim_photo"
+                        status={field.value ? "Sudah Upload" : "Belum Upload"}
+                        helperText="Format: JPG, PNG (Maks. 10MB)"
+                        icon={Car}
                       />
-                    </div>
-                  )}
-                />
-              </div>
-            </section>
+                    )}
+                  />
+                </div>
+              )}
+            </div>
           </div>
         );
       case 3:
         return (
-          <div key="step-rekening" className="space-y-12">
-            {/* Rekening Bank */}
-            <section className="space-y-6">
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-3">
-                  <div className="h-8 w-1.5 rounded-full bg-primary" />
-                  <h4 className="text-lg font-bold text-slate-100">
-                    Data Rekening Bank
-                  </h4>
-                </div>
-                <p className="text-sm text-slate-400">
-                  Informasi rekening untuk keperluan pembayaran gaji (payroll).
-                </p>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div key="step-rekening" className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="space-y-2">
+              <h4 className="text-xl font-bold text-slate-100 flex items-center gap-3 tracking-tight">
+                <div className="h-2 w-2 rounded-full bg-amber-500" />
+                Data Rekening & Finansial
+              </h4>
+              <p className="text-sm text-slate-400 max-w-2xl leading-relaxed">
+                Informasi ini digunakan untuk keperluan transfer gaji dan tunjangan lainnya. Mohon pastikan data yang Anda masukkan akurat.
+              </p>
+            </div>
+
+            <div className="bg-slate-900/30 border border-slate-800/60 rounded-[2.5rem] p-8 md:p-10 shadow-xl space-y-10">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                 <FormField
                   control={form.control}
                   name="dataRekening.bankName"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Nama Bank</FormLabel>
-                      <FormControl>
-                        <Select
-                          onValueChange={field.onChange}
-                          value={field.value}
-                        >
-                          <SelectTrigger>
+                      <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">Nama Bank*</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value || ""}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80">
                             <SelectValue placeholder="Pilih Bank" />
                           </SelectTrigger>
-                          <SelectContent>
-                            {INDONESIAN_BANKS.map((bank) => (
-                              <SelectItem key={bank} value={bank}>
-                                {bank}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </FormControl>
+                        </FormControl>
+                        <SelectContent className="bg-slate-900 border-slate-800">
+                          {INDONESIAN_BANKS.map((opt) => (
+                            <SelectItem key={opt} value={opt}>
+                              {opt}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+
                 <FormField
                   control={form.control}
                   name="dataRekening.bankAccountNumber"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Nomor Rekening</FormLabel>
+                      <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">Nomor Rekening*</FormLabel>
                       <FormControl>
                         <Input
                           {...field}
                           value={field.value ?? ""}
                           placeholder="Contoh: 1234567890"
+                          className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80 font-mono tracking-widest"
                           inputMode="numeric"
                           onChange={(e) => {
                             const val = e.target.value.replace(/[^0-9]/g, "");
@@ -2758,41 +2909,44 @@ export function EmployeeSelfProfileForm({
                     </FormItem>
                   )}
                 />
+
                 <FormField
                   control={form.control}
                   name="dataRekening.bankAccountHolderName"
                   render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nama Pemilik Rekening</FormLabel>
+                    <FormItem className="md:col-span-2">
+                      <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">Nama Pemilik Rekening*</FormLabel>
                       <FormControl>
                         <Input
                           {...field}
                           value={field.value ?? ""}
-                          placeholder="Harus sesuai dengan nama di buku tabungan"
+                          placeholder="Nama lengkap sesuai yang tertera di buku tabungan"
+                          className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80"
                         />
                       </FormControl>
+                      <FormDescription className="text-[10px] text-slate-500 italic mt-2">
+                        Pastikan nama pemilik rekening sama dengan nama lengkap Anda di KTP untuk menghindari kendala saat payroll.
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
-              <div className="mt-8">
-                <FormField
-                  control={form.control}
-                  name="dataRekening.bankDocumentUrl"
-                  render={({ field }) => (
-                    <FileUploadField
-                      label="Upload Bukti Rekening / Buku Tabungan"
-                      value={field.value}
-                      onChange={field.onChange}
-                      userId={firebaseUser?.uid ?? ""}
-                      fieldKey="bank_doc"
-                      helperText="Unggah halaman depan buku tabungan atau screenshot detail rekening M-Banking."
-                    />
-                  )}
-                />
+
+              <div className="pt-6 border-t border-slate-800/40">
+                <div className="flex items-start gap-4 p-4 rounded-2xl bg-amber-500/5 border border-amber-500/10">
+                  <div className="h-8 w-8 rounded-full bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+                    <Info className="h-4 w-4 text-amber-500" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-bold text-amber-500 uppercase tracking-widest">Informasi</p>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Bukti foto/scan buku tabungan telah Anda unggah di langkah sebelumnya (Dokumen Administratif). Pastikan data di sini sinkron dengan bukti yang diunggah.
+                    </p>
+                  </div>
+                </div>
               </div>
-            </section>
+            </div>
           </div>
         );
       case 4:
@@ -4230,25 +4384,24 @@ export function EmployeeSelfProfileForm({
           >
             {/* Pendidikan Terakhir */}
             <div className="space-y-6">
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 px-2">
                 <h4 className="text-xl font-bold text-slate-100 flex items-center gap-3 tracking-tight">
                   <div className="h-2 w-2 rounded-full bg-blue-500" />
                   Pendidikan Terakhir
                 </h4>
                 <p className="text-sm text-slate-400 max-w-xl leading-relaxed">
-                  Pendidikan terakhir wajib diisi. Riwayat pendidikan lainnya
-                  dapat ditambahkan jika diperlukan.
+                  Pendidikan terakhir wajib diisi. Data ini akan menjadi basis kualifikasi utama Anda.
                 </p>
               </div>
 
-              <div className="relative bg-slate-900/30 border border-slate-800/60 rounded-[2rem] p-6 sm:p-8 shadow-sm">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="relative bg-slate-900/30 border border-slate-800/60 rounded-[2.5rem] p-8 sm:p-10 shadow-sm space-y-10">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
                   <FormField
                     control={form.control}
                     name="pendidikanDanPengembangan.pendidikanTerakhir.jenjang"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-slate-400 text-xs uppercase tracking-wider font-semibold">
+                        <FormLabel className="text-slate-400 text-[10px] uppercase tracking-widest font-bold">
                           Jenjang*
                         </FormLabel>
                         <Select
@@ -4256,11 +4409,11 @@ export function EmployeeSelfProfileForm({
                           value={field.value || ""}
                         >
                           <FormControl>
-                            <SelectTrigger className="bg-slate-950/40 rounded-xl h-11 border-slate-800">
+                            <SelectTrigger className="bg-slate-950/40 rounded-xl h-12 border-slate-800 focus:border-blue-500/50">
                               <SelectValue placeholder="Pilih jenjang" />
                             </SelectTrigger>
                           </FormControl>
-                          <SelectContent>
+                          <SelectContent className="bg-slate-900 border-slate-800">
                             {EDUCATION_OPTIONS.map((opt) => (
                               <SelectItem key={opt} value={opt}>
                                 {opt}
@@ -4277,7 +4430,7 @@ export function EmployeeSelfProfileForm({
                     name="pendidikanDanPengembangan.pendidikanTerakhir.namaInstitusi"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-slate-400 text-xs uppercase tracking-wider font-semibold">
+                        <FormLabel className="text-slate-400 text-[10px] uppercase tracking-widest font-bold">
                           Nama Institusi*
                         </FormLabel>
                         <FormControl>
@@ -4285,7 +4438,7 @@ export function EmployeeSelfProfileForm({
                             {...field}
                             value={field.value || ""}
                             placeholder="Contoh: Universitas Indonesia"
-                            className="bg-slate-950/40 rounded-xl h-11 border-slate-800"
+                            className="bg-slate-950/40 rounded-xl h-12 border-slate-800 focus:border-blue-500/50"
                           />
                         </FormControl>
                         <FormMessage />
@@ -4297,7 +4450,7 @@ export function EmployeeSelfProfileForm({
                     name="pendidikanDanPengembangan.pendidikanTerakhir.jurusan"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-slate-400 text-xs uppercase tracking-wider font-semibold">
+                        <FormLabel className="text-slate-400 text-[10px] uppercase tracking-widest font-bold">
                           Jurusan*
                         </FormLabel>
                         <FormControl>
@@ -4305,7 +4458,7 @@ export function EmployeeSelfProfileForm({
                             {...field}
                             value={field.value || ""}
                             placeholder="Contoh: Teknik Informatika"
-                            className="bg-slate-950/40 rounded-xl h-11 border-slate-800"
+                            className="bg-slate-950/40 rounded-xl h-12 border-slate-800 focus:border-blue-500/50"
                           />
                         </FormControl>
                         <FormMessage />
@@ -4317,29 +4470,51 @@ export function EmployeeSelfProfileForm({
                     name="pendidikanDanPengembangan.pendidikanTerakhir.tahunLulus"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-slate-400 text-xs uppercase tracking-wider font-semibold">
+                        <FormLabel className="text-slate-400 text-[10px] uppercase tracking-widest font-bold">
                           Tahun Lulus*
                         </FormLabel>
-                        <FormControl>
-                          <Input
-                            {...field}
-                            value={field.value || ""}
-                            placeholder="Contoh: 2020"
-                            inputMode="numeric"
-                            maxLength={4}
-                            className="bg-slate-950/40 rounded-xl h-11 border-slate-800"
-                            onChange={(e) =>
-                              field.onChange(
-                                e.target.value.replace(/[^0-9]/g, ""),
-                              )
-                            }
-                          />
-                        </FormControl>
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value || ""}
+                        >
+                          <FormControl>
+                            <SelectTrigger className="bg-slate-950/40 rounded-xl h-12 border-slate-800 focus:border-blue-500/50">
+                              <SelectValue placeholder="Pilih tahun" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent className="bg-slate-900 border-slate-800 max-h-[300px]">
+                            {YEAR_OPTIONS.map((year) => (
+                              <SelectItem key={year} value={year}>
+                                {year}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
                 </div>
+
+                <Separator className="bg-slate-800/40" />
+
+                <FormField
+                  control={form.control}
+                  name="pendidikanDanPengembangan.pendidikanTerakhir.ijazahUrl"
+                  render={({ field }) => (
+                    <DocumentUploadCard
+                      title="Ijazah Terakhir"
+                      description="Unggah ijazah atau sertifikat lulus terakhir Anda sebagai bukti sah kualifikasi pendidikan."
+                      value={typeof field.value === "string" ? field.value : ""}
+                      onChange={field.onChange}
+                      userId={firebaseUser?.uid ?? ""}
+                      fieldKey="pendidikan_terakhir_ijazah"
+                      status={field.value ? "Sudah Upload" : "Belum Upload"}
+                      helperText="Format: JPG, PNG, PDF (Maks. 10MB)"
+                      icon={GraduationCap}
+                    />
+                  )}
+                />
               </div>
             </div>
 
@@ -4347,21 +4522,19 @@ export function EmployeeSelfProfileForm({
 
             {/* Riwayat Pendidikan Lainnya */}
             <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-2">
                 <div className="space-y-1.5">
                   <h4 className="text-xl font-bold text-slate-100 flex items-center gap-3 tracking-tight">
                     <div className="h-2 w-2 rounded-full bg-indigo-500" />
                     Riwayat Pendidikan Lainnya
                   </h4>
                   <p className="text-sm text-slate-400 max-w-xl leading-relaxed">
-                    Tambahkan riwayat pendidikan sebelumnya jika relevan.
-                    (Opsional)
+                    Tambahkan riwayat pendidikan sebelumnya (SD, SMP, SMA, atau kursus panjang).
                   </p>
                 </div>
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
                   onClick={() =>
                     appendPendidikan({
                       id: crypto.randomUUID(),
@@ -4369,128 +4542,170 @@ export function EmployeeSelfProfileForm({
                       namaInstitusi: "",
                       jurusan: "",
                       tahunLulus: "",
+                      ijazahUrl: "",
                     })
                   }
-                  className="rounded-xl border-blue-500/30 bg-blue-500/5 text-blue-400 hover:bg-blue-500/10 hover:text-blue-300 shadow-sm"
+                  className="rounded-2xl border-indigo-500/30 bg-indigo-500/5 text-indigo-400 hover:bg-indigo-500/10 hover:text-indigo-300 h-12 px-6 shadow-lg shadow-indigo-500/5 transition-all duration-300"
                 >
-                  <Plus className="mr-2 h-4 w-4" /> Tambah Pendidikan
+                  <Plus className="mr-2 h-5 w-5" /> Tambah Pendidikan
                 </Button>
               </div>
 
-              <div className="space-y-6">
+              <div className="space-y-8">
                 {pendidikanFields.map((field, index) => (
                   <div
                     key={field.id}
-                    className="relative bg-slate-900/30 border border-slate-800/60 rounded-[2rem] p-6 sm:p-8 shadow-sm"
+                    className="relative bg-slate-900/30 border border-slate-800/60 rounded-[2.5rem] p-8 sm:p-10 shadow-sm animate-in slide-in-from-right-4 duration-500"
+                    style={{ animationDelay: `${index * 100}ms` }}
                   >
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removePendidikan(index)}
-                      className="absolute right-4 top-4 h-8 w-8 rounded-full text-slate-500 hover:text-red-400 hover:bg-red-500/10"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                      <FormField
-                        control={form.control}
-                        name={`pendidikanDanPengembangan.riwayatPendidikan.${index}.jenjang`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-slate-400 text-xs uppercase tracking-wider font-semibold">
-                              Jenjang
-                            </FormLabel>
-                            <Select
-                              onValueChange={field.onChange}
-                              value={field.value || ""}
-                            >
+                    <div className="absolute top-10 left-0 w-1.5 h-12 bg-indigo-500/40 rounded-r-full" />
+                    
+                    <div className="flex items-center justify-between mb-10 border-b border-slate-800/40 pb-6">
+                       <h5 className="text-sm font-bold text-slate-300 uppercase tracking-[0.3em]">
+                        Pendidikan #{index + 1}
+                      </h5>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removePendidikan(index)}
+                        className="h-10 w-10 rounded-xl text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                      >
+                        <Trash2 className="h-5 w-5" />
+                      </Button>
+                    </div>
+
+                    <div className="space-y-10">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                        <FormField
+                          control={form.control}
+                          name={`pendidikanDanPengembangan.riwayatPendidikan.${index}.jenjang`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-slate-400 text-[10px] uppercase tracking-widest font-bold">
+                                Jenjang
+                              </FormLabel>
+                              <Select
+                                onValueChange={field.onChange}
+                                value={field.value || ""}
+                              >
+                                <FormControl>
+                                  <SelectTrigger className="bg-slate-950/40 rounded-xl h-12 border-slate-800">
+                                    <SelectValue placeholder="Pilih jenjang" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent className="bg-slate-900 border-slate-800">
+                                  {EDUCATION_OPTIONS.map((opt) => (
+                                    <SelectItem key={opt} value={opt}>
+                                      {opt}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name={`pendidikanDanPengembangan.riwayatPendidikan.${index}.namaInstitusi`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-slate-400 text-[10px] uppercase tracking-widest font-bold">
+                                Nama Institusi
+                              </FormLabel>
                               <FormControl>
-                                <SelectTrigger className="bg-slate-950/40 rounded-xl h-11 border-slate-800">
-                                  <SelectValue placeholder="Pilih jenjang" />
-                                </SelectTrigger>
+                                <Input
+                                  {...field}
+                                  value={field.value || ""}
+                                  placeholder="Contoh: SMA Negeri 1"
+                                  className="bg-slate-950/40 rounded-xl h-12 border-slate-800"
+                                />
                               </FormControl>
-                              <SelectContent>
-                                {EDUCATION_OPTIONS.map((opt) => (
-                                  <SelectItem key={opt} value={opt}>
-                                    {opt}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </FormItem>
-                        )}
-                      />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name={`pendidikanDanPengembangan.riwayatPendidikan.${index}.jurusan`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-slate-400 text-[10px] uppercase tracking-widest font-bold">
+                                Jurusan
+                              </FormLabel>
+                              <FormControl>
+                                <Input
+                                  {...field}
+                                  value={field.value || ""}
+                                  placeholder="Contoh: IPA / IPS"
+                                  className="bg-slate-950/40 rounded-xl h-12 border-slate-800"
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name={`pendidikanDanPengembangan.riwayatPendidikan.${index}.tahunLulus`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-slate-400 text-[10px] uppercase tracking-widest font-bold">
+                                Tahun Lulus
+                              </FormLabel>
+                              <Select
+                                onValueChange={field.onChange}
+                                value={field.value || ""}
+                              >
+                                <FormControl>
+                                  <SelectTrigger className="bg-slate-950/40 rounded-xl h-12 border-slate-800">
+                                    <SelectValue placeholder="Pilih tahun" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent className="bg-slate-900 border-slate-800 max-h-[300px]">
+                                  {YEAR_OPTIONS.map((year) => (
+                                    <SelectItem key={year} value={year}>
+                                      {year}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
                       <FormField
                         control={form.control}
-                        name={`pendidikanDanPengembangan.riwayatPendidikan.${index}.namaInstitusi`}
+                        name={`pendidikanDanPengembangan.riwayatPendidikan.${index}.ijazahUrl`}
                         render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-slate-400 text-xs uppercase tracking-wider font-semibold">
-                              Nama Institusi
-                            </FormLabel>
-                            <FormControl>
-                              <Input
-                                {...field}
-                                value={field.value || ""}
-                                placeholder="Contoh: Universitas Indonesia"
-                                className="bg-slate-950/40 rounded-xl h-11 border-slate-800"
-                              />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name={`pendidikanDanPengembangan.riwayatPendidikan.${index}.jurusan`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-slate-400 text-xs uppercase tracking-wider font-semibold">
-                              Jurusan
-                            </FormLabel>
-                            <FormControl>
-                              <Input
-                                {...field}
-                                value={field.value || ""}
-                                placeholder="Contoh: Teknik Informatika"
-                                className="bg-slate-950/40 rounded-xl h-11 border-slate-800"
-                              />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name={`pendidikanDanPengembangan.riwayatPendidikan.${index}.tahunLulus`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-slate-400 text-xs uppercase tracking-wider font-semibold">
-                              Tahun Lulus
-                            </FormLabel>
-                            <FormControl>
-                              <Input
-                                {...field}
-                                value={field.value || ""}
-                                placeholder="Contoh: 2020"
-                                inputMode="numeric"
-                                maxLength={4}
-                                className="bg-slate-950/40 rounded-xl h-11 border-slate-800"
-                                onChange={(e) =>
-                                  field.onChange(
-                                    e.target.value.replace(/[^0-9]/g, ""),
-                                  )
-                                }
-                              />
-                            </FormControl>
-                          </FormItem>
+                          <DocumentUploadCard
+                            title="Bukti Ijazah / Sertifikat"
+                            description="Unggah ijazah untuk riwayat pendidikan ini (Opsional)."
+                            value={typeof field.value === "string" ? field.value : ""}
+                            onChange={field.onChange}
+                            userId={firebaseUser?.uid ?? ""}
+                            fieldKey={`riwayat_pendidikan_ijazah_${index}`}
+                            status={field.value ? "Sudah Upload" : "Belum Upload"}
+                            helperText="Format: JPG, PNG, PDF (Maks. 10MB)"
+                            icon={FileText}
+                          />
                         )}
                       />
                     </div>
                   </div>
                 ))}
                 {pendidikanFields.length === 0 && (
-                  <div className="text-center p-12 border border-dashed border-slate-800 rounded-[2rem] text-slate-500 text-sm">
-                    Belum ada data pendidikan yang ditambahkan.
+                  <div className="flex flex-col items-center justify-center py-20 rounded-[3rem] border-2 border-dashed border-slate-800/40 bg-slate-950/10 text-slate-500 space-y-6">
+                    <div className="h-16 w-16 rounded-2xl bg-indigo-500/5 flex items-center justify-center border border-indigo-500/10">
+                      <GraduationCap className="h-8 w-8 text-indigo-500/20" />
+                    </div>
+                    <div className="text-center max-w-sm px-6">
+                      <p className="font-bold text-slate-300 text-lg tracking-tight">
+                        Belum ada riwayat pendidikan tambahan
+                      </p>
+                      <p className="text-xs mt-2 text-slate-500 leading-relaxed italic">
+                        Anda dapat menambahkan riwayat pendidikan lain jika diperlukan.
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>
@@ -4500,145 +4715,193 @@ export function EmployeeSelfProfileForm({
 
             {/* Sertifikasi & Pelatihan */}
             <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-2">
                 <div className="space-y-1.5">
                   <h4 className="text-xl font-bold text-slate-100 flex items-center gap-3 tracking-tight">
                     <div className="h-2 w-2 rounded-full bg-emerald-500" />
                     Sertifikasi & Pelatihan
                   </h4>
                   <p className="text-sm text-slate-400 max-w-xl leading-relaxed">
-                    Tambahkan sertifikasi atau pelatihan yang relevan.
-                    (Opsional)
+                    Tambahkan kompetensi tambahan atau sertifikasi profesional yang Anda miliki.
                   </p>
                 </div>
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
                   onClick={() =>
                     appendSertifikasi({
                       id: crypto.randomUUID(),
                       namaSertifikasi: "",
                       penyelenggara: "",
-                      tahun: "",
+                      tahunPerolehan: "",
+                      tahunExpired: "",
                       buktiUrl: "",
                     })
                   }
-                  className="rounded-xl border-emerald-500/30 bg-emerald-500/5 text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300 shadow-sm"
+                  className="rounded-2xl border-emerald-500/30 bg-emerald-500/5 text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300 h-12 px-6 shadow-lg shadow-emerald-500/5 transition-all duration-300"
                 >
-                  <Plus className="mr-2 h-4 w-4" /> Tambah Sertifikasi
+                  <Plus className="mr-2 h-5 w-5" /> Tambah Sertifikasi
                 </Button>
               </div>
 
-              <div className="space-y-6">
+              <div className="space-y-8">
                 {sertifikasiFields.map((field, index) => (
                   <div
                     key={field.id}
-                    className="relative bg-slate-900/30 border border-slate-800/60 rounded-[2rem] p-6 sm:p-8 shadow-sm"
+                    className="relative bg-slate-900/30 border border-slate-800/60 rounded-[2.5rem] p-8 sm:p-10 shadow-sm animate-in slide-in-from-right-4 duration-500"
+                    style={{ animationDelay: `${index * 100}ms` }}
                   >
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeSertifikasi(index)}
-                      className="absolute right-4 top-4 h-8 w-8 rounded-full text-slate-500 hover:text-red-400 hover:bg-red-500/10"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      <FormField
-                        control={form.control}
-                        name={`pendidikanDanPengembangan.sertifikasiPelatihan.${index}.namaSertifikasi`}
-                        render={({ field }) => (
-                          <FormItem className="lg:col-span-2">
-                            <FormLabel className="text-slate-400 text-xs uppercase tracking-wider font-semibold">
-                              Nama Sertifikasi / Pelatihan
-                            </FormLabel>
-                            <FormControl>
-                              <Input
-                                {...field}
+                    <div className="absolute top-10 left-0 w-1.5 h-12 bg-emerald-500/40 rounded-r-full" />
+                    
+                    <div className="flex items-center justify-between mb-10 border-b border-slate-800/40 pb-6">
+                       <h5 className="text-sm font-bold text-slate-300 uppercase tracking-[0.3em]">
+                        Sertifikasi #{index + 1}
+                      </h5>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeSertifikasi(index)}
+                        className="h-10 w-10 rounded-xl text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                      >
+                        <Trash2 className="h-5 w-5" />
+                      </Button>
+                    </div>
+
+                    <div className="space-y-10">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                        <FormField
+                          control={form.control}
+                          name={`pendidikanDanPengembangan.sertifikasiPelatihan.${index}.namaSertifikasi`}
+                          render={({ field }) => (
+                            <FormItem className="lg:col-span-2">
+                              <FormLabel className="text-slate-400 text-[10px] uppercase tracking-widest font-bold">
+                                Nama Sertifikasi / Pelatihan
+                              </FormLabel>
+                              <FormControl>
+                                <Input
+                                  {...field}
+                                  value={field.value || ""}
+                                  placeholder="Contoh: Google Certified Data Analyst"
+                                  className="bg-slate-950/40 rounded-xl h-12 border-slate-800"
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name={`pendidikanDanPengembangan.sertifikasiPelatihan.${index}.penyelenggara`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-slate-400 text-[10px] uppercase tracking-widest font-bold">
+                                Penyelenggara
+                              </FormLabel>
+                              <FormControl>
+                                <Input
+                                  {...field}
+                                  value={field.value || ""}
+                                  placeholder="Contoh: Coursera / Google"
+                                  className="bg-slate-950/40 rounded-xl h-12 border-slate-800"
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name={`pendidikanDanPengembangan.sertifikasiPelatihan.${index}.tahunPerolehan`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-slate-400 text-[10px] uppercase tracking-widest font-bold">
+                                Tahun Perolehan
+                              </FormLabel>
+                              <Select
+                                onValueChange={field.onChange}
                                 value={field.value || ""}
-                                placeholder="Contoh: AWS Certified Solutions Architect"
-                                className="bg-slate-950/40 rounded-xl h-11 border-slate-800"
-                              />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name={`pendidikanDanPengembangan.sertifikasiPelatihan.${index}.tahun`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-slate-400 text-xs uppercase tracking-wider font-semibold">
-                              Tahun
-                            </FormLabel>
-                            <FormControl>
-                              <Input
-                                {...field}
+                              >
+                                <FormControl>
+                                  <SelectTrigger className="bg-slate-950/40 rounded-xl h-12 border-slate-800">
+                                    <SelectValue placeholder="Pilih tahun" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent className="bg-slate-900 border-slate-800 max-h-[300px]">
+                                  {YEAR_OPTIONS.map((year) => (
+                                    <SelectItem key={year} value={year}>
+                                      {year}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name={`pendidikanDanPengembangan.sertifikasiPelatihan.${index}.tahunExpired`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-slate-400 text-[10px] uppercase tracking-widest font-bold">
+                                Tahun Berakhir / Expired
+                              </FormLabel>
+                              <Select
+                                onValueChange={field.onChange}
                                 value={field.value || ""}
-                                placeholder="Contoh: 2022"
-                                inputMode="numeric"
-                                maxLength={4}
-                                className="bg-slate-950/40 rounded-xl h-11 border-slate-800"
-                                onChange={(e) =>
-                                  field.onChange(
-                                    e.target.value.replace(/[^0-9]/g, ""),
-                                  )
-                                }
-                              />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name={`pendidikanDanPengembangan.sertifikasiPelatihan.${index}.penyelenggara`}
-                        render={({ field }) => (
-                          <FormItem className="lg:col-span-2">
-                            <FormLabel className="text-slate-400 text-xs uppercase tracking-wider font-semibold">
-                              Penyelenggara
-                            </FormLabel>
-                            <FormControl>
-                              <Input
-                                {...field}
-                                value={field.value || ""}
-                                placeholder="Contoh: Amazon Web Services"
-                                className="bg-slate-950/40 rounded-xl h-11 border-slate-800"
-                              />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
+                              >
+                                <FormControl>
+                                 <SelectTrigger className="bg-slate-950/40 rounded-xl h-12 border-slate-800">
+                                    <SelectValue placeholder="Pilih tahun atau No Expiry" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent className="bg-slate-900 border-slate-800 max-h-[300px]">
+                                  {EXPIRED_YEAR_OPTIONS.map((opt) => (
+                                    <SelectItem key={opt} value={opt}>
+                                      {opt}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormDescription className="text-[9px] text-slate-500 italic">
+                                Pilih "Tidak ada masa berlaku" jika sertifikat seumur hidup.
+                              </FormDescription>
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
                       <FormField
                         control={form.control}
                         name={`pendidikanDanPengembangan.sertifikasiPelatihan.${index}.buktiUrl`}
                         render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-slate-400 text-xs uppercase tracking-wider font-semibold">
-                              Bukti Sertifikat
-                            </FormLabel>
-                            <FormControl>
-                              <div className="pt-2">
-                                <FileUploadField
-                                  label="Upload Sertifikat"
-                                  value={field.value}
-                                  onChange={field.onChange}
-                                  userId={firebaseUser?.uid ?? ""}
-                                  fieldKey={`sertifikat_${index}`}
-                                  helperText="Format gambar atau PDF."
-                                />
-                              </div>
-                            </FormControl>
-                          </FormItem>
+                          <DocumentUploadCard
+                            title="Bukti Sertifikat"
+                            description="Unggah bukti kelulusan atau sertifikat digital Anda."
+                            value={typeof field.value === "string" ? field.value : ""}
+                            onChange={field.onChange}
+                            userId={firebaseUser?.uid ?? ""}
+                            fieldKey={`sertifikat_${index}`}
+                            status={field.value ? "Sudah Upload" : "Belum Upload"}
+                            helperText="Format: JPG, PNG, PDF (Maks. 10MB)"
+                            icon={Award}
+                          />
                         )}
                       />
                     </div>
                   </div>
                 ))}
                 {sertifikasiFields.length === 0 && (
-                  <div className="text-center p-12 border border-dashed border-slate-800 rounded-[2rem] text-slate-500 text-sm">
-                    Belum ada sertifikasi yang ditambahkan.
+                  <div className="flex flex-col items-center justify-center py-20 rounded-[3rem] border-2 border-dashed border-slate-800/40 bg-slate-950/10 text-slate-500 space-y-6">
+                    <div className="h-16 w-16 rounded-2xl bg-emerald-500/5 flex items-center justify-center border border-emerald-500/10">
+                      <Award className="h-8 w-8 text-emerald-500/20" />
+                    </div>
+                    <div className="text-center max-w-sm px-6">
+                      <p className="font-bold text-slate-300 text-lg tracking-tight">
+                        Belum ada sertifikasi yang ditambahkan
+                      </p>
+                      <p className="text-xs mt-2 text-slate-500 leading-relaxed italic">
+                        Menambahkan sertifikasi dapat meningkatkan kredibilitas profil profesional Anda.
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>

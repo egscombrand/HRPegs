@@ -193,13 +193,16 @@ export interface RiwayatPendidikan {
   namaInstitusi?: string;
   jurusan?: string;
   tahunLulus?: string;
+  ijazahUrl?: string;
 }
 
 export interface SertifikasiPelatihan {
   id: string;
   namaSertifikasi?: string;
   penyelenggara?: string;
-  tahun?: string;
+  tahun?: string; // Kept for compatibility
+  tahunPerolehan?: string;
+  tahunExpired?: string;
   buktiUrl?: string;
 }
 
@@ -286,6 +289,7 @@ export type EmployeeProfile = {
       namaInstitusi?: string;
       jurusan?: string;
       tahunLulus?: string;
+      ijazahUrl?: string;
     };
     riwayatPendidikan: RiwayatPendidikan[];
     sertifikasiPelatihan: SertifikasiPelatihan[];

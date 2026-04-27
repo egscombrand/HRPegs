@@ -1,0 +1,389 @@
+﻿case 2:
+        return (
+          <div key="step-dokumen" className="space-y-12">
+            {/* NPWP */}
+            <section className="space-y-6">
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-1.5 rounded-full bg-primary" />
+                  <h4 className="text-lg font-bold text-slate-100">
+                    Dokumen Perpajakan (NPWP)
+                  </h4>
+                </div>
+                <p className="text-sm text-slate-400">
+                  Data ini digunakan untuk pelaporan pajak penghasilan sesuai
+                  peraturan yang berlaku.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                <div className="lg:col-span-1 space-y-6">
+                  <FormField
+                    control={form.control}
+                    name="dokumenAdministratif.noNpwp"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-2xl border border-slate-800 bg-slate-900/30 p-4">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel className="text-sm font-medium cursor-pointer">
+                            Saya belum memiliki NPWP
+                          </FormLabel>
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+
+                  {!watchedNoNpwp && (
+                    <FormField
+                      control={form.control}
+                      name="dokumenAdministratif.npwp"
+                      render={({ field }) => (
+                        <FormItem className="animate-in fade-in slide-in-from-top-2 duration-300">
+                          <FormLabel>Nomor NPWP</FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={field.value ?? ""}
+                              placeholder="15 digit angka NPWP"
+                              inputMode="numeric"
+                              onChange={(e) => {
+                                const val = e.target.value.replace(
+                                  /[^0-9]/g,
+                                  "",
+                                );
+                                field.onChange(val);
+                              }}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                </div>
+
+                <div className="lg:col-span-2 space-y-6">
+                  {!watchedNoNpwp && (
+                    <FormField
+                      control={form.control}
+                      name="dokumenAdministratif.npwpFilePending"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-2xl border border-slate-800 bg-slate-900/30 p-4">
+                          <FormControl>
+                            <Checkbox
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                            />
+                          </FormControl>
+                          <div className="space-y-1 leading-none">
+                            <FormLabel className="text-sm font-medium cursor-pointer text-slate-300">
+                              Saya akan melengkapi file dokumen nanti
+                            </FormLabel>
+                          </div>
+                        </FormItem>
+                      )}
+                    />
+                  )}
+
+                  {!watchedNoNpwp && !watchedNpwpFilePending && (
+                    <FormField
+                      control={form.control}
+                      name="dokumenAdministratif.npwpPhotoUrl"
+                      render={({ field }) => (
+                        <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                          <FileUploadField
+                            label="Foto / Scan Kartu NPWP"
+                            value={field.value}
+                            onChange={field.onChange}
+                            userId={firebaseUser?.uid ?? ""}
+                            fieldKey="npwp_photo"
+                            helperText="Unggah bukti fisik NPWP dalam format JPG/PNG atau PDF."
+                          />
+                        </div>
+                      )}
+                    />
+                  )}
+                </div>
+              </div>
+            </section>
+
+            <Separator className="bg-slate-800/50" />
+
+            {/* BPJS */}
+            <section className="space-y-6">
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-1.5 rounded-full bg-primary" />
+                  <h4 className="text-lg font-bold text-slate-100">
+                    Asuransi & Jaminan Sosial (BPJS)
+                  </h4>
+                </div>
+                <p className="text-sm text-slate-400">
+                  Data BPJS diperlukan untuk pendaftaran jaminan kesehatan dan
+                  ketenagakerjaan perusahaan.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                {/* BPJS Kesehatan */}
+                <div className="space-y-6">
+                  <h5 className="text-sm font-bold text-slate-300 flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-blue-500" />
+                    BPJS Kesehatan
+                  </h5>
+
+                  <FormField
+                    control={form.control}
+                    name="dokumenAdministratif.noBpjsKesehatan"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-2xl border border-slate-800 bg-slate-900/30 p-4">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel className="text-sm font-medium cursor-pointer">
+                            Saya belum memiliki BPJS Kesehatan
+                          </FormLabel>
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+
+                  {!watchedNoBpjsKs && (
+                    <>
+                      <FormField
+                        control={form.control}
+                        name="dokumenAdministratif.bpjsKesehatan"
+                        render={({ field }) => (
+                          <FormItem className="animate-in fade-in slide-in-from-top-2 duration-300">
+                            <FormLabel>No. BPJS Kesehatan*</FormLabel>
+                            <FormControl>
+                              <Input
+                                {...field}
+                                value={field.value ?? ""}
+                                placeholder="Nomor kartu BPJS Kesehatan"
+                                inputMode="numeric"
+                                onChange={(e) => {
+                                  const val = e.target.value.replace(
+                                    /[^0-9]/g,
+                                    "",
+                                  );
+                                  field.onChange(val);
+                                }}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="dokumenAdministratif.bpjsKesehatanPhotoUrl"
+                        render={({ field }) => (
+                          <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                            <FileUploadField
+                              label="Upload Kartu BPJS Kesehatan"
+                              value={field.value}
+                              onChange={field.onChange}
+                              userId={firebaseUser?.uid ?? ""}
+                              fieldKey="bpjs_ks_photo"
+                              required
+                              helperText="Kartu digital atau foto kartu fisik."
+                            />
+                          </div>
+                        )}
+                      />
+                    </>
+                  )}
+                </div>
+
+                {/* BPJS Ketenagakerjaan */}
+                <div className="space-y-6">
+                  <h5 className="text-sm font-bold text-slate-300 flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-green-500" />
+                    BPJS Ketenagakerjaan
+                  </h5>
+
+                  <FormField
+                    control={form.control}
+                    name="dokumenAdministratif.noBpjsKetenagakerjaan"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-2xl border border-slate-800 bg-slate-900/30 p-4">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel className="text-sm font-medium cursor-pointer">
+                            Saya belum memiliki BPJS Ketenagakerjaan
+                          </FormLabel>
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+
+                  {!watchedNoBpjsTk && (
+                    <>
+                      <FormField
+                        control={form.control}
+                        name="dokumenAdministratif.bpjsKetenagakerjaan"
+                        render={({ field }) => (
+                          <FormItem className="animate-in fade-in slide-in-from-top-2 duration-300">
+                            <FormLabel>No. BPJS Ketenagakerjaan*</FormLabel>
+                            <FormControl>
+                              <Input
+                                {...field}
+                                value={field.value ?? ""}
+                                placeholder="Nomor kartu BPJS Ketenagakerjaan"
+                                inputMode="numeric"
+                                onChange={(e) => {
+                                  const val = e.target.value.replace(
+                                    /[^0-9]/g,
+                                    "",
+                                  );
+                                  field.onChange(val);
+                                }}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="dokumenAdministratif.bpjsKetenagakerjaanPhotoUrl"
+                        render={({ field }) => (
+                          <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                            <FileUploadField
+                              label="Upload Kartu BPJS Ketenagakerjaan"
+                              value={field.value}
+                              onChange={field.onChange}
+                              userId={firebaseUser?.uid ?? ""}
+                              fieldKey="bpjs_tk_photo"
+                              required
+                              helperText="Kartu digital atau foto kartu fisik."
+                            />
+                          </div>
+                        )}
+                      />
+                    </>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            {requiresSim && (
+              <>
+                <Separator className="bg-slate-800/50" />
+                <section className="space-y-6">
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-1.5 rounded-full bg-primary" />
+                      <h4 className="text-lg font-bold text-slate-100">
+                        Dokumen SIM (Opsional)
+                      </h4>
+                    </div>
+                    <p className="text-sm text-slate-400">
+                      Digunakan untuk posisi yang membutuhkan mobilitas
+                      kendaraan.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <FormField
+                      control={form.control}
+                      name="dokumenAdministratif.simNumber"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Nomor SIM</FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={field.value ?? ""}
+                              placeholder="Nomor SIM Anda"
+                              inputMode="numeric"
+                              onChange={(e) => {
+                                const val = e.target.value.replace(
+                                  /[^0-9]/g,
+                                  "",
+                                );
+                                field.onChange(val);
+                              }}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="dokumenAdministratif.simPhotoUrl"
+                      render={({ field }) => (
+                        <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                          <FileUploadField
+                            label="Upload Foto SIM"
+                            value={field.value}
+                            onChange={field.onChange}
+                            userId={firebaseUser?.uid ?? ""}
+                            fieldKey="sim_photo"
+                            helperText="Foto SIM asli yang terlihat jelas."
+                          />
+                        </div>
+                      )}
+                    />
+                  </div>
+                </section>
+              </>
+            )}
+
+            <Separator className="bg-slate-800/50" />
+
+            <section className="space-y-6">
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-1.5 rounded-full bg-primary" />
+                  <h4 className="text-lg font-bold text-slate-100">
+                    Ijazah Terakhir
+                  </h4>
+                </div>
+                <p className="text-sm text-slate-400">
+                  Unggah scan/foto Ijazah Terakhir untuk keperluan validasi
+                  pendidikan.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <FormField
+                  control={form.control}
+                  name="dokumenAdministratif.ijazahUrl"
+                  render={({ field }) => (
+                    <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                      <FileUploadField
+                        label="Upload Ijazah Terakhir"
+                        value={field.value}
+                        onChange={field.onChange}
+                        userId={firebaseUser?.uid ?? ""}
+                        fieldKey="ijazah_terakhir"
+                        helperText="Format JPG/PNG atau PDF. Maksimal 10MB."
+                      />
+                    </div>
+                  )}
+                />
+              </div>
+            </section>
+          </div>
+        );
+      
