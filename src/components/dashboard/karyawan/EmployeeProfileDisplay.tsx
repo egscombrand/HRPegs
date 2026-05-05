@@ -122,10 +122,21 @@ const FileStatus = ({
   }
 
   return (
-    <div className="flex items-center justify-between py-3 border-b border-slate-800/40 last:border-0">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-        {label}
-      </span>
+    <div className="flex items-center justify-between py-3 border-b border-slate-800/40 last:border-0 group">
+      <div className="flex items-center gap-3">
+        {url && /\.(jpeg|jpg|gif|png|webp)$/i.test(url) ? (
+          <div className="h-8 w-8 rounded-lg overflow-hidden border border-slate-700 shrink-0">
+            <img src={url} alt={label} className="h-full w-full object-cover" />
+          </div>
+        ) : url ? (
+          <div className="h-8 w-8 rounded-lg bg-slate-800/50 flex items-center justify-center border border-slate-700 shrink-0 text-slate-500">
+            <FileText className="h-4 w-4" />
+          </div>
+        ) : null}
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+          {label}
+        </span>
+      </div>
       <div className="flex items-center gap-2">
         {url ? (
           <>
@@ -496,7 +507,11 @@ export function EmployeeProfileDisplay({
                       <DataRow
                         label="Tahun Lulus"
                         value={pp.pendidikanTerakhir.tahunLulus}
-                        className="py-2 border-0"
+                        className="py-2"
+                      />
+                      <FileStatus
+                        label="Bukti Ijazah"
+                        url={pp.pendidikanTerakhir.ijazahUrl}
                       />
                     </div>
                   ) : (
@@ -526,14 +541,23 @@ export function EmployeeProfileDisplay({
                             <p className="text-sm font-bold text-slate-200 mb-1">
                               {cert.namaSertifikasi || "-"}
                             </p>
-                            <div className="flex justify-between items-center">
+                            <div className="flex justify-between items-center mb-2">
                               <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 truncate mr-2">
                                 {cert.penyelenggara || "-"}
                               </span>
-                              <span className="text-[10px] font-black uppercase tracking-widest text-primary flex-shrink-0">
-                                {cert.tahun || "-"}
-                              </span>
+                              <div className="text-right flex-shrink-0">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-primary block">
+                                  Diperoleh: {cert.tahunPerolehan || cert.tahun || "-"}
+                                </span>
+                                <span className="text-[9px] font-bold text-slate-500 block">
+                                  Exp: {cert.tahunExpired || "Tidak ada"}
+                                </span>
+                              </div>
                             </div>
+                            <FileStatus
+                              label="Sertifikat"
+                              url={cert.buktiUrl}
+                            />
                           </div>
                         ))}
                       {pp.sertifikasiPelatihan.length > 3 && (
@@ -552,6 +576,25 @@ export function EmployeeProfileDisplay({
                   )}
                 </div>
               </div>
+
+              {pp.riwayatPendidikan && pp.riwayatPendidikan.length > 0 && (
+                <div className="mt-8 space-y-4">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-2">
+                    <GraduationCap className="h-3 w-3" /> Riwayat Pendidikan Lainnya
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {pp.riwayatPendidikan.map((edu: any, idx: number) => (
+                      <div key={idx} className="bg-slate-900/20 p-5 rounded-[2rem] border border-slate-800/40">
+                         <DataRow label="Jenjang" value={edu.jenjang} className="py-2" />
+                         <DataRow label="Institusi" value={edu.namaInstitusi} className="py-2" />
+                         <DataRow label="Jurusan" value={edu.jurusan} className="py-2" />
+                         <DataRow label="Tahun Lulus" value={edu.tahunLulus} className="py-2" />
+                         <FileStatus label="Bukti Ijazah" url={edu.ijazahUrl} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

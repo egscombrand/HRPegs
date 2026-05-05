@@ -206,6 +206,19 @@ export interface SertifikasiPelatihan {
   buktiUrl?: string;
 }
 
+export type VerificationStatusGroup = "pending" | "approved" | "revision" | "rejected";
+
+export type EmployeeVerificationStatus = {
+  bankAccount?: VerificationStatusGroup;
+  identity?: VerificationStatusGroup;
+  tax?: VerificationStatusGroup;
+  bpjs?: VerificationStatusGroup;
+  education?: VerificationStatusGroup;
+  address?: VerificationStatusGroup;
+  family?: VerificationStatusGroup;
+  emergencyContact?: VerificationStatusGroup;
+};
+
 export type EmployeeProfile = {
   id?: string;
   uid: string;
@@ -401,6 +414,10 @@ export type EmployeeProfile = {
   internalNotes?: string;
   additionalFields?: Record<string, any>;
   hrdEmploymentInfo?: HrdEmploymentInfo;
+  
+  // --- Verifikasi Perubahan ---
+  verificationStatus?: EmployeeVerificationStatus;
+  verificationNotes?: Partial<Record<keyof EmployeeVerificationStatus, string>>;
 };
 
 export type AllowanceItem = {

@@ -89,3 +89,19 @@ export function getDocumentStatus(fieldValue: string | null | undefined, hasFiel
   if (fieldValue && fieldValue.trim().length > 0) return "Belum Upload Bukti";
   return "Belum Upload";
 }
+
+/**
+ * Resolves the document URL for an education item.
+ */
+export function getEducationDocumentUrl(item: any): string | null {
+  if (!item) return null;
+  return item.ijazahUrl || item.ijazahFileUrl || item.fileUrl || item.buktiUrl || null;
+}
+
+/**
+ * Resolves the document URL for a certification item.
+ */
+export function getCertificationDocumentUrl(item: any): string | null {
+  if (!item) return null;
+  return item.buktiUrl || item.fileUrl || item.certificateUrl || item.ijazahUrl || null;
+}

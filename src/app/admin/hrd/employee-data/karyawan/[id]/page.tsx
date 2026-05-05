@@ -78,11 +78,12 @@ import {
   Plus,
   X,
   Trash2,
+  Users as UsersIcon,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useToast } from "@/hooks/use-toast";
 import { calculateProfileCompleteness } from "@/lib/employee-completeness";
-import { getEmployeeDocumentUrls, getDocumentStatus } from "@/lib/employee-documents";
+import { getEmployeeDocumentUrls, getDocumentStatus, getEducationDocumentUrl, getCertificationDocumentUrl } from "@/lib/employee-documents";
 import { normalizeEmployeeRow } from "@/lib/employee-row-normalizer";
 import { getHrdEmployeeStruktur } from "@/lib/employee-hrd-profile";
 
@@ -145,6 +146,9 @@ const DURASI_OPTIONS = [
 
 function formatAddress(addr?: any): string | null {
   if (!addr) return null;
+  // If addr is actually the profile object (error mapping fallback), return null to avoid showing irrelevant data
+  if (addr.fullName || addr.email || addr.dataDiriIdentitas) return null;
+  
   const parts = [
     addr.street ? `Jl. ${addr.street}` : null,
     addr.kelurahan?.name ? `Kel. ${addr.kelurahan.name}` : null,
@@ -156,14 +160,233 @@ function formatAddress(addr?: any): string | null {
   return parts.length > 0 ? parts.join(", ") : null;
 }
 
-const DataRow = ({ label, value, className }: { label: string; value?: string | null; className?: string }) => (
+const DataRow = ({ label, value, className }: { label: string; value?: string | null | number; className?: string }) => (
   <div className="py-2.5 group transition-all">
     <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-1 group-hover:text-emerald-500/50 transition-colors">{label}</p>
-    <p className={`text-sm font-medium text-slate-200 truncate ${className || ""}`} title={value || "Belum diisi"}>
-      {value || "Belum diisi"}
+    <p className={`text-sm font-medium text-slate-200 truncate ${className || ""}`} title={String(value || "Belum diisi")}>
+      {value !== undefined && value !== null && value !== "" ? String(value) : "Belum diisi"}
     </p>
   </div>
 );
+
+const DocumentPreviewCard = ({ 
+  label, 
+  url, 
+  status, 
+  type = "Document",
+  value
+}: { 
+  label: string; 
+  url?: string | null; 
+  status?: string; 
+  type?: string;
+  value?: string | null;
+}) => {
+  const isImage = url && /\.(jpg|jpeg|png|webp|gif)/i.test(url);
+  
+  return (
+    <Card className="group border-slate-800 bg-slate-950/40 backdrop-blur-xl hover:border-slate-700 transition-all duration-300">
+      <CardHeader className="pb-4 border-b border-slate-800/50">
+        <div className="flex justify-between items-start">
+          <Badge variant="outline" className="text-[9px] uppercase tracking-tighter border-slate-800 text-slate-500">{type}</Badge>
+          <Badge 
+            variant="outline" 
+            className={`text-[9px] uppercase tracking-tighter ${
+              status === "Valid" || status === "Sudah Upload" 
+                ? "border-emerald-500/20 text-emerald-500 bg-emerald-500/5" 
+                : status === "Tidak Punya"
+                  ? "border-slate-700 text-slate-500 bg-slate-800/50"
+                  : "border-red-500/20 text-red-500 bg-red-500/5"
+            }`}
+          >
+            {status}
+          </Badge>
+        </div>
+        <CardTitle className="text-sm font-bold text-slate-200 mt-2">{label}</CardTitle>
+        {value && <p className="text-[10px] font-mono text-slate-500 mt-1">{value}</p>}
+      </CardHeader>
+      <CardContent className="pt-6">
+        {url ? (
+          <div className="space-y-4">
+            {isImage ? (
+              <div 
+                className="relative aspect-video rounded-xl overflow-hidden border border-slate-800 bg-slate-900/50 cursor-pointer group-hover:ring-1 group-hover:ring-emerald-500/30 transition-all"
+                onClick={() => window.open(url, "_blank")}
+              >
+                <img src={url} className="h-full w-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" alt={label} />
+                <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <Eye className="h-5 w-5 text-white" />
+                </div>
+              </div>
+            ) : (
+              <div 
+                className="aspect-video rounded-xl border border-slate-800 bg-slate-900/50 flex flex-col items-center justify-center text-slate-500 cursor-pointer hover:bg-slate-800/50 transition-colors"
+                onClick={() => window.open(url, "_blank")}
+              >
+                <FileText className="h-8 w-8 mb-2 opacity-20" />
+                <span className="text-[10px] uppercase tracking-widest font-bold">PDF / Document</span>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="flex-1 rounded-xl border-slate-800 bg-slate-900/30 text-[10px] text-slate-400 hover:text-white hover:bg-slate-800 h-9"
+                onClick={() => window.open(url, "_blank")}
+              >
+                <Eye className="h-3.5 w-3.5 mr-2" />
+                Lihat
+              </Button>
+              <a 
+                href={url} 
+                download={label} 
+                target="_blank" 
+                rel="noreferrer"
+                className="flex-1"
+              >
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="w-full rounded-xl border-slate-800 bg-slate-900/30 text-[10px] text-slate-400 hover:text-white hover:bg-slate-800 h-9"
+                >
+                  <Download className="h-3.5 w-3.5 mr-2" />
+                  Download
+                </Button>
+              </a>
+            </div>
+          </div>
+        ) : (
+          <div className="aspect-video rounded-xl border-2 border-dashed border-slate-800 bg-slate-900/20 flex flex-col items-center justify-center text-slate-600">
+            <AlertOctagon className="h-6 w-6 mb-2 opacity-20" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-center px-4">
+              {status === "Tidak Punya" ? "Karyawan Tidak Memiliki" : "Belum Diunggah"}
+            </span>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
+const VerificationActionCard = ({
+  employeeId,
+  group,
+  title,
+  currentStatus,
+  currentNotes,
+}: {
+  employeeId: string;
+  group: keyof NonNullable<EmployeeProfile["verificationStatus"]>;
+  title: string;
+  currentStatus?: VerificationStatusGroup;
+  currentNotes?: string;
+}) => {
+  const firestore = useFirestore();
+  const { toast } = useToast();
+  const [status, setStatus] = useState<VerificationStatusGroup>(currentStatus || "approved");
+  const [note, setNote] = useState(currentNotes || "");
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (currentStatus) setStatus(currentStatus);
+    if (currentNotes) setNote(currentNotes);
+  }, [currentStatus, currentNotes]);
+
+  const handleSave = async (newStatus: VerificationStatusGroup) => {
+    if (newStatus === "revision" && !note.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Catatan Wajib Diisi",
+        description: "Mohon berikan catatan jika meminta revisi atau menolak.",
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const ref = doc(firestore, "employee_profiles", employeeId);
+      await updateDoc(ref, {
+        [`verificationStatus.${group}`]: newStatus,
+        [`verificationNotes.${group}`]: newStatus === "approved" ? "" : note,
+      });
+      setStatus(newStatus);
+      toast({
+        title: "Status Verifikasi Diperbarui",
+        description: `Status ${title} telah diubah menjadi ${newStatus}.`,
+      });
+    } catch (e: any) {
+      toast({
+        variant: "destructive",
+        title: "Gagal Menyimpan",
+        description: e.message,
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (!currentStatus || currentStatus === "approved") return null;
+
+  const isPending = status === "pending";
+  const isRevision = status === "revision";
+
+  return (
+    <Card className={`mb-8 border-l-4 ${
+      isPending ? "border-amber-500 bg-amber-500/5" :
+      isRevision ? "border-blue-500 bg-blue-500/5" :
+      "border-red-500 bg-red-500/5"
+    }`}>
+      <CardHeader className="pb-4">
+        <CardTitle className="text-lg font-bold flex items-center gap-2">
+          {isPending && <AlertTriangle className="h-5 w-5 text-amber-500" />}
+          {isRevision && <AlertCircle className="h-5 w-5 text-blue-500" />}
+          {!isPending && !isRevision && <XCircle className="h-5 w-5 text-red-500" />}
+          Verifikasi Data: {title}
+        </CardTitle>
+        <CardDescription className="text-slate-400">
+          Karyawan telah melakukan perubahan pada data {title.toLowerCase()}. Mohon direview.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <FormLabel className="text-xs uppercase tracking-widest text-slate-500">Catatan Revisi / Penolakan</FormLabel>
+          <Textarea 
+            placeholder="Masukkan catatan jika data perlu direvisi atau ditolak..."
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            className="bg-slate-900/50 border-slate-800 h-20"
+          />
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <Button 
+            disabled={isSaving}
+            onClick={() => handleSave("approved")}
+            className="bg-emerald-600 hover:bg-emerald-500 text-white"
+          >
+            {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+            Setujui Perubahan
+          </Button>
+          <Button 
+            variant="outline"
+            disabled={isSaving}
+            onClick={() => handleSave("revision")}
+            className="border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-white"
+          >
+            Minta Revisi
+          </Button>
+          <Button 
+            variant="outline"
+            disabled={isSaving}
+            onClick={() => handleSave("rejected")}
+            className="border-red-500 text-red-500 hover:bg-red-500 hover:text-white"
+          >
+            Tolak
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
 
 export default function EmployeeDetailPage({
   params,
@@ -805,12 +1028,11 @@ export default function EmployeeDetailPage({
                         <p className="text-sm text-slate-400 mb-4">{positionLabel}</p>
                         <div className="flex gap-2">
                           <Badge className={employmentStatusClass}>{employmentStatusLabel}</Badge>
-                          <Badge variant="outline" className="border-slate-800 text-slate-400">{normalizedData?.tipeKaryawan || "Tipe N/A"}</Badge>
                         </div>
                      </div>
                      <div className="p-6 space-y-4">
                         <div className="flex justify-between text-sm">
-                          <span className="text-slate-500">Completeness</span>
+                          <span className="text-slate-500">Profile Completeness</span>
                           <span className="text-emerald-400 font-bold">{completeness.percentage}%</span>
                         </div>
                         <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
@@ -825,12 +1047,12 @@ export default function EmployeeDetailPage({
 
                  <Card className="border-slate-800 bg-slate-950/40 backdrop-blur-xl">
                    <CardHeader>
-                     <CardTitle className="text-sm font-bold uppercase tracking-widest text-slate-500">Informasi Kontak</CardTitle>
+                     <CardTitle className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500">Informasi Dasar</CardTitle>
                    </CardHeader>
                    <CardContent className="space-y-1">
+                      <DataRow label="NIK" value={dd.nik} />
+                      <DataRow label="Phone" value={employeePhone} />
                       <DataRow label="Work Email" value={email} />
-                      <DataRow label="Phone Number" value={employeePhone} />
-                      <DataRow label="Personal Email" value={dd.personalEmail} />
                    </CardContent>
                  </Card>
                </div>
@@ -840,10 +1062,10 @@ export default function EmployeeDetailPage({
                  <Card className="border-slate-800 bg-slate-950/40 backdrop-blur-xl">
                    <CardHeader className="border-b border-slate-800/50 flex flex-row items-center justify-between">
                      <div>
-                       <CardTitle className="text-lg font-bold text-white">Struktur Organisasi</CardTitle>
-                       <CardDescription className="text-slate-500">Detail penempatan dan hierarki karyawan.</CardDescription>
+                       <CardTitle className="text-lg font-bold text-white">Struktur & Penempatan</CardTitle>
+                       <CardDescription className="text-slate-500">Detail hierarki dan lokasi kerja saat ini.</CardDescription>
                      </div>
-                     <Building2 className="h-8 w-8 text-slate-800" />
+                     <Building2 className="h-8 w-8 text-slate-800 opacity-20" />
                    </CardHeader>
                    <CardContent className="p-8">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-2">
@@ -851,33 +1073,32 @@ export default function EmployeeDetailPage({
                         <DataRow label="Division" value={divisionLabel} />
                         <DataRow label="Position" value={positionLabel} />
                         <DataRow label="Manager/Atasan" value={hrdInfo.atasanLangsung} />
-                        <DataRow label="Location" value={hrdInfo.lokasiKerja} />
-                        <DataRow label="Employment Type" value={normalizedData?.tipeKaryawan} />
+                        <DataRow label="Lokasi Kerja" value={hrdInfo.lokasiKerja} />
+                        <DataRow label="Tipe Karyawan" value={normalizedData?.tipeKaryawan} />
                       </div>
                    </CardContent>
                  </Card>
 
-                 <Card className="border-slate-800 bg-slate-950/40 backdrop-blur-xl">
+                 <Card className="border-slate-800 bg-slate-950/40 backdrop-blur-xl overflow-hidden">
                     <CardHeader className="border-b border-slate-800/50">
-                      <CardTitle className="text-lg font-bold text-white">Payroll Overview</CardTitle>
-                      <CardDescription className="text-slate-500">Ringkasan data keuangan dan payroll.</CardDescription>
+                      <CardTitle className="text-lg font-bold text-white">Ringkasan Payroll</CardTitle>
                     </CardHeader>
                     <CardContent className="p-8">
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div className="rounded-[1.5rem] bg-slate-900/50 p-6 border border-slate-800">
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Bank Account</p>
-                          <p className="text-lg font-bold text-white">{rek.bankName || "N/A"}</p>
-                          <p className="text-xs text-slate-400 font-mono mt-1">{rek.bankAccountNumber || "**** ****"}</p>
+                        <div className="rounded-3xl bg-slate-900/50 p-6 border border-slate-800">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Rekening</p>
+                          <p className="text-lg font-bold text-white truncate">{rek.bankName || "N/A"}</p>
+                          <p className="text-xs text-slate-400 font-mono mt-1">{rek.bankAccountNumber || "N/A"}</p>
                         </div>
-                        <div className="rounded-[1.5rem] bg-slate-900/50 p-6 border border-slate-800">
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Base Salary</p>
+                        <div className="rounded-3xl bg-slate-900/50 p-6 border border-slate-800">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Gaji Pokok</p>
                           <p className="text-lg font-bold text-emerald-400">
                             {hrdInfo.gajiPokok ? `Rp ${hrdInfo.gajiPokok.toLocaleString()}` : "Confidential"}
                           </p>
                         </div>
-                        <div className="rounded-[1.5rem] bg-slate-900/50 p-6 border border-slate-800">
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Join Date</p>
-                          <p className="text-lg font-bold text-white">{hrdInfo.tanggalMasuk || "N/A"}</p>
+                        <div className="rounded-3xl bg-slate-900/50 p-6 border border-slate-800">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Masa Kerja</p>
+                          <p className="text-lg font-bold text-white">{hrdInfo.tanggalMasuk ? format(new Date(hrdInfo.tanggalMasuk), "dd MMM yyyy") : "N/A"}</p>
                         </div>
                       </div>
                     </CardContent>
@@ -887,16 +1108,28 @@ export default function EmployeeDetailPage({
           </TabsContent>
 
           <TabsContent value="pribadi" className="space-y-8">
+            <VerificationActionCard 
+              employeeId={employeeId} 
+              group="identity" 
+              title="Identitas Pribadi & Fisik" 
+              currentStatus={profileDoc?.verificationStatus?.identity} 
+              currentNotes={profileDoc?.verificationNotes?.identity} 
+            />
+            <VerificationActionCard 
+              employeeId={employeeId} 
+              group="family" 
+              title="Data Keluarga" 
+              currentStatus={profileDoc?.verificationStatus?.family} 
+              currentNotes={profileDoc?.verificationNotes?.family} 
+            />
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* KOLOM KIRI: Identitas & Kesehatan */}
               <div className="lg:col-span-2 space-y-8">
                 <Card className="border-slate-800 bg-slate-950/40 backdrop-blur-xl">
                   <CardHeader className="border-b border-slate-800/50 bg-slate-900/20">
                     <CardTitle className="flex items-center gap-2 text-lg font-bold text-white">
                       <User className="h-5 w-5 text-blue-500" />
-                      Identitas Dasar
+                      Identitas Pribadi
                     </CardTitle>
-                    <CardDescription className="text-slate-500">Informasi identitas dan data pribadi sesuai dokumen resmi.</CardDescription>
                   </CardHeader>
                   <CardContent className="p-8">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-2">
@@ -905,8 +1138,8 @@ export default function EmployeeDetailPage({
                       <DataRow label="Jenis Kelamin" value={dd.gender} />
                       <DataRow label="Tempat Lahir" value={dd.birthPlace} />
                       <DataRow label="Tanggal Lahir" value={dd.birthDate} />
-                      <DataRow label="Status Pernikahan" value={dd.maritalStatus} />
                       <DataRow label="Agama" value={dd.religion} />
+                      <DataRow label="Status Pernikahan" value={dd.maritalStatus} />
                       <DataRow label="Kewarganegaraan" value={dd.nationality} />
                     </div>
                   </CardContent>
@@ -916,69 +1149,122 @@ export default function EmployeeDetailPage({
                   <CardHeader className="border-b border-slate-800/50 bg-slate-900/20">
                     <CardTitle className="flex items-center gap-2 text-lg font-bold text-white">
                       <Heart className="h-5 w-5 text-red-500" />
-                      Fisik & Kesehatan
+                      Kesehatan & Fisik
                     </CardTitle>
-                    <CardDescription className="text-slate-500">Data kesehatan dan kondisi fisik karyawan.</CardDescription>
                   </CardHeader>
                   <CardContent className="p-8">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-2">
-                      <DataRow label="Golongan Darah" value={dd.golonganDarah || dd.bloodType} />
-                      <DataRow label="Tinggi Badan (cm)" value={dd.tinggiBadan || dd.heightCm} />
-                      <DataRow label="Berat Badan (kg)" value={dd.beratBadan || dd.weightKg} />
-                      <DataRow label="Kondisi Fisik Khusus" value={dd.hasPhysicalCondition || "Tidak ada"} />
+                      <DataRow label="Golongan Darah" value={dd.bloodType || dd.golonganDarah} />
+                      <DataRow label="Tinggi Badan (cm)" value={dd.heightCm || dd.tinggiBadan} />
+                      <DataRow label="Berat Badan (kg)" value={dd.weightKg || dd.beratBadan} />
+                      <DataRow label="Kondisi Fisik" value={dd.hasPhysicalCondition} />
                     </div>
                   </CardContent>
                 </Card>
-              </div>
 
-              {/* KOLOM KANAN: Dokumen Kunci */}
-              <div className="space-y-8">
-                <Card className="border-slate-800 bg-slate-950/40 backdrop-blur-xl overflow-hidden">
-                   <CardHeader className="border-b border-slate-800/50 bg-slate-900/20">
-                      <CardTitle className="text-sm font-bold uppercase tracking-widest text-slate-500 flex items-center gap-2">
-                        <FileText className="h-4 w-4" />
-                        Kartu Identitas (KTP)
+                <Card className="border-slate-800 bg-slate-950/40 backdrop-blur-xl">
+                   <CardHeader className="border-b border-slate-800/50">
+                      <CardTitle className="text-lg font-bold text-white flex items-center gap-2">
+                        <UsersIcon className="h-5 w-5 text-purple-500" />
+                        Keluarga & Tanggungan
                       </CardTitle>
                    </CardHeader>
-                   <CardContent className="p-6">
-                      <div className="space-y-4">
-                         <div className="rounded-2xl bg-slate-900/50 p-4 border border-slate-800">
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Nomor NIK</p>
-                            <p className="text-lg font-bold text-white font-mono tracking-wider">{dd.nik || "N/A"}</p>
-                         </div>
-                         {ktpPhotoUrl ? (
-                           <div 
-                            className="relative group aspect-video w-full rounded-2xl overflow-hidden border border-slate-800 bg-slate-900 cursor-pointer"
-                            onClick={() => ktpPhotoUrl && window.open(ktpPhotoUrl, "_blank")}
-                           >
-                              <img src={ktpPhotoUrl} alt="KTP" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
-                              <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                 <Eye className="h-6 w-6 text-white" />
-                              </div>
-                           </div>
-                         ) : (
-                           <div className="aspect-video w-full rounded-2xl border-2 border-dashed border-slate-800 bg-slate-900/30 flex items-center justify-center text-slate-600">
-                              <p className="text-xs">Foto KTP belum diunggah</p>
-                           </div>
-                         )}
-                      </div>
+                   <CardContent className="p-8">
+                      {((profileDoc?.dataKeluarga?.saudaraKandung?.length ?? 0) > 0 || (profileDoc?.dataKeluarga?.tanggungan?.length ?? 0) > 0) ? (
+                        <div className="space-y-8">
+                           {/* Saudara Kandung */}
+                           {profileDoc?.dataKeluarga?.saudaraKandung && profileDoc.dataKeluarga.saudaraKandung.length > 0 && (
+                             <div className="space-y-4">
+                                <h4 className="text-xs font-bold uppercase tracking-widest text-slate-500">Saudara Kandung</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                   {profileDoc.dataKeluarga.saudaraKandung.map((k: any, i: number) => (
+                                     <div key={i} className="rounded-2xl border border-slate-800 bg-slate-900/50 p-6">
+                                        <div className="flex justify-between items-start mb-4">
+                                           <h4 className="font-bold text-white">{k.name}</h4>
+                                           <Badge variant="outline" className="text-[9px] uppercase border-blue-500/20 text-blue-400">Saudara</Badge>
+                                        </div>
+                                        <DataRow label="Pekerjaan" value={k.occupation} />
+                                     </div>
+                                   ))}
+                                </div>
+                             </div>
+                           )}
+
+                           {/* Tanggungan / Istri / Suami / Anak */}
+                           {profileDoc?.dataKeluarga?.tanggungan && profileDoc.dataKeluarga.tanggungan.length > 0 && (
+                             <div className="space-y-4">
+                                <h4 className="text-xs font-bold uppercase tracking-widest text-slate-500">Tanggungan (Istri/Suami/Anak)</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                   {profileDoc.dataKeluarga.tanggungan.map((k: any, i: number) => (
+                                     <div key={i} className="rounded-2xl border border-slate-800 bg-slate-900/50 p-6">
+                                        <div className="flex justify-between items-start mb-4">
+                                           <h4 className="font-bold text-white">{k.name}</h4>
+                                           <Badge variant="outline" className="text-[9px] uppercase border-emerald-500/20 text-emerald-400">{k.relation || "Tanggungan"}</Badge>
+                                        </div>
+                                        <DataRow label="Pekerjaan" value={k.occupation} />
+                                     </div>
+                                   ))}
+                                </div>
+                             </div>
+                           )}
+                        </div>
+                      ) : (
+                        <div className="text-center py-10 text-slate-500 italic text-sm">Data keluarga belum diisi.</div>
+                      )}
                    </CardContent>
+                </Card>
+              </div>
+
+              <div className="space-y-8">
+                <DocumentPreviewCard 
+                  label="Foto KTP" 
+                  url={ktpPhotoUrl} 
+                  status={ktpPhotoUrl ? "Sudah Upload" : "Belum Upload"} 
+                  type="Identity" 
+                  value={dd.nik} 
+                />
+                
+                <Card className="border-slate-800 bg-slate-950/40 backdrop-blur-xl">
+                  <CardHeader>
+                    <CardTitle className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Kontak Darurat</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {contacts.length > 0 ? (
+                      contacts.map((c, i) => (
+                        <div key={i} className="p-4 rounded-2xl bg-slate-900/50 border border-slate-800">
+                           <p className="text-sm font-bold text-white">{c.name}</p>
+                           <p className="text-[10px] text-emerald-500 uppercase font-bold">{c.relation}</p>
+                           <p className="text-xs text-slate-400 mt-2">{c.phone}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-xs text-slate-600 italic">Belum ada kontak darurat.</p>
+                    )}
+                  </CardContent>
                 </Card>
               </div>
             </div>
           </TabsContent>
+
           <TabsContent value="alamat" className="space-y-8">
+            <VerificationActionCard 
+              employeeId={employeeId} 
+              group="address" 
+              title="Alamat Lengkap" 
+              currentStatus={profileDoc?.verificationStatus?.address} 
+              currentNotes={profileDoc?.verificationNotes?.address} 
+            />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <Card className="border-slate-800 bg-slate-950/40 backdrop-blur-xl">
                 <CardHeader className="border-b border-slate-800/50 bg-slate-900/20">
                     <CardTitle className="flex items-center gap-2 text-lg font-bold text-white">
                     <MapPin className="h-5 w-5 text-emerald-500" />
-                    Alamat KTP
+                    Alamat Sesuai KTP
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-8">
-                  <div className="rounded-2xl border border-slate-800 bg-slate-900/30 p-6 min-h-[120px] flex items-center">
-                    <p className="text-slate-200 leading-relaxed italic">
+                  <div className="rounded-3xl border border-slate-800 bg-slate-900/30 p-8 min-h-[120px] flex items-center shadow-inner">
+                    <p className="text-slate-200 leading-relaxed italic text-lg">
                       {formatAddress(al.ktp) || "Alamat KTP belum dilengkapi."}
                     </p>
                   </div>
@@ -993,261 +1279,249 @@ export default function EmployeeDetailPage({
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-8">
-                  <div className="rounded-2xl border border-slate-800 bg-slate-900/30 p-6 min-h-[120px] flex items-center">
-                    <p className="text-slate-200 leading-relaxed italic">
+                  <div className="rounded-3xl border border-slate-800 bg-slate-900/30 p-8 min-h-[120px] flex items-center shadow-inner">
+                    <p className="text-slate-200 leading-relaxed italic text-lg">
                       {formatAddress(al.domisili) || "Alamat domisili belum dilengkapi."}
                     </p>
                   </div>
                 </CardContent>
               </Card>
             </div>
-            
-            <Card className="border-slate-800 bg-slate-950/40 backdrop-blur-xl">
-               <CardHeader className="border-b border-slate-800/50">
-                  <CardTitle className="text-lg font-bold text-white flex items-center gap-2">
-                    <Phone className="h-5 w-5 text-purple-500" />
-                    Kontak Darurat
-                  </CardTitle>
-               </CardHeader>
-               <CardContent className="p-8">
-                  {contacts.length === 0 ? (
-                    <div className="text-center py-8 text-slate-500">Belum ada kontak darurat.</div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {contacts.map((c, i) => (
-                        <div key={i} className="rounded-2xl border border-slate-800 bg-slate-900/50 p-6">
-                           <div className="flex justify-between items-start mb-4">
-                              <h4 className="font-bold text-white text-lg">{c.name}</h4>
-                              <Badge variant="outline" className="border-slate-700 text-slate-400 uppercase text-[10px] tracking-widest">{c.relation}</Badge>
-                           </div>
-                           <div className="space-y-4">
-                              <DataRow label="Telepon" value={c.phone} />
-                              <DataRow label="Alamat" value={c.address} />
-                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-               </CardContent>
-            </Card>
           </TabsContent>
 
           <TabsContent value="rekening" className="space-y-8">
+            <VerificationActionCard 
+              employeeId={employeeId} 
+              group="bankAccount" 
+              title="Rekening Payroll" 
+              currentStatus={profileDoc?.verificationStatus?.bankAccount} 
+              currentNotes={profileDoc?.verificationNotes?.bankAccount} 
+            />
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* Kolom Kiri: Detail Rekening */}
               <div className="lg:col-span-2 space-y-8">
                 <Card className="border-slate-800 bg-slate-950/40 backdrop-blur-xl overflow-hidden">
                   <CardHeader className="border-b border-slate-800/50 bg-slate-900/20">
                     <CardTitle className="flex items-center gap-2 text-lg font-bold text-white">
-                      <CreditCard className="h-5 w-5 text-blue-500" />
-                      Informasi Rekening Utama
+                      <CreditCard className="h-5 w-5 text-emerald-500" />
+                      Informasi Rekening & Finansial
                     </CardTitle>
-                    <CardDescription className="text-slate-500">Data rekening yang digunakan untuk pengiriman payroll.</CardDescription>
                   </CardHeader>
                   <CardContent className="p-8">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-4">
                       <DataRow label="Nama Bank" value={rek.bankName} />
-                      <DataRow label="Cabang Bank" value={rek.bankBranch || "N/A"} />
-                      <DataRow label="Nomor Rekening" value={rek.bankAccountNumber} className="font-mono text-lg text-blue-400" />
-                      <DataRow label="Atas Nama (Pemilik)" value={rek.bankAccountHolderName} />
+                      <DataRow label="Nomor Rekening" value={rek.bankAccountNumber} className="font-mono text-lg text-emerald-400" />
+                      <DataRow label="Atas Nama" value={rek.bankAccountHolderName} />
+                      <DataRow label="Cabang" value={rek.bankBranch} />
                     </div>
                   </CardContent>
                 </Card>
 
+                <VerificationActionCard 
+                  employeeId={employeeId} 
+                  group="tax" 
+                  title="Pajak (NPWP)" 
+                  currentStatus={profileDoc?.verificationStatus?.tax} 
+                  currentNotes={profileDoc?.verificationNotes?.tax} 
+                />
+                <VerificationActionCard 
+                  employeeId={employeeId} 
+                  group="bpjs" 
+                  title="BPJS" 
+                  currentStatus={profileDoc?.verificationStatus?.bpjs} 
+                  currentNotes={profileDoc?.verificationNotes?.bpjs} 
+                />
                 <Card className="border-slate-800 bg-slate-950/40 backdrop-blur-xl overflow-hidden">
-                  <CardHeader className="border-b border-slate-800/50 flex flex-row items-center justify-between">
-                    <div>
-                      <CardTitle className="text-lg font-bold text-white">Status Verifikasi & Catatan</CardTitle>
-                      <CardDescription className="text-slate-500">Kelola status keabsahan data rekening.</CardDescription>
-                    </div>
-                    <div className="flex gap-2">
-                       <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 px-4 py-1.5 rounded-xl">Valid / Terverifikasi</Badge>
-                    </div>
+                  <CardHeader className="border-b border-slate-800/50 bg-slate-900/20">
+                    <CardTitle className="text-base font-bold text-white">Dokumen Administratif</CardTitle>
                   </CardHeader>
                   <CardContent className="p-8">
-                    <div className="space-y-6">
-                      <div className="rounded-2xl border border-slate-800 bg-slate-900/30 p-6">
-                         <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">Catatan Administrasi HRD</p>
-                         <p className="text-sm text-slate-300">
-                           {hrdInfo.catatanBenefit || "Belum ada catatan khusus mengenai payroll karyawan ini."}
-                         </p>
-                      </div>
-                      
-                      <div className="flex flex-wrap gap-3">
-                         <Button className="rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20">
-                            <CheckCircle className="h-4 w-4 mr-2" />
-                            Verifikasi Sekarang
-                         </Button>
-                         <Button variant="outline" className="rounded-xl border-slate-700 text-slate-300 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30">
-                            <AlertTriangle className="h-4 w-4 mr-2" />
-                            Minta Revisi
-                         </Button>
-                      </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-2">
+                       <DataRow label="Nomor NPWP" value={docAdmin.npwp} />
+                       <DataRow label="Nomor BPJS Kesehatan" value={docAdmin.bpjsKesehatan} />
+                       <DataRow label="Nomor BPJS Ketenagakerjaan" value={docAdmin.bpjsKetenagakerjaan} />
+                       <DataRow label="Nomor SIM" value={docAdmin.simNumber} />
                     </div>
                   </CardContent>
                 </Card>
               </div>
 
-              {/* Kolom Kanan: Bukti Rekening */}
               <div className="space-y-8">
-                <Card className="border-slate-800 bg-slate-950/40 backdrop-blur-xl overflow-hidden h-full">
-                  <CardHeader className="border-b border-slate-800/50 bg-slate-900/20">
-                    <CardTitle className="text-base font-bold text-white flex items-center gap-2">
-                       <ImageIcon className="h-4 w-4 text-purple-500" />
-                       Lampiran Bukti
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-8 flex flex-col items-center">
-                    {buktiRekeningUrl ? (
-                      <div className="w-full space-y-6">
-                        <div 
-                          className="relative group aspect-[3/4] w-full rounded-3xl overflow-hidden border-2 border-slate-800 bg-slate-900 shadow-2xl cursor-pointer"
-                          onClick={() => buktiRekeningUrl && window.open(buktiRekeningUrl, "_blank")}
-                        >
-                           <img 
-                            src={buktiRekeningUrl} 
-                            alt="Bukti Rekening" 
-                            className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110" 
-                           />
-                           <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center backdrop-blur-[2px]">
-                              <div className="bg-white/10 p-4 rounded-2xl backdrop-blur-md border border-white/20">
-                                 <Eye className="h-8 w-8 text-white" />
-                              </div>
-                           </div>
-                        </div>
-                        
-                        <div className="space-y-3">
-                           <p className="text-center text-xs text-slate-500 italic">Klik gambar untuk memperbesar</p>
-                           <Button 
-                            variant="outline" 
-                            className="w-full rounded-2xl border-slate-800 bg-slate-900/50 text-slate-300 hover:bg-slate-800"
-                            onClick={() => buktiRekeningUrl && window.open(buktiRekeningUrl, "_blank")}
-                           >
-                              <Download className="h-4 w-4 mr-2" />
-                              Download Dokumen
-                           </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="w-full aspect-[3/4] rounded-3xl border-2 border-dashed border-slate-800 bg-slate-900/30 flex flex-col items-center justify-center text-slate-600 p-12 text-center">
-                        <AlertTriangle className="h-12 w-12 mb-4 opacity-20" />
-                        <p className="text-sm font-bold text-slate-500 mb-1">Bukti Belum Tersedia</p>
-                        <p className="text-xs text-slate-600">Karyawan belum mengunggah foto buku tabungan atau bukti rekening.</p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                <DocumentPreviewCard 
+                  label="Bukti Rekening / Tabungan" 
+                  url={buktiRekeningUrl} 
+                  status={buktiRekeningUrl ? "Sudah Upload" : "Belum Upload"} 
+                  type="Financial" 
+                />
               </div>
             </div>
           </TabsContent>
 
           <TabsContent value="pendidikan" className="space-y-8">
-            <Card className="border-slate-800 bg-slate-950/40 backdrop-blur-xl">
-              <CardHeader className="border-b border-slate-800/50 bg-slate-900/20">
-                <CardTitle className="flex items-center gap-2 text-lg font-bold text-white">
-                  <GraduationCap className="h-5 w-5 text-emerald-500" />
-                  Pendidikan Terakhir
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-2">
-                  <DataRow label="Jenjang Pendidikan" value={pp.pendidikanTerakhir?.jenjang} />
-                  <DataRow label="Nama Institusi" value={pp.pendidikanTerakhir?.namaInstitusi} />
-                  <DataRow label="Jurusan / Bidang Studi" value={pp.pendidikanTerakhir?.jurusan} />
-                  <DataRow label="Tahun Lulus" value={pp.pendidikanTerakhir?.tahunLulus} />
-                  <DataRow label="IPK / Nilai Akhir" value={pp.pendidikanTerakhir?.gpa} />
-                </div>
-              </CardContent>
-            </Card>
+            <VerificationActionCard 
+              employeeId={employeeId} 
+              group="education" 
+              title="Pendidikan Terakhir" 
+              currentStatus={profileDoc?.verificationStatus?.education} 
+              currentNotes={profileDoc?.verificationNotes?.education} 
+            />
+            {/* Pendidikan Terakhir */}
+            <div className="space-y-6">
+              <h3 className="text-xl font-bold text-white flex items-center gap-3">
+                <div className="h-8 w-1 bg-emerald-500 rounded-full" />
+                Pendidikan Terakhir
+              </h3>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <Card className="lg:col-span-2 border-slate-800 bg-slate-950/40 backdrop-blur-xl">
+                  <CardContent className="p-8">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-4">
+                      <DataRow label="Jenjang" value={pp.pendidikanTerakhir?.jenjang} />
+                      <DataRow label="Institusi" value={pp.pendidikanTerakhir?.namaInstitusi} />
+                      <DataRow label="Jurusan" value={pp.pendidikanTerakhir?.jurusan} />
+                      <DataRow label="Tahun Lulus" value={pp.pendidikanTerakhir?.tahunLulus} />
+                    </div>
+                  </CardContent>
+                </Card>
+                <DocumentPreviewCard 
+                  label="Ijazah Terakhir" 
+                  url={getEducationDocumentUrl(pp.pendidikanTerakhir)} 
+                  status={getEducationDocumentUrl(pp.pendidikanTerakhir) ? "Sudah Upload" : "Belum Upload"} 
+                  type="Education" 
+                />
+              </div>
+            </div>
+
+            {/* Riwayat Pendidikan Lainnya */}
+            <div className="space-y-6">
+              <h3 className="text-xl font-bold text-white flex items-center gap-3">
+                <div className="h-8 w-1 bg-blue-500 rounded-full" />
+                Riwayat Pendidikan Lainnya
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 {pp.riwayatPendidikan?.length ? pp.riwayatPendidikan.map((edu: any, idx: number) => (
+                   <Card key={idx} className="border-slate-800 bg-slate-950/40 overflow-hidden">
+                      <CardHeader className="border-b border-slate-800/50 bg-slate-900/20 flex flex-row items-center justify-between">
+                         <CardTitle className="text-sm font-bold text-white">{edu.jenjang} - {edu.namaInstitusi}</CardTitle>
+                         {getEducationDocumentUrl(edu) ? (
+                           <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[9px]">Sudah Upload</Badge>
+                         ) : (
+                           <Badge variant="outline" className="text-[9px] opacity-50">Ijazah belum diunggah</Badge>
+                         )}
+                      </CardHeader>
+                      <CardContent className="p-6">
+                         <div className="grid grid-cols-2 gap-4 mb-6">
+                            <DataRow label="Jurusan" value={edu.jurusan} />
+                            <DataRow label="Tahun Lulus" value={edu.tahunLulus} />
+                         </div>
+                         {getEducationDocumentUrl(edu) && (
+                           <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="w-full rounded-xl border-slate-800 bg-slate-900/50"
+                            onClick={() => window.open(getEducationDocumentUrl(edu)!, "_blank")}
+                           >
+                              <Eye className="h-3 w-3 mr-2" /> Lihat Bukti Ijazah
+                           </Button>
+                         )}
+                      </CardContent>
+                   </Card>
+                 )) : (
+                   <div className="col-span-2 text-center py-10 text-slate-600 border-2 border-dashed border-slate-800 rounded-3xl">Belum ada riwayat tambahan.</div>
+                 )}
+              </div>
+            </div>
+
+            {/* Sertifikasi */}
+            <div className="space-y-6">
+              <h3 className="text-xl font-bold text-white flex items-center gap-3">
+                <div className="h-8 w-1 bg-purple-500 rounded-full" />
+                Sertifikasi & Pelatihan
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 {pp.sertifikasiPelatihan?.length ? pp.sertifikasiPelatihan.map((cert: any, idx: number) => (
+                   <Card key={idx} className="border-slate-800 bg-slate-950/40 overflow-hidden">
+                      <CardHeader className="border-b border-slate-800/50 bg-slate-900/20 flex flex-row items-center justify-between">
+                         <CardTitle className="text-sm font-bold text-white">{cert.namaSertifikasi}</CardTitle>
+                         {getCertificationDocumentUrl(cert) ? (
+                           <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[9px]">Sudah Upload</Badge>
+                         ) : (
+                           <Badge variant="outline" className="text-[9px] opacity-50">Sertifikat belum diunggah</Badge>
+                         )}
+                      </CardHeader>
+                      <CardContent className="p-6">
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                            <DataRow label="Penyelenggara" value={cert.penyelenggara} />
+                            <DataRow label="Masa Berlaku" value={`${cert.tahunPerolehan} s/d ${cert.tahunExpired || "Selamanya / Tanpa Masa Berlaku"}`} />
+                         </div>
+                         {getCertificationDocumentUrl(cert) && (
+                           <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="w-full rounded-xl border-slate-800 bg-slate-900/50"
+                            onClick={() => window.open(getCertificationDocumentUrl(cert)!, "_blank")}
+                           >
+                              <Eye className="h-3 w-3 mr-2" /> Lihat Sertifikat
+                           </Button>
+                         )}
+                      </CardContent>
+                   </Card>
+                 )) : (
+                   <div className="col-span-2 text-center py-10 text-slate-600 border-2 border-dashed border-slate-800 rounded-3xl">Belum ada sertifikasi.</div>
+                 )}
+              </div>
+            </div>
           </TabsContent>
 
           <TabsContent value="dokumen" className="space-y-8">
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-              {[
-                { label: "Pas Foto Profil", file: profilePhotoUrl, type: "Photo", status: profilePhotoUrl ? "Sudah Upload" : "Belum Upload" },
-                { label: "Kartu Tanda Penduduk (KTP)", file: ktpPhotoUrl, type: "Identity", value: dd.nik, status: ktpPhotoUrl ? "Sudah Upload" : (dd.nik ? "Belum Upload Bukti" : "Belum Upload") },
-                { label: "NPWP", file: npwpUrl, type: "Tax", value: docAdmin.npwp, status: getDocumentStatus(docAdmin.npwp, !docAdmin.noNpwp, npwpUrl) },
-                { label: "BPJS Kesehatan", file: bpjsKesUrl, type: "Insurance", value: docAdmin.bpjsKesehatan, status: getDocumentStatus(docAdmin.bpjsKesehatan, !docAdmin.noBpjsKesehatan, bpjsKesUrl) },
-                { label: "BPJS Ketenagakerjaan", file: bpjsKetUrl, type: "Insurance", value: docAdmin.bpjsKetenagakerjaan, status: getDocumentStatus(docAdmin.bpjsKetenagakerjaan, !docAdmin.noBpjsKetenagakerjaan, bpjsKetUrl) },
-                { label: "Ijazah Terakhir", file: ijazahUrl, type: "Education", status: ijazahUrl ? "Sudah Upload" : "Belum Upload" },
-                { label: "Bukti Rekening / Tabungan", file: buktiRekeningUrl, type: "Payroll", status: buktiRekeningUrl ? "Sudah Upload" : "Belum Upload" },
-              ].map((docItem) => (
-                <Card key={docItem.label} className="group border-slate-800 bg-slate-950/40 backdrop-blur-xl hover:border-slate-700 transition-all duration-300">
-                  <CardHeader className="pb-4 border-b border-slate-800/50">
-                    <div className="flex justify-between items-start">
-                       <Badge variant="outline" className="text-[9px] uppercase tracking-tighter border-slate-800 text-slate-500">{docItem.type}</Badge>
-                       <Badge 
-                         variant="outline" 
-                         className={`text-[9px] uppercase tracking-tighter ${
-                           docItem.status === "Valid" || docItem.status === "Sudah Upload" 
-                             ? "border-emerald-500/20 text-emerald-500 bg-emerald-500/5" 
-                             : docItem.status === "Tidak Punya"
-                               ? "border-slate-700 text-slate-500 bg-slate-800/50"
-                               : "border-red-500/20 text-red-500 bg-red-500/5"
-                         }`}
-                       >
-                         {docItem.status}
-                       </Badge>
-                    </div>
-                    <CardTitle className="text-sm font-bold text-slate-200 mt-2">{docItem.label}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-6 space-y-4">
-                     {docItem.file ? (
-                        <div className="space-y-4">
-                           {docItem.type === "Photo" || docItem.type === "Identity" || docItem.type === "Payroll" || (docItem.file && /\.(jpg|jpeg|png|webp|gif)/i.test(docItem.file)) ? (
-                              <div 
-                                className="relative aspect-video rounded-xl overflow-hidden border border-slate-800 bg-slate-900/50 cursor-pointer group-hover:ring-1 group-hover:ring-emerald-500/30 transition-all"
-                                onClick={() => docItem.file && window.open(docItem.file, "_blank")}
-                              >
-                                 <img src={docItem.file} className="h-full w-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" alt={docItem.label} />
-                              </div>
-                           ) : (
-                              <div className="aspect-video rounded-xl border border-slate-800 bg-slate-900/50 flex flex-col items-center justify-center text-slate-500">
-                                 <FileText className="h-8 w-8 mb-2 opacity-20" />
-                                 <span className="text-[10px] uppercase tracking-widest font-bold">PDF / Document</span>
-                              </div>
-                           )}
-                           <div className="flex gap-2">
-                             <Button 
-                              variant="outline" 
-                              className="flex-1 rounded-xl border-slate-800 bg-slate-900/30 text-[10px] text-slate-400 hover:text-white hover:bg-slate-800 h-9"
-                              onClick={() => docItem.file && window.open(docItem.file, "_blank")}
-                             >
-                                <Eye className="h-3 w-3 mr-2" />
-                                Lihat
-                             </Button>
-                             <Button 
-                              variant="outline" 
-                              className="flex-1 rounded-xl border-slate-800 bg-slate-900/30 text-[10px] text-slate-400 hover:text-white hover:bg-slate-800 h-9"
-                              onClick={() => {
-                                if (docItem.file) {
-                                  const link = document.createElement('a');
-                                  link.href = docItem.file;
-                                  link.download = docItem.label;
-                                  link.target = "_blank";
-                                  link.click();
-                                }
-                              }}
-                             >
-                                <Download className="h-3 w-3 mr-2" />
-                                Download
-                             </Button>
-                           </div>
-                        </div>
-                     ) : (
-                        <div className="aspect-video rounded-xl border-2 border-dashed border-slate-800 bg-slate-900/20 flex flex-col items-center justify-center text-slate-600">
-                           <AlertOctagon className="h-6 w-6 mb-2 opacity-20" />
-                           <span className="text-[10px] font-bold uppercase tracking-widest text-center px-4">
-                             {docItem.status === "Tidak Punya" ? "Karyawan Tidak Memiliki" : (docItem.label === "Ijazah Terakhir" ? "Ijazah terakhir belum diunggah karyawan." : "Belum Diunggah")}
-                           </span>
-                        </div>
-                     )}
-                  </CardContent>
-                </Card>
-              ))}
-
+                <DocumentPreviewCard 
+                  label="Pas Foto Profil" 
+                  url={profilePhotoUrl} 
+                  status={profilePhotoUrl ? "Sudah Upload" : "Belum Upload"} 
+                  type="Photo" 
+                />
+                <DocumentPreviewCard 
+                  label="KTP" 
+                  url={ktpPhotoUrl} 
+                  status={ktpPhotoUrl ? "Sudah Upload" : "Belum Upload"} 
+                  type="Identity" 
+                  value={dd.nik} 
+                />
+                <DocumentPreviewCard 
+                  label="NPWP" 
+                  url={npwpUrl} 
+                  status={getDocumentStatus(docAdmin.npwp, !docAdmin.noNpwp, npwpUrl)} 
+                  type="Tax" 
+                  value={docAdmin.npwp} 
+                />
+                <DocumentPreviewCard 
+                  label="BPJS Kesehatan" 
+                  url={bpjsKesUrl} 
+                  status={getDocumentStatus(docAdmin.bpjsKesehatan, !docAdmin.noBpjsKesehatan, bpjsKesUrl)} 
+                  type="Insurance" 
+                  value={docAdmin.bpjsKesehatan} 
+                />
+                <DocumentPreviewCard 
+                  label="BPJS Ketenagakerjaan" 
+                  url={bpjsKetUrl} 
+                  status={getDocumentStatus(docAdmin.bpjsKetenagakerjaan, !docAdmin.noBpjsKetenagakerjaan, bpjsKetUrl)} 
+                  type="Insurance" 
+                  value={docAdmin.bpjsKetenagakerjaan} 
+                />
+                <DocumentPreviewCard 
+                  label="Ijazah Terakhir" 
+                  url={getEducationDocumentUrl(pp.pendidikanTerakhir)} 
+                  status={getEducationDocumentUrl(pp.pendidikanTerakhir) ? "Sudah Upload" : "Belum Upload"} 
+                  type="Education" 
+                />
+                <DocumentPreviewCard 
+                  label="Bukti Rekening" 
+                  url={buktiRekeningUrl} 
+                  status={buktiRekeningUrl ? "Sudah Upload" : "Belum Upload"} 
+                  type="Payroll" 
+                />
             </div>
           </TabsContent>
+
 
           <TabsContent value="hrd" className="space-y-8">
             {/* Header Dashboard HRD */}
