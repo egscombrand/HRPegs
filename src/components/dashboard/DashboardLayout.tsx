@@ -12,6 +12,7 @@ import { doc, collection, query, where, limit } from 'firebase/firestore';
 import type { NavigationSetting, UserRole, Job } from '@/lib/types';
 import { MENU_CONFIG, ALL_MENU_GROUPS } from '@/lib/menu-config';
 import { CheckSquare, FileHeart, Briefcase } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { isActiveEmployeeEligibleForLeave, canUserReview } from '@/lib/auth-eligibility';
 
 
@@ -68,6 +69,17 @@ export function DashboardLayout({
 
   const { data: panelistAssignments, isLoading: isLoadingPanelists } = useCollection(panelistQuery);
   const { data: jobAssignments, isLoading: isLoadingJobs } = useCollection(jobQuery);
+
+  const pendingBankRequestsQuery = useMemoFirebase(() => {
+    if (roleKey === 'hrd' || roleKey === 'super-admin') {
+      return query(
+        collection(firestore, 'bank_change_requests'),
+        where('status', '==', 'pending')
+      );
+    }
+    return null;
+  }, [firestore, roleKey]);
+  const { data: pendingBankRequests } = useCollection(pendingBankRequestsQuery);
 
   const hasAnyAssignment = (panelistAssignments && panelistAssignments.length > 0) || 
                           (jobAssignments && jobAssignments.length > 0);
@@ -152,8 +164,22 @@ export function DashboardLayout({
         })).filter(group => group.items.length > 0);
     }
 
+    // Add badges
+    currentConfig = currentConfig.map(group => ({
+        ...group,
+        items: group.items.map(item => {
+            if (item.key === 'employee.data.bank_requests') {
+                const count = pendingBankRequests?.length || 0;
+                if (count > 0) {
+                    return { ...item, badge: <Badge variant="secondary" className="bg-red-500 text-white hover:bg-red-600 px-2 py-0 h-5 text-[10px]">{count}</Badge> };
+                }
+            }
+            return item;
+        })
+    }));
+
     return currentConfig;
-  }, [roleKey, userProfile, navSettings, isLoadingSettings, manualMenuConfig]);
+  }, [roleKey, userProfile, navSettings, isLoadingSettings, manualMenuConfig, isAssignmentLoading, hasAnyAssignment, pendingBankRequests]);
 
   return (
     <SidebarProvider>

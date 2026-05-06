@@ -11,6 +11,12 @@ import {
   serverTimestamp,
   writeBatch,
   Timestamp,
+  collection,
+  query,
+  where,
+  orderBy,
+  limit,
+  getDocs,
 } from "firebase/firestore";
 import {
   getStorage,
@@ -38,6 +44,7 @@ import {
   FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -88,15 +95,16 @@ import { parseDateValue } from "@/lib/utils";
 import { AlertTriangle, Clock, XCircle, AlertCircle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { VerificationStatusGroup } from "@/lib/types";
+import { BankChangeRequestModal } from "./BankChangeRequestModal";
 
-function VerificationAlert({ 
-  status, 
-  note, 
-  title, 
-  isPayroll = false 
-}: { 
-  status?: VerificationStatusGroup; 
-  note?: string; 
+function VerificationAlert({
+  status,
+  note,
+  title,
+  isPayroll = false,
+}: {
+  status?: VerificationStatusGroup;
+  note?: string;
   title: string;
   isPayroll?: boolean;
 }) {
@@ -107,21 +115,26 @@ function VerificationAlert({
   const isRejected = status === "rejected";
 
   return (
-    <Alert className={`mb-6 border-l-4 ${
-      isPending ? "bg-amber-500/10 border-amber-500 text-amber-600 dark:text-amber-400" :
-      isRevision ? "bg-blue-500/10 border-blue-500 text-blue-600 dark:text-blue-400" :
-      "bg-red-500/10 border-red-500 text-red-600 dark:text-red-400"
-    }`}>
+    <Alert
+      className={`mb-6 border-l-4 ${
+        isPending
+          ? "bg-amber-500/10 border-amber-500 text-amber-600 dark:text-amber-400"
+          : isRevision
+            ? "bg-blue-500/10 border-blue-500 text-blue-600 dark:text-blue-400"
+            : "bg-red-500/10 border-red-500 text-red-600 dark:text-red-400"
+      }`}
+    >
       {isPending && <Clock className="h-5 w-5" />}
       {isRevision && <AlertCircle className="h-5 w-5" />}
       {isRejected && <XCircle className="h-5 w-5" />}
       <div className="ml-3">
         <AlertTitle className="font-bold flex items-center gap-2">
-          Status Verifikasi {title}: {
-            isPending ? "Menunggu Verifikasi HRD" :
-            isRevision ? "Perlu Revisi" :
-            "Ditolak"
-          }
+          Status Verifikasi {title}:{" "}
+          {isPending
+            ? "Menunggu Verifikasi HRD"
+            : isRevision
+              ? "Perlu Revisi"
+              : "Ditolak"}
         </AlertTitle>
         <AlertDescription className="mt-1 space-y-2">
           {isRevision && note && (
@@ -130,7 +143,8 @@ function VerificationAlert({
           {isPayroll && (isPending || isRevision || isRejected) && (
             <p className="flex items-center gap-1.5 font-bold mt-2">
               <AlertTriangle className="h-4 w-4" />
-              Rekening belum diverifikasi HRD. Jangan gunakan untuk payroll final.
+              Rekening belum diverifikasi HRD. Jangan gunakan untuk payroll
+              final.
             </p>
           )}
         </AlertDescription>
@@ -174,7 +188,7 @@ const OCCUPATION_OPTIONS = [
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_OPTIONS = Array.from({ length: CURRENT_YEAR - 1980 + 1 }, (_, i) =>
-  (CURRENT_YEAR - i).toString()
+  (CURRENT_YEAR - i).toString(),
 );
 const EXPIRED_YEAR_OPTIONS = ["Tidak ada masa berlaku", ...YEAR_OPTIONS];
 
@@ -684,7 +698,11 @@ function DocumentUploadCard({
   onChange: (url: string) => void;
   userId: string;
   fieldKey: string;
-  status: "Sudah Upload" | "Belum Upload" | "Tidak Punya" | "File Baru Belum Disimpan";
+  status:
+    | "Sudah Upload"
+    | "Belum Upload"
+    | "Tidak Punya"
+    | "File Baru Belum Disimpan";
   helperText: string;
   icon: any;
 }) {
@@ -756,8 +774,8 @@ function DocumentUploadCard({
                     status === "Sudah Upload"
                       ? "bg-emerald-500/10 text-emerald-500"
                       : status === "Belum Upload"
-                      ? "bg-amber-500/10 text-amber-500"
-                      : "bg-slate-500/10 text-slate-500"
+                        ? "bg-amber-500/10 text-amber-500"
+                        : "bg-slate-500/10 text-slate-500"
                   }`}
                 >
                   <Icon className="h-6 w-6" />
@@ -772,8 +790,8 @@ function DocumentUploadCard({
                         status === "Sudah Upload"
                           ? "bg-emerald-500"
                           : status === "Belum Upload"
-                          ? "bg-amber-500"
-                          : "bg-slate-500"
+                            ? "bg-amber-500"
+                            : "bg-slate-500"
                       }`}
                     />
                     <span
@@ -781,8 +799,8 @@ function DocumentUploadCard({
                         status === "Sudah Upload"
                           ? "text-emerald-500"
                           : status === "Belum Upload"
-                          ? "text-amber-500"
-                          : "text-slate-500"
+                            ? "text-amber-500"
+                            : "text-slate-500"
                       }`}
                     >
                       {status}
@@ -828,7 +846,9 @@ function DocumentUploadCard({
 
           <div
             className={`lg:w-72 xl:w-80 border-l border-slate-800 flex items-center justify-center p-6 sm:p-8 transition-all ${
-              !value ? "bg-slate-950/20 grayscale opacity-40" : "bg-slate-950/60"
+              !value
+                ? "bg-slate-950/20 grayscale opacity-40"
+                : "bg-slate-950/60"
             }`}
           >
             {value ? (
@@ -914,7 +934,11 @@ function FileUploadField({
   onChange: (url: string) => void;
   userId: string;
   fieldKey: string;
-  status: "Sudah Upload" | "Belum Upload" | "Tidak Punya" | "File Baru Belum Disimpan";
+  status:
+    | "Sudah Upload"
+    | "Belum Upload"
+    | "Tidak Punya"
+    | "File Baru Belum Disimpan";
   description: string;
   icon: any;
   helperText?: string;
@@ -1075,8 +1099,7 @@ function normalizeEmployeeProfileToFormValues(initialProfile: any): any {
       npwpFilePending:
         docAdmin.npwpFilePending ?? initialProfile.npwpFilePending ?? false,
       npwp: docAdmin.npwp || initialProfile.npwp || "",
-      npwpPhotoUrl:
-        docAdmin.npwpPhotoUrl || initialProfile.npwpPhotoUrl || "",
+      npwpPhotoUrl: docAdmin.npwpPhotoUrl || initialProfile.npwpPhotoUrl || "",
       noBpjsKesehatan:
         docAdmin.noBpjsKesehatan ?? initialProfile.noBpjsKesehatan ?? false,
       bpjsKesehatanFilePending:
@@ -1113,35 +1136,34 @@ function normalizeEmployeeProfileToFormValues(initialProfile: any): any {
       bankAccountNumber:
         rek.bankAccountNumber || initialProfile.bankAccountNumber || "",
       bankAccountHolderName:
-        rek.bankAccountHolderName ||
-        initialProfile.bankAccountHolderName ||
-        "",
+        rek.bankAccountHolderName || initialProfile.bankAccountHolderName || "",
       bankDocumentUrl:
         rek.bankDocumentUrl || initialProfile.bankDocumentUrl || "",
       buktiRekeningUrl:
         rek.buktiRekeningUrl || (initialProfile as any)?.buktiRekeningUrl || "",
     },
-    kontakDarurat: Array.isArray(kd) && kd.length > 0
-      ? kd.map((k: any) => ({
-          id: k.id || crypto.randomUUID(),
-          name: k.name || "",
-          relation: k.relation || "",
-          relationOther: k.relationOther || "",
-          phone: k.phone || "",
-          address: k.address || "",
-          priority: k.priority || "Utama",
-        }))
-      : [
-          {
-            id: crypto.randomUUID(),
-            name: initialProfile.emergencyContactName || "",
-            relation: initialProfile.emergencyContactRelation || "",
-            relationOther: "",
-            phone: initialProfile.emergencyContactPhone || "",
-            address: initialProfile.emergencyContactAddress || "",
-            priority: "Utama",
-          },
-        ],
+    kontakDarurat:
+      Array.isArray(kd) && kd.length > 0
+        ? kd.map((k: any) => ({
+            id: k.id || crypto.randomUUID(),
+            name: k.name || "",
+            relation: k.relation || "",
+            relationOther: k.relationOther || "",
+            phone: k.phone || "",
+            address: k.address || "",
+            priority: k.priority || "Utama",
+          }))
+        : [
+            {
+              id: crypto.randomUUID(),
+              name: initialProfile.emergencyContactName || "",
+              relation: initialProfile.emergencyContactRelation || "",
+              relationOther: "",
+              phone: initialProfile.emergencyContactPhone || "",
+              address: initialProfile.emergencyContactAddress || "",
+              priority: "Utama",
+            },
+          ],
     dataKeluarga: {
       orangTua: {
         ayah: {
@@ -1237,6 +1259,34 @@ export function EmployeeSelfProfileForm({
   const firestore = useFirestore();
   const { toast } = useToast();
   const lastResetKeyRef = useRef("");
+
+  const [latestBankRequest, setLatestBankRequest] = useState<any>(null);
+  const [isBankRequestModalOpen, setIsBankRequestModalOpen] = useState(false);
+  
+  const fetchPendingRequests = async () => {
+    if (!firebaseUser?.uid) return;
+    try {
+      const q = query(
+        collection(firestore, "bank_change_requests"),
+        where("employeeUid", "==", firebaseUser.uid),
+        orderBy("submittedAt", "desc"),
+        limit(1)
+      );
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const doc = snap.docs[0];
+        setLatestBankRequest({ id: doc.id, ...doc.data() });
+      } else {
+        setLatestBankRequest(null);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    fetchPendingRequests();
+  }, [firebaseUser?.uid, firestore]);
 
   const requiresSim = useMemo(() => {
     const position = (initialProfile.positionTitle || "").toLowerCase();
@@ -1505,54 +1555,83 @@ export function EmployeeSelfProfileForm({
       firebaseUser.uid,
     );
     const userRef = doc(firestore, "users", firebaseUser.uid);
-    
+
     // Check for verification changes
     const initialValues = normalizeEmployeeProfileToFormValues(initialProfile);
-    const isDifferent = (a: any, b: any) => JSON.stringify(cleanUndefinedValues(a)) !== JSON.stringify(cleanUndefinedValues(b));
-    
+    const isDifferent = (a: any, b: any) =>
+      JSON.stringify(cleanUndefinedValues(a)) !==
+      JSON.stringify(cleanUndefinedValues(b));
+
     const currentVerificationStatus = initialProfile.verificationStatus || {};
     const newVerificationStatus: any = { ...currentVerificationStatus };
     const changedGroups: string[] = [];
-    const historyEntries: any[] = [];
 
     const checkAndLogChange = (group: string, oldVal: any, newVal: any) => {
       if (isDifferent(oldVal, newVal)) {
         newVerificationStatus[group] = "pending";
         changedGroups.push(group);
-        historyEntries.push({
-          type: "verification",
-          group,
-          oldValue: oldVal,
-          newValue: newVal,
-          status: "pending",
-          note: "Menunggu verifikasi HRD",
-          changedBy: firebaseUser.uid,
-          changedAt: serverTimestamp(),
-        });
       }
     };
 
     if (!isDraft) {
-      checkAndLogChange("bankAccount", initialValues.dataRekening, values.dataRekening);
-      checkAndLogChange("identity", initialValues.dataDiriIdentitas, values.dataDiriIdentitas);
-      
-      const oldTax = { noNpwp: initialValues.dokumenAdministratif.noNpwp, npwp: initialValues.dokumenAdministratif.npwp, npwpPhotoUrl: initialValues.dokumenAdministratif.npwpPhotoUrl };
-      const newTax = { noNpwp: values.dokumenAdministratif.noNpwp, npwp: values.dokumenAdministratif.npwp, npwpPhotoUrl: values.dokumenAdministratif.npwpPhotoUrl };
-      checkAndLogChange("tax", oldTax, newTax);
-      
-      const oldBpjs = { noBpjsKs: initialValues.dokumenAdministratif.noBpjsKesehatan, bpjsKs: initialValues.dokumenAdministratif.bpjsKesehatan, bpjsKsUrl: initialValues.dokumenAdministratif.bpjsKesehatanPhotoUrl, noBpjsTk: initialValues.dokumenAdministratif.noBpjsKetenagakerjaan, bpjsTk: initialValues.dokumenAdministratif.bpjsKetenagakerjaan, bpjsTkUrl: initialValues.dokumenAdministratif.bpjsKetenagakerjaanPhotoUrl };
-      const newBpjs = { noBpjsKs: values.dokumenAdministratif.noBpjsKesehatan, bpjsKs: values.dokumenAdministratif.bpjsKesehatan, bpjsKsUrl: values.dokumenAdministratif.bpjsKesehatanPhotoUrl, noBpjsTk: values.dokumenAdministratif.noBpjsKetenagakerjaan, bpjsTk: values.dokumenAdministratif.bpjsKetenagakerjaan, bpjsTkUrl: values.dokumenAdministratif.bpjsKetenagakerjaanPhotoUrl };
-      checkAndLogChange("bpjs", oldBpjs, newBpjs);
-      
-      checkAndLogChange("education", initialValues.pendidikanDanPengembangan?.pendidikanTerakhir, values.pendidikanDanPengembangan?.pendidikanTerakhir);
-      checkAndLogChange("address", initialValues.alamat, values.alamat);
-      checkAndLogChange("family", initialValues.dataKeluarga, values.dataKeluarga);
-      checkAndLogChange("emergencyContact", initialValues.kontakDarurat, values.kontakDarurat);
+      checkAndLogChange(
+        "bankAccount",
+        initialValues.dataRekening,
+        values.dataRekening,
+      );
+      checkAndLogChange(
+        "identity",
+        initialValues.dataDiriIdentitas,
+        values.dataDiriIdentitas,
+      );
 
-      historyEntries.forEach(entry => {
-        const historyRef = doc(firestore, "employees", firebaseUser.uid, "employment_history", crypto.randomUUID());
-        batch.set(historyRef, entry);
-      });
+      const oldTax = {
+        noNpwp: initialValues.dokumenAdministratif.noNpwp,
+        npwp: initialValues.dokumenAdministratif.npwp,
+        npwpPhotoUrl: initialValues.dokumenAdministratif.npwpPhotoUrl,
+      };
+      const newTax = {
+        noNpwp: values.dokumenAdministratif.noNpwp,
+        npwp: values.dokumenAdministratif.npwp,
+        npwpPhotoUrl: values.dokumenAdministratif.npwpPhotoUrl,
+      };
+      checkAndLogChange("tax", oldTax, newTax);
+
+      const oldBpjs = {
+        noBpjsKs: initialValues.dokumenAdministratif.noBpjsKesehatan,
+        bpjsKs: initialValues.dokumenAdministratif.bpjsKesehatan,
+        bpjsKsUrl: initialValues.dokumenAdministratif.bpjsKesehatanPhotoUrl,
+        noBpjsTk: initialValues.dokumenAdministratif.noBpjsKetenagakerjaan,
+        bpjsTk: initialValues.dokumenAdministratif.bpjsKetenagakerjaan,
+        bpjsTkUrl:
+          initialValues.dokumenAdministratif.bpjsKetenagakerjaanPhotoUrl,
+      };
+      const newBpjs = {
+        noBpjsKs: values.dokumenAdministratif.noBpjsKesehatan,
+        bpjsKs: values.dokumenAdministratif.bpjsKesehatan,
+        bpjsKsUrl: values.dokumenAdministratif.bpjsKesehatanPhotoUrl,
+        noBpjsTk: values.dokumenAdministratif.noBpjsKetenagakerjaan,
+        bpjsTk: values.dokumenAdministratif.bpjsKetenagakerjaan,
+        bpjsTkUrl: values.dokumenAdministratif.bpjsKetenagakerjaanPhotoUrl,
+      };
+      checkAndLogChange("bpjs", oldBpjs, newBpjs);
+
+      checkAndLogChange(
+        "education",
+        initialValues.pendidikanDanPengembangan?.pendidikanTerakhir,
+        values.pendidikanDanPengembangan?.pendidikanTerakhir,
+      );
+      checkAndLogChange("address", initialValues.alamat, values.alamat);
+      checkAndLogChange(
+        "family",
+        initialValues.dataKeluarga,
+        values.dataKeluarga,
+      );
+      checkAndLogChange(
+        "emergencyContact",
+        initialValues.kontakDarurat,
+        values.kontakDarurat,
+      );
     }
 
     const getRegionValue = (region: any) =>
@@ -1561,26 +1640,45 @@ export function EmployeeSelfProfileForm({
         : null;
 
     const employeeDocuments = [
-      { name: "NPWP", url: values.dokumenAdministratif.npwpPhotoUrl, type: "npwp" },
-      { name: "BPJS Kesehatan", url: values.dokumenAdministratif.bpjsKesehatanPhotoUrl, type: "bpjs_ks" },
-      { name: "BPJS Ketenagakerjaan", url: values.dokumenAdministratif.bpjsKetenagakerjaanPhotoUrl, type: "bpjs_tk" },
-      { name: "Bukti Rekening", url: values.dataRekening.bankDocumentUrl, type: "bank_proof" },
+      {
+        name: "NPWP",
+        url: values.dokumenAdministratif.npwpPhotoUrl,
+        type: "npwp",
+      },
+      {
+        name: "BPJS Kesehatan",
+        url: values.dokumenAdministratif.bpjsKesehatanPhotoUrl,
+        type: "bpjs_ks",
+      },
+      {
+        name: "BPJS Ketenagakerjaan",
+        url: values.dokumenAdministratif.bpjsKetenagakerjaanPhotoUrl,
+        type: "bpjs_tk",
+      },
+      {
+        name: "Bukti Rekening",
+        url: values.dataRekening.bankDocumentUrl,
+        type: "bank_proof",
+      },
       { name: "KTP", url: values.dataDiriIdentitas.ktpPhotoUrl, type: "ktp" },
       ...(values.pendidikanDanPengembangan?.riwayatPendidikan
         ?.filter((p: any) => p.ijazahUrl)
         .map((p: any) => ({
           name: `Ijazah ${p.jenjang || ""}`,
           url: p.ijazahUrl,
-          type: "education_ijazah"
+          type: "education_ijazah",
         })) || []),
       ...(values.pendidikanDanPengembangan?.pendidikanTerakhir?.ijazahUrl
-        ? [{
-          name: "Ijazah Terakhir",
-          url: values.pendidikanDanPengembangan.pendidikanTerakhir.ijazahUrl,
-          type: "education_ijazah_last"
-        }]
-        : [])
-    ].filter(doc => doc.url);
+        ? [
+            {
+              name: "Ijazah Terakhir",
+              url: values.pendidikanDanPengembangan.pendidikanTerakhir
+                .ijazahUrl,
+              type: "education_ijazah_last",
+            },
+          ]
+        : []),
+    ].filter((doc) => doc.url);
 
     const employeePayload = cleanUndefinedValues({
       uid: firebaseUser.uid,
@@ -1614,7 +1712,9 @@ export function EmployeeSelfProfileForm({
         : { isComplete: true, completedAt: serverTimestamp() },
       fullName: values.dataDiriIdentitas.fullName,
       phone: values.dataDiriIdentitas.phone,
-      verificationStatus: Object.keys(newVerificationStatus).length > 0 ? newVerificationStatus : null,
+      ...(Object.keys(newVerificationStatus).length > 0
+        ? { verificationStatus: newVerificationStatus }
+        : {}),
     });
 
     batch.set(employeeProfileRef, employeePayload, { merge: true });
@@ -1757,10 +1857,10 @@ export function EmployeeSelfProfileForm({
                 </p>
               </div>
 
-              <VerificationAlert 
-                status={initialProfile.verificationStatus?.identity} 
-                note={initialProfile.verificationNotes?.identity} 
-                title="Identitas Resmi" 
+              <VerificationAlert
+                status={initialProfile.verificationStatus?.identity}
+                note={initialProfile.verificationNotes?.identity}
+                title="Identitas Resmi"
               />
 
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
@@ -2250,10 +2350,10 @@ export function EmployeeSelfProfileForm({
                 </p>
               </div>
 
-              <VerificationAlert 
-                status={initialProfile.verificationStatus?.address} 
-                note={initialProfile.verificationNotes?.address} 
-                title="Alamat Lengkap" 
+              <VerificationAlert
+                status={initialProfile.verificationStatus?.address}
+                note={initialProfile.verificationNotes?.address}
+                title="Alamat Lengkap"
               />
 
               <RegionSelector form={form} basePath="alamat.ktp" />
@@ -2465,26 +2565,31 @@ export function EmployeeSelfProfileForm({
         );
       case 2:
         return (
-          <div key="step-dokumen" className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
+          <div
+            key="step-dokumen"
+            className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700"
+          >
             <div className="space-y-2">
               <h4 className="text-xl font-bold text-slate-100 flex items-center gap-3 tracking-tight">
                 <div className="h-2 w-2 rounded-full bg-primary" />
                 Dokumen Administratif
               </h4>
               <p className="text-sm text-slate-400 max-w-2xl leading-relaxed">
-                Silahkan lengkapi dokumen administratif di bawah ini. Dokumen ini sangat penting untuk proses penggajian (payroll), pajak, dan asuransi kesehatan Anda.
+                Silahkan lengkapi dokumen administratif di bawah ini. Dokumen
+                ini sangat penting untuk proses penggajian (payroll), pajak, dan
+                asuransi kesehatan Anda.
               </p>
             </div>
 
-            <VerificationAlert 
-              status={initialProfile.verificationStatus?.tax} 
-              note={initialProfile.verificationNotes?.tax} 
-              title="NPWP" 
+            <VerificationAlert
+              status={initialProfile.verificationStatus?.tax}
+              note={initialProfile.verificationNotes?.tax}
+              title="NPWP"
             />
-            <VerificationAlert 
-              status={initialProfile.verificationStatus?.bpjs} 
-              note={initialProfile.verificationNotes?.bpjs} 
-              title="BPJS" 
+            <VerificationAlert
+              status={initialProfile.verificationStatus?.bpjs}
+              note={initialProfile.verificationNotes?.bpjs}
+              title="BPJS"
             />
 
             <div className="grid grid-cols-1 gap-8">
@@ -2502,7 +2607,10 @@ export function EmployeeSelfProfileForm({
                             onCheckedChange={field.onChange}
                             className="h-5 w-5 rounded-md border-slate-700 data-[state=checked]:bg-primary"
                           />
-                          <Label htmlFor="no-npwp" className="text-xs font-bold text-slate-400 uppercase tracking-widest cursor-pointer hover:text-slate-300 transition-colors">
+                          <Label
+                            htmlFor="no-npwp"
+                            className="text-xs font-bold text-slate-400 uppercase tracking-widest cursor-pointer hover:text-slate-300 transition-colors"
+                          >
                             Saya belum memiliki NPWP
                           </Label>
                         </div>
@@ -2519,7 +2627,9 @@ export function EmployeeSelfProfileForm({
                         name="dokumenAdministratif.npwp"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Nomor NPWP (15 Digit)*</FormLabel>
+                            <FormLabel className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">
+                              Nomor NPWP (15 Digit)*
+                            </FormLabel>
                             <FormControl>
                               <Input
                                 {...field}
@@ -2528,7 +2638,10 @@ export function EmployeeSelfProfileForm({
                                 className="bg-slate-950/40 h-12 rounded-xl border-slate-800 focus:border-primary/50 transition-all font-mono tracking-wider"
                                 inputMode="numeric"
                                 onChange={(e) => {
-                                  const val = e.target.value.replace(/[^0-9]/g, "");
+                                  const val = e.target.value.replace(
+                                    /[^0-9]/g,
+                                    "",
+                                  );
                                   field.onChange(val);
                                 }}
                               />
@@ -2572,7 +2685,10 @@ export function EmployeeSelfProfileForm({
                           onCheckedChange={field.onChange}
                           className="h-5 w-5 rounded-md border-slate-700 data-[state=checked]:bg-blue-500"
                         />
-                        <Label htmlFor="no-bpjs-ks" className="text-xs font-bold text-slate-400 uppercase tracking-widest cursor-pointer hover:text-slate-300 transition-colors">
+                        <Label
+                          htmlFor="no-bpjs-ks"
+                          className="text-xs font-bold text-slate-400 uppercase tracking-widest cursor-pointer hover:text-slate-300 transition-colors"
+                        >
                           Saya belum memiliki BPJS Kesehatan
                         </Label>
                       </div>
@@ -2588,7 +2704,9 @@ export function EmployeeSelfProfileForm({
                         name="dokumenAdministratif.bpjsKesehatan"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Nomor BPJS Kesehatan*</FormLabel>
+                            <FormLabel className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">
+                              Nomor BPJS Kesehatan*
+                            </FormLabel>
                             <FormControl>
                               <Input
                                 {...field}
@@ -2597,7 +2715,10 @@ export function EmployeeSelfProfileForm({
                                 className="bg-slate-950/40 h-12 rounded-xl border-slate-800 focus:border-blue-500/50 transition-all font-mono tracking-wider"
                                 inputMode="numeric"
                                 onChange={(e) => {
-                                  const val = e.target.value.replace(/[^0-9]/g, "");
+                                  const val = e.target.value.replace(
+                                    /[^0-9]/g,
+                                    "",
+                                  );
                                   field.onChange(val);
                                 }}
                               />
@@ -2641,7 +2762,10 @@ export function EmployeeSelfProfileForm({
                           onCheckedChange={field.onChange}
                           className="h-5 w-5 rounded-md border-slate-700 data-[state=checked]:bg-green-500"
                         />
-                        <Label htmlFor="no-bpjs-tk" className="text-xs font-bold text-slate-400 uppercase tracking-widest cursor-pointer hover:text-slate-300 transition-colors">
+                        <Label
+                          htmlFor="no-bpjs-tk"
+                          className="text-xs font-bold text-slate-400 uppercase tracking-widest cursor-pointer hover:text-slate-300 transition-colors"
+                        >
                           Saya belum memiliki BPJS Ketenagakerjaan
                         </Label>
                       </div>
@@ -2657,7 +2781,9 @@ export function EmployeeSelfProfileForm({
                         name="dokumenAdministratif.bpjsKetenagakerjaan"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Nomor BPJS Ketenagakerjaan*</FormLabel>
+                            <FormLabel className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">
+                              Nomor BPJS Ketenagakerjaan*
+                            </FormLabel>
                             <FormControl>
                               <Input
                                 {...field}
@@ -2666,7 +2792,10 @@ export function EmployeeSelfProfileForm({
                                 className="bg-slate-950/40 h-12 rounded-xl border-slate-800 focus:border-green-500/50 transition-all font-mono tracking-wider"
                                 inputMode="numeric"
                                 onChange={(e) => {
-                                  const val = e.target.value.replace(/[^0-9]/g, "");
+                                  const val = e.target.value.replace(
+                                    /[^0-9]/g,
+                                    "",
+                                  );
                                   field.onChange(val);
                                 }}
                               />
@@ -2705,7 +2834,9 @@ export function EmployeeSelfProfileForm({
                       name="dokumenAdministratif.simNumber"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Nomor SIM</FormLabel>
+                          <FormLabel className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">
+                            Nomor SIM
+                          </FormLabel>
                           <FormControl>
                             <Input
                               {...field}
@@ -2714,7 +2845,10 @@ export function EmployeeSelfProfileForm({
                               className="bg-slate-950/40 h-12 rounded-xl border-slate-800"
                               inputMode="numeric"
                               onChange={(e) => {
-                                const val = e.target.value.replace(/[^0-9]/g, "");
+                                const val = e.target.value.replace(
+                                  /[^0-9]/g,
+                                  "",
+                                );
                                 field.onChange(val);
                               }}
                             />
@@ -2747,131 +2881,270 @@ export function EmployeeSelfProfileForm({
         );
       case 3:
         return (
-          <div key="step-rekening" className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+          <div
+            key="step-rekening"
+            className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700"
+          >
             <div className="space-y-2">
               <h4 className="text-xl font-bold text-slate-100 flex items-center gap-3 tracking-tight">
                 <div className="h-2 w-2 rounded-full bg-amber-500" />
                 Data Rekening & Finansial
               </h4>
               <p className="text-sm text-slate-400 max-w-2xl leading-relaxed">
-                Informasi ini digunakan untuk keperluan transfer gaji dan tunjangan lainnya. Mohon pastikan data yang Anda masukkan akurat.
+                Informasi ini digunakan untuk keperluan transfer gaji dan
+                tunjangan lainnya. Mohon pastikan data yang Anda masukkan
+                akurat.
               </p>
             </div>
 
-            <VerificationAlert 
-              status={initialProfile.verificationStatus?.bankAccount} 
-              note={initialProfile.verificationNotes?.bankAccount} 
+            <VerificationAlert
+              status={initialProfile.verificationStatus?.bankAccount}
+              note={initialProfile.verificationNotes?.bankAccount}
               title="Rekening Payroll"
               isPayroll={true}
             />
 
-            <div className="bg-slate-900/30 border border-slate-800/60 rounded-[2.5rem] p-8 md:p-10 shadow-xl space-y-10">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="space-y-6">
-                  <FormField
-                    control={form.control}
-                    name="dataRekening.bankName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">Nama Bank*</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          value={field.value || ""}
-                        >
+            {initialProfile.dataRekening?.bankName ? (
+              <div className="bg-slate-900/30 border border-slate-800/60 rounded-[2.5rem] p-8 md:p-10 shadow-xl space-y-10">
+                <div className="flex justify-between items-center mb-4">
+                  <div className="px-3 py-1 bg-emerald-500/10 text-emerald-500 text-xs font-bold rounded-full uppercase tracking-widest border border-emerald-500/20">
+                    Data Aktif Payroll
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="space-y-6">
+                    <div>
+                      <p className="text-slate-500 text-[11px] font-bold uppercase tracking-wider mb-1">Nama Bank</p>
+                      <p className="text-slate-200 font-semibold text-lg">{initialProfile.dataRekening.bankName}</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500 text-[11px] font-bold uppercase tracking-wider mb-1">Nomor Rekening</p>
+                      <p className="text-slate-200 font-semibold text-lg">{initialProfile.dataRekening.bankAccountNumber}</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500 text-[11px] font-bold uppercase tracking-wider mb-1">Nama Pemilik Rekening</p>
+                      <p className="text-slate-200 font-semibold text-lg">{initialProfile.dataRekening.bankAccountHolderName}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-slate-500 text-[11px] font-bold uppercase tracking-wider mb-2">Bukti Rekening</p>
+                    {initialProfile.dataRekening.bankDocumentUrl ? (
+                      <div className="group relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 shadow-2xl">
+                        <img src={initialProfile.dataRekening.bankDocumentUrl} alt="Bukti Rekening" className="w-full h-full object-cover opacity-80" />
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <Button 
+                            type="button" 
+                            variant="default" 
+                            size="sm" 
+                            className="rounded-full px-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => window.open(initialProfile.dataRekening?.bankDocumentUrl, "_blank")}
+                          >
+                            <Eye className="mr-2 h-4 w-4" /> Buka Dokumen
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="h-full w-full rounded-2xl border border-dashed border-slate-700 bg-slate-900/50 flex items-center justify-center text-slate-500 text-sm">
+                        Belum ada bukti
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-6 border-t border-slate-800/40">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-blue-500/5 border border-blue-500/10">
+                    <div className="space-y-1">
+                      <p className="text-xs font-bold text-blue-400 uppercase tracking-widest">
+                        Perubahan Data Rekening
+                      </p>
+                      <p className="text-sm text-slate-400 leading-relaxed max-w-xl">
+                        Selama pengajuan belum disetujui HRD, payroll tetap menggunakan data rekening aktif sebelumnya.
+                      </p>
+                    </div>
+                    {latestBankRequest?.status === "pending" ? (
+                      <Button type="button" disabled variant="outline" className="shrink-0 border-amber-500/30 text-amber-500 bg-amber-500/5 hover:bg-amber-500/10 hover:text-amber-500">
+                        <Clock className="mr-2 h-4 w-4" />
+                        Menunggu Persetujuan HRD
+                      </Button>
+                    ) : (
+                      <Button type="button" variant="default" onClick={() => setIsBankRequestModalOpen(true)} className="shrink-0">
+                        Ajukan Perubahan Data Rekening
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-slate-900/30 border border-slate-800/60 rounded-[2.5rem] p-8 md:p-10 shadow-xl space-y-10">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="space-y-6">
+                    <FormField
+                      control={form.control}
+                      name="dataRekening.bankName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+                            Nama Bank*
+                          </FormLabel>
+                          <Select
+                            onValueChange={field.onChange}
+                            value={field.value || ""}
+                          >
+                            <FormControl>
+                              <SelectTrigger className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80">
+                                <SelectValue placeholder="Pilih Bank" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent className="bg-slate-900 border-slate-800">
+                              {INDONESIAN_BANKS.map((opt) => (
+                                <SelectItem key={opt} value={opt}>
+                                  {opt}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="dataRekening.bankAccountNumber"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+                            Nomor Rekening*
+                          </FormLabel>
                           <FormControl>
-                            <SelectTrigger className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80">
-                              <SelectValue placeholder="Pilih Bank" />
-                            </SelectTrigger>
+                            <Input
+                              {...field}
+                              className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80"
+                              placeholder="Contoh: 1234567890"
+                              inputMode="numeric"
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/[^0-9]/g, "");
+                                field.onChange(val);
+                              }}
+                            />
                           </FormControl>
-                          <SelectContent className="bg-slate-900 border-slate-800">
-                            {INDONESIAN_BANKS.map((opt) => (
-                              <SelectItem key={opt} value={opt}>
-                                {opt}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                  <FormField
-                    control={form.control}
-                    name="dataRekening.bankAccountNumber"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">Nomor Rekening*</FormLabel>
-                        <FormControl>
-                          <Input
-                            {...field}
-                            className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80"
-                            placeholder="Contoh: 1234567890"
-                            inputMode="numeric"
-                            onChange={(e) => {
-                              const val = e.target.value.replace(/[^0-9]/g, "");
-                              field.onChange(val);
-                            }}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="dataRekening.bankAccountHolderName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">Nama Pemilik Rekening*</FormLabel>
-                        <FormControl>
-                          <Input
-                            {...field}
-                            className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80"
-                            placeholder="Sesuai yang tertera di buku tabungan"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <div>
-                  <FormField
-                    control={form.control}
-                    name="dataRekening.bankDocumentUrl"
-                    render={({ field }) => (
-                      <FileUploadField
-                        label="Bukti Rekening / Buku Tabungan"
-                        description="Foto halaman depan buku tabungan atau screenshot detail rekening dari m-banking. Pastikan Nama dan Nomor Rekening terlihat jelas."
-                        userId={firebaseUser?.uid || ""}
-                        fieldKey="bank_proof"
-                        value={field.value}
-                        onChange={field.onChange}
-                        icon={Wallet}
-                        status={field.value ? "Sudah Upload" : "Belum Upload"}
-                      />
-                    )}
-                  />
-                </div>
-              </div>
-
-              <div className="pt-6 border-t border-slate-800/40">
-                <div className="flex items-start gap-4 p-4 rounded-2xl bg-amber-500/5 border border-amber-500/10">
-                  <div className="h-8 w-8 rounded-full bg-amber-500/10 flex items-center justify-center flex-shrink-0">
-                    <Info className="h-4 w-4 text-amber-500" />
+                    <FormField
+                      control={form.control}
+                      name="dataRekening.bankAccountHolderName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+                            Nama Pemilik Rekening*
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80"
+                              placeholder="Sesuai yang tertera di buku tabungan"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   </div>
-                  <div className="space-y-1">
-                    <p className="text-xs font-bold text-amber-500 uppercase tracking-widest">Informasi</p>
-                    <p className="text-[11px] text-slate-400 leading-relaxed">
-                      Pastikan data di sini sinkron dengan bukti yang diunggah.
-                    </p>
+
+                  <div>
+                    <FormField
+                      control={form.control}
+                      name="dataRekening.bankDocumentUrl"
+                      render={({ field }) => (
+                        <FileUploadField
+                          label="Bukti Rekening / Buku Tabungan"
+                          description="Foto halaman depan buku tabungan atau screenshot detail rekening dari m-banking. Pastikan Nama dan Nomor Rekening terlihat jelas."
+                          userId={firebaseUser?.uid || ""}
+                          fieldKey="bank_proof"
+                          value={field.value}
+                          onChange={field.onChange}
+                          icon={Wallet}
+                          status={field.value ? "Sudah Upload" : "Belum Upload"}
+                        />
+                      )}
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-6 border-t border-slate-800/40">
+                  <div className="flex items-start gap-4 p-4 rounded-2xl bg-amber-500/5 border border-amber-500/10">
+                    <div className="h-8 w-8 rounded-full bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+                      <Info className="h-4 w-4 text-amber-500" />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-bold text-amber-500 uppercase tracking-widest">
+                        Informasi
+                      </p>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        Pastikan data di sini sinkron dengan bukti yang diunggah.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
+            )}
+            
+            {/* Status Pengajuan Card (POV Karyawan) */}
+            <div className="bg-slate-900/30 border border-slate-800/60 rounded-[2.5rem] p-8 md:p-10 shadow-xl space-y-6">
+              <h4 className="text-lg font-bold text-white flex items-center gap-2">
+                <Clock className="w-5 h-5 text-blue-500" />
+                Status Pengajuan Perubahan Rekening
+              </h4>
+              {!latestBankRequest ? (
+                <div className="p-6 rounded-2xl bg-slate-900/50 border border-slate-800 flex items-center justify-center text-slate-500 text-sm">
+                  Belum ada pengajuan perubahan rekening.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="p-5 rounded-2xl bg-slate-900/50 border border-slate-800">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Tanggal Pengajuan</p>
+                      <p className="text-sm text-slate-300">
+                        {latestBankRequest.submittedAt?.toDate ? latestBankRequest.submittedAt.toDate().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }) : "-"}
+                      </p>
+                    </div>
+                    <div className="p-5 rounded-2xl bg-slate-900/50 border border-slate-800">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Status Terbaru</p>
+                      <Badge 
+                        variant="outline"
+                        className={
+                          latestBankRequest.status === "pending" ? "bg-amber-500/10 text-amber-500 border-amber-500/30" :
+                          latestBankRequest.status === "approved" ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/30" :
+                          "bg-red-500/10 text-red-500 border-red-500/30"
+                        }
+                      >
+                        {latestBankRequest.status === "pending" ? "Menunggu HRD" : latestBankRequest.status === "approved" ? "Disetujui" : "Ditolak"}
+                      </Badge>
+                    </div>
+                    <div className="p-5 rounded-2xl bg-slate-900/50 border border-slate-800">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Catatan HRD</p>
+                      <p className="text-sm text-slate-300 truncate" title={latestBankRequest.hrdNote || "-"}>
+                        {latestBankRequest.hrdNote || "-"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
+
+            {isBankRequestModalOpen && (
+              <BankChangeRequestModal 
+                open={isBankRequestModalOpen}
+                onOpenChange={setIsBankRequestModalOpen}
+                initialProfile={initialProfile}
+                latestRequest={latestBankRequest}
+                onSuccess={fetchPendingRequests}
+              />
+            )}
           </div>
         );
       case 4:
@@ -2898,10 +3171,10 @@ export function EmployeeSelfProfileForm({
               </CardHeader>
               <CardContent className="p-0">
                 <div className="p-6 pb-0">
-                  <VerificationAlert 
-                    status={initialProfile.verificationStatus?.family} 
-                    note={initialProfile.verificationNotes?.family} 
-                    title="Data Keluarga" 
+                  <VerificationAlert
+                    status={initialProfile.verificationStatus?.family}
+                    note={initialProfile.verificationNotes?.family}
+                    title="Data Keluarga"
                   />
                 </div>
                 <Tabs defaultValue="ayah" className="w-full">
@@ -4007,10 +4280,10 @@ export function EmployeeSelfProfileForm({
                               Kontak {index + 1}
                               {form.watch(`kontakDarurat.${index}.priority`) ===
                                 "Utama" && (
-                                  <span className="text-[9px] bg-primary text-primary-foreground px-2 py-0.5 rounded-full font-black uppercase tracking-tighter">
-                                    UTAMA
-                                  </span>
-                                )}
+                                <span className="text-[9px] bg-primary text-primary-foreground px-2 py-0.5 rounded-full font-black uppercase tracking-tighter">
+                                  UTAMA
+                                </span>
+                              )}
                             </h5>
                           </div>
                         </div>
@@ -4108,27 +4381,27 @@ export function EmployeeSelfProfileForm({
                           />
                           {form.watch(`kontakDarurat.${index}.relation`) ===
                             "Kerabat Lain" && (
-                              <FormField
-                                control={form.control}
-                                name={`kontakDarurat.${index}.relationOther`}
-                                render={({ field }) => (
-                                  <FormItem className="animate-in slide-in-from-top-2 duration-300">
-                                    <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
-                                      Hubungan Spesifik*
-                                    </FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        {...field}
-                                        value={field.value || ""}
-                                        placeholder="Sebutkan hubungan"
-                                        className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80"
-                                      />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                            )}
+                            <FormField
+                              control={form.control}
+                              name={`kontakDarurat.${index}.relationOther`}
+                              render={({ field }) => (
+                                <FormItem className="animate-in slide-in-from-top-2 duration-300">
+                                  <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+                                    Hubungan Spesifik*
+                                  </FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      {...field}
+                                      value={field.value || ""}
+                                      placeholder="Sebutkan hubungan"
+                                      className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80"
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          )}
                         </div>
                         <FormField
                           control={form.control}
@@ -4201,14 +4474,15 @@ export function EmployeeSelfProfileForm({
                   Pendidikan Terakhir
                 </h4>
                 <p className="text-sm text-slate-400 max-w-xl leading-relaxed">
-                  Pendidikan terakhir wajib diisi. Data ini akan menjadi basis kualifikasi utama Anda.
+                  Pendidikan terakhir wajib diisi. Data ini akan menjadi basis
+                  kualifikasi utama Anda.
                 </p>
               </div>
 
-              <VerificationAlert 
-                status={initialProfile.verificationStatus?.education} 
-                note={initialProfile.verificationNotes?.education} 
-                title="Pendidikan Terakhir" 
+              <VerificationAlert
+                status={initialProfile.verificationStatus?.education}
+                note={initialProfile.verificationNotes?.education}
+                title="Pendidikan Terakhir"
               />
 
               <div className="p-8 space-y-8 bg-slate-900/20 border-x border-b border-slate-800 rounded-b-3xl">
@@ -4345,7 +4619,8 @@ export function EmployeeSelfProfileForm({
                     Riwayat Pendidikan Lainnya
                   </h4>
                   <p className="text-sm text-slate-400 max-w-xl leading-relaxed">
-                    Tambahkan riwayat pendidikan sebelumnya (SD, SMP, SMA, atau kursus panjang).
+                    Tambahkan riwayat pendidikan sebelumnya (SD, SMP, SMA, atau
+                    kursus panjang).
                   </p>
                 </div>
                 <Button
@@ -4534,7 +4809,8 @@ export function EmployeeSelfProfileForm({
                         Belum ada riwayat pendidikan tambahan
                       </p>
                       <p className="text-xs mt-2 text-slate-500 leading-relaxed italic">
-                        Anda dapat menambahkan riwayat pendidikan lain jika diperlukan.
+                        Anda dapat menambahkan riwayat pendidikan lain jika
+                        diperlukan.
                       </p>
                     </div>
                   </div>
@@ -4553,7 +4829,8 @@ export function EmployeeSelfProfileForm({
                     Sertifikasi & Pelatihan
                   </h4>
                   <p className="text-sm text-slate-400 max-w-xl leading-relaxed">
-                    Tambahkan kompetensi tambahan atau sertifikasi profesional yang Anda miliki.
+                    Tambahkan kompetensi tambahan atau sertifikasi profesional
+                    yang Anda miliki.
                   </p>
                 </div>
                 <Button
@@ -4739,7 +5016,8 @@ export function EmployeeSelfProfileForm({
                         Belum ada sertifikasi yang ditambahkan
                       </p>
                       <p className="text-xs mt-2 text-slate-500 leading-relaxed italic">
-                        Menambahkan sertifikasi dapat meningkatkan kredibilitas profil profesional Anda.
+                        Menambahkan sertifikasi dapat meningkatkan kredibilitas
+                        profil profesional Anda.
                       </p>
                     </div>
                   </div>
@@ -4779,20 +5057,22 @@ export function EmployeeSelfProfileForm({
               return (
                 <div
                   key={item.title}
-                  className={`flex items-center gap-2 rounded-2xl px-3 py-2 text-[0.72rem] ${isActive
+                  className={`flex items-center gap-2 rounded-2xl px-3 py-2 text-[0.72rem] ${
+                    isActive
                       ? "bg-slate-950 text-slate-100"
                       : isCompleted
                         ? "bg-slate-900/90 text-slate-300"
                         : "bg-slate-950/70 text-slate-500"
-                    }`}
+                  }`}
                 >
                   <span
-                    className={`flex h-6 w-6 items-center justify-center rounded-full text-[0.72rem] font-semibold ${isActive
+                    className={`flex h-6 w-6 items-center justify-center rounded-full text-[0.72rem] font-semibold ${
+                      isActive
                         ? "bg-primary text-white"
                         : isCompleted
                           ? "bg-emerald-500 text-slate-950"
                           : "bg-slate-800 text-slate-400"
-                      }`}
+                    }`}
                   >
                     {isCompleted ? <Check className="h-4 w-4" /> : index + 1}
                   </span>

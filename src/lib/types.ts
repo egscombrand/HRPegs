@@ -420,6 +420,25 @@ export type EmployeeProfile = {
   verificationNotes?: Partial<Record<keyof EmployeeVerificationStatus, string>>;
 };
 
+export type BankChangeRequest = {
+  id?: string;
+  employeeUid: string;
+  employeeName: string;
+  currentBankName?: string;
+  currentAccountNumber?: string;
+  currentAccountHolderName?: string;
+  requestedBankName: string;
+  requestedAccountNumber: string;
+  requestedAccountHolderName: string;
+  requestedProofUrl: string;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected';
+  hrdNote?: string;
+  submittedAt: Timestamp;
+  reviewedAt?: Timestamp;
+  reviewedBy?: string;
+};
+
 export type AllowanceItem = {
   id: string;
   name: string;

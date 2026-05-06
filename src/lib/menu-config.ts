@@ -2,7 +2,7 @@
 import { createElement, type ReactNode } from 'react';
 import { 
     LayoutDashboard, Users, Briefcase, User, Calendar, DollarSign, Settings, ShieldCheck, Database, History, 
-    Contact, UserPlus, FolderKanban, CalendarOff, UserMinus, KanbanSquare, CheckSquare, BarChart, ClipboardCheck, Award, Search, FileText, FileUp, Video, BrainCircuit, Timer, MapPin, BookUser, FileHeart, FileClock, GraduationCap, PenSquare, Globe
+    Contact, UserPlus, FolderKanban, CalendarOff, UserMinus, KanbanSquare, CheckSquare, BarChart, ClipboardCheck, Award, Search, FileText, FileUp, Video, BrainCircuit, Timer, MapPin, BookUser, FileHeart, FileClock, GraduationCap, PenSquare, Globe, Wallet
 } from 'lucide-react';
 import type { UserRole } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
@@ -35,6 +35,7 @@ const EMPLOYEE_MANAGEMENT_ITEMS: MenuGroup = {
     title: "Manajemen Karyawan",
     items: [
         { key: 'employee.data.karyawan', href: '/admin/hrd/employee-data/karyawan', label: 'Data Karyawan', icon: createElement(Users) },
+        { key: 'employee.data.bank_requests', href: '/admin/hrd/employee-data/bank-requests', label: 'Pengajuan Perubahan Rekening', icon: createElement(Wallet) },
     ]
 };
 
