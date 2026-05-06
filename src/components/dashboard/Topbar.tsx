@@ -90,7 +90,17 @@ export function Topbar({ pageTitle, actionArea }: TopbarProps) {
         );
     }, [userProfile?.uid, firestore]);
     const { data: unreadNotifications } = useCollection<Notification>(unreadNotifsQuery);
-    const unreadCount = unreadNotifications?.length || 0;
+
+    const hrdUnreadNotifsQuery = useMemoFirebase(() => {
+        if (!userProfile?.role || !['hrd', 'super-admin'].includes(userProfile.role)) return null;
+        return query(
+            collection(firestore, 'hrd_notifications'),
+            where('isRead', '==', false)
+        );
+    }, [userProfile?.role, firestore]);
+    const { data: hrdUnreadNotifications } = useCollection<Notification>(hrdUnreadNotifsQuery);
+
+    const unreadCount = (unreadNotifications?.length || 0) + (hrdUnreadNotifications?.length || 0);
 
 
     return (

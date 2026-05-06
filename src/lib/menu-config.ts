@@ -35,7 +35,6 @@ const EMPLOYEE_MANAGEMENT_ITEMS: MenuGroup = {
     title: "Manajemen Karyawan",
     items: [
         { key: 'employee.data.karyawan', href: '/admin/hrd/employee-data/karyawan', label: 'Data Karyawan', icon: createElement(Users) },
-        { key: 'employee.data.bank_requests', href: '/admin/hrd/employee-data/bank-requests', label: 'Pengajuan Perubahan Rekening', icon: createElement(Wallet) },
     ]
 };
 

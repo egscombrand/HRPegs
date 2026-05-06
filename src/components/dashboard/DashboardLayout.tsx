@@ -168,7 +168,7 @@ export function DashboardLayout({
     currentConfig = currentConfig.map(group => ({
         ...group,
         items: group.items.map(item => {
-            if (item.key === 'employee.data.bank_requests') {
+            if (item.key === 'employee.data.karyawan') {
                 const count = pendingBankRequests?.length || 0;
                 if (count > 0) {
                     return { ...item, badge: <Badge variant="secondary" className="bg-red-500 text-white hover:bg-red-600 px-2 py-0 h-5 text-[10px]">{count}</Badge> };

@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useAuth } from "@/providers/auth-provider";
 import { useFirestore } from "@/firebase";
-import { collection, addDoc, serverTimestamp, getDocs, query, where, Timestamp } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -176,27 +176,17 @@ export function BankChangeRequestModal({ open, onOpenChange, initialProfile, lat
       
       // Kirim notifikasi ke HRD
       try {
-        const hrdQuery = query(
-          collection(firestore, "users"),
-          where("role", "in", ["hrd", "super-admin"])
-        );
-        const hrdSnap = await getDocs(hrdQuery);
-        
-        const notifPromises = hrdSnap.docs.map(doc => {
-          return addDoc(collection(firestore, "users", doc.id, "notifications"), {
-            title: "Pengajuan Perubahan Rekening Baru",
-            message: `${initialProfile.fullName || firebaseUser.displayName || 'Karyawan'} mengajukan perubahan data rekening payroll. Mohon periksa dan lakukan verifikasi.`,
-            type: "bank_change_request",
-            targetRole: "hrd",
-            employeeUid: firebaseUser.uid,
-            employeeName: initialProfile.fullName || firebaseUser.displayName || "",
-            requestId: docRef.id,
-            isRead: false,
-            link: `/admin/hrd/employee-data/bank-requests`,
-            createdAt: serverTimestamp(),
-          });
+        await addDoc(collection(firestore, "hrd_notifications"), {
+          type: "bank_change_request",
+          title: "Pengajuan Perubahan Rekening Baru",
+          message: `${initialProfile.fullName || firebaseUser.displayName || 'Karyawan'} mengajukan perubahan data rekening payroll. Mohon diperiksa.`,
+          employeeUid: firebaseUser.uid,
+          employeeName: initialProfile.fullName || firebaseUser.displayName || "",
+          requestId: docRef.id,
+          isRead: false,
+          link: `/admin/hrd/employee-data/bank-requests`,
+          createdAt: serverTimestamp(),
         });
-        await Promise.all(notifPromises);
       } catch (notifErr) {
         console.error("Gagal kirim notifikasi ke HRD", notifErr);
       }

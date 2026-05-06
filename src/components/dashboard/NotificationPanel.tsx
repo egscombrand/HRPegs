@@ -13,8 +13,10 @@ import {
   orderBy,
   doc,
   writeBatch,
+  where,
 } from "firebase/firestore";
 import type { Notification } from "@/lib/types";
+import { useMemo } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
@@ -27,6 +29,7 @@ import {
   Briefcase,
   Calendar,
   CheckCircle,
+  Wallet,
 } from "lucide-react";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
@@ -45,21 +48,52 @@ export function NotificationPanel() {
   }, [userProfile?.uid, firestore]);
 
   const {
-    data: notifications,
-    isLoading,
-    mutate,
+    data: userNotifications,
+    isLoading: isUserLoading,
+    mutate: mutateUser,
   } = useCollection<Notification>(notificationsQuery);
 
-  const handleMarkAsRead = async (notificationId: string) => {
+  const hrdNotificationsQuery = useMemoFirebase(() => {
+    if (!userProfile?.role || !["hrd", "super-admin"].includes(userProfile.role)) return null;
+    return query(
+      collection(firestore, "hrd_notifications"),
+      orderBy("createdAt", "desc"),
+    );
+  }, [userProfile?.role, firestore]);
+
+  const {
+    data: hrdNotifications,
+    isLoading: isHrdLoading,
+    mutate: mutateHrd,
+  } = useCollection<Notification>(hrdNotificationsQuery);
+
+  const notifications = useMemo(() => {
+    const un = (userNotifications || []).map((n) => ({ ...n, _source: "user" }));
+    const hn = (hrdNotifications || []).map((n) => ({ ...n, _source: "hrd" }));
+    return [...un, ...hn].sort((a, b) => {
+      const timeA = a.createdAt?.toMillis?.() || 0;
+      const timeB = b.createdAt?.toMillis?.() || 0;
+      return timeB - timeA;
+    });
+  }, [userNotifications, hrdNotifications]);
+
+  const isLoading = isUserLoading || isHrdLoading;
+
+  const handleMarkAsRead = async (notif: any) => {
     if (!userProfile) return;
     try {
-      const notifRef = doc(
-        firestore,
-        "users",
-        userProfile.uid,
-        "notifications",
-        notificationId,
-      );
+      let notifRef;
+      if (notif._source === "hrd") {
+        notifRef = doc(firestore, "hrd_notifications", notif.id!);
+      } else {
+        notifRef = doc(
+          firestore,
+          "users",
+          userProfile.uid,
+          "notifications",
+          notif.id!,
+        );
+      }
       await updateDocumentNonBlocking(notifRef, { isRead: true });
       // Mutate is not strictly needed if we rely on the link navigation, but good for consistency
     } catch (e: any) {
@@ -77,20 +111,26 @@ export function NotificationPanel() {
     if (unreadNotifs.length === 0) return;
 
     const batch = writeBatch(firestore);
-    unreadNotifs.forEach((notif) => {
-      const ref = doc(
-        firestore,
-        "users",
-        userProfile.uid,
-        "notifications",
-        notif.id!,
-      );
+    unreadNotifs.forEach((notif: any) => {
+      let ref;
+      if (notif._source === "hrd") {
+        ref = doc(firestore, "hrd_notifications", notif.id!);
+      } else {
+        ref = doc(
+          firestore,
+          "users",
+          userProfile.uid,
+          "notifications",
+          notif.id!,
+        );
+      }
       batch.update(ref, { isRead: true });
     });
 
     try {
       await batch.commit();
-      mutate(); // Re-fetch to update UI immediately
+      mutateUser(); // Re-fetch to update UI immediately
+      mutateHrd();
     } catch (e: any) {
       toast({
         variant: "destructive",
@@ -104,8 +144,10 @@ export function NotificationPanel() {
     return notification.actionUrl || "#";
   };
 
-  const renderIcon = (type: Notification["type"]) => {
+    const renderIcon = (type: Notification["type"]) => {
     switch (type) {
+      case "bank_change_request":
+        return <Wallet className="h-4 w-4 text-muted-foreground" />;
       case "interview_scheduled":
       case "interview_updated":
         return <Calendar className="h-4 w-4 text-muted-foreground" />;
@@ -163,7 +205,7 @@ export function NotificationPanel() {
                   "block rounded-md transition-colors hover:bg-accent",
                   !notif.isRead && "bg-blue-50 dark:bg-blue-900/20",
                 )}
-                onClick={() => !notif.isRead && handleMarkAsRead(notif.id!)}
+                onClick={() => !notif.isRead && handleMarkAsRead(notif)}
               >
                 <div className="flex items-start gap-3 p-3">
                   <div className="relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted mt-1">

@@ -140,6 +140,28 @@ export type EmergencyContact = {
   priority: string;
 };
 
+export type FamilyDocumentItem = {
+  fileUrl: string;
+  status: "uploaded" | "missing" | "needs_review" | "approved" | "rejected";
+  uploadedAt?: Timestamp | Date;
+  hrdNote?: string;
+};
+
+export type FamilyAdditionalDocument = FamilyDocumentItem & {
+  id: string;
+  documentType: string;
+  documentName: string;
+};
+
+export type FamilyBpjsMember = {
+  dependentId?: string;
+  relation: string;
+  name: string;
+  noBpjsKes: string;
+  fileUrl: string;
+  status: "uploaded" | "missing" | "needs_review" | "approved" | "rejected";
+};
+
 export type DataKeluarga = {
   orangTua?: {
     ayah?: {
@@ -291,6 +313,13 @@ export type EmployeeProfile = {
 
   // --- Keluarga & Tanggungan ---
   dataKeluarga?: DataKeluarga;
+
+  familyDocuments?: {
+    kk: FamilyDocumentItem;
+    marriageCertificate: FamilyDocumentItem;
+    additionalDocuments: FamilyAdditionalDocument[];
+    familyBpjsMembers: FamilyBpjsMember[];
+  };
 
   // --- Kontak Darurat ---
   kontakDarurat: EmergencyContact[];
@@ -1472,7 +1501,8 @@ export type Notification = {
     | "status_update"
     | "offer"
     | "negotiation"
-    | "decision";
+    | "decision"
+    | "bank_change_request";
   module: "recruitment" | "employee";
   title: string;
   message: string;

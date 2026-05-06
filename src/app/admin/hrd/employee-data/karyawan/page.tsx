@@ -6,7 +6,7 @@ import { useRoleGuard } from "@/hooks/useRoleGuard";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { MENU_CONFIG } from "@/lib/menu-config";
 import { useCollection, useFirestore, useMemoFirebase } from "@/firebase";
-import { collection } from "firebase/firestore";
+import { collection, query, where } from "firebase/firestore";
 import type {
   UserProfile,
   Brand,
@@ -59,7 +59,8 @@ import { ImportDialog } from "@/components/dashboard/hrd/ImportDialog";
 import {
   calculateProfileCompleteness,
 } from "@/lib/employee-completeness";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { BankChangeReviewModal } from "@/components/dashboard/hrd/BankChangeReviewModal";
 import {
   normalizeEmployeeOperationalStatus,
   getOperationalStatusLabel,
@@ -88,6 +89,7 @@ interface MergedEmployee {
   operationalStatus: OperationalStatus;
   operationalStatusLabel: string;
   needsHrdAttention: boolean;
+  pendingBankRequest?: any;
 }
 
 function StatusKepegawaanBadge({ status }: { status: OperationalStatus }) {
@@ -111,31 +113,31 @@ function StatusKepegawaanBadge({ status }: { status: OperationalStatus }) {
   );
 }
 
-function AdminCheckIcons({ profile }: { profile?: EmployeeProfile | null }) {
+function AdminCheckIcons({ profile, pendingBankRequest }: { profile?: EmployeeProfile | null; pendingBankRequest?: any }) {
   const rek = profile?.dataRekening;
   const doc = profile?.dokumenAdministratif;
 
-  const items = [
-    { label: "Rek", exists: !!rek?.bankName, verified: !!rek?.bankDocumentUrl },
-    { label: "NPWP", exists: !!(doc?.npwp || doc?.noNpwp), verified: !!doc?.npwpPhotoUrl },
-    { label: "BPJS", exists: !!(doc?.bpjsKesehatan || doc?.noBpjsKesehatan), verified: !!doc?.bpjsKesehatanPhotoUrl },
-  ];
-
   return (
-    <div className="flex gap-2 items-center">
-      {items.map((it) => (
-        <div key={it.label} className="flex flex-col items-center gap-0.5">
-          <div 
-            className={cn(
-              "h-1.5 w-1.5 rounded-full",
-              it.verified ? "bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]" :
-              it.exists ? "bg-amber-500" :
-              "bg-slate-700"
-            )}
-          />
-          <span className="text-[8px] font-bold text-slate-500 uppercase">{it.label}</span>
-        </div>
-      ))}
+    <div className="flex gap-2 items-center flex-wrap">
+      {pendingBankRequest ? (
+        <Badge variant="outline" className="border-amber-500/30 text-amber-500 bg-amber-500/10 text-[11px] font-bold px-2 py-0.5 h-6">REK: Pending</Badge>
+      ) : rek?.bankName ? (
+        <Badge variant="outline" className="border-emerald-500/30 text-emerald-500 bg-emerald-500/10 text-[11px] font-bold px-2 py-0.5 h-6">REK: OK</Badge>
+      ) : (
+        <Badge variant="outline" className="border-slate-500/30 text-slate-400 bg-slate-500/10 text-[11px] font-bold px-2 py-0.5 h-6">REK: Belum Ada</Badge>
+      )}
+
+      {doc?.npwpPhotoUrl ? (
+        <Badge variant="outline" className="border-emerald-500/30 text-emerald-500 bg-emerald-500/10 text-[11px] font-bold px-2 py-0.5 h-6">NPWP: OK</Badge>
+      ) : (
+        <Badge variant="outline" className="border-slate-500/30 text-slate-400 bg-slate-500/10 text-[11px] font-bold px-2 py-0.5 h-6">NPWP: Belum Ada</Badge>
+      )}
+
+      {doc?.bpjsKesehatanPhotoUrl ? (
+        <Badge variant="outline" className="border-emerald-500/30 text-emerald-500 bg-emerald-500/10 text-[11px] font-bold px-2 py-0.5 h-6">BPJS: OK</Badge>
+      ) : (
+        <Badge variant="outline" className="border-slate-500/30 text-slate-400 bg-slate-500/10 text-[11px] font-bold px-2 py-0.5 h-6">BPJS: Belum Ada</Badge>
+      )}
     </div>
   );
 }
@@ -143,13 +145,13 @@ function AdminCheckIcons({ profile }: { profile?: EmployeeProfile | null }) {
 function SummaryCard({ label, count, icon: Icon, color }: { label: string; count: number; icon: any; color: string }) {
   return (
     <div className="flex-1 min-w-[120px] bg-slate-900/40 border border-slate-800/50 p-3 rounded-xl hover:border-slate-700 transition-all group">
-      <div className="flex items-center justify-between mb-2">
-        <div className={cn("p-1.5 rounded-lg", color)}>
-          <Icon className="h-3.5 w-3.5" />
+      <div className="flex items-center justify-between mb-3">
+        <div className={cn("p-2 rounded-lg", color)}>
+          <Icon className="h-5 w-5" />
         </div>
-        <span className="text-xl font-black text-white">{count}</span>
+        <span className="text-2xl md:text-3xl font-black text-white">{count}</span>
       </div>
-      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{label}</p>
+      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{label}</p>
     </div>
   );
 }
@@ -171,6 +173,22 @@ export default function KaryawanDataPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isImportOpen, setIsImportOpen] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  
+  // Set initial tab from query param if available
+  useMemo(() => {
+    const filter = searchParams.get('filter');
+    if (filter === 'review') {
+      setActiveTab('review');
+    }
+  }, [searchParams]);
+
+  const [selectedReviewEmp, setSelectedReviewEmp] = useState<MergedEmployee | null>(null);
+  const [selectedReviewReq, setSelectedReviewReq] = useState<any | null>(null);
+
+  const { data: pendingBankRequests, mutate: mutateBankRequests } = useCollection<any>(
+    useMemoFirebase(() => query(collection(firestore, "bank_change_requests"), where("status", "==", "pending")), [firestore]),
+  );
 
   const { data: users, isLoading: usersLoading } = useCollection<UserProfile>(
     useMemoFirebase(() => collection(firestore, "users"), [firestore]),
@@ -247,6 +265,7 @@ export default function KaryawanDataPage() {
         operationalStatus: normalized.statusKerja,
         operationalStatusLabel: getOperationalStatusLabel(normalized.statusKerja),
         needsHrdAttention: normalized.needsHrdAttention,
+        pendingBankRequest: pendingBankRequests?.find((r) => r.employeeUid === emp.uid),
       });
     });
 
@@ -277,17 +296,19 @@ export default function KaryawanDataPage() {
         operationalStatus: normalized.statusKerja,
         operationalStatusLabel: getOperationalStatusLabel(normalized.statusKerja),
         needsHrdAttention: normalized.needsHrdAttention,
+        pendingBankRequest: pendingBankRequests?.find((r) => r.employeeUid === u.uid),
       });
     });
 
     return result;
-  }, [employees, users, employeeProfiles, brands, isLoading]);
+  }, [employees, users, employeeProfiles, brands, pendingBankRequests, isLoading]);
 
   const filteredEmployees = useMemo(() => {
     return allMerged.filter((emp) => {
       const status = emp.operationalStatus;
       let tabMatch = false;
       if (activeTab === "all") tabMatch = true;
+      else if (activeTab === "review") tabMatch = !!emp.pendingBankRequest;
       else if (activeTab === "active") tabMatch = status === "active";
       else if (activeTab === "training") tabMatch = status === "training";
       else if (activeTab === "intern") tabMatch = status === "intern";
@@ -309,6 +330,8 @@ export default function KaryawanDataPage() {
       return true;
     });
   }, [allMerged, activeTab, brandFilter, searchTerm, completenessFilter]);
+
+  const pendingReviewCount = allMerged.filter(e => e.pendingBankRequest).length;
 
   const groupedEmployees = useMemo(() => {
     const groups: Record<string, MergedEmployee[]> = {
@@ -384,8 +407,8 @@ export default function KaryawanDataPage() {
   return (
     <>
       <DashboardLayout pageTitle="Employee Directory" menuConfig={menuConfig}>
-        <div className="space-y-6 max-w-[1600px] mx-auto pb-10">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div className="space-y-8 w-full max-w-[1800px] mx-auto px-4 md:px-8 pb-10">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
             <div>
               <h1 className="text-2xl font-black text-white tracking-tight">Data Karyawan</h1>
               <p className="text-xs text-slate-500 mt-1">Directory administrasi karyawan terpusat PT. HRP Environesia</p>
@@ -402,6 +425,20 @@ export default function KaryawanDataPage() {
               </Button>
             </div>
           </div>
+          
+          {pendingReviewCount > 0 && (
+            <div className="bg-amber-500/10 border border-amber-500/30 p-5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-amber-500/20 rounded-xl">
+                  <AlertTriangle className="h-6 w-6 text-amber-500" />
+                </div>
+                <p className="text-[15px] font-medium text-amber-500/90">Ada <span className="font-bold text-amber-500 text-base">{pendingReviewCount}</span> perubahan data rekening karyawan yang membutuhkan tindakan HRD.</p>
+              </div>
+              <Button size="lg" variant="default" className="bg-amber-500 hover:bg-amber-600 text-amber-950 font-bold h-11 px-6 rounded-xl text-sm w-full md:w-auto" onClick={() => setActiveTab('review')}>
+                Lihat yang Perlu Direview
+              </Button>
+            </div>
+          )}
 
           <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
             <SummaryCard label="Total Karyawan" count={stats.total} icon={Users} color="bg-slate-500/10 text-slate-500" />
@@ -414,20 +451,20 @@ export default function KaryawanDataPage() {
           </div>
 
           <Card className="border-slate-800 bg-slate-950/50 backdrop-blur-xl">
-             <CardHeader className="p-4 border-b border-slate-800/50">
-                <div className="flex flex-wrap items-center gap-3">
-                   <div className="relative flex-1 min-w-[200px]">
-                      <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+             <CardHeader className="p-5 border-b border-slate-800/50">
+                <div className="flex flex-wrap items-center gap-4">
+                   <div className="relative flex-1 min-w-[240px]">
+                      <Search className="absolute left-3.5 top-3 h-5 w-5 text-slate-500" />
                       <Input 
-                        placeholder="Cari karyawan..." 
+                        placeholder="Cari nama atau email..." 
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="bg-slate-900/50 border-slate-800 h-10 pl-10 rounded-xl focus:border-emerald-500/50 transition-all text-sm" 
+                        className="bg-slate-900/50 border-slate-800 h-11 pl-11 rounded-xl focus:border-emerald-500/50 transition-all text-sm" 
                       />
                    </div>
                    
                    <Select value={brandFilter} onValueChange={setBrandFilter}>
-                      <SelectTrigger className="w-[160px] bg-slate-900/50 border-slate-800 h-10 rounded-xl text-xs">
+                      <SelectTrigger className="w-[180px] bg-slate-900/50 border-slate-800 h-11 rounded-xl text-sm font-medium">
                         <SelectValue placeholder="Brand" />
                       </SelectTrigger>
                       <SelectContent className="bg-slate-900 border-slate-800">
@@ -437,26 +474,27 @@ export default function KaryawanDataPage() {
                    </Select>
 
                    <Select value={completenessFilter} onValueChange={setCompletenessFilter}>
-                      <SelectTrigger className="w-[160px] bg-slate-900/50 border-slate-800 h-10 rounded-xl text-xs">
+                      <SelectTrigger className="w-[180px] bg-slate-900/50 border-slate-800 h-11 rounded-xl text-sm font-medium">
                         <SelectValue placeholder="Kelengkapan" />
                       </SelectTrigger>
                       <SelectContent className="bg-slate-900 border-slate-800">
-                        <SelectItem value="all">Kelengkapan</SelectItem>
+                        <SelectItem value="all">Semua Kelengkapan</SelectItem>
                         <SelectItem value="complete">Lengkap</SelectItem>
                         <SelectItem value="partial">Sebagian</SelectItem>
                         <SelectItem value="not_started">Belum Isi</SelectItem>
                       </SelectContent>
                    </Select>
 
-                   <Tabs value={activeTab} onValueChange={setActiveTab} className="bg-slate-900/50 p-1 rounded-xl border border-slate-800/50">
-                      <TabsList className="h-8 bg-transparent gap-1">
-                        <TabsTrigger value="all" className="h-6 text-[10px] uppercase font-bold rounded-lg px-3">Semua</TabsTrigger>
-                        <TabsTrigger value="active" className="h-6 text-[10px] uppercase font-bold rounded-lg px-3">Aktif</TabsTrigger>
-                        <TabsTrigger value="training" className="h-6 text-[10px] uppercase font-bold rounded-lg px-3">Training</TabsTrigger>
-                        <TabsTrigger value="intern" className="h-6 text-[10px] uppercase font-bold rounded-lg px-3">Magang</TabsTrigger>
-                        <TabsTrigger value="probation" className="h-6 text-[10px] uppercase font-bold rounded-lg px-3">Percobaan</TabsTrigger>
-                        <TabsTrigger value="contract" className="h-6 text-[10px] uppercase font-bold rounded-lg px-3">Kontrak</TabsTrigger>
-                        <TabsTrigger value="inactive" className="h-6 text-[10px] uppercase font-bold rounded-lg px-3">Nonaktif</TabsTrigger>
+                   <Tabs value={activeTab} onValueChange={setActiveTab} className="bg-slate-900/50 p-1.5 rounded-xl border border-slate-800/50">
+                      <TabsList className="h-9 bg-transparent gap-1.5">
+                        <TabsTrigger value="all" className="h-7 text-xs uppercase font-bold rounded-lg px-4">Semua</TabsTrigger>
+                        <TabsTrigger value="review" className="h-7 text-xs uppercase font-bold rounded-lg px-4 text-amber-500 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400">Perlu Review HRD</TabsTrigger>
+                        <TabsTrigger value="active" className="h-7 text-xs uppercase font-bold rounded-lg px-4">Aktif</TabsTrigger>
+                        <TabsTrigger value="training" className="h-7 text-xs uppercase font-bold rounded-lg px-4">Training</TabsTrigger>
+                        <TabsTrigger value="intern" className="h-7 text-xs uppercase font-bold rounded-lg px-4">Magang</TabsTrigger>
+                        <TabsTrigger value="probation" className="h-7 text-xs uppercase font-bold rounded-lg px-4">Percobaan</TabsTrigger>
+                        <TabsTrigger value="contract" className="h-7 text-xs uppercase font-bold rounded-lg px-4">Kontrak</TabsTrigger>
+                        <TabsTrigger value="inactive" className="h-7 text-xs uppercase font-bold rounded-lg px-4">Nonaktif</TabsTrigger>
                       </TabsList>
                    </Tabs>
 
@@ -494,68 +532,88 @@ export default function KaryawanDataPage() {
                                 <Table>
                                   <TableHeader className="bg-slate-900/40">
                                     <TableRow className="border-slate-800/50 hover:bg-transparent">
-                                      <TableHead className="text-[10px] uppercase font-black text-slate-500 px-6 h-10">Karyawan</TableHead>
-                                      <TableHead className="text-[10px] uppercase font-black text-slate-500 h-10">Brand / Divisi</TableHead>
-                                      <TableHead className="text-[10px] uppercase font-black text-slate-500 h-10">Jabatan</TableHead>
-                                      <TableHead className="text-[10px] uppercase font-black text-slate-500 h-10">Tipe</TableHead>
-                                      <TableHead className="text-[10px] uppercase font-black text-slate-500 h-10">Kelengkapan</TableHead>
-                                      <TableHead className="text-[10px] uppercase font-black text-slate-500 h-10">Admin Check</TableHead>
-                                      <TableHead className="text-right px-6 h-10">Aksi</TableHead>
+                                      <TableHead className="text-xs uppercase font-bold text-slate-400 px-6 h-12 w-[280px]">Karyawan</TableHead>
+                                      <TableHead className="text-xs uppercase font-bold text-slate-400 h-12">Brand / Divisi</TableHead>
+                                      <TableHead className="text-xs uppercase font-bold text-slate-400 h-12">Jabatan</TableHead>
+                                      <TableHead className="text-xs uppercase font-bold text-slate-400 h-12 w-[120px]">Tipe</TableHead>
+                                      <TableHead className="text-xs uppercase font-bold text-slate-400 h-12 w-[160px]">Kelengkapan</TableHead>
+                                      <TableHead className="text-xs uppercase font-bold text-slate-400 h-12 w-[200px]">Admin Check</TableHead>
+                                      <TableHead className="text-right px-6 h-12 w-[280px]">Aksi</TableHead>
                                     </TableRow>
                                   </TableHeader>
                                   <TableBody>
                                     {emps.map((emp) => {
                                       const c = calculateProfileCompleteness(emp.employeeProfile ?? null);
+                                      const hasPendingReq = !!emp.pendingBankRequest;
                                       return (
-                                        <TableRow key={emp.uid} className="border-slate-800/50 hover:bg-slate-900/30 transition-colors group">
-                                          <TableCell className="px-6 py-4">
-                                            <div className="flex flex-col">
-                                              <span className="text-sm font-bold text-white group-hover:text-emerald-400 transition-colors">{emp.fullName}</span>
-                                              <span className="text-[10px] text-slate-500 font-medium">{emp.email}</span>
-                                              {emp.employeeNumber && <span className="text-[9px] text-slate-600 mt-1">NIK: {emp.employeeNumber}</span>}
+                                        <TableRow key={emp.uid} className={cn("border-slate-800/50 hover:bg-slate-800/40 transition-colors group", hasPendingReq && "bg-amber-500/[0.04]")}>
+                                          <TableCell className="px-6 py-5">
+                                            <div className="flex flex-col gap-1">
+                                              <span className="text-base font-bold text-white group-hover:text-emerald-400 transition-colors">{emp.fullName}</span>
+                                              <span className="text-sm text-slate-400 font-medium">{emp.email}</span>
+                                              {emp.employeeNumber && <span className="text-xs text-slate-500 font-mono mt-0.5">NIK: {emp.employeeNumber}</span>}
                                             </div>
                                           </TableCell>
-                                          <TableCell>
-                                            <div className="flex flex-col">
-                                              <div className="flex items-center gap-1.5">
-                                                <span className="text-xs font-bold text-slate-300">
+                                          <TableCell className="py-5">
+                                            <div className="flex flex-col gap-2">
+                                              <div className="flex flex-wrap items-center gap-2">
+                                                <span className="text-sm font-bold text-slate-200">
                                                   {emp.brandName}
                                                 </span>
-                                                {emp.needsHrdAttention && (
-                                                  <Badge variant="outline" className="h-3.5 px-1 text-[8px] border-amber-500/30 text-amber-500 bg-amber-500/5 uppercase font-bold">
+                                                {emp.pendingBankRequest ? (
+                                                  <Badge variant="outline" className="h-5 px-2 text-[10px] border-amber-500/30 text-amber-500 bg-amber-500/10 uppercase font-bold tracking-wider">
+                                                    Review Rekening
+                                                  </Badge>
+                                                ) : emp.needsHrdAttention && (
+                                                  <Badge variant="outline" className="h-5 px-2 text-[10px] border-red-500/30 text-red-500 bg-red-500/5 uppercase font-bold">
                                                     Perlu HRD
                                                   </Badge>
                                                 )}
                                               </div>
-                                              <span className="text-[10px] text-slate-500">{emp.division}</span>
+                                              <span className="text-xs text-slate-500 font-medium">{emp.division}</span>
                                             </div>
                                           </TableCell>
-                                          <TableCell>
-                                            <span className="text-xs font-medium text-slate-400">{emp.positionTitle}</span>
+                                          <TableCell className="py-5">
+                                            <span className="text-[13px] font-medium text-slate-300">{emp.positionTitle}</span>
                                           </TableCell>
-                                          <TableCell>
-                                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter bg-slate-900 px-2 py-0.5 rounded border border-slate-800">{emp.employmentType || "Staf"}</span>
+                                          <TableCell className="py-5">
+                                            <span className="text-xs font-bold text-slate-400 uppercase tracking-tighter bg-slate-900 px-3 py-1.5 rounded-md border border-slate-800">{emp.employmentType || "Staf"}</span>
                                           </TableCell>
-                                          <TableCell>
-                                            <div className="flex flex-col gap-1.5">
-                                              <div className="w-24 h-1 bg-slate-800 rounded-full overflow-hidden">
+                                          <TableCell className="py-5">
+                                            <div className="flex flex-col gap-2">
+                                              <div className="w-28 h-2 bg-slate-800 rounded-full overflow-hidden">
                                                  <div className={cn("h-full transition-all", c.status === 'complete' ? 'bg-emerald-500' : 'bg-amber-500')} style={{ width: `${c.percentage}%` }} />
                                               </div>
-                                              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{c.percentage}%</span>
+                                              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{c.percentage}%</span>
                                             </div>
                                           </TableCell>
-                                          <TableCell>
-                                            <AdminCheckIcons profile={emp.employeeProfile} />
+                                          <TableCell className="py-5">
+                                            <AdminCheckIcons profile={emp.employeeProfile} pendingBankRequest={emp.pendingBankRequest} />
                                           </TableCell>
-                                          <TableCell className="text-right px-6">
-                                            <Button 
-                                              variant="ghost" 
-                                              size="sm" 
-                                              className="h-8 px-3 rounded-lg text-xs font-bold bg-slate-900 border border-slate-800 hover:bg-emerald-500 hover:text-white hover:border-emerald-500 transition-all"
-                                              onClick={() => router.push(`/admin/hrd/employee-data/karyawan/${emp.uid}`)}
-                                            >
-                                              Lihat Detail
-                                            </Button>
+                                          <TableCell className="text-right px-6 py-5">
+                                            <div className="flex items-center justify-end gap-3">
+                                              {emp.pendingBankRequest && (
+                                                <Button
+                                                  variant="default"
+                                                  size="sm"
+                                                  className="h-9 px-4 rounded-xl text-[13px] font-bold bg-amber-600 hover:bg-amber-700 text-white transition-all shadow-md shadow-amber-900/20"
+                                                  onClick={() => {
+                                                    setSelectedReviewEmp(emp);
+                                                    setSelectedReviewReq(emp.pendingBankRequest);
+                                                  }}
+                                                >
+                                                  Review Perubahan
+                                                </Button>
+                                              )}
+                                              <Button 
+                                                variant="ghost" 
+                                                size="sm" 
+                                                className="h-9 px-4 rounded-xl text-[13px] font-bold bg-slate-900 border border-slate-800 hover:bg-emerald-500 hover:text-white hover:border-emerald-500 transition-all"
+                                                onClick={() => router.push(`/admin/hrd/employee-data/karyawan/${emp.uid}`)}
+                                              >
+                                                Lihat Detail
+                                              </Button>
+                                            </div>
                                           </TableCell>
                                         </TableRow>
                                       );
@@ -589,6 +647,23 @@ export default function KaryawanDataPage() {
         onOpenChange={setIsImportOpen}
         onImportSuccess={() => mutate?.()}
       />
+
+      {selectedReviewEmp && selectedReviewReq && (
+        <BankChangeReviewModal 
+          open={!!selectedReviewReq}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedReviewEmp(null);
+              setSelectedReviewReq(null);
+            }
+          }}
+          request={selectedReviewReq}
+          employeeData={selectedReviewEmp}
+          onSuccess={() => {
+            mutateBankRequests();
+          }}
+        />
+      )}
     </>
   );
 }
