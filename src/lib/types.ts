@@ -228,7 +228,11 @@ export interface SertifikasiPelatihan {
   buktiUrl?: string;
 }
 
-export type VerificationStatusGroup = "pending" | "approved" | "revision" | "rejected";
+export type VerificationStatusGroup =
+  | "pending"
+  | "approved"
+  | "revision"
+  | "rejected";
 
 export type EmployeeVerificationStatus = {
   bankAccount?: VerificationStatusGroup;
@@ -443,7 +447,7 @@ export type EmployeeProfile = {
   internalNotes?: string;
   additionalFields?: Record<string, any>;
   hrdEmploymentInfo?: HrdEmploymentInfo;
-  
+
   // --- Verifikasi Perubahan ---
   verificationStatus?: EmployeeVerificationStatus;
   verificationNotes?: Partial<Record<keyof EmployeeVerificationStatus, string>>;
@@ -461,7 +465,7 @@ export type BankChangeRequest = {
   requestedAccountHolderName: string;
   requestedProofUrl: string;
   reason: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: "pending" | "approved" | "rejected";
   hrdNote?: string;
   submittedAt: Timestamp;
   reviewedAt?: Timestamp;
@@ -479,7 +483,15 @@ export type AllowanceItem = {
 
 export type EmploymentHistory = {
   id?: string;
-  type: "promotion" | "mutation" | "status_change" | "payroll_update" | "appraisal" | "award" | "sanction" | "other";
+  type:
+    | "promotion"
+    | "mutation"
+    | "status_change"
+    | "payroll_update"
+    | "appraisal"
+    | "award"
+    | "sanction"
+    | "other";
   field?: string;
   oldValue?: any;
   newValue?: any;
@@ -516,6 +528,18 @@ export type HrdEmploymentInfo = {
   jamKerja?: string;
   sistemKerja?: string;
   lokasiKerja?: string;
+
+  // New structure fields
+  employeeId?: string;
+  divisionId?: string;
+  structuralPosition?: string;
+  workRole?: string;
+  employeeType?: string;
+  employmentStatus?: string;
+  directSupervisorUid?: string;
+  structureEffectiveDate?: string;
+  structureChangeReason?: string;
+
   gajiPokok?: number;
   tunjanganTetap?: number;
   tunjanganTidakTetap?: number;
@@ -524,13 +548,13 @@ export type HrdEmploymentInfo = {
   thr?: number;
   potonganBPJSKes?: number; // Legacy
   potonganBPJSTK?: number; // Legacy
-  
+
   // Granular BPJS
   bpjsKesPerusahaan?: number;
   bpjsKesKaryawan?: number;
   bpjsTkPerusahaan?: number;
   bpjsTkKaryawan?: number;
-  
+
   potonganPPh21?: number;
   potonganLain?: number;
   catatanPayroll?: string;
@@ -552,7 +576,7 @@ export type HrdEmploymentInfo = {
   customPayrollAccountNumber?: string;
   customPayrollAccountHolder?: string;
   customPayrollBankBookUrl?: string;
-  
+
   atasanLangsung?: string;
   asetPerusahaan?: string;
   catatanBenefit?: string;

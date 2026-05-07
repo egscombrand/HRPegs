@@ -132,7 +132,7 @@ function AdminCheckIcons({
   const doc = profile?.dokumenAdministratif;
 
   return (
-    <div className="flex gap-2 items-center flex-wrap">
+    <div className="flex flex-wrap gap-1">
       {pendingBankRequest ? (
         <Badge
           variant="outline"
@@ -177,14 +177,30 @@ function AdminCheckIcons({
           variant="outline"
           className="border-emerald-500/30 text-emerald-500 bg-emerald-500/10 text-[11px] font-bold px-2 py-0.5 h-6"
         >
-          BPJS: OK
+          BPJS Kes: OK
         </Badge>
       ) : (
         <Badge
           variant="outline"
           className="border-slate-500/30 text-slate-400 bg-slate-500/10 text-[11px] font-bold px-2 py-0.5 h-6"
         >
-          BPJS: Belum Ada
+          BPJS Kes: Belum Ada
+        </Badge>
+      )}
+
+      {doc?.bpjsKetenagakerjaanPhotoUrl ? (
+        <Badge
+          variant="outline"
+          className="border-emerald-500/30 text-emerald-500 bg-emerald-500/10 text-[11px] font-bold px-2 py-0.5 h-6"
+        >
+          BPJS TK: OK
+        </Badge>
+      ) : (
+        <Badge
+          variant="outline"
+          className="border-slate-500/30 text-slate-400 bg-slate-500/10 text-[11px] font-bold px-2 py-0.5 h-6"
+        >
+          BPJS TK: Belum Ada
         </Badge>
       )}
     </div>
@@ -313,6 +329,13 @@ export default function KaryawanDataPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [actionNeededFilter, setActionNeededFilter] = useState("all");
+  const [sortBy, setSortBy] = useState<
+    | "name-asc"
+    | "name-desc"
+    | "completeness-asc"
+    | "completeness-desc"
+    | "needs-review"
+  >("name-asc");
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -327,7 +350,7 @@ export default function KaryawanDataPage() {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [completenessFilter, actionNeededFilter, searchTerm]);
+  }, [completenessFilter, actionNeededFilter, searchTerm, sortBy]);
 
   const [selectedReviewEmp, setSelectedReviewEmp] =
     useState<MergedEmployee | null>(null);
@@ -487,7 +510,7 @@ export default function KaryawanDataPage() {
   ]);
 
   const filteredEmployees = useMemo(() => {
-    return allMerged.filter((emp) => {
+    let filtered = allMerged.filter((emp) => {
       const status = emp.operationalStatus;
       let tabMatch = false;
       if (activeTab === "all") tabMatch = true;
@@ -552,6 +575,45 @@ export default function KaryawanDataPage() {
 
       return true;
     });
+
+    // Apply sorting
+    filtered.sort((a, b) => {
+      switch (sortBy) {
+        case "name-asc":
+          return a.fullName
+            .toLowerCase()
+            .localeCompare(b.fullName.toLowerCase());
+        case "name-desc":
+          return b.fullName
+            .toLowerCase()
+            .localeCompare(a.fullName.toLowerCase());
+        case "completeness-asc": {
+          const aComp = calculateProfileCompleteness(a.employeeProfile ?? null);
+          const bComp = calculateProfileCompleteness(b.employeeProfile ?? null);
+          return aComp.percentage - bComp.percentage;
+        }
+        case "completeness-desc": {
+          const aComp = calculateProfileCompleteness(a.employeeProfile ?? null);
+          const bComp = calculateProfileCompleteness(b.employeeProfile ?? null);
+          return bComp.percentage - aComp.percentage;
+        }
+        case "needs-review": {
+          const aStatus = getActionNeededStatus(a);
+          const bStatus = getActionNeededStatus(b);
+          // Sort by priority (higher priority first), then by name
+          if (aStatus.priority !== bStatus.priority) {
+            return bStatus.priority - aStatus.priority;
+          }
+          return a.fullName
+            .toLowerCase()
+            .localeCompare(b.fullName.toLowerCase());
+        }
+        default:
+          return 0;
+      }
+    });
+
+    return filtered;
   }, [
     allMerged,
     activeTab,
@@ -559,6 +621,7 @@ export default function KaryawanDataPage() {
     searchTerm,
     completenessFilter,
     actionNeededFilter,
+    sortBy,
   ]);
 
   // Pagination logic
@@ -907,6 +970,28 @@ export default function KaryawanDataPage() {
                   </SelectContent>
                 </Select>
 
+                <Select
+                  value={sortBy}
+                  onValueChange={(value: any) => setSortBy(value)}
+                >
+                  <SelectTrigger className="w-[180px] bg-slate-900/50 border-slate-800 h-11 rounded-xl text-sm font-medium">
+                    <SelectValue placeholder="Urutkan" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-900 border-slate-800">
+                    <SelectItem value="name-asc">Nama A-Z</SelectItem>
+                    <SelectItem value="name-desc">Nama Z-A</SelectItem>
+                    <SelectItem value="completeness-desc">
+                      Kelengkapan Tertinggi
+                    </SelectItem>
+                    <SelectItem value="completeness-asc">
+                      Kelengkapan Terendah
+                    </SelectItem>
+                    <SelectItem value="needs-review">
+                      Perlu Review Dulu
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+
                 <Tabs
                   value={activeTab}
                   onValueChange={setActiveTab}
@@ -968,6 +1053,7 @@ export default function KaryawanDataPage() {
                   brandFilter !== "all" ||
                   completenessFilter !== "all" ||
                   actionNeededFilter !== "all" ||
+                  sortBy !== "name-asc" ||
                   activeTab !== "all") && (
                   <Button
                     variant="ghost"
@@ -979,6 +1065,7 @@ export default function KaryawanDataPage() {
                       setCompletenessFilter("all");
                       setActionNeededFilter("all");
                       setActiveTab("all");
+                      setSortBy("name-asc");
                       setCurrentPage(1);
                     }}
                   >
@@ -1021,20 +1108,20 @@ export default function KaryawanDataPage() {
                           </div>
                         </AccordionTrigger>
                         <AccordionContent className="pt-0 pb-0">
-                          <div className="overflow-x-auto">
-                            <Table>
+                          <div className="overflow-x-auto w-full">
+                            <Table className="w-full table-fixed min-w-[1200px]">
                               <TableHeader className="bg-slate-900/40">
                                 <TableRow className="border-slate-800/50 hover:bg-transparent">
-                                  <TableHead className="text-xs uppercase font-bold text-slate-400 px-6 h-12 w-[60px]">
+                                  <TableHead className="text-xs uppercase font-bold text-slate-400 px-6 h-12 w-[60px] sticky left-0 bg-slate-900/40 z-10">
                                     No
                                   </TableHead>
                                   <TableHead className="text-xs uppercase font-bold text-slate-400 h-12 w-[120px]">
                                     Employee ID
                                   </TableHead>
-                                  <TableHead className="text-xs uppercase font-bold text-slate-400 h-12 w-[280px]">
+                                  <TableHead className="text-xs uppercase font-bold text-slate-400 h-12 min-w-[300px]">
                                     Karyawan
                                   </TableHead>
-                                  <TableHead className="text-xs uppercase font-bold text-slate-400 h-12">
+                                  <TableHead className="text-xs uppercase font-bold text-slate-400 h-12 min-w-[200px]">
                                     Brand/Divisi
                                   </TableHead>
                                   <TableHead className="text-xs uppercase font-bold text-slate-400 h-12 w-[120px]">
@@ -1043,13 +1130,13 @@ export default function KaryawanDataPage() {
                                   <TableHead className="text-xs uppercase font-bold text-slate-400 h-12 w-[160px]">
                                     Kelengkapan
                                   </TableHead>
-                                  <TableHead className="text-xs uppercase font-bold text-slate-400 h-12 w-[180px]">
+                                  <TableHead className="text-xs uppercase font-bold text-slate-400 h-12 min-w-[250px]">
                                     Action Needed
                                   </TableHead>
-                                  <TableHead className="text-xs uppercase font-bold text-slate-400 h-12 w-[200px]">
+                                  <TableHead className="text-xs uppercase font-bold text-slate-400 h-12 min-w-[300px]">
                                     Admin Check
                                   </TableHead>
-                                  <TableHead className="text-right px-6 h-12 w-[280px]">
+                                  <TableHead className="text-right px-6 h-12 min-w-[200px]">
                                     Aksi
                                   </TableHead>
                                 </TableRow>
@@ -1073,21 +1160,21 @@ export default function KaryawanDataPage() {
                                     <TableRow
                                       key={emp.uid}
                                       className={cn(
-                                        "border-slate-800/50 hover:bg-slate-800/40 transition-colors group",
+                                        "border-slate-800/50 hover:bg-slate-800/40 transition-colors group min-h-[88px]",
                                         hasPendingReq && "bg-amber-500/[0.04]",
                                       )}
                                     >
-                                      <TableCell className="px-6 py-5 text-center">
+                                      <TableCell className="px-6 py-6 text-center align-middle sticky left-0 bg-slate-950/50 backdrop-blur-sm z-10">
                                         <span className="text-sm font-bold text-slate-400">
                                           {String(globalIndex).padStart(2, "0")}
                                         </span>
                                       </TableCell>
-                                      <TableCell className="py-5">
+                                      <TableCell className="py-6 align-middle">
                                         <span className="text-sm font-mono font-bold text-slate-300">
                                           {employeeId}
                                         </span>
                                       </TableCell>
-                                      <TableCell className="px-6 py-5">
+                                      <TableCell className="px-6 py-6 align-middle">
                                         <div className="flex flex-col gap-1">
                                           <span className="text-base font-bold text-white group-hover:text-emerald-400 transition-colors">
                                             {emp.fullName}
@@ -1097,9 +1184,9 @@ export default function KaryawanDataPage() {
                                           </span>
                                         </div>
                                       </TableCell>
-                                      <TableCell className="py-5">
+                                      <TableCell className="py-6 align-middle">
                                         <div className="flex flex-col gap-1">
-                                          <span className="text-sm font-bold text-slate-200">
+                                          <span className="text-sm font-semibold text-slate-200">
                                             {emp.brandName}
                                           </span>
                                           <span className="text-xs text-slate-500 font-medium">
@@ -1107,22 +1194,12 @@ export default function KaryawanDataPage() {
                                           </span>
                                         </div>
                                       </TableCell>
-                                      <TableCell className="py-5">
+                                      <TableCell className="py-6 align-middle">
                                         <StatusKepegawaanBadge
                                           status={emp.operationalStatus}
                                         />
                                       </TableCell>
-                                      <TableCell className="py-5">
-                                        <span className="text-[13px] font-medium text-slate-300">
-                                          {emp.positionTitle}
-                                        </span>
-                                      </TableCell>
-                                      <TableCell className="py-5">
-                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-tighter bg-slate-900 px-3 py-1.5 rounded-md border border-slate-800">
-                                          {emp.employmentType || "Staf"}
-                                        </span>
-                                      </TableCell>
-                                      <TableCell className="py-5">
+                                      <TableCell className="py-6 align-middle">
                                         <div className="flex flex-col gap-2">
                                           <div className="w-28 h-2 bg-slate-800 rounded-full overflow-hidden">
                                             <div
@@ -1142,20 +1219,77 @@ export default function KaryawanDataPage() {
                                           </span>
                                         </div>
                                       </TableCell>
-                                      <TableCell className="py-5">
-                                        <Badge
-                                          variant="outline"
-                                          className={cn(
-                                            "text-[11px] font-bold px-2 py-0.5 h-6",
-                                            actionStatus.color,
-                                            actionStatus.bgColor,
-                                            actionStatus.textColor,
+                                      <TableCell className="py-6 align-middle">
+                                        <div className="flex flex-wrap gap-1">
+                                          {actionStatus.priority === 4 && (
+                                            <Badge
+                                              variant="outline"
+                                              className="text-[11px] font-bold px-2 py-0.5 h-6 border-amber-500/30 bg-amber-500/10 text-amber-500"
+                                            >
+                                              Rekening Pending
+                                            </Badge>
                                           )}
-                                        >
-                                          {actionStatus.status}
-                                        </Badge>
+                                          {actionStatus.status.includes(
+                                            "NPWP",
+                                          ) && (
+                                            <Badge
+                                              variant="outline"
+                                              className="text-[11px] font-bold px-2 py-0.5 h-6 border-red-500/30 bg-red-500/10 text-red-500"
+                                            >
+                                              NPWP Belum Ada
+                                            </Badge>
+                                          )}
+                                          {actionStatus.status.includes(
+                                            "BPJS Kes",
+                                          ) && (
+                                            <Badge
+                                              variant="outline"
+                                              className="text-[11px] font-bold px-2 py-0.5 h-6 border-red-500/30 bg-red-500/10 text-red-500"
+                                            >
+                                              BPJS Kes Belum Ada
+                                            </Badge>
+                                          )}
+                                          {actionStatus.status.includes(
+                                            "BPJS TK",
+                                          ) && (
+                                            <Badge
+                                              variant="outline"
+                                              className="text-[11px] font-bold px-2 py-0.5 h-6 border-red-500/30 bg-red-500/10 text-red-500"
+                                            >
+                                              BPJS TK Belum Ada
+                                            </Badge>
+                                          )}
+                                          {actionStatus.status.includes(
+                                            "Data Belum Lengkap",
+                                          ) && (
+                                            <Badge
+                                              variant="outline"
+                                              className="text-[11px] font-bold px-2 py-0.5 h-6 border-orange-500/30 bg-orange-500/10 text-orange-500"
+                                            >
+                                              Data Belum Lengkap
+                                            </Badge>
+                                          )}
+                                          {actionStatus.status.includes(
+                                            "Data Tidak Lengkap",
+                                          ) && (
+                                            <Badge
+                                              variant="outline"
+                                              className="text-[11px] font-bold px-2 py-0.5 h-6 border-slate-500/30 bg-slate-500/10 text-slate-400"
+                                            >
+                                              Data Tidak Lengkap
+                                            </Badge>
+                                          )}
+                                          {actionStatus.priority === 0 && (
+                                            <Badge
+                                              variant="outline"
+                                              className="text-[11px] font-bold px-2 py-0.5 h-6 border-emerald-500/30 bg-emerald-500/10 text-emerald-500"
+                                            >
+                                              Tidak Ada Masalah
+                                            </Badge>
+                                          )}
+                                        </div>
                                       </TableCell>
-                                      <TableCell className="py-5">
+                                      <TableCell className="py-6 align-middle">
                                         <AdminCheckIcons
                                           profile={emp.employeeProfile}
                                           pendingBankRequest={
@@ -1163,7 +1297,7 @@ export default function KaryawanDataPage() {
                                           }
                                         />
                                       </TableCell>
-                                      <TableCell className="text-right px-6 py-5">
+                                      <TableCell className="text-right px-6 py-6 align-middle">
                                         <div className="flex items-center justify-end gap-3">
                                           {emp.pendingBankRequest && (
                                             <Button
@@ -1220,6 +1354,7 @@ export default function KaryawanDataPage() {
                       setCompletenessFilter("all");
                       setActionNeededFilter("all");
                       setActiveTab("all");
+                      setSortBy("name-asc");
                       setCurrentPage(1);
                     }}
                   >
