@@ -16,6 +16,7 @@ import {
   collection,
   setDoc,
   addDoc,
+  updateDoc,
   serverTimestamp,
   query,
   orderBy,
@@ -26,6 +27,7 @@ import type {
   EmployeeProfile,
   Brand,
   HrdEmploymentInfo,
+  VerificationStatusGroup,
 } from "@/lib/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -79,6 +81,7 @@ import {
   X,
   Trash2,
   Users as UsersIcon,
+  AlertCircle,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useToast } from "@/hooks/use-toast";

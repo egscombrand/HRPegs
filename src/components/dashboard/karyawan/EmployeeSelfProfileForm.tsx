@@ -96,7 +96,10 @@ import { AlertTriangle, Clock, XCircle, AlertCircle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { VerificationStatusGroup } from "@/lib/types";
 import { BankChangeRequestModal } from "./BankChangeRequestModal";
-import { EmployeeDataChangeRequestModal, type ChangeRequestCategory } from "./EmployeeDataChangeRequestModal";
+import {
+  EmployeeDataChangeRequestModal,
+  type ChangeRequestCategory,
+} from "./EmployeeDataChangeRequestModal";
 
 function VerificationAlert({
   status,
@@ -632,51 +635,71 @@ const selfFormSchema = z.object({
         });
       }
     }),
-  familyDocuments: z.object({
-    kk: z.object({
-      fileUrl: z.string().optional(),
-      fileName: z.string().optional(),
-      uploadedAt: z.any().optional(),
-      status: z.string().optional(),
-    }).optional(),
-    marriageCertificate: z.object({
-      fileUrl: z.string().optional(),
-      fileName: z.string().optional(),
-      uploadedAt: z.any().optional(),
-      status: z.string().optional(),
-    }).optional(),
-    spouseKtp: z.object({
-      fileUrl: z.string().optional(),
-      fileName: z.string().optional(),
-      uploadedAt: z.any().optional(),
-      status: z.string().optional(),
-    }).optional(),
-    familyBpjsMembers: z.array(z.object({
-      dependentId: z.string().optional(),
-      dependentName: z.string().optional(),
-      relationship: z.string().optional(),
-      bpjsNumber: z.string().optional(),
-      fileUrl: z.string().optional(),
-      fileName: z.string().optional(),
-      uploadedAt: z.any().optional(),
-      status: z.string().optional(),
-    })).optional(),
-    childBirthCertificates: z.array(z.object({
-      childName: z.string().optional(),
-      fileUrl: z.string().optional(),
-      fileName: z.string().optional(),
-      uploadedAt: z.any().optional(),
-      status: z.string().optional(),
-    })).optional(),
-    additionalDocuments: z.array(z.object({
-      documentType: z.string().optional(),
-      documentName: z.string().optional(),
-      fileUrl: z.string().optional(),
-      fileName: z.string().optional(),
-      uploadedAt: z.any().optional(),
-      status: z.string().optional(),
-    })).optional(),
-  }).optional(),
+  familyDocuments: z
+    .object({
+      kk: z
+        .object({
+          fileUrl: z.string().optional(),
+          fileName: z.string().optional(),
+          uploadedAt: z.any().optional(),
+          status: z.string().optional(),
+        })
+        .optional(),
+      marriageCertificate: z
+        .object({
+          fileUrl: z.string().optional(),
+          fileName: z.string().optional(),
+          uploadedAt: z.any().optional(),
+          status: z.string().optional(),
+        })
+        .optional(),
+      spouseKtp: z
+        .object({
+          fileUrl: z.string().optional(),
+          fileName: z.string().optional(),
+          uploadedAt: z.any().optional(),
+          status: z.string().optional(),
+        })
+        .optional(),
+      familyBpjsMembers: z
+        .array(
+          z.object({
+            dependentId: z.string().optional(),
+            dependentName: z.string().optional(),
+            relationship: z.string().optional(),
+            bpjsNumber: z.string().optional(),
+            fileUrl: z.string().optional(),
+            fileName: z.string().optional(),
+            uploadedAt: z.any().optional(),
+            status: z.string().optional(),
+          }),
+        )
+        .optional(),
+      childBirthCertificates: z
+        .array(
+          z.object({
+            childName: z.string().optional(),
+            fileUrl: z.string().optional(),
+            fileName: z.string().optional(),
+            uploadedAt: z.any().optional(),
+            status: z.string().optional(),
+          }),
+        )
+        .optional(),
+      additionalDocuments: z
+        .array(
+          z.object({
+            documentType: z.string().optional(),
+            documentName: z.string().optional(),
+            fileUrl: z.string().optional(),
+            fileName: z.string().optional(),
+            uploadedAt: z.any().optional(),
+            status: z.string().optional(),
+          }),
+        )
+        .optional(),
+    })
+    .optional(),
 });
 
 type FormValues = z.infer<typeof selfFormSchema>;
@@ -821,7 +844,9 @@ function DocumentUploadCard({
   const isPdf = value?.toLowerCase().endsWith(".pdf") || value?.includes("pdf");
 
   return (
-    <Card className={`overflow-hidden border-slate-800 bg-slate-900/40 rounded-3xl shadow-sm hover:shadow-md transition-all duration-300 ${disabled ? 'opacity-70 cursor-not-allowed' : ''}`}>
+    <Card
+      className={`overflow-hidden border-slate-800 bg-slate-900/40 rounded-3xl shadow-sm hover:shadow-md transition-all duration-300 ${disabled ? "opacity-70 cursor-not-allowed" : ""}`}
+    >
       <CardContent className="p-0">
         <div className="flex flex-col lg:flex-row">
           <div className="flex-1 p-6 sm:p-8 space-y-6">
@@ -831,7 +856,8 @@ function DocumentUploadCard({
                   className={`h-12 w-12 rounded-2xl flex items-center justify-center transition-colors ${
                     status === "Sudah Upload"
                       ? "bg-emerald-500/10 text-emerald-500"
-                      : status === "Belum Upload" || status === "Perlu Review HRD"
+                      : status === "Belum Upload" ||
+                          status === "Perlu Review HRD"
                         ? "bg-amber-500/10 text-amber-500"
                         : "bg-slate-500/10 text-slate-500"
                   }`}
@@ -847,7 +873,8 @@ function DocumentUploadCard({
                       className={`h-1.5 w-1.5 rounded-full ${
                         status === "Sudah Upload"
                           ? "bg-emerald-500"
-                          : status === "Belum Upload" || status === "Perlu Review HRD"
+                          : status === "Belum Upload" ||
+                              status === "Perlu Review HRD"
                             ? "bg-amber-500"
                             : "bg-slate-500"
                       }`}
@@ -856,7 +883,8 @@ function DocumentUploadCard({
                       className={`text-[10px] font-bold uppercase tracking-widest ${
                         status === "Sudah Upload"
                           ? "text-emerald-500"
-                          : status === "Belum Upload" || status === "Perlu Review HRD"
+                          : status === "Belum Upload" ||
+                              status === "Perlu Review HRD"
                             ? "text-amber-500"
                             : "text-slate-500"
                       }`}
@@ -1056,6 +1084,149 @@ const STEP_CONFIG = [
   },
 ];
 
+// ── Dropdown value canonicalizers ────────────────────────────────────────────
+// Translate legacy / variant stored values → exact option string the Select uses.
+
+function canonicalGender(raw: any): string {
+  const VALID = ["Laki-laki", "Perempuan", "Lainnya"] as const;
+  if (!raw && raw !== false) return "";
+  const v = String(raw).trim();
+  const MAP: Record<string, string> = {
+    "laki-laki": "Laki-laki",
+    "laki laki": "Laki-laki",
+    l: "Laki-laki",
+    m: "Laki-laki",
+    male: "Laki-laki",
+    perempuan: "Perempuan",
+    p: "Perempuan",
+    f: "Perempuan",
+    female: "Perempuan",
+    lainnya: "Lainnya",
+    other: "Lainnya",
+  };
+  const found = VALID.find((o) => o === v);
+  if (found) return found;
+  return MAP[v.toLowerCase()] ?? "";
+}
+
+function canonicalMaritalStatus(raw: any): string {
+  const VALID = [
+    "Belum Menikah",
+    "Menikah",
+    "Cerai Hidup",
+    "Cerai Mati",
+  ] as const;
+  if (!raw) return "";
+  const v = String(raw).trim();
+  const MAP: Record<string, string> = {
+    "belum menikah": "Belum Menikah",
+    "belum kawin": "Belum Menikah",
+    single: "Belum Menikah",
+    "tidak menikah": "Belum Menikah",
+    menikah: "Menikah",
+    kawin: "Menikah",
+    married: "Menikah",
+    "sudah menikah": "Menikah",
+    "cerai hidup": "Cerai Hidup",
+    divorced: "Cerai Hidup",
+    "cerai mati": "Cerai Mati",
+    janda: "Cerai Mati",
+    duda: "Cerai Mati",
+    widowed: "Cerai Mati",
+  };
+  const found = VALID.find((o) => o === v);
+  if (found) return found;
+  return MAP[v.toLowerCase()] ?? "";
+}
+
+function canonicalReligion(raw: any): string {
+  const VALID = [
+    "Islam",
+    "Kristen",
+    "Katolik",
+    "Hindu",
+    "Buddha",
+    "Konghucu",
+    "Lainnya",
+  ] as const;
+  if (!raw) return "";
+  const v = String(raw).trim();
+  const MAP: Record<string, string> = {
+    islam: "Islam",
+    muslim: "Islam",
+    kristen: "Kristen",
+    "kristen protestan": "Kristen",
+    protestant: "Kristen",
+    christian: "Kristen",
+    katolik: "Katolik",
+    catholic: "Katolik",
+    "kristen katolik": "Katolik",
+    hindu: "Hindu",
+    buddha: "Buddha",
+    budha: "Buddha",
+    buddhist: "Buddha",
+    konghucu: "Konghucu",
+    confucian: "Konghucu",
+    lainnya: "Lainnya",
+    other: "Lainnya",
+  };
+  const found = VALID.find((o) => o === v);
+  if (found) return found;
+  return MAP[v.toLowerCase()] ?? "";
+}
+
+function canonicalNationality(raw: any): string {
+  const VALID = ["WNI", "WNA"] as const;
+  if (!raw) return "WNI";
+  const v = String(raw).trim();
+  const MAP: Record<string, string> = {
+    wni: "WNI",
+    indonesia: "WNI",
+    "warga negara indonesia": "WNI",
+    indonesian: "WNI",
+    wna: "WNA",
+    "warga negara asing": "WNA",
+    foreigner: "WNA",
+    foreign: "WNA",
+  };
+  const found = VALID.find((o) => o === v);
+  if (found) return found;
+  return MAP[v.toLowerCase()] ?? "WNI";
+}
+
+function canonicalGolonganDarah(raw: any): string {
+  const VALID = [
+    "A",
+    "B",
+    "AB",
+    "O",
+    "A+",
+    "A-",
+    "B+",
+    "B-",
+    "AB+",
+    "AB-",
+    "O+",
+    "O-",
+  ] as const;
+  if (!raw) return "";
+  const v = String(raw).trim().toUpperCase();
+  return (VALID as readonly string[]).includes(v) ? v : "";
+}
+
+function canonicalHasPhysicalCondition(raw: any): string {
+  if (raw === true || raw === "true" || raw === "1" || raw === 1) return "Ya";
+  if (raw === false || raw === "false" || raw === "0" || raw === 0)
+    return "Tidak";
+  const v = String(raw ?? "")
+    .trim()
+    .toLowerCase();
+  if (v === "ya" || v === "yes") return "Ya";
+  if (v === "tidak" || v === "no" || v === "none") return "Tidak";
+  return "";
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 function normalizeEmployeeProfileToFormValues(initialProfile: any): any {
   if (!initialProfile) return {};
 
@@ -1088,26 +1259,26 @@ function normalizeEmployeeProfileToFormValues(initialProfile: any): any {
         initialProfile.email ||
         "",
       phone: dd.phone || initialProfile.phone || "",
-      gender: normalize(dd.gender || initialProfile.gender || ""),
+      // ── Dropdown fields — use canonicalizers so legacy values map correctly ──
+      gender: canonicalGender(dd.gender || initialProfile.gender),
       birthPlace: dd.birthPlace || initialProfile.birthPlace || "",
       birthDate: dd.birthDate || formattedBirthDate,
-      maritalStatus: normalize(
-        dd.maritalStatus || initialProfile.maritalStatus || "",
+      maritalStatus: canonicalMaritalStatus(
+        dd.maritalStatus || initialProfile.maritalStatus,
       ),
-      religion: normalize(dd.religion || initialProfile.religion || ""),
-      nationality: normalize(
-        dd.nationality || initialProfile.nationality || "WNI",
+      religion: canonicalReligion(dd.religion || initialProfile.religion),
+      nationality: canonicalNationality(
+        dd.nationality || initialProfile.nationality,
       ),
       countryOfOrigin:
         dd.countryOfOrigin ||
         initialProfile.additionalFields?.countryOfOrigin ||
         initialProfile.countryOfOrigin ||
         "",
-      golonganDarah: normalize(
+      golonganDarah: canonicalGolonganDarah(
         dd.golonganDarah ||
           initialProfile.additionalFields?.golonganDarah ||
-          initialProfile.bloodType ||
-          "",
+          initialProfile.bloodType,
       ),
       tinggiBadan:
         dd.tinggiBadan ||
@@ -1119,10 +1290,10 @@ function normalizeEmployeeProfileToFormValues(initialProfile: any): any {
         initialProfile.additionalFields?.beratBadan ||
         initialProfile.weightKg ||
         "",
-      hasPhysicalCondition: normalize(
-        dd.hasPhysicalCondition ||
-          initialProfile.additionalFields?.hasPhysicalCondition ||
-          initialProfile.hasPhysicalCondition ||
+      hasPhysicalCondition: canonicalHasPhysicalCondition(
+        dd.hasPhysicalCondition ??
+          initialProfile.additionalFields?.hasPhysicalCondition ??
+          initialProfile.hasPhysicalCondition ??
           "Tidak",
       ),
       physicalConditionDetails:
@@ -1340,13 +1511,15 @@ function normalizeEmployeeProfileToFormValues(initialProfile: any): any {
         uploadedAt: m.uploadedAt || null,
         status: m.status || "missing",
       })),
-      childBirthCertificates: (fd.childBirthCertificates || []).map((c: any) => ({
-        childName: c.childName || "",
-        fileUrl: c.fileUrl || "",
-        fileName: c.fileName || "",
-        uploadedAt: c.uploadedAt || null,
-        status: c.status || "missing",
-      })),
+      childBirthCertificates: (fd.childBirthCertificates || []).map(
+        (c: any) => ({
+          childName: c.childName || "",
+          fileUrl: c.fileUrl || "",
+          fileName: c.fileName || "",
+          uploadedAt: c.uploadedAt || null,
+          status: c.status || "missing",
+        }),
+      ),
       additionalDocuments: (fd.additionalDocuments || [])
         .filter((d: any) => d.documentType || d.fileUrl)
         .map((d: any) => ({
@@ -1372,12 +1545,17 @@ export function EmployeeSelfProfileForm({
   const { toast } = useToast();
   const lastResetKeyRef = useRef("");
 
-  const [latestBankRequest, setLatestBankRequest] = useState<any>(null);
+  const [pendingBankRequest, setPendingBankRequest] = useState<any>(null);
   const [isBankRequestModalOpen, setIsBankRequestModalOpen] = useState(false);
-  
-  const [isChangeRequestModalOpen, setIsChangeRequestModalOpen] = useState(false);
-  const [activeChangeCategory, setActiveChangeCategory] = useState<ChangeRequestCategory | undefined>();
-  const [pendingRequests, setPendingRequests] = useState<Record<string, any>>({});
+
+  const [isChangeRequestModalOpen, setIsChangeRequestModalOpen] =
+    useState(false);
+  const [activeChangeCategory, setActiveChangeCategory] = useState<
+    ChangeRequestCategory | undefined
+  >();
+  const [pendingRequests, setPendingRequests] = useState<Record<string, any>>(
+    {},
+  );
 
   const fetchPendingRequests = async () => {
     if (!firebaseUser?.uid) return;
@@ -1387,26 +1565,28 @@ export function EmployeeSelfProfileForm({
         collection(firestore, "bank_change_requests"),
         where("employeeUid", "==", firebaseUser.uid),
         orderBy("submittedAt", "desc"),
-        limit(1)
+        limit(1),
       );
       const bankSnap = await getDocs(bankQ);
       if (!bankSnap.empty) {
         const doc = bankSnap.docs[0];
-        setLatestBankRequest({ id: doc.id, ...doc.data() });
+        const request = { id: doc.id, ...doc.data() } as any;
+        setPendingBankRequest(request.status === "pending" ? request : null);
       } else {
-        setLatestBankRequest(null);
+        setPendingBankRequest(null);
       }
 
-      // Fetch Generic Change Requests
+      // Fetch Generic Change Requests (exclude payroll requests, which use bank_change_requests)
       const q = query(
         collection(firestore, "employee_change_requests"),
         where("employeeUid", "==", firebaseUser.uid),
-        where("status", "==", "pending")
+        where("status", "==", "pending"),
       );
       const snapshot = await getDocs(q);
       const requests: Record<string, any> = {};
-      snapshot.forEach(doc => {
+      snapshot.forEach((doc) => {
         const data = doc.data();
+        if (data.category === "payroll") return;
         requests[data.category] = { id: doc.id, ...data };
       });
       setPendingRequests(requests);
@@ -1438,11 +1618,14 @@ export function EmployeeSelfProfileForm({
     );
   }, [initialProfile]);
 
-  const isIdentityVerified = initialProfile.verificationStatus?.identity === 'approved';
-  const isTaxVerified = initialProfile.verificationStatus?.tax === 'approved';
-  const isBpjsVerified = initialProfile.verificationStatus?.bpjs === 'approved';
-  const isFamilyVerified = initialProfile.verificationStatus?.family === 'approved';
-  const isBankVerified = initialProfile.verificationStatus?.bankAccount === 'approved';
+  const isIdentityVerified =
+    initialProfile.verificationStatus?.identity === "approved";
+  const isTaxVerified = initialProfile.verificationStatus?.tax === "approved";
+  const isBpjsVerified = initialProfile.verificationStatus?.bpjs === "approved";
+  const isFamilyVerified =
+    initialProfile.verificationStatus?.family === "approved";
+  const isBankVerified =
+    initialProfile.verificationStatus?.bankAccount === "approved";
 
   const form = useForm<FormValues>({
     resolver: zodResolver(selfFormSchema),
@@ -1630,7 +1813,7 @@ export function EmployeeSelfProfileForm({
     control: form.control,
     name: "familyDocuments.additionalDocuments",
   });
-  
+
   const {
     fields: familyBpjsMemberFields,
     append: appendFamilyBpjsMember,
@@ -1871,13 +2054,18 @@ export function EmployeeSelfProfileForm({
         url: m.fileUrl,
         type: "family_bpjs_member",
       })),
-      ...(values.familyDocuments?.childBirthCertificates || []).map((c: any) => ({
-        name: `Akta Lahir: ${c.childName}`,
-        url: c.fileUrl,
-        type: "family_child_birth_cert",
-      })),
+      ...(values.familyDocuments?.childBirthCertificates || []).map(
+        (c: any) => ({
+          name: `Akta Lahir: ${c.childName}`,
+          url: c.fileUrl,
+          type: "family_child_birth_cert",
+        }),
+      ),
       ...(values.familyDocuments?.additionalDocuments || []).map((d: any) => ({
-        name: d.documentType === "Dokumen Lainnya" ? (d.documentName || "Dokumen Lainnya") : (d.documentType || "Dokumen Keluarga Tambahan"),
+        name:
+          d.documentType === "Dokumen Lainnya"
+            ? d.documentName || "Dokumen Lainnya"
+            : d.documentType || "Dokumen Keluarga Tambahan",
         url: d.fileUrl,
         type: "family_additional_doc",
       })),
@@ -2163,33 +2351,35 @@ export function EmployeeSelfProfileForm({
                     </FormItem>
                   )}
                 />
-                  <FormField
-                    control={form.control}
-                    name="dataDiriIdentitas.maritalStatus"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">Status Pernikahan</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          value={field.value || ""}
-                        >
-                          <FormControl>
-                            <SelectTrigger className="bg-slate-950/40 border-slate-800">
-                              <SelectValue placeholder="Pilih status" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent className="bg-slate-900 border-slate-800">
-                            {MARITAL_STATUS_OPTIONS.map((opt) => (
-                              <SelectItem key={opt} value={opt}>
-                                {opt}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                <FormField
+                  control={form.control}
+                  name="dataDiriIdentitas.maritalStatus"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+                        Status Pernikahan
+                      </FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value || ""}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="bg-slate-950/40 border-slate-800">
+                            <SelectValue placeholder="Pilih status" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent className="bg-slate-900 border-slate-800">
+                          {MARITAL_STATUS_OPTIONS.map((opt) => (
+                            <SelectItem key={opt} value={opt}>
+                              {opt}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <FormField
                   control={form.control}
                   name="dataDiriIdentitas.religion"
@@ -2473,21 +2663,29 @@ export function EmployeeSelfProfileForm({
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
                 <div className="lg:col-span-1 space-y-4">
                   <div className="flex items-center justify-between">
-                    <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">Nomor KTP (NIK)</FormLabel>
+                    <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+                      Nomor KTP (NIK)
+                    </FormLabel>
                     {pendingRequests.ktp ? (
-                      <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/30 px-2 py-1 rounded-lg text-[10px]">
+                      <Badge
+                        variant="outline"
+                        className="bg-amber-500/10 text-amber-500 border-amber-500/30 px-2 py-1 rounded-lg text-[10px]"
+                      >
                         Menunggu Review
                       </Badge>
-                    ) : (isIdentityVerified && form.watch("dataDiriIdentitas.nik")) && (
-                      <Button 
-                        type="button" 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={() => openChangeRequest('ktp')}
-                        className="h-7 text-[10px] text-blue-400 hover:text-blue-300 hover:bg-blue-500/5 px-2"
-                      >
-                        Ajukan Perubahan KTP
-                      </Button>
+                    ) : (
+                      isIdentityVerified &&
+                      form.watch("dataDiriIdentitas.nik") && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openChangeRequest("ktp")}
+                          className="h-7 text-[10px] text-blue-400 hover:text-blue-300 hover:bg-blue-500/5 px-2"
+                        >
+                          Ajukan Perubahan KTP
+                        </Button>
+                      )
                     )}
                   </div>
                   <FormField
@@ -2498,7 +2696,9 @@ export function EmployeeSelfProfileForm({
                         <FormControl>
                           <Input
                             {...field}
-                            disabled={!!pendingRequests.ktp || isIdentityVerified}
+                            disabled={
+                              !!pendingRequests.ktp || isIdentityVerified
+                            }
                             value={field.value ?? ""}
                             placeholder="16 digit NIK"
                             maxLength={16}
@@ -2847,21 +3047,31 @@ export function EmployeeSelfProfileForm({
                   <div className="animate-in fade-in slide-in-from-top-4 duration-500 space-y-6">
                     <div className="bg-slate-900/20 border border-slate-800/60 p-6 rounded-3xl relative">
                       <div className="flex items-center justify-between mb-4">
-                        <h5 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Data Pajak (NPWP)</h5>
+                        <h5 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                          Data Pajak (NPWP)
+                        </h5>
                         {pendingRequests.pajak ? (
-                          <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/30 px-3 py-1.5 rounded-xl">
-                            <Clock className="w-3.5 h-3.5 mr-1.5" /> Menunggu Review
-                          </Badge>
-                        ) : (isTaxVerified && form.watch("dokumenAdministratif.npwp") && !form.watch("dokumenAdministratif.noNpwp")) && (
-                          <Button 
-                            type="button" 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => openChangeRequest('pajak')}
-                            className="rounded-xl border-blue-500/30 text-blue-400 bg-blue-500/5 hover:bg-blue-500/10"
+                          <Badge
+                            variant="outline"
+                            className="bg-amber-500/10 text-amber-500 border-amber-500/30 px-3 py-1.5 rounded-xl"
                           >
-                            Ajukan Perubahan NPWP
-                          </Button>
+                            <Clock className="w-3.5 h-3.5 mr-1.5" /> Menunggu
+                            Review
+                          </Badge>
+                        ) : (
+                          isTaxVerified &&
+                          form.watch("dokumenAdministratif.npwp") &&
+                          !form.watch("dokumenAdministratif.noNpwp") && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openChangeRequest("pajak")}
+                              className="rounded-xl border-blue-500/30 text-blue-400 bg-blue-500/5 hover:bg-blue-500/10"
+                            >
+                              Ajukan Perubahan NPWP
+                            </Button>
+                          )
                         )}
                       </div>
                       <FormField
@@ -2876,7 +3086,9 @@ export function EmployeeSelfProfileForm({
                               <Input
                                 {...field}
                                 value={field.value ?? ""}
-                                disabled={!!pendingRequests.pajak || isTaxVerified}
+                                disabled={
+                                  !!pendingRequests.pajak || isTaxVerified
+                                }
                                 placeholder="00.000.000.0-000.000"
                                 className="bg-slate-950/40 h-12 rounded-xl border-slate-800 focus:border-primary/50 transition-all font-mono tracking-wider"
                                 inputMode="numeric"
@@ -2939,19 +3151,26 @@ export function EmployeeSelfProfileForm({
                     )}
                   />
                   {pendingRequests.bpjs_ks ? (
-                    <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/30 px-2 py-1 rounded-lg text-[10px]">
+                    <Badge
+                      variant="outline"
+                      className="bg-amber-500/10 text-amber-500 border-amber-500/30 px-2 py-1 rounded-lg text-[10px]"
+                    >
                       Menunggu Review
                     </Badge>
-                  ) : (isBpjsVerified && form.watch("dokumenAdministratif.bpjsKesehatan") && !form.watch("dokumenAdministratif.noBpjsKesehatan")) && (
-                    <Button 
-                      type="button" 
-                      variant="ghost" 
-                      size="sm"
-                      onClick={() => openChangeRequest('bpjs_ks')}
-                      className="h-7 text-[10px] text-blue-400 hover:text-blue-300 hover:bg-blue-500/5 px-2"
-                    >
-                      Ajukan Perubahan BPJS Kes
-                    </Button>
+                  ) : (
+                    isBpjsVerified &&
+                    form.watch("dokumenAdministratif.bpjsKesehatan") &&
+                    !form.watch("dokumenAdministratif.noBpjsKesehatan") && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openChangeRequest("bpjs_ks")}
+                        className="h-7 text-[10px] text-blue-400 hover:text-blue-300 hover:bg-blue-500/5 px-2"
+                      >
+                        Ajukan Perubahan BPJS Kes
+                      </Button>
+                    )
                   )}
                 </div>
 
@@ -2970,7 +3189,9 @@ export function EmployeeSelfProfileForm({
                               <Input
                                 {...field}
                                 value={field.value ?? ""}
-                                disabled={!!pendingRequests.bpjs_ks || isBpjsVerified}
+                                disabled={
+                                  !!pendingRequests.bpjs_ks || isBpjsVerified
+                                }
                                 placeholder="0001234567890"
                                 className="bg-slate-950/40 h-12 rounded-xl border-slate-800 focus:border-blue-500/50 transition-all font-mono tracking-wider"
                                 inputMode="numeric"
@@ -3033,19 +3254,28 @@ export function EmployeeSelfProfileForm({
                     )}
                   />
                   {pendingRequests.bpjs_tk ? (
-                    <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/30 px-2 py-1 rounded-lg text-[10px]">
+                    <Badge
+                      variant="outline"
+                      className="bg-amber-500/10 text-amber-500 border-amber-500/30 px-2 py-1 rounded-lg text-[10px]"
+                    >
                       Menunggu Review
                     </Badge>
-                  ) : (isBpjsVerified && form.watch("dokumenAdministratif.bpjsKetenagakerjaan") && !form.watch("dokumenAdministratif.noBpjsKetenagakerjaan")) && (
-                    <Button 
-                      type="button" 
-                      variant="ghost" 
-                      size="sm"
-                      onClick={() => openChangeRequest('bpjs_tk')}
-                      className="h-7 text-[10px] text-blue-400 hover:text-blue-300 hover:bg-blue-500/5 px-2"
-                    >
-                      Ajukan Perubahan BPJS TK
-                    </Button>
+                  ) : (
+                    isBpjsVerified &&
+                    form.watch("dokumenAdministratif.bpjsKetenagakerjaan") &&
+                    !form.watch(
+                      "dokumenAdministratif.noBpjsKetenagakerjaan",
+                    ) && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openChangeRequest("bpjs_tk")}
+                        className="h-7 text-[10px] text-blue-400 hover:text-blue-300 hover:bg-blue-500/5 px-2"
+                      >
+                        Ajukan Perubahan BPJS TK
+                      </Button>
+                    )
                   )}
                 </div>
 
@@ -3064,7 +3294,9 @@ export function EmployeeSelfProfileForm({
                               <Input
                                 {...field}
                                 value={field.value ?? ""}
-                                disabled={!!pendingRequests.bpjs_tk || isBpjsVerified}
+                                disabled={
+                                  !!pendingRequests.bpjs_tk || isBpjsVerified
+                                }
                                 placeholder="0001234567890"
                                 className="bg-slate-950/40 h-12 rounded-xl border-slate-800 focus:border-green-500/50 transition-all font-mono tracking-wider"
                                 inputMode="numeric"
@@ -3174,24 +3406,39 @@ export function EmployeeSelfProfileForm({
                       Rekening Payroll
                     </h4>
                     <p className="text-sm text-slate-400 mt-1">
-                      Data rekening yang digunakan untuk pengiriman gaji bulanan Anda.
+                      Data rekening yang digunakan untuk pengiriman gaji bulanan
+                      Anda.
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  {pendingRequests.payroll ? (
-                    <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/30 px-4 py-2 rounded-xl font-bold">
-                      <Clock className="w-4 h-4 mr-2" /> Menunggu Review HRD
-                    </Badge>
-                  ) : (isBankVerified && form.watch("dataRekening.bankAccountNumber")) && (
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      onClick={() => openChangeRequest('payroll')}
-                      className="rounded-xl border-blue-500/30 text-blue-400 bg-blue-500/5 hover:bg-blue-500/10 h-11 px-6 font-bold"
+                  {pendingBankRequest ? (
+                    <Badge
+                      variant="outline"
+                      className="bg-amber-500/10 text-amber-500 border-amber-500/30 px-4 py-2 rounded-xl font-bold"
                     >
-                      Ajukan Perubahan Rekening
-                    </Button>
+                      <Clock className="w-4 h-4 mr-2" /> Menunggu Persetujuan
+                      HRD
+                    </Badge>
+                  ) : (
+                    // Show button when all 4 core rekening fields are filled
+                    // No need to wait for isBankVerified — verification may not always be set
+                    !!form.watch("dataRekening.bankName") &&
+                    !!form.watch("dataRekening.bankAccountNumber") &&
+                    !!form.watch("dataRekening.bankAccountHolderName") &&
+                    !!(
+                      form.watch("dataRekening.bankDocumentUrl") ||
+                      form.watch("dataRekening.buktiRekeningUrl")
+                    ) && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setIsBankRequestModalOpen(true)}
+                        className="rounded-xl border-blue-500/30 text-blue-400 bg-blue-500/5 hover:bg-blue-500/10 h-11 px-6 font-bold"
+                      >
+                        Ajukan Perubahan Rekening
+                      </Button>
+                    )
                   )}
                 </div>
               </div>
@@ -3211,7 +3458,7 @@ export function EmployeeSelfProfileForm({
                         <Select
                           onValueChange={field.onChange}
                           value={field.value || ""}
-                          disabled={!!pendingRequests.payroll || isBankVerified}
+                          disabled={!!pendingBankRequest || isBankVerified}
                         >
                           <FormControl>
                             <SelectTrigger className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80">
@@ -3242,7 +3489,7 @@ export function EmployeeSelfProfileForm({
                         <FormControl>
                           <Input
                             {...field}
-                            disabled={!!pendingRequests.payroll || isBankVerified}
+                            disabled={!!pendingBankRequest || isBankVerified}
                             value={field.value ?? ""}
                             placeholder="Contoh: 1234567890"
                             className="bg-slate-950/40 h-12 rounded-xl border-slate-800"
@@ -3265,7 +3512,7 @@ export function EmployeeSelfProfileForm({
                         <FormControl>
                           <Input
                             {...field}
-                            disabled={!!pendingRequests.payroll || isBankVerified}
+                            disabled={!!pendingBankRequest || isBankVerified}
                             value={field.value ?? ""}
                             className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80"
                             placeholder="Sesuai yang tertera di buku tabungan"
@@ -3288,7 +3535,7 @@ export function EmployeeSelfProfileForm({
                         userId={firebaseUser?.uid || ""}
                         fieldKey="bank_proof"
                         value={field.value}
-                        disabled={!!pendingRequests.payroll}
+                        disabled={!!pendingBankRequest}
                         onChange={field.onChange}
                         icon={Wallet}
                         status={field.value ? "Sudah Upload" : "Belum Upload"}
@@ -3300,11 +3547,11 @@ export function EmployeeSelfProfileForm({
             </div>
 
             {isBankRequestModalOpen && (
-              <BankChangeRequestModal 
+              <BankChangeRequestModal
                 open={isBankRequestModalOpen}
                 onOpenChange={setIsBankRequestModalOpen}
                 initialProfile={initialProfile}
-                latestRequest={latestBankRequest}
+                latestRequest={pendingBankRequest}
                 onSuccess={fetchPendingRequests}
               />
             )}
@@ -3845,24 +4092,33 @@ export function EmployeeSelfProfileForm({
                         Dokumen Pendukung Keluarga
                       </h4>
                       <p className="text-sm text-slate-400 mt-1">
-                        Upload dokumen keluarga yang diperlukan untuk validasi administrasi HRD.
+                        Upload dokumen keluarga yang diperlukan untuk validasi
+                        administrasi HRD.
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                     {pendingRequests.legal_extra ? (
-                      <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/30 px-4 py-2 rounded-xl font-bold">
+                      <Badge
+                        variant="outline"
+                        className="bg-amber-500/10 text-amber-500 border-amber-500/30 px-4 py-2 rounded-xl font-bold"
+                      >
                         <Clock className="w-4 h-4 mr-2" /> Menunggu Review HRD
                       </Badge>
-                    ) : isFamilyVerified && (
-                      <Button 
-                        type="button" 
-                        variant="outline" 
-                        onClick={() => openChangeRequest('legal_extra')}
-                        className="rounded-xl border-blue-500/30 text-blue-400 bg-blue-500/5 hover:bg-blue-500/10 h-11 px-6 font-bold"
-                      >
-                        Ajukan Perubahan Dokumen Legal
-                      </Button>
+                    ) : (
+                      // Show only when verified AND at least one legal doc already exists
+                      isFamilyVerified &&
+                      (form.watch("familyDocuments.additionalDocuments") || [])
+                        .length > 0 && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => openChangeRequest("legal_extra")}
+                          className="rounded-xl border-blue-500/30 text-blue-400 bg-blue-500/5 hover:bg-blue-500/10 h-11 px-6 font-bold"
+                        >
+                          Ajukan Perubahan Dokumen Legal
+                        </Button>
+                      )
                     )}
                   </div>
                 </div>
@@ -3871,126 +4127,182 @@ export function EmployeeSelfProfileForm({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">
                   <div className="flex items-center justify-between px-2">
-                    <FormLabel className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Kartu Keluarga (KK)</FormLabel>
+                    <FormLabel className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                      Kartu Keluarga (KK)
+                    </FormLabel>
                     {pendingRequests.kk ? (
-                      <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/30 px-2 py-1 rounded-lg text-[10px]">
+                      <Badge
+                        variant="outline"
+                        className="bg-amber-500/10 text-amber-500 border-amber-500/30 px-2 py-1 rounded-lg text-[10px]"
+                      >
                         Menunggu Review
                       </Badge>
-                    ) : (isFamilyVerified && form.watch("familyDocuments.kk.fileUrl")) && (
-                      <Button 
-                        type="button" 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={() => openChangeRequest('kk')}
-                        className="h-7 text-[10px] text-blue-400 hover:text-blue-300 hover:bg-blue-500/5 px-2"
-                      >
-                        Ajukan Perubahan KK
-                      </Button>
+                    ) : (
+                      isFamilyVerified &&
+                      form.watch("familyDocuments.kk.fileUrl") && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openChangeRequest("kk")}
+                          className="h-7 text-[10px] text-blue-400 hover:text-blue-300 hover:bg-blue-500/5 px-2"
+                        >
+                          Ajukan Perubahan KK
+                        </Button>
+                      )
                     )}
                   </div>
                   <FileUploadField
-                  label="Kartu Keluarga (KK)*"
-                  description="Upload scan/foto Kartu Keluarga yang masih berlaku."
-                  value={form.watch("familyDocuments.kk.fileUrl")}
-                  disabled={!!pendingRequests.kk || isFamilyVerified}
-                  onChange={(url) => {
-                    form.setValue("familyDocuments.kk.fileUrl", url);
-                    form.setValue("familyDocuments.kk.status", "uploaded");
-                    form.setValue("familyDocuments.kk.uploadedAt", new Date());
-                  }}
-                  userId={firebaseUser!.uid}
-                  fieldKey="kk"
-                  status={
-                    form.watch("familyDocuments.kk.status") === "needs_review"
-                      ? "Perlu Review HRD"
-                      : form.watch("familyDocuments.kk.fileUrl")
-                        ? "Sudah Upload"
-                        : "Belum Upload"
-                  }
-                  helperText="Wajib untuk verifikasi data keluarga dan BPJS."
-                  icon={FileText}
-                />
+                    label="Kartu Keluarga (KK)*"
+                    description="Upload scan/foto Kartu Keluarga yang masih berlaku."
+                    value={form.watch("familyDocuments.kk.fileUrl")}
+                    disabled={!!pendingRequests.kk || isFamilyVerified}
+                    onChange={(url) => {
+                      form.setValue("familyDocuments.kk.fileUrl", url);
+                      form.setValue("familyDocuments.kk.status", "uploaded");
+                      form.setValue(
+                        "familyDocuments.kk.uploadedAt",
+                        new Date(),
+                      );
+                    }}
+                    userId={firebaseUser!.uid}
+                    fieldKey="kk"
+                    status={
+                      form.watch("familyDocuments.kk.status") === "needs_review"
+                        ? "Perlu Review HRD"
+                        : form.watch("familyDocuments.kk.fileUrl")
+                          ? "Sudah Upload"
+                          : "Belum Upload"
+                    }
+                    helperText="Wajib untuk verifikasi data keluarga dan BPJS."
+                    icon={FileText}
+                  />
                 </div>
 
                 {watchedMaritalStatus === "Kawin" && (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between px-2">
-                      <FormLabel className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Buku / Akta Nikah</FormLabel>
+                      <FormLabel className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                        Buku / Akta Nikah
+                      </FormLabel>
                       {pendingRequests.marriage ? (
-                        <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/30 px-2 py-1 rounded-lg text-[10px]">
+                        <Badge
+                          variant="outline"
+                          className="bg-amber-500/10 text-amber-500 border-amber-500/30 px-2 py-1 rounded-lg text-[10px]"
+                        >
                           Menunggu Review
                         </Badge>
-                      ) : (isFamilyVerified && form.watch("familyDocuments.marriageCertificate.fileUrl")) && (
-                        <Button 
-                          type="button" 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => openChangeRequest('marriage')}
-                          className="h-7 text-[10px] text-blue-400 hover:text-blue-300 hover:bg-blue-500/5 px-2"
-                        >
-                          Ajukan Perubahan Akta Nikah
-                        </Button>
+                      ) : (
+                        isFamilyVerified &&
+                        form.watch(
+                          "familyDocuments.marriageCertificate.fileUrl",
+                        ) && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openChangeRequest("marriage")}
+                            className="h-7 text-[10px] text-blue-400 hover:text-blue-300 hover:bg-blue-500/5 px-2"
+                          >
+                            Ajukan Perubahan Akta Nikah
+                          </Button>
+                        )
                       )}
                     </div>
                     <FileUploadField
                       label="Buku Nikah / Akta Nikah"
                       description="Wajib diunggah jika status Anda Menikah/Cerai."
-                    value={form.watch("familyDocuments.marriageCertificate.fileUrl")}
-                    disabled={!!pendingRequests.marriage || isFamilyVerified}
-                    onChange={(url) => {
-                      form.setValue("familyDocuments.marriageCertificate.fileUrl", url);
-                      form.setValue("familyDocuments.marriageCertificate.status", "uploaded");
-                      form.setValue("familyDocuments.marriageCertificate.uploadedAt", new Date());
-                    }}
-                    userId={firebaseUser!.uid}
-                    fieldKey="marriage_cert"
-                    status={
-                      form.watch("familyDocuments.marriageCertificate.status") === "needs_review"
-                        ? "Perlu Review HRD"
-                        : form.watch("familyDocuments.marriageCertificate.fileUrl")
-                          ? "Sudah Upload"
-                          : "Belum Upload"
-                    }
-                    helperText="Digunakan untuk validasi hubungan keluarga dan data tanggungan."
-                    icon={Heart}
-                  />
+                      value={form.watch(
+                        "familyDocuments.marriageCertificate.fileUrl",
+                      )}
+                      disabled={!!pendingRequests.marriage || isFamilyVerified}
+                      onChange={(url) => {
+                        form.setValue(
+                          "familyDocuments.marriageCertificate.fileUrl",
+                          url,
+                        );
+                        form.setValue(
+                          "familyDocuments.marriageCertificate.status",
+                          "uploaded",
+                        );
+                        form.setValue(
+                          "familyDocuments.marriageCertificate.uploadedAt",
+                          new Date(),
+                        );
+                      }}
+                      userId={firebaseUser!.uid}
+                      fieldKey="marriage_cert"
+                      status={
+                        form.watch(
+                          "familyDocuments.marriageCertificate.status",
+                        ) === "needs_review"
+                          ? "Perlu Review HRD"
+                          : form.watch(
+                                "familyDocuments.marriageCertificate.fileUrl",
+                              )
+                            ? "Sudah Upload"
+                            : "Belum Upload"
+                      }
+                      helperText="Digunakan untuk validasi hubungan keluarga dan data tanggungan."
+                      icon={Heart}
+                    />
                   </div>
                 )}
 
-                {(watchedMaritalStatus === "Kawin" || (tanggunganFields || []).some(t => t.relation === "Istri" || t.relation === "Suami")) && (
+                {(watchedMaritalStatus === "Kawin" ||
+                  (tanggunganFields || []).some(
+                    (t) => t.relation === "Istri" || t.relation === "Suami",
+                  )) && (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between px-2">
-                      <FormLabel className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">KTP Pasangan</FormLabel>
+                      <FormLabel className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                        KTP Pasangan
+                      </FormLabel>
                       {pendingRequests.spouse_ktp ? (
-                        <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/30 px-2 py-1 rounded-lg text-[10px]">
+                        <Badge
+                          variant="outline"
+                          className="bg-amber-500/10 text-amber-500 border-amber-500/30 px-2 py-1 rounded-lg text-[10px]"
+                        >
                           Menunggu Review
                         </Badge>
-                      ) : (isFamilyVerified && form.watch("familyDocuments.spouseKtp.fileUrl")) && (
-                        <Button 
-                          type="button" 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => openChangeRequest('spouse_ktp')}
-                          className="h-7 text-[10px] text-blue-400 hover:text-blue-300 hover:bg-blue-500/5 px-2"
-                        >
-                          Ajukan Perubahan KTP Pasangan
-                        </Button>
+                      ) : (
+                        isFamilyVerified &&
+                        form.watch("familyDocuments.spouseKtp.fileUrl") && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openChangeRequest("spouse_ktp")}
+                            className="h-7 text-[10px] text-blue-400 hover:text-blue-300 hover:bg-blue-500/5 px-2"
+                          >
+                            Ajukan Perubahan KTP Pasangan
+                          </Button>
+                        )
                       )}
                     </div>
                     <FileUploadField
                       label="KTP Pasangan"
                       description="Upload scan/foto KTP asli Pasangan."
                       value={form.watch("familyDocuments.spouseKtp.fileUrl")}
-                      disabled={!!pendingRequests.spouse_ktp || isFamilyVerified}
+                      disabled={
+                        !!pendingRequests.spouse_ktp || isFamilyVerified
+                      }
                       onChange={(url) => {
                         form.setValue("familyDocuments.spouseKtp.fileUrl", url);
-                        form.setValue("familyDocuments.spouseKtp.status", "uploaded");
-                        form.setValue("familyDocuments.spouseKtp.uploadedAt", new Date());
+                        form.setValue(
+                          "familyDocuments.spouseKtp.status",
+                          "uploaded",
+                        );
+                        form.setValue(
+                          "familyDocuments.spouseKtp.uploadedAt",
+                          new Date(),
+                        );
                       }}
                       userId={firebaseUser!.uid}
                       fieldKey="spouse_ktp"
                       status={
-                        form.watch("familyDocuments.spouseKtp.status") === "needs_review"
+                        form.watch("familyDocuments.spouseKtp.status") ===
+                        "needs_review"
                           ? "Perlu Review HRD"
                           : form.watch("familyDocuments.spouseKtp.fileUrl")
                             ? "Sudah Upload"
@@ -4001,7 +4313,6 @@ export function EmployeeSelfProfileForm({
                     />
                   </div>
                 )}
-
               </div>
 
               {/* BPJS Kesehatan Keluarga Per Anggota */}
@@ -4009,36 +4320,46 @@ export function EmployeeSelfProfileForm({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <ShieldCheck className="h-5 w-5 text-blue-500" />
-                    <h5 className="text-base font-bold text-slate-200">BPJS Kesehatan Keluarga</h5>
+                    <h5 className="text-base font-bold text-slate-200">
+                      BPJS Kesehatan Keluarga
+                    </h5>
                   </div>
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => appendFamilyBpjsMember({
-                      dependentId: `manual-${crypto.randomUUID()}`,
-                      dependentName: "",
-                      relationship: "Anak",
-                      bpjsNumber: "",
-                      fileUrl: "",
-                      status: "missing"
-                    })}
+                    onClick={() =>
+                      appendFamilyBpjsMember({
+                        dependentId: `manual-${crypto.randomUUID()}`,
+                        dependentName: "",
+                        relationship: "Anak",
+                        bpjsNumber: "",
+                        fileUrl: "",
+                        status: "missing",
+                      })
+                    }
                     className="rounded-xl border-slate-800 bg-slate-900/50 text-slate-400 hover:text-white"
                   >
-                    <Plus className="mr-2 h-4 w-4" /> Tambah BPJS Anak/Tanggungan
+                    <Plus className="mr-2 h-4 w-4" /> Tambah BPJS
+                    Anak/Tanggungan
                   </Button>
                 </div>
-                
+
                 {(() => {
                   const hasDependents = (tanggunganFields || []).length > 0;
                   const isMarried = watchedMaritalStatus === "Kawin";
-                  
-                  if (!isMarried && !hasDependents && familyBpjsMemberFields.length === 0) {
+
+                  if (
+                    !isMarried &&
+                    !hasDependents &&
+                    familyBpjsMemberFields.length === 0
+                  ) {
                     return (
                       <div className="bg-slate-900/20 border border-dashed border-slate-800 rounded-[2rem] p-10 flex flex-col items-center justify-center text-center space-y-3">
                         <ShieldCheck className="h-10 w-10 text-slate-700" />
                         <p className="text-slate-500 text-sm">
-                          Tambahkan pasangan atau tanggungan terlebih dahulu untuk mengunggah BPJS keluarga.
+                          Tambahkan pasangan atau tanggungan terlebih dahulu
+                          untuk mengunggah BPJS keluarga.
                         </p>
                       </div>
                     );
@@ -4046,119 +4367,171 @@ export function EmployeeSelfProfileForm({
 
                   // Create a virtual list of members to show
                   const membersToShow: any[] = [];
-                  
+
                   // 1. Add Spouse if married
                   if (isMarried) {
-                    const spouseFromTanggungan = (tanggunganFields || []).find(t => t.relation === "Istri" || t.relation === "Suami");
+                    const spouseFromTanggungan = (tanggunganFields || []).find(
+                      (t) => t.relation === "Istri" || t.relation === "Suami",
+                    );
                     const spouseId = spouseFromTanggungan?.id || "spouse-auto";
-                    const spouseRel = spouseFromTanggungan?.relation || (watchedGender === "Laki-laki" ? "Istri" : "Suami");
-                    
+                    const spouseRel =
+                      spouseFromTanggungan?.relation ||
+                      (watchedGender === "Laki-laki" ? "Istri" : "Suami");
+
                     membersToShow.push({
                       id: spouseId,
                       name: spouseFromTanggungan?.name || "",
                       relation: spouseRel,
                       isAuto: true,
-                      label: spouseFromTanggungan?.name || spouseRel
+                      label: spouseFromTanggungan?.name || spouseRel,
                     });
                   }
 
                   // 2. Add Children from tanggungan
-                  (tanggunganFields || []).forEach(t => {
+                  (tanggunganFields || []).forEach((t) => {
                     if (t.relation !== "Istri" && t.relation !== "Suami") {
                       membersToShow.push({
                         id: t.id,
                         name: t.name || "",
                         relation: t.relation,
                         isAuto: true,
-                        label: t.name || `Anak ${t.childOrder || ""}`
+                        label: t.name || `Anak ${t.childOrder || ""}`,
                       });
                     }
                   });
 
                   // 3. Add Manual Members from field array (excluding those that match auto IDs)
                   familyBpjsMemberFields.forEach((field, index) => {
-                    const dependentId = form.watch(`familyDocuments.familyBpjsMembers.${index}.dependentId`);
+                    const dependentId = form.watch(
+                      `familyDocuments.familyBpjsMembers.${index}.dependentId`,
+                    );
                     // Only add if not already in membersToShow
-                    if (!membersToShow.some(m => m.id === dependentId)) {
+                    if (!membersToShow.some((m) => m.id === dependentId)) {
                       membersToShow.push({
                         id: field.id,
-                        name: form.watch(`familyDocuments.familyBpjsMembers.${index}.dependentName`),
-                        relation: form.watch(`familyDocuments.familyBpjsMembers.${index}.relationship`),
+                        name: form.watch(
+                          `familyDocuments.familyBpjsMembers.${index}.dependentName`,
+                        ),
+                        relation: form.watch(
+                          `familyDocuments.familyBpjsMembers.${index}.relationship`,
+                        ),
                         isAuto: false,
-                        index
+                        index,
                       });
                     }
                   });
 
                   // Ensure unique members by ID
-                  const uniqueMembers = Array.from(new Map(membersToShow.map(m => [m.id, m])).values());
+                  const uniqueMembers = Array.from(
+                    new Map(membersToShow.map((m) => [m.id, m])).values(),
+                  );
 
                   return (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {uniqueMembers.map((member) => {
-                        const memberBpjs = (form.watch("familyDocuments.familyBpjsMembers") || [])
-                          .find((m: any) => m.dependentId === member.id) || {};
-                        
-                        const memberIndex = member.isAuto 
-                          ? -1 
-                          : member.index;
+                        const memberBpjs =
+                          (
+                            form.watch("familyDocuments.familyBpjsMembers") ||
+                            []
+                          ).find((m: any) => m.dependentId === member.id) || {};
+
+                        const memberIndex = member.isAuto ? -1 : member.index;
 
                         return (
-                          <Card key={`bpjs-${member.id}`} className="border-slate-800 bg-slate-900/40 p-6 rounded-[2rem] relative overflow-hidden group">
+                          <Card
+                            key={`bpjs-${member.id}`}
+                            className="border-slate-800 bg-slate-900/40 p-6 rounded-[2rem] relative overflow-hidden group"
+                          >
                             {!member.isAuto && (
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => removeFamilyBpjsMember(member.index)}
+                                onClick={() =>
+                                  removeFamilyBpjsMember(member.index)
+                                }
                                 className="absolute top-4 right-4 h-8 w-8 p-0 text-slate-500 hover:text-red-400 z-10"
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             )}
-                            
-                             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity flex flex-col items-end gap-2">
-                               <ShieldCheck className="h-12 w-12 text-blue-500" />
-                               {pendingRequests.family_bpjs ? (
-                                 <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/30 px-2 py-1 rounded-lg text-[10px]">
-                                   Review
-                                 </Badge>
-                               ) : (isFamilyVerified && memberBpjs.fileUrl) && (
-                                 <Button 
-                                   type="button" 
-                                   variant="ghost" 
-                                   size="sm"
-                                   onClick={() => openChangeRequest('family_bpjs')}
-                                   className="h-7 text-[10px] text-blue-400 hover:text-blue-300 hover:bg-blue-500/5 px-2"
-                                 >
-                                   Ajukan Perubahan
-                                 </Button>
-                               )}
-                             </div>
-                            
+
+                            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity flex flex-col items-end gap-2">
+                              <ShieldCheck className="h-12 w-12 text-blue-500" />
+                              {pendingRequests.family_bpjs ? (
+                                <Badge
+                                  variant="outline"
+                                  className="bg-amber-500/10 text-amber-500 border-amber-500/30 px-2 py-1 rounded-lg text-[10px]"
+                                >
+                                  Review
+                                </Badge>
+                              ) : (
+                                isFamilyVerified &&
+                                memberBpjs.fileUrl && (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() =>
+                                      openChangeRequest("family_bpjs")
+                                    }
+                                    className="h-7 text-[10px] text-blue-400 hover:text-blue-300 hover:bg-blue-500/5 px-2"
+                                  >
+                                    Ajukan Perubahan
+                                  </Button>
+                                )
+                              )}
+                            </div>
+
                             <div className="space-y-6">
                               <div className="flex flex-col">
                                 {member.isAuto ? (
                                   <>
-                                    <span className="text-sm font-bold text-slate-200">{member.label}</span>
-                                    <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mt-0.5">{member.relation}</span>
+                                    <span className="text-sm font-bold text-slate-200">
+                                      {member.label}
+                                    </span>
+                                    <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mt-0.5">
+                                      {member.relation}
+                                    </span>
                                   </>
                                 ) : (
                                   <div className="grid grid-cols-2 gap-3">
                                     <div className="space-y-1">
-                                      <FormLabel className="text-[10px] font-bold uppercase text-slate-500">Nama</FormLabel>
+                                      <FormLabel className="text-[10px] font-bold uppercase text-slate-500">
+                                        Nama
+                                      </FormLabel>
                                       <Input
                                         placeholder="Nama..."
-                                        value={form.watch(`familyDocuments.familyBpjsMembers.${member.index}.dependentName`) || ""}
-                                        onChange={(e) => form.setValue(`familyDocuments.familyBpjsMembers.${member.index}.dependentName`, e.target.value)}
+                                        value={
+                                          form.watch(
+                                            `familyDocuments.familyBpjsMembers.${member.index}.dependentName`,
+                                          ) || ""
+                                        }
+                                        onChange={(e) =>
+                                          form.setValue(
+                                            `familyDocuments.familyBpjsMembers.${member.index}.dependentName`,
+                                            e.target.value,
+                                          )
+                                        }
                                         className="bg-slate-950/40 border-slate-800 h-9 text-xs"
                                       />
                                     </div>
                                     <div className="space-y-1">
-                                      <FormLabel className="text-[10px] font-bold uppercase text-slate-500">Hubungan</FormLabel>
-                                      <Select 
-                                        onValueChange={(val) => form.setValue(`familyDocuments.familyBpjsMembers.${member.index}.relationship`, val)} 
-                                        value={form.watch(`familyDocuments.familyBpjsMembers.${member.index}.relationship`) || ""}
+                                      <FormLabel className="text-[10px] font-bold uppercase text-slate-500">
+                                        Hubungan
+                                      </FormLabel>
+                                      <Select
+                                        onValueChange={(val) =>
+                                          form.setValue(
+                                            `familyDocuments.familyBpjsMembers.${member.index}.relationship`,
+                                            val,
+                                          )
+                                        }
+                                        value={
+                                          form.watch(
+                                            `familyDocuments.familyBpjsMembers.${member.index}.relationship`,
+                                          ) || ""
+                                        }
                                       >
                                         <FormControl>
                                           <SelectTrigger className="bg-slate-950/40 border-slate-800 h-9 rounded-xl text-xs">
@@ -4166,8 +4539,16 @@ export function EmployeeSelfProfileForm({
                                           </SelectTrigger>
                                         </FormControl>
                                         <SelectContent className="bg-slate-900 border-slate-800">
-                                          {["Suami", "Istri", "Anak", "Orang Tua", "Tanggungan Lainnya"].map((rel) => (
-                                            <SelectItem key={rel} value={rel}>{rel}</SelectItem>
+                                          {[
+                                            "Suami",
+                                            "Istri",
+                                            "Anak",
+                                            "Orang Tua",
+                                            "Tanggungan Lainnya",
+                                          ].map((rel) => (
+                                            <SelectItem key={rel} value={rel}>
+                                              {rel}
+                                            </SelectItem>
                                           ))}
                                         </SelectContent>
                                       </Select>
@@ -4178,13 +4559,22 @@ export function EmployeeSelfProfileForm({
 
                               <div className="space-y-4">
                                 <div className="space-y-2">
-                                  <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Nomor Kartu BPJS</FormLabel>
+                                  <FormLabel className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                                    Nomor Kartu BPJS
+                                  </FormLabel>
                                   <Input
                                     placeholder="Masukkan nomor BPJS..."
                                     value={memberBpjs.bpjsNumber || ""}
                                     onChange={(e) => {
-                                      const currentMembers = form.getValues("familyDocuments.familyBpjsMembers") || [];
-                                      const existingIndex = currentMembers.findIndex((m: any) => m.dependentId === member.id);
+                                      const currentMembers =
+                                        form.getValues(
+                                          "familyDocuments.familyBpjsMembers",
+                                        ) || [];
+                                      const existingIndex =
+                                        currentMembers.findIndex(
+                                          (m: any) =>
+                                            m.dependentId === member.id,
+                                        );
                                       const updatedMember = {
                                         ...memberBpjs,
                                         dependentId: member.id,
@@ -4192,13 +4582,17 @@ export function EmployeeSelfProfileForm({
                                         relationship: member.relation,
                                         bpjsNumber: e.target.value,
                                       };
-                                      
+
                                       if (existingIndex > -1) {
-                                        currentMembers[existingIndex] = updatedMember;
+                                        currentMembers[existingIndex] =
+                                          updatedMember;
                                       } else {
                                         currentMembers.push(updatedMember);
                                       }
-                                      form.setValue("familyDocuments.familyBpjsMembers", currentMembers);
+                                      form.setValue(
+                                        "familyDocuments.familyBpjsMembers",
+                                        currentMembers,
+                                      );
                                     }}
                                     className="bg-slate-950/40 border-slate-800 h-10 rounded-xl"
                                   />
@@ -4206,11 +4600,17 @@ export function EmployeeSelfProfileForm({
 
                                 <FileUploadField
                                   label="Foto Kartu BPJS"
-                                  description={`Upload scan kartu BPJS ${member.name || 'anggota'}.`}
+                                  description={`Upload scan kartu BPJS ${member.name || "anggota"}.`}
                                   value={memberBpjs.fileUrl}
                                   onChange={(url) => {
-                                    const currentMembers = form.getValues("familyDocuments.familyBpjsMembers") || [];
-                                    const existingIndex = currentMembers.findIndex((m: any) => m.dependentId === member.id);
+                                    const currentMembers =
+                                      form.getValues(
+                                        "familyDocuments.familyBpjsMembers",
+                                      ) || [];
+                                    const existingIndex =
+                                      currentMembers.findIndex(
+                                        (m: any) => m.dependentId === member.id,
+                                      );
                                     const updatedMember = {
                                       ...memberBpjs,
                                       dependentId: member.id,
@@ -4220,13 +4620,17 @@ export function EmployeeSelfProfileForm({
                                       status: "uploaded",
                                       uploadedAt: new Date(),
                                     };
-                                    
+
                                     if (existingIndex > -1) {
-                                      currentMembers[existingIndex] = updatedMember;
+                                      currentMembers[existingIndex] =
+                                        updatedMember;
                                     } else {
                                       currentMembers.push(updatedMember);
                                     }
-                                    form.setValue("familyDocuments.familyBpjsMembers", currentMembers);
+                                    form.setValue(
+                                      "familyDocuments.familyBpjsMembers",
+                                      currentMembers,
+                                    );
                                   }}
                                   userId={firebaseUser!.uid}
                                   fieldKey={`family_bpjs_${member.id}`}
@@ -4239,7 +4643,10 @@ export function EmployeeSelfProfileForm({
                                   }
                                   helperText="Format: JPG, PNG, PDF (Max 10MB)"
                                   icon={ShieldCheck}
-                                  disabled={!!pendingRequests.family_bpjs || isFamilyVerified}
+                                  disabled={
+                                    !!pendingRequests.family_bpjs ||
+                                    isFamilyVerified
+                                  }
                                 />
                               </div>
                             </div>
@@ -4252,59 +4659,87 @@ export function EmployeeSelfProfileForm({
               </div>
 
               {/* Akta Kelahiran Anak */}
-              {(tanggunganFields || []).some(t => t.relation === "Anak") && (
+              {(tanggunganFields || []).some((t) => t.relation === "Anak") && (
                 <div className="space-y-6">
                   <div className="flex items-center gap-3">
                     <Baby className="h-5 w-5 text-amber-500" />
-                    <h5 className="text-base font-bold text-slate-200">Akta Kelahiran Anak</h5>
+                    <h5 className="text-base font-bold text-slate-200">
+                      Akta Kelahiran Anak
+                    </h5>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {(tanggunganFields || [])
-                      .filter(t => t.relation === "Anak")
+                      .filter((t) => t.relation === "Anak")
                       .map((child, index) => {
-                        const childDoc = (form.watch("familyDocuments.childBirthCertificates") || [])
-                          .find((d: any) => d.childName === child.name) || {};
-                        
+                        const childDoc =
+                          (
+                            form.watch(
+                              "familyDocuments.childBirthCertificates",
+                            ) || []
+                          ).find((d: any) => d.childName === child.name) || {};
+
                         return (
-                          <div key={`child-birth-cert-${child.id}`} className="space-y-4">
+                          <div
+                            key={`child-birth-cert-${child.id}`}
+                            className="space-y-4"
+                          >
                             <div className="flex items-center justify-between px-2">
-                              <FormLabel className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Akta Kelahiran: {child.name || `Anak ${index + 1}`}</FormLabel>
+                              <FormLabel className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                                Akta Kelahiran:{" "}
+                                {child.name || `Anak ${index + 1}`}
+                              </FormLabel>
                               {pendingRequests.birth_cert ? (
-                                <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/30 px-2 py-1 rounded-lg text-[10px]">
+                                <Badge
+                                  variant="outline"
+                                  className="bg-amber-500/10 text-amber-500 border-amber-500/30 px-2 py-1 rounded-lg text-[10px]"
+                                >
                                   Menunggu Review
                                 </Badge>
-                              ) : (isFamilyVerified && childDoc.fileUrl) && (
-                                <Button 
-                                  type="button" 
-                                  variant="ghost" 
-                                  size="sm"
-                                  onClick={() => openChangeRequest('birth_cert')}
-                                  className="h-7 text-[10px] text-blue-400 hover:text-blue-300 hover:bg-blue-500/5 px-2"
-                                >
-                                  Ajukan Perubahan Akta Anak
-                                </Button>
+                              ) : (
+                                isFamilyVerified &&
+                                childDoc.fileUrl && (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() =>
+                                      openChangeRequest("birth_cert")
+                                    }
+                                    className="h-7 text-[10px] text-blue-400 hover:text-blue-300 hover:bg-blue-500/5 px-2"
+                                  >
+                                    Ajukan Perubahan Akta Anak
+                                  </Button>
+                                )
                               )}
                             </div>
                             <FileUploadField
                               label={`Akta Kelahiran: ${child.name || `Anak ${index + 1}`}`}
-                              description={`Upload akta kelahiran untuk ${child.name || 'anak Anda'}.`}
+                              description={`Upload akta kelahiran untuk ${child.name || "anak Anda"}.`}
                               value={childDoc.fileUrl}
                               onChange={(url) => {
-                                const currentDocs = form.getValues("familyDocuments.childBirthCertificates") || [];
-                                const existingIndex = currentDocs.findIndex((d: any) => d.childName === child.name);
+                                const currentDocs =
+                                  form.getValues(
+                                    "familyDocuments.childBirthCertificates",
+                                  ) || [];
+                                const existingIndex = currentDocs.findIndex(
+                                  (d: any) => d.childName === child.name,
+                                );
                                 const newDoc = {
                                   childName: child.name,
                                   fileUrl: url,
                                   status: "uploaded",
                                   uploadedAt: new Date(),
                                 };
-                                
+
                                 if (existingIndex > -1) {
                                   currentDocs[existingIndex] = newDoc;
                                 } else {
                                   currentDocs.push(newDoc);
                                 }
-                                form.setValue("familyDocuments.childBirthCertificates", currentDocs);
+                                form.setValue(
+                                  "familyDocuments.childBirthCertificates",
+                                  currentDocs,
+                                );
                               }}
                               userId={firebaseUser!.uid}
                               fieldKey={`child_birth_cert_${index}`}
@@ -4317,7 +4752,9 @@ export function EmployeeSelfProfileForm({
                               }
                               helperText="Wajib jika anak dimasukkan sebagai tanggungan."
                               icon={Baby}
-                              disabled={!!pendingRequests.birth_cert || isFamilyVerified}
+                              disabled={
+                                !!pendingRequests.birth_cert || isFamilyVerified
+                              }
                             />
                           </div>
                         );
@@ -4331,26 +4768,30 @@ export function EmployeeSelfProfileForm({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <Plus className="h-5 w-5 text-slate-400" />
-                    <h5 className="text-base font-bold text-slate-200">Dokumen Tambahan Lainnya</h5>
+                    <h5 className="text-base font-bold text-slate-200">
+                      Dokumen Tambahan Lainnya
+                    </h5>
                   </div>
                   {additionalFamilyDocFields.length > 0 && (
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => appendAdditionalFamilyDoc({
-                        documentType: "",
-                        documentName: "",
-                        fileUrl: "",
-                        status: "missing"
-                      })}
+                      onClick={() =>
+                        appendAdditionalFamilyDoc({
+                          documentType: "",
+                          documentName: "",
+                          fileUrl: "",
+                          status: "missing",
+                        })
+                      }
                       className="rounded-xl border-slate-800 bg-slate-900/50 text-slate-400 hover:text-white"
                     >
                       <Plus className="mr-2 h-4 w-4" /> Tambah Lagi
                     </Button>
                   )}
                 </div>
-                
+
                 {additionalFamilyDocFields.length === 0 ? (
                   <div className="bg-slate-900/20 border border-dashed border-slate-800 rounded-[2rem] p-10 flex flex-col items-center justify-center text-center space-y-4">
                     <div className="h-16 w-16 rounded-2xl bg-slate-800 flex items-center justify-center text-slate-500 shadow-inner">
@@ -4358,18 +4799,21 @@ export function EmployeeSelfProfileForm({
                     </div>
                     <div className="max-w-md">
                       <p className="text-slate-400 text-sm font-medium">
-                        Belum ada dokumen tambahan. Tambahkan hanya jika diperlukan.
+                        Belum ada dokumen tambahan. Tambahkan hanya jika
+                        diperlukan.
                       </p>
                     </div>
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={() => appendAdditionalFamilyDoc({
-                        documentType: "",
-                        documentName: "",
-                        fileUrl: "",
-                        status: "missing"
-                      })}
+                      onClick={() =>
+                        appendAdditionalFamilyDoc({
+                          documentType: "",
+                          documentName: "",
+                          fileUrl: "",
+                          status: "missing",
+                        })
+                      }
                       className="rounded-xl border-slate-700 bg-slate-800/50 text-slate-300 hover:bg-slate-800 hover:text-white px-8 h-12 font-bold shadow-lg transition-all"
                     >
                       <Plus className="mr-2 h-5 w-5" /> Tambah Dokumen Opsional
@@ -4378,9 +4822,14 @@ export function EmployeeSelfProfileForm({
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {additionalFamilyDocFields.map((field, index) => {
-                      const watchedType = form.watch(`familyDocuments.additionalDocuments.${index}.documentType`);
+                      const watchedType = form.watch(
+                        `familyDocuments.additionalDocuments.${index}.documentType`,
+                      );
                       return (
-                        <Card key={field.id} className="border-slate-800 bg-slate-900/40 p-6 rounded-3xl relative animate-in fade-in slide-in-from-top-4 duration-500">
+                        <Card
+                          key={field.id}
+                          className="border-slate-800 bg-slate-900/40 p-6 rounded-3xl relative animate-in fade-in slide-in-from-top-4 duration-500"
+                        >
                           <Button
                             type="button"
                             variant="ghost"
@@ -4390,15 +4839,20 @@ export function EmployeeSelfProfileForm({
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
-                          
+
                           <div className="space-y-6">
                             <FormField
                               control={form.control}
                               name={`familyDocuments.additionalDocuments.${index}.documentType`}
                               render={({ field }) => (
                                 <FormItem>
-                                  <FormLabel className="text-xs font-bold uppercase text-slate-500 tracking-wider">Jenis Dokumen</FormLabel>
-                                  <Select onValueChange={field.onChange} value={field.value || ""}>
+                                  <FormLabel className="text-xs font-bold uppercase text-slate-500 tracking-wider">
+                                    Jenis Dokumen
+                                  </FormLabel>
+                                  <Select
+                                    onValueChange={field.onChange}
+                                    value={field.value || ""}
+                                  >
                                     <FormControl>
                                       <SelectTrigger className="bg-slate-950/40 border-slate-800 h-12 rounded-xl">
                                         <SelectValue placeholder="Pilih jenis dokumen" />
@@ -4406,7 +4860,9 @@ export function EmployeeSelfProfileForm({
                                     </FormControl>
                                     <SelectContent className="bg-slate-900 border-slate-800">
                                       {FAMILY_DOCUMENT_TYPES.map((type) => (
-                                        <SelectItem key={type} value={type}>{type}</SelectItem>
+                                        <SelectItem key={type} value={type}>
+                                          {type}
+                                        </SelectItem>
                                       ))}
                                     </SelectContent>
                                   </Select>
@@ -4420,7 +4876,9 @@ export function EmployeeSelfProfileForm({
                                 name={`familyDocuments.additionalDocuments.${index}.documentName`}
                                 render={({ field }) => (
                                   <FormItem className="animate-in fade-in slide-in-from-top-2 duration-300">
-                                    <FormLabel className="text-xs font-bold uppercase text-slate-500 tracking-wider">Nama Dokumen Kustom</FormLabel>
+                                    <FormLabel className="text-xs font-bold uppercase text-slate-500 tracking-wider">
+                                      Nama Dokumen Kustom
+                                    </FormLabel>
                                     <FormControl>
                                       <Input
                                         {...field}
@@ -4432,30 +4890,48 @@ export function EmployeeSelfProfileForm({
                                 )}
                               />
                             )}
-                            
+
                             {watchedType && (
                               <div className="animate-in fade-in slide-in-from-top-2 duration-500">
                                 <FileUploadField
                                   label="File Dokumen"
                                   description="Pilih file dokumen pendukung."
-                                  value={form.watch(`familyDocuments.additionalDocuments.${index}.fileUrl`)}
+                                  value={form.watch(
+                                    `familyDocuments.additionalDocuments.${index}.fileUrl`,
+                                  )}
                                   onChange={(url) => {
-                                    form.setValue(`familyDocuments.additionalDocuments.${index}.fileUrl`, url);
-                                    form.setValue(`familyDocuments.additionalDocuments.${index}.status`, "uploaded");
-                                    form.setValue(`familyDocuments.additionalDocuments.${index}.uploadedAt`, new Date());
+                                    form.setValue(
+                                      `familyDocuments.additionalDocuments.${index}.fileUrl`,
+                                      url,
+                                    );
+                                    form.setValue(
+                                      `familyDocuments.additionalDocuments.${index}.status`,
+                                      "uploaded",
+                                    );
+                                    form.setValue(
+                                      `familyDocuments.additionalDocuments.${index}.uploadedAt`,
+                                      new Date(),
+                                    );
                                   }}
                                   userId={firebaseUser!.uid}
                                   fieldKey={`additional_family_doc_${index}`}
                                   status={
-                                    form.watch(`familyDocuments.additionalDocuments.${index}.status`) === "needs_review"
+                                    form.watch(
+                                      `familyDocuments.additionalDocuments.${index}.status`,
+                                    ) === "needs_review"
                                       ? "Perlu Review HRD"
-                                      : form.watch(`familyDocuments.additionalDocuments.${index}.fileUrl`)
+                                      : form.watch(
+                                            `familyDocuments.additionalDocuments.${index}.fileUrl`,
+                                          )
                                         ? "Sudah Upload"
                                         : "Belum Upload"
                                   }
                                   helperText="Format: JPG, PNG, PDF (Max 10MB)"
                                   icon={FileUp}
-                                  disabled={!!pendingRequests.legal_extra || isFamilyVerified}
+                                  disabled={
+                                    !!pendingRequests.legal_extra ||
+                                    isFamilyVerified
+                                  }
                                 />
                               </div>
                             )}
@@ -4746,44 +5222,26 @@ export function EmployeeSelfProfileForm({
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  {pendingRequests.kk ? (
-                    <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/30 px-4 py-2 rounded-xl font-bold">
-                      <Clock className="w-4 h-4 mr-2" /> Menunggu Review HRD
-                    </Badge>
-                  ) : (
-                    <div className="flex items-center gap-3">
-                      {isFamilyVerified && (
-                        <Button 
-                          type="button" 
-                          variant="outline" 
-                          onClick={() => openChangeRequest('kk')}
-                          className="rounded-xl border-blue-500/30 text-blue-400 bg-blue-500/5 hover:bg-blue-500/10 h-11 px-6 font-bold"
-                        >
-                          Ajukan Perubahan Data Keluarga
-                        </Button>
-                      )}
-                      <Button
-                        type="button"
-                        disabled={!!pendingRequests.kk}
-                        onClick={() =>
-                          appendTanggungan({
-                            id: crypto.randomUUID(),
-                            name: "",
-                            relation: "",
-                            childOrder: "",
-                            birthPlace: "",
-                            birthDate: "",
-                            education: "",
-                            activityStatus: "",
-                            occupation: "",
-                          })
-                        }
-                        className="rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-6 h-11 shadow-lg shadow-amber-500/20 transition-all duration-300"
-                      >
-                        <Plus className="mr-2 h-5 w-5" /> Tambah Tanggungan
-                      </Button>
-                    </div>
-                  )}
+                  <Button
+                    type="button"
+                    disabled={!!pendingRequests.kk}
+                    onClick={() =>
+                      appendTanggungan({
+                        id: crypto.randomUUID(),
+                        name: "",
+                        relation: "",
+                        childOrder: "",
+                        birthPlace: "",
+                        birthDate: "",
+                        education: "",
+                        activityStatus: "",
+                        occupation: "",
+                      })
+                    }
+                    className="rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-6 h-11 shadow-lg shadow-amber-500/20 transition-all duration-300"
+                  >
+                    <Plus className="mr-2 h-5 w-5" /> Tambah Tanggungan
+                  </Button>
                 </div>
               </div>
 
@@ -5617,7 +6075,10 @@ export function EmployeeSelfProfileForm({
                                 value={field.value}
                                 onChange={field.onChange}
                                 icon={FileText}
-                                disabled={!!pendingRequests.birth_cert || isFamilyVerified}
+                                disabled={
+                                  !!pendingRequests.birth_cert ||
+                                  isFamilyVerified
+                                }
                                 status={
                                   field.value ? "Sudah Upload" : "Belum Upload"
                                 }
