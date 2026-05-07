@@ -28,6 +28,17 @@ export const EMPLOYMENT_STAGES = [
 ] as const;
 export type EmploymentStage = (typeof EMPLOYMENT_STAGES)[number];
 
+export type StructuralLevel = "management" | "division_manager" | "staff";
+
+export type ManagementScope = {
+  brandId: string;
+  brandName: string;
+  divisionIds: string[];
+  divisionNames: string[];
+  scopeType: "brand_level" | "selected_divisions";
+  scopeLabel: string;
+};
+
 export type UserProfile = {
   id?: string; // Same as uid
   uid: string;
@@ -52,9 +63,20 @@ export type UserProfile = {
   // Division Manager fields
   isDivisionManager?: boolean;
   managedBrandId?: string | null;
+  managedDivisionId?: string | null;
   managedDivision?: string | null;
   division?: string | null;
   positionTitle?: string | null;
+
+  // New Hierarchy Fields
+  structuralLevel?: StructuralLevel;
+  managementScopes?: ManagementScope[];
+  workRole?: string;
+  brandName?: string;
+  divisionId?: string;
+  divisionName?: string;
+  directSupervisorUid?: string;
+  directSupervisorName?: string;
 
   // Hidden offerings - temporary solution for candidate to hide old offerings
   hiddenOfferingIds?: string[];
@@ -81,6 +103,8 @@ export type EmployeeMasterData = {
   joinDate?: Timestamp; // legacy alias for compatibility
   employeeNumber?: string;
   source?: EmployeeDataSource;
+  sistemKerja?: string;
+  workSystem?: string;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 };
@@ -527,6 +551,7 @@ export type HrdEmploymentInfo = {
   hariKerja?: string;
   jamKerja?: string;
   sistemKerja?: string;
+  workSystem?: string;
   lokasiKerja?: string;
 
   // New structure fields
@@ -583,6 +608,11 @@ export type HrdEmploymentInfo = {
   catatanInternalHrd?: string;
   catatanAdministrasi?: string;
   tanggalEfektif?: string;
+
+  // New Hierarchy Fields
+  structuralLevel?: StructuralLevel;
+  managementScopes?: ManagementScope[];
+
   additionalFields?: {
     historyType?: string;
     historyTitle?: string;

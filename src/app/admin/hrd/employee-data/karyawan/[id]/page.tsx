@@ -84,6 +84,7 @@ import {
   Trash2,
   Users as UsersIcon,
   AlertCircle,
+  Info,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useToast } from "@/hooks/use-toast";
@@ -113,6 +114,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Sheet,
   SheetContent,
@@ -472,19 +480,19 @@ export default function EmployeeDetailPage({
   }, [userProfile]);
 
   // Fetch data
-  const { data: userDoc, isLoading: userLoading } = useDoc<UserProfile>(
+  const { data: userDoc, isLoading: userLoading, mutate: mutateUser } = useDoc<UserProfile>(
     useMemoFirebase(
       () => (employeeId ? doc(firestore, "users", employeeId) : null),
       [firestore, employeeId],
     ),
   );
-  const { data: empDoc, isLoading: empLoading } = useDoc<EmployeeMasterData>(
+  const { data: empDoc, isLoading: empLoading, mutate: mutateEmp } = useDoc<EmployeeMasterData>(
     useMemoFirebase(
       () => (employeeId ? doc(firestore, "employees", employeeId) : null),
       [firestore, employeeId],
     ),
   );
-  const { data: profileDoc, isLoading: profileLoading } =
+  const { data: profileDoc, isLoading: profileLoading, mutate: mutateProfile } =
     useDoc<EmployeeProfile>(
       useMemoFirebase(
         () =>
@@ -538,7 +546,13 @@ export default function EmployeeDetailPage({
       tipeKaryawan: normalizedData?.tipeKaryawan || "",
       statusKerja: normalizedData?.statusKerja || "",
       atasanLangsung: hrdInfo.atasanLangsung || "",
-      sistemKerja: hrdInfo.sistemKerja || "",
+      sistemKerja: String(
+        hrdInfo.sistemKerja ||
+          hrdInfo.workSystem ||
+          empDoc?.sistemKerja ||
+          empDoc?.workSystem ||
+          "",
+      ).trim(),
       lokasiKerja: hrdInfo.lokasiKerja || "",
       tanggalMasuk: hrdInfo.tanggalMasuk || "",
       nomorKontrakSK: hrdInfo.nomorKontrakSK || "",
@@ -637,26 +651,40 @@ export default function EmployeeDetailPage({
   }, [isLoading, employeeId, employmentDefaultValues, form]);
 
   // Load divisions when brand changes
+  // Watch brandId for divisions
+  const watchBrandIdForDivisions = form.watch("brandId");
+
   useEffect(() => {
-    const brandId = form.watch("brandId");
+    const brandId = watchBrandIdForDivisions;
     if (!brandId) {
       setDivisions([]);
       return;
     }
 
-    // Load divisions for selected brand
-    // Assuming divisions are stored in a subcollection or have brandId field
+    // Load divisions from brands/{brandId}/divisions subcollection
     const loadDivisions = async () => {
       try {
-        const divisionsQuery = query(
-          collection(firestore, "divisions"),
-          where("brandId", "==", brandId),
+        const divisionsRef = collection(
+          firestore,
+          "brands",
+          brandId,
+          "divisions",
         );
-        const divisionsSnap = await getDocs(divisionsQuery);
-        const divisionsData = divisionsSnap.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
+        const divisionsSnap = await getDocs(divisionsRef);
+        const divisionsData = divisionsSnap.docs
+          .map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          }))
+          // Filter active divisions if isActive field exists
+          .filter((d: any) => d.isActive !== false)
+          // Sort by sortOrder first, then by name
+          .sort((a: any, b: any) => {
+            if (a.sortOrder && b.sortOrder) {
+              return a.sortOrder - b.sortOrder;
+            }
+            return (a.name || "").localeCompare(b.name || "");
+          });
         setDivisions(divisionsData);
       } catch (error) {
         console.error("Error loading divisions:", error);
@@ -665,12 +693,16 @@ export default function EmployeeDetailPage({
     };
 
     loadDivisions();
-  }, [form.watch("brandId"), firestore]);
+  }, [watchBrandIdForDivisions, firestore]);
+
+  // Watch values outside to stabilize useEffect dependencies
+  const watchBrandIdForManagers = form.watch("brandId");
+  const watchDivisionIdForManagers = form.watch("divisionId");
 
   // Load managers when brand and division change
   useEffect(() => {
-    const brandId = form.watch("brandId");
-    const divisionId = form.watch("divisionId");
+    const brandId = watchBrandIdForManagers;
+    const divisionId = watchDivisionIdForManagers;
 
     if (!brandId || !divisionId) {
       setManagers([]);
@@ -680,23 +712,46 @@ export default function EmployeeDetailPage({
     // Load managers (users with role that are division managers for this brand/division)
     const loadManagers = async () => {
       try {
-        // Query users who are managers in this brand and division
+        const selectedDivision = divisions.find(d => d.id === divisionId);
+        const divisionName = selectedDivision?.name || "";
+
+        // Query users who are marked as Division Managers
         const managersQuery = query(
           collection(firestore, "users"),
-          where("brandId", "==", brandId),
-          where("divisionId", "==", divisionId),
-          where("structuralPosition", "==", "division_manager"),
+          where("isDivisionManager", "==", true),
         );
+        
         const managersSnap = await getDocs(managersQuery);
-        const managersData = managersSnap.docs.map((doc) => ({
+        const allManagers = managersSnap.docs.map((doc) => ({
           uid: doc.id,
           ...doc.data(),
-        }));
-        setManagers(managersData);
+        })) as any[];
 
-        // Auto-select if only one manager
-        if (managersData.length === 1) {
-          form.setValue("directSupervisorUid", managersData[0].uid);
+        // Filter in memory for precise brand & division matching
+        const filteredManagers = allManagers.filter(u => {
+          // Brand match
+          const brandMatch = u.brandId === brandId || u.managedBrandId === brandId;
+          if (!brandMatch) return false;
+
+          // Division match (by ID or Name fallback)
+          const idMatch = u.divisionId === divisionId || u.managedDivisionId === divisionId;
+          const nameMatch = (u.managedDivision?.toLowerCase() === divisionName.toLowerCase()) || 
+                           (u.divisionName?.toLowerCase() === divisionName.toLowerCase());
+          
+          return idMatch || nameMatch;
+        });
+
+        setManagers(filteredManagers);
+
+        // Auto-select if only one manager found
+        if (filteredManagers.length === 1) {
+          form.setValue("directSupervisorUid", filteredManagers[0].uid);
+        } else {
+          // If the current supervisor is not in the new list, clear it
+          const currentSupervisor = form.getValues("directSupervisorUid");
+          if (currentSupervisor && !filteredManagers.find(m => m.uid === currentSupervisor)) {
+            form.setValue("directSupervisorUid", "");
+          }
         }
       } catch (error) {
         console.error("Error loading managers:", error);
@@ -705,7 +760,7 @@ export default function EmployeeDetailPage({
     };
 
     loadManagers();
-  }, [form.watch("brandId"), form.watch("divisionId"), firestore, form]);
+  }, [watchBrandIdForManagers, watchDivisionIdForManagers, firestore, form, divisions]);
 
   // Auto-calculate contract duration or end date
   const watchKontrakMulai = form.watch("kontrakMulai");
@@ -760,12 +815,21 @@ export default function EmployeeDetailPage({
     }
   }, [watchKontrakMulai, watchKontrakSelesai, form]);
 
-  const handleSaveHrd = async (values: HrdEmploymentInfo) => {
+  const handleSaveHrd = async (values: HrdEmploymentInfo, additionalHistory?: any) => {
     if (!firebaseUser || !userProfile || !employeeId) return;
     setIsSaving(true);
     try {
       const b = brands?.find((b) => b.id === values.brandId);
-      const updatedValues = { ...values, brand: b ? b.name : "" };
+      const d = divisions?.find((div) => div.id === values.divisionId);
+      const s = managers?.find((m) => m.uid === values.directSupervisorUid);
+      
+      const updatedValues = { 
+        ...values, 
+        brand: b ? b.name : (values as any).brandName || "",
+        brandName: b ? b.name : (values as any).brandName || "",
+        divisionName: d ? d.name : (values as any).divisionName || "",
+        directSupervisorName: s ? s.fullName : (values as any).directSupervisorName || ""
+      };
 
       // Determine what changed for history
       const changes: any[] = [];
@@ -946,14 +1010,19 @@ export default function EmployeeDetailPage({
         empRef,
         {
           brandId: updatedValues.brandId,
-          brandName: updatedValues.brand,
+          brandName: updatedValues.brandName,
           divisionId: updatedValues.divisionId,
+          divisionName: updatedValues.divisionName,
           structuralPosition: updatedValues.structuralPosition,
           workRole: updatedValues.workRole,
           employeeType:
             updatedValues.employeeType || updatedValues.tipeKaryawan,
           employmentStatus:
             updatedValues.employmentStatus || updatedValues.statusKerja,
+          sistemKerja: updatedValues.sistemKerja,
+          workSystem: updatedValues.sistemKerja,
+          directSupervisorUid: updatedValues.directSupervisorUid,
+          directSupervisorName: updatedValues.directSupervisorName,
           updatedAt: serverTimestamp(),
         },
         { merge: true },
@@ -987,6 +1056,12 @@ export default function EmployeeDetailPage({
         title: "Tersimpan",
         description: `Data ${editingSection || "kepegawaian"} berhasil diperbarui.`,
       });
+      
+      // Force immediate re-fetch for all relevant data
+      mutateProfile?.();
+      mutateEmp?.();
+      mutateUser?.();
+
       setEditingSection(null);
     } catch (e: any) {
       toast({
@@ -1407,6 +1482,10 @@ export default function EmployeeDetailPage({
                           <DataRow
                             label="Lokasi Kerja"
                             value={hrdInfo.lokasiKerja}
+                          />
+                          <DataRow
+                            label="Sistem Kerja"
+                            value={hrdInfo.sistemKerja || hrdInfo.workSystem || "WFO"}
                           />
                           <DataRow
                             label="Tipe Karyawan"
@@ -2096,31 +2175,32 @@ export default function EmployeeDetailPage({
                       </Button>
                     </CardHeader>
                     <CardContent className="pt-6">
-                      <div className="grid grid-cols-1 gap-y-2">
-                        <DataRow
-                          label="Brand / Unit"
-                          value={hrdStruktur?.brandName}
-                        />
-                        <DataRow label="Divisi" value={hrdStruktur?.divisi} />
-                        <DataRow label="Jabatan" value={hrdStruktur?.jabatan} />
-                        <DataRow
-                          label="Tipe Karyawan"
-                          value={hrdStruktur?.tipeKaryawan}
-                        />
-                        <DataRow
-                          label="Status Kerja"
-                          value={hrdStruktur?.statusKerja}
-                          className={employmentStatusClass}
-                        />
-                        <DataRow
-                          label="Sistem Kerja"
-                          value={hrdStruktur?.sistemKerja}
-                        />
-                        <DataRow
-                          label="Atasan Langsung"
-                          value={hrdInfo.atasanLangsung}
-                        />
-                      </div>
+                        <div className="grid grid-cols-1 gap-y-2">
+                          <DataRow
+                            label="Brand / Unit"
+                            value={hrdStruktur?.brandName}
+                          />
+                          <DataRow label="Divisi" value={hrdStruktur?.divisi} />
+                          <DataRow label="Jabatan / Fungsi" value={hrdStruktur?.jabatan} />
+                          <DataRow label="Level Struktural" value={hrdStruktur?.structuralPosition} />
+                          <DataRow
+                            label="Tipe Karyawan"
+                            value={hrdStruktur?.tipeKaryawan}
+                          />
+                          <DataRow
+                            label="Status Kerja"
+                            value={hrdStruktur?.statusKerja}
+                            className={employmentStatusClass}
+                          />
+                          <DataRow
+                            label="Sistem Kerja"
+                            value={hrdStruktur?.sistemKerja}
+                          />
+                          <DataRow
+                            label="Atasan Langsung"
+                            value={hrdStruktur?.atasanLangsung}
+                          />
+                        </div>
                     </CardContent>
                   </Card>
 
@@ -2540,24 +2620,37 @@ export default function EmployeeDetailPage({
                   </Card>
                 </div>
 
-                {/* Editing Sheets */}
-                <Sheet
+                {/* Editing Dialogs */}
+                <Dialog
                   open={!!editingSection}
                   onOpenChange={(open) => !open && setEditingSection(null)}
                 >
-                  <SheetContent className="sm:max-w-2xl bg-slate-950 border-slate-800 text-slate-100 overflow-y-auto">
-                    <SheetHeader className="mb-8">
-                      <SheetTitle className="text-2xl font-bold text-white flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 border border-emerald-500/20">
-                          <Pencil className="h-5 w-5" />
-                        </div>
-                        Ubah {editingSection}
-                      </SheetTitle>
-                      <SheetDescription className="text-slate-500">
-                        Pastikan data sesuai dengan Single Source of Truth
-                        (SSOT).
-                      </SheetDescription>
-                    </SheetHeader>
+                  <DialogContent className="w-[95vw] md:w-[90vw] max-w-5xl h-[95vh] md:h-[90vh] bg-slate-950 border-slate-800 text-slate-100 flex flex-col p-0 overflow-hidden shadow-2xl">
+                    {/* Sticky Header */}
+                    <div className="shrink-0 z-50 bg-slate-900/50 backdrop-blur-xl border-b border-slate-800/60 px-6 py-5 md:px-10 md:py-7">
+                      <DialogHeader>
+                        <DialogTitle className="text-xl md:text-2xl font-black text-white flex items-center gap-4">
+                          <div className="h-10 w-10 md:h-12 md:w-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 border border-emerald-500/20 shadow-inner">
+                            <Pencil className="h-5 w-5 md:h-6 md:w-6" />
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <span>
+                              {editingSection === "struktur"
+                                ? "Ubah Struktur Kepegawaian"
+                                : `Ubah ${editingSection?.charAt(0).toUpperCase()}${editingSection?.slice(1)}`}
+                            </span>
+                            <p className="text-[10px] md:text-xs font-medium text-slate-500 uppercase tracking-[0.2em]">
+                              Management & Administration
+                            </p>
+                          </div>
+                        </DialogTitle>
+                        <DialogDescription className="text-sm text-slate-400 mt-1 md:mt-2 leading-relaxed max-w-2xl">
+                          {editingSection === "struktur"
+                            ? "Sesuaikan penempatan brand, divisi, dan jabatan karyawan untuk menjaga akurasi data struktur organisasi."
+                            : "Pastikan data sesuai dengan Single Source of Truth (SSOT) dan dokumen pendukung yang sah."}
+                        </DialogDescription>
+                      </DialogHeader>
+                    </div>
 
                     <Form {...form}>
                       <form
@@ -2585,7 +2678,7 @@ export default function EmployeeDetailPage({
                           }
 
                           if (editingSection === "tambah_riwayat") {
-                            handleAddCareerHistory({
+                            handleSaveHrd(data, {
                               type:
                                 data.additionalFields?.historyType ||
                                 "promotion",
@@ -2601,559 +2694,440 @@ export default function EmployeeDetailPage({
                             handleSaveHrd(data);
                           }
                         })}
-                        className="space-y-6 pb-20"
+                        className="flex flex-col flex-1 min-h-0"
                       >
-                        {editingSection === "struktur" && (
-                          <div className="space-y-6">
-                            {/* Info Box */}
-                            <div className="p-4 bg-slate-900/40 border border-slate-800/50 rounded-xl">
-                              <p className="text-sm text-slate-300 leading-relaxed">
-                                Perubahan struktur akan memperbarui penempatan
-                                karyawan dan tersimpan sebagai riwayat audit
-                                HRD. Pastikan brand, divisi, jabatan struktural,
-                                dan atasan langsung sudah sesuai.
-                              </p>
-                            </div>
+                        {/* Scrollable Content */}
+                        <div className="flex-1 overflow-y-auto px-6 py-8 md:px-10 md:py-10 custom-scrollbar">
+                          {editingSection === "struktur" ? (
+                            <div className="space-y-8">
+                              {/* Info Box - Full Width */}
+                              <div className="p-5 md:p-6 bg-blue-500/5 border border-blue-500/20 rounded-2xl flex gap-4 items-start">
+                                <div className="h-10 w-10 shrink-0 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-400">
+                                  <Info className="h-5 w-5" />
+                                </div>
+                                <p className="text-sm text-slate-400 leading-relaxed">
+                                  Perubahan struktur akan memperbarui penempatan
+                                  karyawan dan tersimpan sebagai riwayat audit
+                                  HRD. Pastikan brand, divisi, jabatan
+                                  struktural, dan atasan langsung sudah sesuai
+                                  dengan kebijakan perusahaan.
+                                </p>
+                              </div>
 
-                            {/* Employee ID */}
-                            <FormField
-                              control={form.control}
-                              name="employeeId"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                                    Nomor Induk Karyawan
-                                  </FormLabel>
-                                  <FormControl>
-                                    <Input
-                                      {...field}
-                                      placeholder="Contoh: EMP-0001 atau EGS-2026-001"
-                                      className="bg-slate-900/50 border-slate-800 h-12 rounded-xl focus:border-emerald-500/50"
-                                    />
-                                  </FormControl>
-                                  <p className="text-xs text-slate-500 mt-1">
-                                    Nomor identitas internal karyawan yang
-                                    digunakan untuk administrasi HRD.
-                                  </p>
-                                </FormItem>
-                              )}
-                            />
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-8">
 
-                            {/* Brand / Perusahaan */}
-                            <FormField
-                              control={form.control}
-                              name="brandId"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                                    Brand / Perusahaan
-                                  </FormLabel>
-                                  <Select
-                                    onValueChange={(value) => {
-                                      field.onChange(value);
-                                      // Reset division and supervisor when brand changes
-                                      form.setValue("divisionId", "");
-                                      form.setValue("directSupervisorUid", "");
-                                    }}
-                                    value={field.value}
-                                  >
-                                    <FormControl>
-                                      <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
-                                        <SelectValue placeholder="Pilih Brand" />
-                                      </SelectTrigger>
-                                    </FormControl>
-                                    <SelectContent className="bg-slate-900 border-slate-800">
-                                      {brands?.map((b) => (
-                                        <SelectItem key={b.id!} value={b.id!}>
-                                          {b.name}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                  <p className="text-xs text-slate-500 mt-1">
-                                    Pilih perusahaan/brand tempat karyawan
-                                    ditempatkan.
-                                  </p>
-                                </FormItem>
-                              )}
-                            />
-
-                            {/* Divisi */}
-                            <FormField
-                              control={form.control}
-                              name="divisionId"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                                    Divisi
-                                  </FormLabel>
-                                  <Select
-                                    onValueChange={(value) => {
-                                      field.onChange(value);
-                                      // Reset supervisor when division changes
-                                      form.setValue("directSupervisorUid", "");
-                                    }}
-                                    value={field.value}
-                                    disabled={!form.watch("brandId")}
-                                  >
-                                    <FormControl>
-                                      <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
-                                        <SelectValue placeholder="Pilih Divisi" />
-                                      </SelectTrigger>
-                                    </FormControl>
-                                    <SelectContent className="bg-slate-900 border-slate-800">
-                                      {divisions.length > 0 ? (
-                                        divisions.map((d) => (
-                                          <SelectItem key={d.id} value={d.id}>
-                                            {d.name}
-                                          </SelectItem>
-                                        ))
-                                      ) : (
-                                        <SelectItem value="" disabled>
-                                          Belum ada divisi untuk brand ini.
-                                          Tambahkan terlebih dahulu di Master
-                                          Data.
-                                        </SelectItem>
-                                      )}
-                                    </SelectContent>
-                                  </Select>
-                                  <p className="text-xs text-slate-500 mt-1">
-                                    Divisi akan menentukan struktur tim dan
-                                    atasan langsung karyawan.
-                                  </p>
-                                </FormItem>
-                              )}
-                            />
-
-                            {/* Jabatan Struktural */}
-                            <FormField
-                              control={form.control}
-                              name="structuralPosition"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                                    Jabatan Struktural
-                                  </FormLabel>
-                                  <Select
-                                    onValueChange={field.onChange}
-                                    value={field.value}
-                                  >
-                                    <FormControl>
-                                      <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
-                                        <SelectValue placeholder="Pilih Jabatan Struktural" />
-                                      </SelectTrigger>
-                                    </FormControl>
-                                    <SelectContent className="bg-slate-900 border-slate-800">
-                                      <SelectItem value="staff">
-                                        Staff
-                                      </SelectItem>
-                                      <SelectItem value="division_manager">
-                                        Manager Divisi
-                                      </SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                  <p className="text-xs text-slate-500 mt-1">
-                                    Jabatan struktural digunakan untuk
-                                    membedakan level tanggung jawab karyawan.
-                                  </p>
-                                </FormItem>
-                              )}
-                            />
-
-                            {/* Role / Fungsi Kerja */}
-                            <FormField
-                              control={form.control}
-                              name="workRole"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                                    Role / Fungsi Kerja
-                                  </FormLabel>
-                                  <FormControl>
-                                    <Input
-                                      {...field}
-                                      placeholder="Contoh: Web Developer, Creative Staff, Finance Staff"
-                                      className="bg-slate-900/50 border-slate-800 h-12 rounded-xl focus:border-emerald-500/50"
-                                    />
-                                  </FormControl>
-                                  <p className="text-xs text-slate-500 mt-1">
-                                    Isi fungsi kerja spesifik karyawan di dalam
-                                    divisi.
-                                  </p>
-                                </FormItem>
-                              )}
-                            />
-
-                            {/* Tipe Karyawan */}
-                            <FormField
-                              control={form.control}
-                              name="employeeType"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                                    Tipe Karyawan
-                                  </FormLabel>
-                                  <Select
-                                    onValueChange={field.onChange}
-                                    value={field.value}
-                                  >
-                                    <FormControl>
-                                      <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
-                                        <SelectValue placeholder="Pilih Tipe Karyawan" />
-                                      </SelectTrigger>
-                                    </FormControl>
-                                    <SelectContent className="bg-slate-900 border-slate-800">
-                                      <SelectItem value="Karyawan Tetap">
-                                        Karyawan Tetap
-                                      </SelectItem>
-                                      <SelectItem value="Kontrak">
-                                        Kontrak
-                                      </SelectItem>
-                                      <SelectItem value="Probation">
-                                        Probation
-                                      </SelectItem>
-                                      <SelectItem value="Magang">
-                                        Magang
-                                      </SelectItem>
-                                      <SelectItem value="Freelance">
-                                        Freelance
-                                      </SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                  <p className="text-xs text-slate-500 mt-1">
-                                    Tipe karyawan menjelaskan jenis hubungan
-                                    kerja dengan perusahaan.
-                                  </p>
-                                </FormItem>
-                              )}
-                            />
-
-                            {/* Status Kerja */}
-                            <FormField
-                              control={form.control}
-                              name="employmentStatus"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                                    Status Kerja
-                                  </FormLabel>
-                                  <Select
-                                    onValueChange={field.onChange}
-                                    value={field.value}
-                                  >
-                                    <FormControl>
-                                      <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
-                                        <SelectValue placeholder="Pilih Status Kerja" />
-                                      </SelectTrigger>
-                                    </FormControl>
-                                    <SelectContent className="bg-slate-900 border-slate-800">
-                                      <SelectItem value="Training">
-                                        Training
-                                      </SelectItem>
-                                      <SelectItem value="Masa Percobaan">
-                                        Masa Percobaan
-                                      </SelectItem>
-                                      <SelectItem value="Aktif">
-                                        Aktif
-                                      </SelectItem>
-                                      <SelectItem value="Kontrak">
-                                        Kontrak
-                                      </SelectItem>
-                                      <SelectItem value="Magang">
-                                        Magang
-                                      </SelectItem>
-                                      <SelectItem value="Resigned">
-                                        Resigned
-                                      </SelectItem>
-                                      <SelectItem value="Terminated">
-                                        Terminated
-                                      </SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                  <p className="text-xs text-slate-500 mt-1">
-                                    Status kerja menjelaskan kondisi aktif
-                                    karyawan saat ini.
-                                  </p>
-                                </FormItem>
-                              )}
-                            />
-
-                            {/* Atasan Langsung */}
-                            <FormField
-                              control={form.control}
-                              name="directSupervisorUid"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                                    Atasan Langsung
-                                  </FormLabel>
-                                  <Select
-                                    onValueChange={field.onChange}
-                                    value={field.value}
-                                    disabled={
-                                      !form.watch("brandId") ||
-                                      !form.watch("divisionId")
-                                    }
-                                  >
-                                    <FormControl>
-                                      <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
-                                        <SelectValue placeholder="Pilih Atasan Langsung" />
-                                      </SelectTrigger>
-                                    </FormControl>
-                                    <SelectContent className="bg-slate-900 border-slate-800">
-                                      {managers.length > 0 ? (
-                                        managers.map((m) => (
-                                          <SelectItem key={m.uid} value={m.uid}>
-                                            {m.fullName}
-                                          </SelectItem>
-                                        ))
-                                      ) : (
-                                        <SelectItem value="" disabled>
-                                          Belum ada Manager Divisi untuk divisi
-                                          ini. Silakan tetapkan melalui User
-                                          Management.
-                                        </SelectItem>
-                                      )}
-                                    </SelectContent>
-                                  </Select>
-                                  <p className="text-xs text-slate-500 mt-1">
-                                    Atasan langsung diambil dari Manager Divisi
-                                    sesuai brand dan divisi karyawan.
-                                  </p>
-                                </FormItem>
-                              )}
-                            />
-
-                            {/* Tanggal Efektif Perubahan */}
-                            <FormField
-                              control={form.control}
-                              name="structureEffectiveDate"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                                    Tanggal Efektif Perubahan *
-                                  </FormLabel>
-                                  <FormControl>
-                                    <Input
-                                      type="date"
-                                      {...field}
-                                      className="bg-slate-900/50 border-slate-800 h-12 rounded-xl focus:border-emerald-500/50"
-                                    />
-                                  </FormControl>
-                                  <p className="text-xs text-slate-500 mt-1">
-                                    Tanggal mulai berlakunya perubahan struktur
-                                    karyawan.
-                                  </p>
-                                </FormItem>
-                              )}
-                            />
-
-                            {/* Alasan Perubahan */}
-                            <FormField
-                              control={form.control}
-                              name="structureChangeReason"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                                    Alasan Perubahan *
-                                  </FormLabel>
-                                  <FormControl>
-                                    <Textarea
-                                      {...field}
-                                      placeholder="Contoh: Mutasi internal, promosi, penyesuaian struktur, koreksi data HRD"
-                                      className="bg-slate-900/50 border-slate-800 min-h-[80px] rounded-xl focus:border-emerald-500/50"
-                                    />
-                                  </FormControl>
-                                  <p className="text-xs text-slate-500 mt-1">
-                                    Alasan ini akan disimpan sebagai log audit
-                                    perubahan struktur.
-                                  </p>
-                                </FormItem>
-                              )}
-                            />
-                          </div>
-                        )}
-
-                        {editingSection === "tambah_riwayat" && (
-                          <div className="space-y-6">
-                            <FormField
-                              control={form.control}
-                              name="additionalFields.historyType"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="text-xs font-bold text-slate-500">
-                                    Tipe Event
-                                  </FormLabel>
-                                  <Select
-                                    onValueChange={field.onChange}
-                                    value={field.value || "promotion"}
-                                  >
-                                    <FormControl>
-                                      <SelectTrigger className="bg-slate-900 border-slate-800">
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                    </FormControl>
-                                    <SelectContent className="bg-slate-900 border-slate-800">
-                                      <SelectItem value="promotion">
-                                        Promotion
-                                      </SelectItem>
-                                      <SelectItem value="mutation">
-                                        Mutation
-                                      </SelectItem>
-                                      <SelectItem value="award">
-                                        Award
-                                      </SelectItem>
-                                      <SelectItem value="sanction">
-                                        Sanction
-                                      </SelectItem>
-                                      <SelectItem value="appraisal">
-                                        Appraisal
-                                      </SelectItem>
-                                      <SelectItem value="other">
-                                        Other
-                                      </SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                </FormItem>
-                              )}
-                            />
-                            <FormField
-                              control={form.control}
-                              name="additionalFields.historyTitle"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="text-xs font-bold text-slate-500">
-                                    Judul Event
-                                  </FormLabel>
-                                  <FormControl>
-                                    <Input
-                                      {...field}
-                                      value={field.value || ""}
-                                      placeholder="Contoh: Kenaikan Jabatan Senior"
-                                      className="bg-slate-900 border-slate-800"
-                                    />
-                                  </FormControl>
-                                </FormItem>
-                              )}
-                            />
-                            <FormField
-                              control={form.control}
-                              name="additionalFields.historyDescription"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="text-xs font-bold text-slate-500">
-                                    Deskripsi Singkat
-                                  </FormLabel>
-                                  <FormControl>
-                                    <Textarea
-                                      {...field}
-                                      value={field.value || ""}
-                                      placeholder="Detail perubahan..."
-                                      className="bg-slate-900 border-slate-800 min-h-[100px]"
-                                    />
-                                  </FormControl>
-                                </FormItem>
-                              )}
-                            />
-                            <FormField
-                              control={form.control}
-                              name="additionalFields.historyDate"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="text-xs font-bold text-slate-500">
-                                    Tanggal Efektif
-                                  </FormLabel>
-                                  <FormControl>
-                                    <Input
-                                      type="date"
-                                      {...field}
-                                      value={field.value || ""}
-                                      className="bg-slate-900 border-slate-800"
-                                    />
-                                  </FormControl>
-                                </FormItem>
-                              )}
-                            />
-                          </div>
-                        )}
-
-                        {editingSection === "catatan" && (
-                          <div className="space-y-6">
-                            <FormField
-                              control={form.control}
-                              name="catatanInternalHrd"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="text-xs font-bold text-slate-500">
-                                    Catatan Internal HRD (Rahasia)
-                                  </FormLabel>
-                                  <FormControl>
-                                    <Textarea
-                                      {...field}
-                                      className="bg-slate-900 border-slate-800 min-h-[300px] text-sm leading-relaxed"
-                                      placeholder="Masukkan catatan rahasia terkait performa, behavior, atau informasi sensitif lainnya..."
-                                    />
-                                  </FormControl>
-                                </FormItem>
-                              )}
-                            />
-                          </div>
-                        )}
-
-                        {editingSection === "kontrak" && (
-                          <div className="space-y-6">
-                            {/* 1. Tipe & Status Utama */}
-                            <div className="grid grid-cols-2 gap-4">
+                              {/* Employee ID */}
                               <FormField
                                 control={form.control}
-                                name="tipeKaryawan"
+                                name="employeeId"
                                 render={({ field }) => (
                                   <FormItem>
-                                    <FormLabel className="text-xs font-black text-slate-500 uppercase">
-                                      Jenis Kontrak / Tipe
+                                    <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                      Nomor Induk Karyawan
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        {...field}
+                                        placeholder="Contoh: EMP-0001 atau EGS-2026-001"
+                                        className="bg-slate-900/50 border-slate-800 h-12 rounded-xl focus:border-emerald-500/50"
+                                      />
+                                    </FormControl>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                      Nomor identitas internal karyawan yang
+                                      digunakan untuk administrasi HRD.
+                                    </p>
+                                  </FormItem>
+                                )}
+                              />
+
+                              {/* Brand / Perusahaan */}
+                              <FormField
+                                control={form.control}
+                                name="brandId"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                      Brand / Perusahaan
                                     </FormLabel>
                                     <Select
-                                      onValueChange={field.onChange}
-                                      value={field.value || ""}
+                                      onValueChange={(value) => {
+                                        field.onChange(value);
+                                        // Reset division and supervisor when brand changes
+                                        form.setValue("divisionId", "");
+                                        form.setValue(
+                                          "directSupervisorUid",
+                                          "",
+                                        );
+                                      }}
+                                      value={field.value}
                                     >
                                       <FormControl>
-                                        <SelectTrigger className="bg-slate-900 border-slate-800">
-                                          <SelectValue />
+                                        <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
+                                          <SelectValue placeholder="Pilih Brand" />
                                         </SelectTrigger>
                                       </FormControl>
                                       <SelectContent className="bg-slate-900 border-slate-800">
-                                        {TIPE_KARYAWAN_OPTIONS.map((o) => (
-                                          <SelectItem key={o} value={o}>
-                                            {o}
+                                        {brands?.map((b) => (
+                                          <SelectItem key={b.id!} value={b.id!}>
+                                            {b.name}
                                           </SelectItem>
                                         ))}
                                       </SelectContent>
                                     </Select>
-                                    {normalizedData?.tipeKaryawan ===
-                                      "Karyawan Tetap" &&
-                                      field.value !== "Karyawan Tetap" && (
-                                        <div className="flex items-center gap-2 mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                                          <AlertTriangle className="h-3 w-3 text-amber-500" />
-                                          <p className="text-[10px] text-amber-200 font-medium">
-                                            Warning: Perubahan dari Tetap ke{" "}
-                                            {field.value} tidak umum.
-                                          </p>
-                                        </div>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                      Pilih perusahaan/brand tempat karyawan
+                                      ditempatkan.
+                                    </p>
+                                  </FormItem>
+                                )}
+                              />
+
+                              {/* Divisi */}
+                              <FormField
+                                control={form.control}
+                                name="divisionId"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                      Divisi
+                                    </FormLabel>
+                                    <Select
+                                      onValueChange={(value) => {
+                                        field.onChange(value);
+                                        // Reset supervisor when division changes
+                                        form.setValue(
+                                          "directSupervisorUid",
+                                          "",
+                                        );
+                                      }}
+                                      value={field.value}
+                                      disabled={!form.watch("brandId")}
+                                    >
+                                      <FormControl>
+                                        <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
+                                          <SelectValue placeholder="Pilih Divisi" />
+                                        </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent className="bg-slate-900 border-slate-800">
+                                        {divisions.map((d) => (
+                                          <SelectItem key={d.id} value={d.id}>
+                                            {d.name}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                      Divisi akan menentukan struktur tim dan
+                                      atasan langsung karyawan.
+                                    </p>
+                                    {divisions.length === 0 && (
+                                      <p className="text-xs text-amber-600 mt-2">
+                                        ⚠️ Belum ada divisi untuk brand ini.
+                                        Tambahkan terlebih dahulu di Master
+                                        Data.
+                                      </p>
+                                    )}
+                                  </FormItem>
+                                )}
+                              />
+
+                              {/* Jabatan Struktural */}
+                              <FormField
+                                control={form.control}
+                                name="structuralPosition"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                      Jabatan Struktural
+                                    </FormLabel>
+                                    <Select
+                                      onValueChange={field.onChange}
+                                      value={field.value}
+                                    >
+                                      <FormControl>
+                                        <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
+                                          <SelectValue placeholder="Pilih Jabatan Struktural" />
+                                        </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent className="bg-slate-900 border-slate-800">
+                                        <SelectItem value="staff">
+                                          Staff
+                                        </SelectItem>
+                                        <SelectItem value="division_manager">
+                                          Manager Divisi
+                                        </SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                      Jabatan struktural digunakan untuk
+                                      membedakan level tanggung jawab karyawan.
+                                    </p>
+                                  </FormItem>
+                                )}
+                              />
+
+                              {/* Role / Fungsi Kerja */}
+                              <FormField
+                                control={form.control}
+                                name="workRole"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                      Role / Fungsi Kerja
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        {...field}
+                                        placeholder="Contoh: Web Developer, Creative Staff, Finance Staff"
+                                        className="bg-slate-900/50 border-slate-800 h-12 rounded-xl focus:border-emerald-500/50"
+                                      />
+                                    </FormControl>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                      Isi fungsi kerja spesifik karyawan di
+                                      dalam divisi.
+                                    </p>
+                                  </FormItem>
+                                )}
+                              />
+
+                              {/* Tipe Karyawan */}
+                              <FormField
+                                control={form.control}
+                                name="employeeType"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                      Tipe Karyawan
+                                    </FormLabel>
+                                    <Select
+                                      onValueChange={field.onChange}
+                                      value={field.value}
+                                    >
+                                      <FormControl>
+                                        <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
+                                          <SelectValue placeholder="Pilih Tipe Karyawan" />
+                                        </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent className="bg-slate-900 border-slate-800">
+                                        <SelectItem value="Karyawan Tetap">
+                                          Karyawan Tetap
+                                        </SelectItem>
+                                        <SelectItem value="Kontrak">
+                                          Kontrak
+                                        </SelectItem>
+                                        <SelectItem value="Probation">
+                                          Probation
+                                        </SelectItem>
+                                        <SelectItem value="Magang">
+                                          Magang
+                                        </SelectItem>
+                                        <SelectItem value="Freelance">
+                                          Freelance
+                                        </SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                      Tipe karyawan menjelaskan jenis hubungan
+                                      kerja dengan perusahaan.
+                                    </p>
+                                  </FormItem>
+                                )}
+                              />
+
+                              {/* Status Kerja */}
+                              <FormField
+                                control={form.control}
+                                name="employmentStatus"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                      Status Kerja
+                                    </FormLabel>
+                                    <Select
+                                      onValueChange={field.onChange}
+                                      value={field.value}
+                                    >
+                                      <FormControl>
+                                        <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
+                                          <SelectValue placeholder="Pilih Status Kerja" />
+                                        </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent className="bg-slate-900 border-slate-800">
+                                        <SelectItem value="Training">
+                                          Training
+                                        </SelectItem>
+                                        <SelectItem value="Masa Percobaan">
+                                          Masa Percobaan
+                                        </SelectItem>
+                                        <SelectItem value="Aktif">
+                                          Aktif
+                                        </SelectItem>
+                                        <SelectItem value="Kontrak">
+                                          Kontrak
+                                        </SelectItem>
+                                        <SelectItem value="Magang">
+                                          Magang
+                                        </SelectItem>
+                                        <SelectItem value="Resigned">
+                                          Resigned
+                                        </SelectItem>
+                                        <SelectItem value="Terminated">
+                                          Terminated
+                                        </SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                      Status kerja menjelaskan kondisi aktif
+                                      karyawan saat ini.
+                                    </p>
+                                  </FormItem>
+                                )}
+                              />
+
+                              {/* Atasan Langsung */}
+                              <FormField
+                                control={form.control}
+                                name="directSupervisorUid"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                      Atasan Langsung
+                                    </FormLabel>
+                                    <Select
+                                      onValueChange={field.onChange}
+                                      value={field.value}
+                                      disabled={
+                                        !form.watch("brandId") ||
+                                        !form.watch("divisionId")
+                                      }
+                                    >
+                                      <FormControl>
+                                        <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
+                                          <SelectValue placeholder="Pilih Atasan Langsung" />
+                                        </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent className="bg-slate-900 border-slate-800">
+                                        {managers.map((m) => (
+                                          <SelectItem key={m.uid} value={m.uid}>
+                                            {m.fullName}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                      Atasan langsung diambil dari Manager
+                                      Divisi sesuai brand dan divisi karyawan.
+                                    </p>
+                                    {managers.length === 0 &&
+                                      form.watch("divisionId") && (
+                                        <p className="text-xs text-amber-600 mt-2">
+                                          ⚠️ Belum ada Manager Divisi untuk
+                                          divisi ini. Silakan tetapkan melalui
+                                          User Management.
+                                        </p>
                                       )}
                                   </FormItem>
                                 )}
                               />
+                          
+                              {/* Sistem Kerja */}
                               <FormField
                                 control={form.control}
-                                name="statusKontrak"
+                                name="sistemKerja"
                                 render={({ field }) => (
                                   <FormItem>
-                                    <FormLabel className="text-xs font-black text-slate-500 uppercase">
-                                      Status Siklus
+                                    <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                      Sistem Kerja
                                     </FormLabel>
                                     <Select
                                       onValueChange={field.onChange}
-                                      value={field.value || ""}
+                                      value={field.value}
+                                    >
+                                      <FormControl>
+                                        <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
+                                          <SelectValue placeholder="Pilih Sistem Kerja" />
+                                        </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent className="bg-slate-900 border-slate-800">
+                                        <SelectItem value="WFO">WFO (Office)</SelectItem>
+                                        <SelectItem value="WFH">WFH (Remote)</SelectItem>
+                                        <SelectItem value="Hybrid">Hybrid</SelectItem>
+                                        <SelectItem value="Shift">Shift</SelectItem>
+                                        <SelectItem value="Lapangan">Lapangan / On-Site</SelectItem>
+                                        <SelectItem value="Fleksibel">Fleksibel</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                      Tentukan metode kehadiran atau pola kerja karyawan.
+                                    </p>
+                                  </FormItem>
+                                )}
+                              />
+
+                              {/* Tanggal Efektif Perubahan */}
+                              <FormField
+                                control={form.control}
+                                name="structureEffectiveDate"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                      Tanggal Efektif Perubahan *
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        type="date"
+                                        {...field}
+                                        className="bg-slate-900/50 border-slate-800 h-12 rounded-xl focus:border-emerald-500/50"
+                                      />
+                                    </FormControl>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                      Tanggal mulai berlakunya perubahan
+                                      struktur karyawan.
+                                    </p>
+                                  </FormItem>
+                                )}
+                              />
+
+                              {/* Alasan Perubahan - Full Width */}
+                              <FormField
+                                control={form.control}
+                                name="structureChangeReason"
+                                render={({ field }) => (
+                                  <FormItem className="lg:col-span-2">
+                                    <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                      Alasan Perubahan *
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Textarea
+                                        {...field}
+                                        placeholder="Contoh: Mutasi internal, promosi, penyesuaian struktur, koreksi data HRD"
+                                        className="bg-slate-900/50 border-slate-800 min-h-[80px] rounded-xl focus:border-emerald-500/50"
+                                      />
+                                    </FormControl>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                      Alasan ini akan disimpan sebagai log audit
+                                      perubahan struktur.
+                                    </p>
+                                  </FormItem>
+                                )}
+                              />
+                              </div>
+                            </div>
+                          ) : null}
+
+                          {editingSection === "tambah_riwayat" ? (
+                            <div className="space-y-6">
+                              <FormField
+                                control={form.control}
+                                name="additionalFields.historyType"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs font-bold text-slate-500">
+                                      Tipe Event
+                                    </FormLabel>
+                                    <Select
+                                      onValueChange={field.onChange}
+                                      value={field.value || "promotion"}
                                     >
                                       <FormControl>
                                         <SelectTrigger className="bg-slate-900 border-slate-800">
@@ -3161,466 +3135,123 @@ export default function EmployeeDetailPage({
                                         </SelectTrigger>
                                       </FormControl>
                                       <SelectContent className="bg-slate-900 border-slate-800">
-                                        <SelectItem value="Draft">
-                                          Draft
+                                        <SelectItem value="promotion">
+                                          Promotion
                                         </SelectItem>
-                                        <SelectItem value="Aktif">
-                                          Aktif
+                                        <SelectItem value="mutation">
+                                          Mutation
                                         </SelectItem>
-                                        <SelectItem value="Diperpanjang">
-                                          Diperpanjang
+                                        <SelectItem value="award">
+                                          Award
                                         </SelectItem>
-                                        <SelectItem value="Selesai">
-                                          Selesai
+                                        <SelectItem value="sanction">
+                                          Sanction
                                         </SelectItem>
-                                        <SelectItem value="Expired">
-                                          Expired
+                                        <SelectItem value="appraisal">
+                                          Appraisal
+                                        </SelectItem>
+                                        <SelectItem value="other">
+                                          Other
                                         </SelectItem>
                                       </SelectContent>
                                     </Select>
                                   </FormItem>
                                 )}
                               />
+                              <FormField
+                                control={form.control}
+                                name="additionalFields.historyTitle"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs font-bold text-slate-500">
+                                      Judul Event
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        {...field}
+                                        value={field.value || ""}
+                                        placeholder="Contoh: Kenaikan Jabatan Senior"
+                                        className="bg-slate-900 border-slate-800"
+                                      />
+                                    </FormControl>
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name="additionalFields.historyDescription"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs font-bold text-slate-500">
+                                      Deskripsi Singkat
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Textarea
+                                        {...field}
+                                        value={field.value || ""}
+                                        placeholder="Detail perubahan..."
+                                        className="bg-slate-900 border-slate-800 min-h-[100px]"
+                                      />
+                                    </FormControl>
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name="additionalFields.historyDate"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs font-bold text-slate-500">
+                                      Tanggal Efektif
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        type="date"
+                                        {...field}
+                                        value={field.value || ""}
+                                        className="bg-slate-900 border-slate-800"
+                                      />
+                                    </FormControl>
+                                  </FormItem>
+                                )}
+                              />
                             </div>
+                          ) : null}
 
-                            {/* 2. Kondisional berdasarkan Tipe */}
-                            <div className="space-y-4 pt-4 border-t border-slate-800">
-                              {/* Magang / Intern */}
-                              {form.watch("tipeKaryawan") === "Magang" && (
-                                <>
-                                  <div className="grid grid-cols-2 gap-4">
-                                    <FormField
-                                      control={form.control}
-                                      name="kontrakMulai"
-                                      render={({ field }) => (
-                                        <FormItem>
-                                          <FormLabel className="text-xs font-bold text-slate-500">
-                                            Mulai Magang
-                                          </FormLabel>
-                                          <FormControl>
-                                            <Input
-                                              type="date"
-                                              {...field}
-                                              value={field.value || ""}
-                                              className="bg-slate-900 border-slate-800"
-                                            />
-                                          </FormControl>
-                                        </FormItem>
-                                      )}
-                                    />
-                                    <FormField
-                                      control={form.control}
-                                      name="durasiKontrak"
-                                      render={({ field }) => (
-                                        <FormItem>
-                                          <FormLabel className="text-xs font-bold text-slate-500">
-                                            Durasi Magang
-                                          </FormLabel>
-                                          <Select
-                                            onValueChange={field.onChange}
-                                            value={
-                                              DURASI_OPTIONS.includes(
-                                                field.value || "",
-                                              )
-                                                ? field.value
-                                                : "Custom"
-                                            }
-                                          >
-                                            <FormControl>
-                                              <SelectTrigger className="bg-slate-900 border-slate-800">
-                                                <SelectValue />
-                                              </SelectTrigger>
-                                            </FormControl>
-                                            <SelectContent className="bg-slate-900 border-slate-800">
-                                              {DURASI_OPTIONS.map((o) => (
-                                                <SelectItem key={o} value={o}>
-                                                  {o}
-                                                </SelectItem>
-                                              ))}
-                                            </SelectContent>
-                                          </Select>
-                                          {!DURASI_OPTIONS.includes(
-                                            field.value || "",
-                                          ) &&
-                                            field.value !== "Custom" && (
-                                              <Input
-                                                {...field}
-                                                value={field.value || ""}
-                                                className="mt-2 bg-slate-900 border-slate-800"
-                                                placeholder="Isi durasi manual..."
-                                              />
-                                            )}
-                                          {field.value === "Custom" && (
-                                            <Input
-                                              onChange={(e) =>
-                                                field.onChange(e.target.value)
-                                              }
-                                              className="mt-2 bg-slate-900 border-slate-800"
-                                              placeholder="Contoh: 45 Hari"
-                                            />
-                                          )}
-                                        </FormItem>
-                                      )}
-                                    />
-                                  </div>
-                                  <FormField
-                                    control={form.control}
-                                    name="kontrakSelesai"
-                                    render={({ field }) => (
-                                      <FormItem>
-                                        <FormLabel className="text-xs font-bold text-slate-500">
-                                          Selesai Magang (Auto)
-                                        </FormLabel>
-                                        <FormControl>
-                                          <Input
-                                            type="date"
-                                            {...field}
-                                            value={field.value || ""}
-                                            className="bg-slate-900 border-slate-800"
-                                          />
-                                        </FormControl>
-                                      </FormItem>
-                                    )}
-                                  />
-                                  <FormField
-                                    control={form.control}
-                                    name="mentor"
-                                    render={({ field }) => (
-                                      <FormItem>
-                                        <FormLabel className="text-xs font-bold text-slate-500">
-                                          Mentor / Pembimbing
-                                        </FormLabel>
-                                        <FormControl>
-                                          <Input
-                                            {...field}
-                                            value={field.value || ""}
-                                            placeholder="Nama Mentor"
-                                            className="bg-slate-900 border-slate-800"
-                                          />
-                                        </FormControl>
-                                      </FormItem>
-                                    )}
-                                  />
-                                </>
-                              )}
+                          {editingSection === "catatan" ? (
+                            <div className="space-y-6">
+                              <FormField
+                                control={form.control}
+                                name="catatanInternalHrd"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs font-bold text-slate-500">
+                                      Catatan Internal HRD (Rahasia)
+                                    </FormLabel>
+                                    <FormControl>
+                                      <Textarea
+                                        {...field}
+                                        className="bg-slate-900 border-slate-800 min-h-[300px] text-sm leading-relaxed"
+                                        placeholder="Masukkan catatan rahasia terkait performa, behavior, atau informasi sensitif lainnya..."
+                                      />
+                                    </FormControl>
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+                          ) : null}
 
-                              {/* Training */}
-                              {form.watch("tipeKaryawan") === "Training" && (
-                                <>
-                                  <div className="grid grid-cols-2 gap-4">
-                                    <FormField
-                                      control={form.control}
-                                      name="kontrakMulai"
-                                      render={({ field }) => (
-                                        <FormItem>
-                                          <FormLabel className="text-xs font-bold text-slate-500">
-                                            Mulai Training
-                                          </FormLabel>
-                                          <FormControl>
-                                            <Input
-                                              type="date"
-                                              {...field}
-                                              value={field.value || ""}
-                                              className="bg-slate-900 border-slate-800"
-                                            />
-                                          </FormControl>
-                                        </FormItem>
-                                      )}
-                                    />
-                                    <FormField
-                                      control={form.control}
-                                      name="durasiKontrak"
-                                      render={({ field }) => (
-                                        <FormItem>
-                                          <FormLabel className="text-xs font-bold text-slate-500">
-                                            Durasi Training
-                                          </FormLabel>
-                                          <Select
-                                            onValueChange={field.onChange}
-                                            value={
-                                              DURASI_OPTIONS.includes(
-                                                field.value || "",
-                                              )
-                                                ? field.value
-                                                : "Custom"
-                                            }
-                                          >
-                                            <FormControl>
-                                              <SelectTrigger className="bg-slate-900 border-slate-800">
-                                                <SelectValue />
-                                              </SelectTrigger>
-                                            </FormControl>
-                                            <SelectContent className="bg-slate-900 border-slate-800">
-                                              {DURASI_OPTIONS.map((o) => (
-                                                <SelectItem key={o} value={o}>
-                                                  {o}
-                                                </SelectItem>
-                                              ))}
-                                            </SelectContent>
-                                          </Select>
-                                        </FormItem>
-                                      )}
-                                    />
-                                  </div>
-                                  <FormField
-                                    control={form.control}
-                                    name="kontrakSelesai"
-                                    render={({ field }) => (
-                                      <FormItem>
-                                        <FormLabel className="text-xs font-bold text-slate-500">
-                                          Selesai Training (Auto)
-                                        </FormLabel>
-                                        <FormControl>
-                                          <Input
-                                            type="date"
-                                            {...field}
-                                            value={field.value || ""}
-                                            className="bg-slate-900 border-slate-800"
-                                          />
-                                        </FormControl>
-                                      </FormItem>
-                                    )}
-                                  />
-                                  <FormField
-                                    control={form.control}
-                                    name="evaluator"
-                                    render={({ field }) => (
-                                      <FormItem>
-                                        <FormLabel className="text-xs font-bold text-slate-500">
-                                          Evaluator / Penanggung Jawab
-                                        </FormLabel>
-                                        <FormControl>
-                                          <Input
-                                            {...field}
-                                            value={field.value || ""}
-                                            placeholder="Nama Evaluator"
-                                            className="bg-slate-900 border-slate-800"
-                                          />
-                                        </FormControl>
-                                      </FormItem>
-                                    )}
-                                  />
-                                </>
-                              )}
-
-                              {/* Probation */}
-                              {form.watch("tipeKaryawan") === "Probation" && (
-                                <>
-                                  <div className="grid grid-cols-2 gap-4">
-                                    <FormField
-                                      control={form.control}
-                                      name="masaPercobaanMulai"
-                                      render={({ field }) => (
-                                        <FormItem>
-                                          <FormLabel className="text-xs font-bold text-slate-500">
-                                            Mulai Probation
-                                          </FormLabel>
-                                          <FormControl>
-                                            <Input
-                                              type="date"
-                                              {...field}
-                                              value={field.value || ""}
-                                              className="bg-slate-900 border-slate-800"
-                                            />
-                                          </FormControl>
-                                        </FormItem>
-                                      )}
-                                    />
-                                    <FormField
-                                      control={form.control}
-                                      name="masaPercobaanSelesai"
-                                      render={({ field }) => (
-                                        <FormItem>
-                                          <FormLabel className="text-xs font-bold text-slate-500">
-                                            Selesai Probation
-                                          </FormLabel>
-                                          <FormControl>
-                                            <Input
-                                              type="date"
-                                              {...field}
-                                              value={field.value || ""}
-                                              className="bg-slate-900 border-slate-800"
-                                            />
-                                          </FormControl>
-                                        </FormItem>
-                                      )}
-                                    />
-                                  </div>
-                                  <FormField
-                                    control={form.control}
-                                    name="tanggalEvaluasi"
-                                    render={({ field }) => (
-                                      <FormItem>
-                                        <FormLabel className="text-xs font-bold text-slate-500">
-                                          Tanggal Evaluasi Akhir
-                                        </FormLabel>
-                                        <FormControl>
-                                          <Input
-                                            type="date"
-                                            {...field}
-                                            value={field.value || ""}
-                                            className="bg-slate-900 border-slate-800"
-                                          />
-                                        </FormControl>
-                                      </FormItem>
-                                    )}
-                                  />
-                                </>
-                              )}
-
-                              {/* Kontrak */}
-                              {form.watch("tipeKaryawan") === "Kontrak" && (
-                                <>
-                                  <FormField
-                                    control={form.control}
-                                    name="nomorKontrakSK"
-                                    render={({ field }) => (
-                                      <FormItem>
-                                        <FormLabel className="text-xs font-bold text-slate-500">
-                                          Nomor Kontrak
-                                        </FormLabel>
-                                        <FormControl>
-                                          <Input
-                                            {...field}
-                                            value={field.value || ""}
-                                            placeholder="Contoh: 001/KTR/ENV/2024"
-                                            className="bg-slate-900 border-slate-800"
-                                          />
-                                        </FormControl>
-                                      </FormItem>
-                                    )}
-                                  />
-                                  <div className="grid grid-cols-2 gap-4">
-                                    <FormField
-                                      control={form.control}
-                                      name="kontrakMulai"
-                                      render={({ field }) => (
-                                        <FormItem>
-                                          <FormLabel className="text-xs font-bold text-slate-500">
-                                            Kontrak Mulai
-                                          </FormLabel>
-                                          <FormControl>
-                                            <Input
-                                              type="date"
-                                              {...field}
-                                              value={field.value || ""}
-                                              className="bg-slate-900 border-slate-800"
-                                            />
-                                          </FormControl>
-                                        </FormItem>
-                                      )}
-                                    />
-                                    <FormField
-                                      control={form.control}
-                                      name="durasiKontrak"
-                                      render={({ field }) => (
-                                        <FormItem>
-                                          <FormLabel className="text-xs font-bold text-slate-500">
-                                            Durasi Kontrak
-                                          </FormLabel>
-                                          <Select
-                                            onValueChange={field.onChange}
-                                            value={
-                                              DURASI_OPTIONS.includes(
-                                                field.value || "",
-                                              )
-                                                ? field.value
-                                                : "Custom"
-                                            }
-                                          >
-                                            <FormControl>
-                                              <SelectTrigger className="bg-slate-900 border-slate-800">
-                                                <SelectValue />
-                                              </SelectTrigger>
-                                            </FormControl>
-                                            <SelectContent className="bg-slate-900 border-slate-800">
-                                              {DURASI_OPTIONS.map((o) => (
-                                                <SelectItem key={o} value={o}>
-                                                  {o}
-                                                </SelectItem>
-                                              ))}
-                                            </SelectContent>
-                                          </Select>
-                                        </FormItem>
-                                      )}
-                                    />
-                                  </div>
-                                  <FormField
-                                    control={form.control}
-                                    name="kontrakSelesai"
-                                    render={({ field }) => (
-                                      <FormItem>
-                                        <FormLabel className="text-xs font-bold text-slate-500">
-                                          Kontrak Selesai (Auto)
-                                        </FormLabel>
-                                        <FormControl>
-                                          <Input
-                                            type="date"
-                                            {...field}
-                                            value={field.value || ""}
-                                            className="bg-slate-900 border-slate-800"
-                                          />
-                                        </FormControl>
-                                      </FormItem>
-                                    )}
-                                  />
-                                </>
-                              )}
-
-                              {/* Karyawan Tetap */}
-                              {form.watch("tipeKaryawan") ===
-                                "Karyawan Tetap" && (
-                                <>
-                                  <FormField
-                                    control={form.control}
-                                    name="tanggalMasuk"
-                                    render={({ field }) => (
-                                      <FormItem>
-                                        <FormLabel className="text-xs font-bold text-slate-500">
-                                          Tanggal Efektif Aktif / Pengangkatan
-                                        </FormLabel>
-                                        <FormControl>
-                                          <Input
-                                            type="date"
-                                            {...field}
-                                            value={field.value || ""}
-                                            className="bg-slate-900 border-slate-800"
-                                          />
-                                        </FormControl>
-                                      </FormItem>
-                                    )}
-                                  />
-                                  <FormField
-                                    control={form.control}
-                                    name="nomorSK"
-                                    render={({ field }) => (
-                                      <FormItem>
-                                        <FormLabel className="text-xs font-bold text-slate-500">
-                                          Nomor SK Pengangkatan
-                                        </FormLabel>
-                                        <FormControl>
-                                          <Input
-                                            {...field}
-                                            value={field.value || ""}
-                                            placeholder="Contoh: 001/SK-P/ENV/2024"
-                                            className="bg-slate-900 border-slate-800"
-                                          />
-                                        </FormControl>
-                                      </FormItem>
-                                    )}
-                                  />
-                                </>
-                              )}
-
-                              {/* General Schedule & Location */}
-                              <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-800">
+                          {editingSection === "kontrak" ? (
+                            <div className="space-y-6">
+                              {/* 1. Tipe & Status Utama */}
+                              <div className="grid grid-cols-2 gap-4">
                                 <FormField
                                   control={form.control}
-                                  name="sistemKerja"
+                                  name="tipeKaryawan"
                                   render={({ field }) => (
                                     <FormItem>
-                                      <FormLabel className="text-xs font-bold text-slate-500">
-                                        Sistem Kerja
+                                      <FormLabel className="text-xs font-black text-slate-500 uppercase">
+                                        Jenis Kontrak / Tipe
                                       </FormLabel>
                                       <Select
                                         onValueChange={field.onChange}
@@ -3632,33 +3263,562 @@ export default function EmployeeDetailPage({
                                           </SelectTrigger>
                                         </FormControl>
                                         <SelectContent className="bg-slate-900 border-slate-800">
-                                          <SelectItem value="WFO">
-                                            WFO
+                                          {TIPE_KARYAWAN_OPTIONS.map((o) => (
+                                            <SelectItem key={o} value={o}>
+                                              {o}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      {normalizedData?.tipeKaryawan ===
+                                        "Karyawan Tetap" &&
+                                        field.value !== "Karyawan Tetap" && (
+                                          <div className="flex items-center gap-2 mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                                            <AlertTriangle className="h-3 w-3 text-amber-500" />
+                                            <p className="text-[10px] text-amber-200 font-medium">
+                                              Warning: Perubahan dari Tetap ke{" "}
+                                              {field.value} tidak umum.
+                                            </p>
+                                          </div>
+                                        )}
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name="statusKontrak"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-xs font-black text-slate-500 uppercase">
+                                        Status Siklus
+                                      </FormLabel>
+                                      <Select
+                                        onValueChange={field.onChange}
+                                        value={field.value || ""}
+                                      >
+                                        <FormControl>
+                                          <SelectTrigger className="bg-slate-900 border-slate-800">
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent className="bg-slate-900 border-slate-800">
+                                          <SelectItem value="Draft">
+                                            Draft
                                           </SelectItem>
-                                          <SelectItem value="WFH">
-                                            WFH
+                                          <SelectItem value="Aktif">
+                                            Aktif
                                           </SelectItem>
-                                          <SelectItem value="Hybrid">
-                                            Hybrid
+                                          <SelectItem value="Diperpanjang">
+                                            Diperpanjang
                                           </SelectItem>
-                                          <SelectItem value="Shift">
-                                            Shift
+                                          <SelectItem value="Selesai">
+                                            Selesai
+                                          </SelectItem>
+                                          <SelectItem value="Expired">
+                                            Expired
                                           </SelectItem>
                                         </SelectContent>
                                       </Select>
                                     </FormItem>
                                   )}
                                 />
+                              </div>
+
+                              {/* 2. Kondisional berdasarkan Tipe */}
+                              <div className="space-y-4 pt-4 border-t border-slate-800">
+                                {/* Magang / Intern */}
+                                {form.watch("tipeKaryawan") === "Magang" && (
+                                  <>
+                                    <div className="grid grid-cols-2 gap-4">
+                                      <FormField
+                                        control={form.control}
+                                        name="kontrakMulai"
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <FormLabel className="text-xs font-bold text-slate-500">
+                                              Mulai Magang
+                                            </FormLabel>
+                                            <FormControl>
+                                              <Input
+                                                type="date"
+                                                {...field}
+                                                value={field.value || ""}
+                                                className="bg-slate-900 border-slate-800"
+                                              />
+                                            </FormControl>
+                                          </FormItem>
+                                        )}
+                                      />
+                                      <FormField
+                                        control={form.control}
+                                        name="durasiKontrak"
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <FormLabel className="text-xs font-bold text-slate-500">
+                                              Durasi Magang
+                                            </FormLabel>
+                                            <Select
+                                              onValueChange={field.onChange}
+                                              value={
+                                                DURASI_OPTIONS.includes(
+                                                  field.value || "",
+                                                )
+                                                  ? field.value
+                                                  : "Custom"
+                                              }
+                                            >
+                                              <FormControl>
+                                                <SelectTrigger className="bg-slate-900 border-slate-800">
+                                                  <SelectValue />
+                                                </SelectTrigger>
+                                              </FormControl>
+                                              <SelectContent className="bg-slate-900 border-slate-800">
+                                                {DURASI_OPTIONS.map((o) => (
+                                                  <SelectItem key={o} value={o}>
+                                                    {o}
+                                                  </SelectItem>
+                                                ))}
+                                              </SelectContent>
+                                            </Select>
+                                            {!DURASI_OPTIONS.includes(
+                                              field.value || "",
+                                            ) &&
+                                              field.value !== "Custom" && (
+                                                <Input
+                                                  {...field}
+                                                  value={field.value || ""}
+                                                  className="mt-2 bg-slate-900 border-slate-800"
+                                                  placeholder="Isi durasi manual..."
+                                                />
+                                              )}
+                                            {field.value === "Custom" && (
+                                              <Input
+                                                onChange={(e) =>
+                                                  field.onChange(e.target.value)
+                                                }
+                                                className="mt-2 bg-slate-900 border-slate-800"
+                                                placeholder="Contoh: 45 Hari"
+                                              />
+                                            )}
+                                          </FormItem>
+                                        )}
+                                      />
+                                    </div>
+                                    <FormField
+                                      control={form.control}
+                                      name="kontrakSelesai"
+                                      render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel className="text-xs font-bold text-slate-500">
+                                            Selesai Magang (Auto)
+                                          </FormLabel>
+                                          <FormControl>
+                                            <Input
+                                              type="date"
+                                              {...field}
+                                              value={field.value || ""}
+                                              className="bg-slate-900 border-slate-800"
+                                            />
+                                          </FormControl>
+                                        </FormItem>
+                                      )}
+                                    />
+                                    <FormField
+                                      control={form.control}
+                                      name="mentor"
+                                      render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel className="text-xs font-bold text-slate-500">
+                                            Mentor / Pembimbing
+                                          </FormLabel>
+                                          <FormControl>
+                                            <Input
+                                              {...field}
+                                              value={field.value || ""}
+                                              placeholder="Nama Mentor"
+                                              className="bg-slate-900 border-slate-800"
+                                            />
+                                          </FormControl>
+                                        </FormItem>
+                                      )}
+                                    />
+                                  </>
+                                )}
+
+                                {/* Training */}
+                                {form.watch("tipeKaryawan") === "Training" && (
+                                  <>
+                                    <div className="grid grid-cols-2 gap-4">
+                                      <FormField
+                                        control={form.control}
+                                        name="kontrakMulai"
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <FormLabel className="text-xs font-bold text-slate-500">
+                                              Mulai Training
+                                            </FormLabel>
+                                            <FormControl>
+                                              <Input
+                                                type="date"
+                                                {...field}
+                                                value={field.value || ""}
+                                                className="bg-slate-900 border-slate-800"
+                                              />
+                                            </FormControl>
+                                          </FormItem>
+                                        )}
+                                      />
+                                      <FormField
+                                        control={form.control}
+                                        name="durasiKontrak"
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <FormLabel className="text-xs font-bold text-slate-500">
+                                              Durasi Training
+                                            </FormLabel>
+                                            <Select
+                                              onValueChange={field.onChange}
+                                              value={
+                                                DURASI_OPTIONS.includes(
+                                                  field.value || "",
+                                                )
+                                                  ? field.value
+                                                  : "Custom"
+                                              }
+                                            >
+                                              <FormControl>
+                                                <SelectTrigger className="bg-slate-900 border-slate-800">
+                                                  <SelectValue />
+                                                </SelectTrigger>
+                                              </FormControl>
+                                              <SelectContent className="bg-slate-900 border-slate-800">
+                                                {DURASI_OPTIONS.map((o) => (
+                                                  <SelectItem key={o} value={o}>
+                                                    {o}
+                                                  </SelectItem>
+                                                ))}
+                                              </SelectContent>
+                                            </Select>
+                                          </FormItem>
+                                        )}
+                                      />
+                                    </div>
+                                    <FormField
+                                      control={form.control}
+                                      name="kontrakSelesai"
+                                      render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel className="text-xs font-bold text-slate-500">
+                                            Selesai Training (Auto)
+                                          </FormLabel>
+                                          <FormControl>
+                                            <Input
+                                              type="date"
+                                              {...field}
+                                              value={field.value || ""}
+                                              className="bg-slate-900 border-slate-800"
+                                            />
+                                          </FormControl>
+                                        </FormItem>
+                                      )}
+                                    />
+                                    <FormField
+                                      control={form.control}
+                                      name="evaluator"
+                                      render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel className="text-xs font-bold text-slate-500">
+                                            Evaluator / Penanggung Jawab
+                                          </FormLabel>
+                                          <FormControl>
+                                            <Input
+                                              {...field}
+                                              value={field.value || ""}
+                                              placeholder="Nama Evaluator"
+                                              className="bg-slate-900 border-slate-800"
+                                            />
+                                          </FormControl>
+                                        </FormItem>
+                                      )}
+                                    />
+                                  </>
+                                )}
+
+                                {/* Probation */}
+                                {form.watch("tipeKaryawan") === "Probation" && (
+                                  <>
+                                    <div className="grid grid-cols-2 gap-4">
+                                      <FormField
+                                        control={form.control}
+                                        name="masaPercobaanMulai"
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <FormLabel className="text-xs font-bold text-slate-500">
+                                              Mulai Probation
+                                            </FormLabel>
+                                            <FormControl>
+                                              <Input
+                                                type="date"
+                                                {...field}
+                                                value={field.value || ""}
+                                                className="bg-slate-900 border-slate-800"
+                                              />
+                                            </FormControl>
+                                          </FormItem>
+                                        )}
+                                      />
+                                      <FormField
+                                        control={form.control}
+                                        name="masaPercobaanSelesai"
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <FormLabel className="text-xs font-bold text-slate-500">
+                                              Selesai Probation
+                                            </FormLabel>
+                                            <FormControl>
+                                              <Input
+                                                type="date"
+                                                {...field}
+                                                value={field.value || ""}
+                                                className="bg-slate-900 border-slate-800"
+                                              />
+                                            </FormControl>
+                                          </FormItem>
+                                        )}
+                                      />
+                                    </div>
+                                    <FormField
+                                      control={form.control}
+                                      name="tanggalEvaluasi"
+                                      render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel className="text-xs font-bold text-slate-500">
+                                            Tanggal Evaluasi Akhir
+                                          </FormLabel>
+                                          <FormControl>
+                                            <Input
+                                              type="date"
+                                              {...field}
+                                              value={field.value || ""}
+                                              className="bg-slate-900 border-slate-800"
+                                            />
+                                          </FormControl>
+                                        </FormItem>
+                                      )}
+                                    />
+                                  </>
+                                )}
+
+                                {/* Kontrak */}
+                                {form.watch("tipeKaryawan") === "Kontrak" && (
+                                  <>
+                                    <FormField
+                                      control={form.control}
+                                      name="nomorKontrakSK"
+                                      render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel className="text-xs font-bold text-slate-500">
+                                            Nomor Kontrak
+                                          </FormLabel>
+                                          <FormControl>
+                                            <Input
+                                              {...field}
+                                              value={field.value || ""}
+                                              placeholder="Contoh: 001/KTR/ENV/2024"
+                                              className="bg-slate-900 border-slate-800"
+                                            />
+                                          </FormControl>
+                                        </FormItem>
+                                      )}
+                                    />
+                                    <div className="grid grid-cols-2 gap-4">
+                                      <FormField
+                                        control={form.control}
+                                        name="kontrakMulai"
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <FormLabel className="text-xs font-bold text-slate-500">
+                                              Kontrak Mulai
+                                            </FormLabel>
+                                            <FormControl>
+                                              <Input
+                                                type="date"
+                                                {...field}
+                                                value={field.value || ""}
+                                                className="bg-slate-900 border-slate-800"
+                                              />
+                                            </FormControl>
+                                          </FormItem>
+                                        )}
+                                      />
+                                      <FormField
+                                        control={form.control}
+                                        name="durasiKontrak"
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <FormLabel className="text-xs font-bold text-slate-500">
+                                              Durasi Kontrak
+                                            </FormLabel>
+                                            <Select
+                                              onValueChange={field.onChange}
+                                              value={
+                                                DURASI_OPTIONS.includes(
+                                                  field.value || "",
+                                                )
+                                                  ? field.value
+                                                  : "Custom"
+                                              }
+                                            >
+                                              <FormControl>
+                                                <SelectTrigger className="bg-slate-900 border-slate-800">
+                                                  <SelectValue />
+                                                </SelectTrigger>
+                                              </FormControl>
+                                              <SelectContent className="bg-slate-900 border-slate-800">
+                                                {DURASI_OPTIONS.map((o) => (
+                                                  <SelectItem key={o} value={o}>
+                                                    {o}
+                                                  </SelectItem>
+                                                ))}
+                                              </SelectContent>
+                                            </Select>
+                                          </FormItem>
+                                        )}
+                                      />
+                                    </div>
+                                    <FormField
+                                      control={form.control}
+                                      name="kontrakSelesai"
+                                      render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel className="text-xs font-bold text-slate-500">
+                                            Kontrak Selesai (Auto)
+                                          </FormLabel>
+                                          <FormControl>
+                                            <Input
+                                              type="date"
+                                              {...field}
+                                              value={field.value || ""}
+                                              className="bg-slate-900 border-slate-800"
+                                            />
+                                          </FormControl>
+                                        </FormItem>
+                                      )}
+                                    />
+                                  </>
+                                )}
+
+                                {/* Karyawan Tetap */}
+                                {form.watch("tipeKaryawan") ===
+                                  "Karyawan Tetap" && (
+                                  <>
+                                    <FormField
+                                      control={form.control}
+                                      name="tanggalMasuk"
+                                      render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel className="text-xs font-bold text-slate-500">
+                                            Tanggal Efektif Aktif / Pengangkatan
+                                          </FormLabel>
+                                          <FormControl>
+                                            <Input
+                                              type="date"
+                                              {...field}
+                                              value={field.value || ""}
+                                              className="bg-slate-900 border-slate-800"
+                                            />
+                                          </FormControl>
+                                        </FormItem>
+                                      )}
+                                    />
+                                    <FormField
+                                      control={form.control}
+                                      name="nomorSK"
+                                      render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel className="text-xs font-bold text-slate-500">
+                                            Nomor SK Pengangkatan
+                                          </FormLabel>
+                                          <FormControl>
+                                            <Input
+                                              {...field}
+                                              value={field.value || ""}
+                                              placeholder="Contoh: 001/SK-P/ENV/2024"
+                                              className="bg-slate-900 border-slate-800"
+                                            />
+                                          </FormControl>
+                                        </FormItem>
+                                      )}
+                                    />
+                                  </>
+                                )}
+
+                                {/* General Schedule & Location */}
+                                <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-800">
+                                  <FormField
+                                    control={form.control}
+                                    name="sistemKerja"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel className="text-xs font-bold text-slate-500">
+                                          Sistem Kerja
+                                        </FormLabel>
+                                        <Select
+                                          onValueChange={field.onChange}
+                                          value={field.value || ""}
+                                        >
+                                          <FormControl>
+                                            <SelectTrigger className="bg-slate-900 border-slate-800">
+                                              <SelectValue />
+                                            </SelectTrigger>
+                                          </FormControl>
+                                          <SelectContent className="bg-slate-900 border-slate-800">
+                                            <SelectItem value="WFO">
+                                              WFO
+                                            </SelectItem>
+                                            <SelectItem value="WFH">
+                                              WFH
+                                            </SelectItem>
+                                            <SelectItem value="Hybrid">
+                                              Hybrid
+                                            </SelectItem>
+                                            <SelectItem value="Shift">
+                                              Shift
+                                            </SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </FormItem>
+                                    )}
+                                  />
+                                  <FormField
+                                    control={form.control}
+                                    name="lokasiKerja"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel className="text-xs font-bold text-slate-500">
+                                          Lokasi Kerja
+                                        </FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            {...field}
+                                            value={field.value || ""}
+                                            className="bg-slate-900 border-slate-800"
+                                          />
+                                        </FormControl>
+                                      </FormItem>
+                                    )}
+                                  />
+                                </div>
                                 <FormField
                                   control={form.control}
-                                  name="lokasiKerja"
+                                  name="catatanKontrak"
                                   render={({ field }) => (
                                     <FormItem>
                                       <FormLabel className="text-xs font-bold text-slate-500">
-                                        Lokasi Kerja
+                                        Catatan Khusus
                                       </FormLabel>
                                       <FormControl>
-                                        <Input
+                                        <Textarea
                                           {...field}
                                           value={field.value || ""}
                                           className="bg-slate-900 border-slate-800"
@@ -3668,207 +3828,365 @@ export default function EmployeeDetailPage({
                                   )}
                                 />
                               </div>
+                            </div>
+                          ) : null}
+
+                          {editingSection === "payroll" ? (
+                            <div className="space-y-6">
                               <FormField
                                 control={form.control}
-                                name="catatanKontrak"
+                                name="gajiPokok"
                                 render={({ field }) => (
                                   <FormItem>
                                     <FormLabel className="text-xs font-bold text-slate-500">
-                                      Catatan Khusus
+                                      Gaji Pokok
                                     </FormLabel>
                                     <FormControl>
-                                      <Textarea
+                                      <Input
+                                        type="number"
                                         {...field}
                                         value={field.value || ""}
+                                        onChange={(e) =>
+                                          field.onChange(Number(e.target.value))
+                                        }
                                         className="bg-slate-900 border-slate-800"
                                       />
                                     </FormControl>
                                   </FormItem>
                                 )}
                               />
-                            </div>
-                          </div>
-                        )}
 
-                        {editingSection === "payroll" && (
-                          <div className="space-y-6">
-                            <FormField
-                              control={form.control}
-                              name="gajiPokok"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="text-xs font-bold text-slate-500">
-                                    Gaji Pokok
-                                  </FormLabel>
-                                  <FormControl>
-                                    <Input
-                                      type="number"
-                                      {...field}
-                                      value={field.value || ""}
-                                      onChange={(e) =>
-                                        field.onChange(Number(e.target.value))
-                                      }
-                                      className="bg-slate-900 border-slate-800"
-                                    />
-                                  </FormControl>
-                                </FormItem>
-                              )}
-                            />
-
-                            <div className="space-y-4">
-                              <div className="flex items-center justify-between">
-                                <p className="text-sm font-bold text-white">
-                                  Daftar Tunjangan
-                                </p>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-8 text-[10px] uppercase font-bold"
-                                  onClick={() => {
-                                    const current =
-                                      form.getValues("allowances") || [];
-                                    form.setValue("allowances", [
-                                      ...current,
-                                      {
-                                        id: Math.random()
-                                          .toString(36)
-                                          .substr(2, 9),
-                                        name: "",
-                                        category: "tetap",
-                                        amount: 0,
-                                        period: "bulanan",
-                                      },
-                                    ]);
-                                  }}
-                                >
-                                  <Plus className="h-3 w-3 mr-1" /> Tambah
-                                </Button>
-                              </div>
-                              <div className="space-y-3">
-                                {(form.watch("allowances") || []).map(
-                                  (al, idx) => (
-                                    <div
-                                      key={al.id}
-                                      className="p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3"
-                                    >
-                                      <div className="flex items-center gap-2">
-                                        <Input
-                                          placeholder="Nama Tunjangan"
-                                          value={al.name}
-                                          onChange={(e) => {
-                                            const current = [
-                                              ...(form.getValues(
+                              <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                  <p className="text-sm font-bold text-white">
+                                    Daftar Tunjangan
+                                  </p>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 text-[10px] uppercase font-bold"
+                                    onClick={() => {
+                                      const current =
+                                        form.getValues("allowances") || [];
+                                      form.setValue("allowances", [
+                                        ...current,
+                                        {
+                                          id: Math.random()
+                                            .toString(36)
+                                            .substr(2, 9),
+                                          name: "",
+                                          category: "tetap",
+                                          amount: 0,
+                                          period: "bulanan",
+                                        },
+                                      ]);
+                                    }}
+                                  >
+                                    <Plus className="h-3 w-3 mr-1" /> Tambah
+                                  </Button>
+                                </div>
+                                <div className="space-y-3">
+                                  {(form.watch("allowances") || []).map(
+                                    (al, idx) => (
+                                      <div
+                                        key={al.id}
+                                        className="p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3"
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          <Input
+                                            placeholder="Nama Tunjangan"
+                                            value={al.name}
+                                            onChange={(e) => {
+                                              const current = [
+                                                ...(form.getValues(
+                                                  "allowances",
+                                                ) || []),
+                                              ];
+                                              current[idx].name =
+                                                e.target.value;
+                                              form.setValue(
                                                 "allowances",
-                                              ) || []),
-                                            ];
-                                            current[idx].name = e.target.value;
-                                            form.setValue(
-                                              "allowances",
-                                              current,
-                                            );
-                                          }}
-                                          className="flex-1 h-9 text-sm"
-                                        />
-                                        <Button
-                                          type="button"
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-8 w-8 text-red-500"
-                                          onClick={() => {
-                                            const current = [
-                                              ...(form.getValues(
+                                                current,
+                                              );
+                                            }}
+                                            className="flex-1 h-9 text-sm"
+                                          />
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-8 w-8 text-red-500"
+                                            onClick={() => {
+                                              const current = [
+                                                ...(form.getValues(
+                                                  "allowances",
+                                                ) || []),
+                                              ];
+                                              current.splice(idx, 1);
+                                              form.setValue(
                                                 "allowances",
-                                              ) || []),
-                                            ];
-                                            current.splice(idx, 1);
-                                            form.setValue(
-                                              "allowances",
-                                              current,
-                                            );
-                                          }}
-                                        >
-                                          <Trash2 className="h-4 w-4" />
-                                        </Button>
+                                                current,
+                                              );
+                                            }}
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                          </Button>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2">
+                                          <Select
+                                            value={al.category}
+                                            onValueChange={(val) => {
+                                              const current = [
+                                                ...(form.getValues(
+                                                  "allowances",
+                                                ) || []),
+                                              ];
+                                              current[idx].category =
+                                                val as any;
+                                              form.setValue(
+                                                "allowances",
+                                                current,
+                                              );
+                                            }}
+                                          >
+                                            <SelectTrigger className="h-8 text-[10px]">
+                                              <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent className="bg-slate-900">
+                                              <SelectItem value="tetap">
+                                                Tetap
+                                              </SelectItem>
+                                              <SelectItem value="tidak_tetap">
+                                                Tidak Tetap
+                                              </SelectItem>
+                                              <SelectItem value="fasilitas">
+                                                Fasilitas
+                                              </SelectItem>
+                                            </SelectContent>
+                                          </Select>
+                                          <Input
+                                            type="number"
+                                            placeholder="Nominal"
+                                            value={al.amount || ""}
+                                            onChange={(e) => {
+                                              const current = [
+                                                ...(form.getValues(
+                                                  "allowances",
+                                                ) || []),
+                                              ];
+                                              current[idx].amount = Number(
+                                                e.target.value,
+                                              );
+                                              form.setValue(
+                                                "allowances",
+                                                current,
+                                              );
+                                            }}
+                                            className="h-8 text-sm"
+                                          />
+                                        </div>
                                       </div>
-                                      <div className="grid grid-cols-2 gap-2">
-                                        <Select
-                                          value={al.category}
-                                          onValueChange={(val) => {
-                                            const current = [
-                                              ...(form.getValues(
-                                                "allowances",
-                                              ) || []),
-                                            ];
-                                            current[idx].category = val as any;
-                                            form.setValue(
-                                              "allowances",
-                                              current,
-                                            );
-                                          }}
-                                        >
-                                          <SelectTrigger className="h-8 text-[10px]">
-                                            <SelectValue />
-                                          </SelectTrigger>
-                                          <SelectContent className="bg-slate-900">
-                                            <SelectItem value="tetap">
-                                              Tetap
-                                            </SelectItem>
-                                            <SelectItem value="tidak_tetap">
-                                              Tidak Tetap
-                                            </SelectItem>
-                                            <SelectItem value="fasilitas">
-                                              Fasilitas
-                                            </SelectItem>
-                                          </SelectContent>
-                                        </Select>
+                                    ),
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="h-px bg-slate-800 my-4"></div>
+
+                              <div className="grid grid-cols-2 gap-4">
+                                <FormField
+                                  control={form.control}
+                                  name="bpjsKesKaryawan"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-[10px] font-bold text-slate-500 uppercase">
+                                        BPJS Kes (Karyawan)
+                                      </FormLabel>
+                                      <FormControl>
                                         <Input
                                           type="number"
-                                          placeholder="Nominal"
-                                          value={al.amount || ""}
-                                          onChange={(e) => {
-                                            const current = [
-                                              ...(form.getValues(
-                                                "allowances",
-                                              ) || []),
-                                            ];
-                                            current[idx].amount = Number(
-                                              e.target.value,
-                                            );
-                                            form.setValue(
-                                              "allowances",
-                                              current,
-                                            );
-                                          }}
-                                          className="h-8 text-sm"
+                                          {...field}
+                                          value={field.value || ""}
+                                          onChange={(e) =>
+                                            field.onChange(
+                                              Number(e.target.value),
+                                            )
+                                          }
+                                          className="bg-slate-900 border-slate-800"
                                         />
-                                      </div>
-                                    </div>
-                                  ),
-                                )}
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name="bpjsKesPerusahaan"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-[10px] font-bold text-slate-500 uppercase">
+                                        BPJS Kes (Persh)
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type="number"
+                                          {...field}
+                                          value={field.value || ""}
+                                          onChange={(e) =>
+                                            field.onChange(
+                                              Number(e.target.value),
+                                            )
+                                          }
+                                          className="bg-slate-900 border-slate-800"
+                                        />
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                <FormField
+                                  control={form.control}
+                                  name="bpjsTkKaryawan"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-[10px] font-bold text-slate-500 uppercase">
+                                        BPJS TK (Karyawan)
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type="number"
+                                          {...field}
+                                          value={field.value || ""}
+                                          onChange={(e) =>
+                                            field.onChange(
+                                              Number(e.target.value),
+                                            )
+                                          }
+                                          className="bg-slate-900 border-slate-800"
+                                        />
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name="bpjsTkPerusahaan"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-[10px] font-bold text-slate-500 uppercase">
+                                        BPJS TK (Persh)
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type="number"
+                                          {...field}
+                                          value={field.value || ""}
+                                          onChange={(e) =>
+                                            field.onChange(
+                                              Number(e.target.value),
+                                            )
+                                          }
+                                          className="bg-slate-900 border-slate-800"
+                                        />
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
+                              </div>
+
+                              <div className="grid grid-cols-3 gap-4">
+                                <FormField
+                                  control={form.control}
+                                  name="thr"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-[10px] font-bold text-slate-500 uppercase">
+                                        THR
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type="number"
+                                          {...field}
+                                          value={field.value || ""}
+                                          onChange={(e) =>
+                                            field.onChange(
+                                              Number(e.target.value),
+                                            )
+                                          }
+                                          className="bg-slate-900 border-slate-800"
+                                        />
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name="potonganPPh21"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-[10px] font-bold text-slate-500 uppercase">
+                                        PPh 21
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type="number"
+                                          {...field}
+                                          value={field.value || ""}
+                                          onChange={(e) =>
+                                            field.onChange(
+                                              Number(e.target.value),
+                                            )
+                                          }
+                                          className="bg-slate-900 border-slate-800"
+                                        />
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name="potonganLain"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-[10px] font-bold text-slate-500 uppercase">
+                                        Potongan Lain
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type="number"
+                                          {...field}
+                                          value={field.value || ""}
+                                          onChange={(e) =>
+                                            field.onChange(
+                                              Number(e.target.value),
+                                            )
+                                          }
+                                          className="bg-slate-900 border-slate-800"
+                                        />
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
                               </div>
                             </div>
+                          ) : null}
 
-                            <div className="h-px bg-slate-800 my-4"></div>
-
+                          <div className="pt-6 border-t border-slate-800 space-y-4">
                             <div className="grid grid-cols-2 gap-4">
                               <FormField
                                 control={form.control}
-                                name="bpjsKesKaryawan"
+                                name="tanggalEfektif"
                                 render={({ field }) => (
                                   <FormItem>
-                                    <FormLabel className="text-[10px] font-bold text-slate-500 uppercase">
-                                      BPJS Kes (Karyawan)
+                                    <FormLabel className="text-xs font-black text-blue-500 uppercase">
+                                      Tanggal Efektif Perubahan
                                     </FormLabel>
                                     <FormControl>
                                       <Input
-                                        type="number"
+                                        type="date"
                                         {...field}
-                                        value={field.value || ""}
-                                        onChange={(e) =>
-                                          field.onChange(Number(e.target.value))
-                                        }
-                                        className="bg-slate-900 border-slate-800"
+                                        className="bg-blue-500/5 border-blue-500/20"
                                       />
                                     </FormControl>
                                   </FormItem>
@@ -3876,207 +4194,59 @@ export default function EmployeeDetailPage({
                               />
                               <FormField
                                 control={form.control}
-                                name="bpjsKesPerusahaan"
+                                name="catatanAdministrasi"
                                 render={({ field }) => (
                                   <FormItem>
-                                    <FormLabel className="text-[10px] font-bold text-slate-500 uppercase">
-                                      BPJS Kes (Persh)
+                                    <FormLabel className="text-xs font-black text-amber-500 uppercase">
+                                      Alasan Perubahan (Log Audit)
                                     </FormLabel>
                                     <FormControl>
                                       <Input
-                                        type="number"
                                         {...field}
-                                        value={field.value || ""}
-                                        onChange={(e) =>
-                                          field.onChange(Number(e.target.value))
-                                        }
-                                        className="bg-slate-900 border-slate-800"
+                                        required
+                                        className="bg-amber-500/5 border-amber-500/20"
+                                        placeholder="Contoh: Penyesuaian Gaji Tahunan"
                                       />
                                     </FormControl>
                                   </FormItem>
                                 )}
                               />
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
-                              <FormField
-                                control={form.control}
-                                name="bpjsTkKaryawan"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel className="text-[10px] font-bold text-slate-500 uppercase">
-                                      BPJS TK (Karyawan)
-                                    </FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        type="number"
-                                        {...field}
-                                        value={field.value || ""}
-                                        onChange={(e) =>
-                                          field.onChange(Number(e.target.value))
-                                        }
-                                        className="bg-slate-900 border-slate-800"
-                                      />
-                                    </FormControl>
-                                  </FormItem>
-                                )}
-                              />
-                              <FormField
-                                control={form.control}
-                                name="bpjsTkPerusahaan"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel className="text-[10px] font-bold text-slate-500 uppercase">
-                                      BPJS TK (Persh)
-                                    </FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        type="number"
-                                        {...field}
-                                        value={field.value || ""}
-                                        onChange={(e) =>
-                                          field.onChange(Number(e.target.value))
-                                        }
-                                        className="bg-slate-900 border-slate-800"
-                                      />
-                                    </FormControl>
-                                  </FormItem>
-                                )}
-                              />
-                            </div>
+                          </div>
+                        </div>
 
-                            <div className="grid grid-cols-3 gap-4">
-                              <FormField
-                                control={form.control}
-                                name="thr"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel className="text-[10px] font-bold text-slate-500 uppercase">
-                                      THR
-                                    </FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        type="number"
-                                        {...field}
-                                        value={field.value || ""}
-                                        onChange={(e) =>
-                                          field.onChange(Number(e.target.value))
-                                        }
-                                        className="bg-slate-900 border-slate-800"
-                                      />
-                                    </FormControl>
-                                  </FormItem>
-                                )}
-                              />
-                              <FormField
-                                control={form.control}
-                                name="potonganPPh21"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel className="text-[10px] font-bold text-slate-500 uppercase">
-                                      PPh 21
-                                    </FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        type="number"
-                                        {...field}
-                                        value={field.value || ""}
-                                        onChange={(e) =>
-                                          field.onChange(Number(e.target.value))
-                                        }
-                                        className="bg-slate-900 border-slate-800"
-                                      />
-                                    </FormControl>
-                                  </FormItem>
-                                )}
-                              />
-                              <FormField
-                                control={form.control}
-                                name="potonganLain"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel className="text-[10px] font-bold text-slate-500 uppercase">
-                                      Potongan Lain
-                                    </FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        type="number"
-                                        {...field}
-                                        value={field.value || ""}
-                                        onChange={(e) =>
-                                          field.onChange(Number(e.target.value))
-                                        }
-                                        className="bg-slate-900 border-slate-800"
-                                      />
-                                    </FormControl>
-                                  </FormItem>
-                                )}
-                              />
-                            </div>
-                          </div>
-                        )}
-
-                        <div className="pt-6 border-t border-slate-800 space-y-4">
-                          <div className="grid grid-cols-2 gap-4">
-                            <FormField
-                              control={form.control}
-                              name="tanggalEfektif"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="text-xs font-black text-blue-500 uppercase">
-                                    Tanggal Efektif Perubahan
-                                  </FormLabel>
-                                  <FormControl>
-                                    <Input
-                                      type="date"
-                                      {...field}
-                                      className="bg-blue-500/5 border-blue-500/20"
-                                    />
-                                  </FormControl>
-                                </FormItem>
-                              )}
-                            />
-                            <FormField
-                              control={form.control}
-                              name="catatanAdministrasi"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="text-xs font-black text-amber-500 uppercase">
-                                    Alasan Perubahan (Log Audit)
-                                  </FormLabel>
-                                  <FormControl>
-                                    <Input
-                                      {...field}
-                                      required
-                                      className="bg-amber-500/5 border-amber-500/20"
-                                      placeholder="Contoh: Penyesuaian Gaji Tahunan"
-                                    />
-                                  </FormControl>
-                                </FormItem>
-                              )}
-                            />
-                          </div>
-                          <div className="flex gap-3 pt-4">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              className="flex-1 h-12"
-                              onClick={() => setEditingSection(null)}
-                            >
-                              Batal
-                            </Button>
-                            <Button
-                              type="submit"
-                              disabled={isSaving}
-                              className="flex-1 h-12 bg-emerald-600 hover:bg-emerald-500"
-                            >
-                              {isSaving ? "Menyimpan..." : "Simpan Data"}
-                            </Button>
-                          </div>
+                        {/* Sticky Footer */}
+                        <div className="shrink-0 z-50 bg-slate-900/80 backdrop-blur-xl border-t border-slate-800/60 px-6 py-5 md:px-10 md:py-6 flex justify-end items-center gap-4">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-12 px-8 rounded-xl border-slate-800 bg-slate-900/50 text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
+                            onClick={() => setEditingSection(null)}
+                          >
+                            Batal
+                          </Button>
+                          <Button
+                            type="submit"
+                            disabled={isSaving}
+                            className="h-12 px-10 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-lg shadow-emerald-900/20 transition-all active:scale-95"
+                          >
+                            {isSaving ? (
+                              <div className="flex items-center gap-2">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <span>Menyimpan...</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <Save className="h-4 w-4" />
+                                <span>Simpan Data</span>
+                              </div>
+                            )}
+                          </Button>
                         </div>
                       </form>
                     </Form>
-                  </SheetContent>
-                </Sheet>
+                  </DialogContent>
+                </Dialog>
               </TabsContent>
 
               <TabsContent value="riwayat">

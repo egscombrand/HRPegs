@@ -26,19 +26,23 @@ export function normalizeEmployeeOperationalStatus(
   const getCleanVal = (val: any) => String(val || "").toLowerCase().trim();
 
   const statusFields = [
-    employee?.status,
     employee?.employmentStatus,
-    employee?.workStatus,
+    employee?.hrdEmploymentInfo?.employmentStatus,
+    employee?.status,
+    employee?.statusKerja,
     employee?.hrdEmploymentInfo?.statusKerja,
     profile?.hrdEmploymentInfo?.statusKerja,
-    employee?.employment_history?.[0]?.newValue // If we had history access here
+    profile?.hrdEmploymentInfo?.employmentStatus,
+    employee?.workStatus,
   ];
 
   const typeFields = [
     employee?.employeeType,
+    employee?.hrdEmploymentInfo?.employeeType,
     employee?.employmentType,
     employee?.hrdEmploymentInfo?.tipeKaryawan,
-    profile?.hrdEmploymentInfo?.tipeKaryawan
+    profile?.hrdEmploymentInfo?.tipeKaryawan,
+    profile?.hrdEmploymentInfo?.employeeType,
   ];
 
   const roleFallback = getCleanVal(user?.role);

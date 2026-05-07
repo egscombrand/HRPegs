@@ -72,6 +72,7 @@ export const ALL_MENU_GROUPS: MenuGroup[] = [
         title: "Administrasi",
         items: [
             { key: 'admin.users', href: '/admin/super-admin/user-management', label: 'User Management', icon: createElement(Users) },
+            { key: 'admin.structure', href: '/admin/super-admin/struktur-organisasi', label: 'Organisasi Perusahaan', icon: createElement(KanbanSquare) },
             { key: 'admin.master', href: '/admin/super-admin/departments-brands', label: 'Master Data', icon: createElement(Database) },
             { key: 'admin.ecosystem', href: '/admin/super-admin/ecosystem', label: 'Ecosystem', icon: createElement(Globe) },
             { key: 'admin.access', href: '/admin/super-admin/menu-settings', label: 'Access & Roles', icon: createElement(ShieldCheck) },
@@ -127,6 +128,7 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
         title: "Administrasi",
         items: [
             { key: 'admin.users', href: '/admin/super-admin/user-management', label: 'User Management', icon: createElement(Users) },
+            { key: 'admin.structure', href: '/admin/super-admin/struktur-organisasi', label: 'Organisasi Perusahaan', icon: createElement(KanbanSquare) },
             { key: 'admin.master', href: '/admin/super-admin/departments-brands', label: 'Master Data', icon: createElement(Database) },
             { key: 'admin.ecosystem', href: '/admin/super-admin/ecosystem', label: 'Ecosystem', icon: createElement(Globe) },
             { key: 'admin.access', href: '/admin/super-admin/menu-settings', label: 'Access & Roles', icon: createElement(ShieldCheck) },
@@ -150,6 +152,12 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
             { key: 'personal.interviews.hrd', href: '/admin/interviews', label: 'My Interviews', icon: createElement(Video) },
             { key: 'recruitment.tasks', href: '/admin/recruitment/my-tasks', label: 'Tugas Rekrutmen', icon: createElement(Briefcase) },
         ]
+    },
+    {
+      title: "Administrasi",
+      items: [
+        { key: 'admin.structure', href: '/admin/super-admin/struktur-organisasi', label: 'Organisasi Perusahaan', icon: createElement(KanbanSquare) },
+      ]
     }
   ],
   'manager': [

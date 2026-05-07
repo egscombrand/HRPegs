@@ -11,6 +11,8 @@ export interface HrdStrukturKerja {
   statusKerja: string; // Human readable label
   sistemKerja: string;
   lokasiKerja: string;
+  atasanLangsung: string;
+  structuralPosition: string;
 }
 
 /**
@@ -25,11 +27,7 @@ export function getHrdEmployeeStruktur(
 ): HrdStrukturKerja {
   const normalized = normalizeEmployeeRow(employee, profile, user, brands);
   
-  // Access HRD specific info from profile or employee doc
-  const hrdInfo = profile?.hrdEmploymentInfo || employee?.hrdEmploymentInfo || {};
-  
   // Normalize brandName, divisi, jabatan to empty if they are the default "Belum diatur" strings
-  // This allows the UI to handle the "Belum diatur" state specifically for alerts
   const cleanBrandName = normalized.brandName === "Brand belum diatur" ? "" : normalized.brandName;
   const cleanDivisi = normalized.divisi === "Divisi belum diatur" ? "" : normalized.divisi;
   const cleanJabatan = normalized.jabatan === "Jabatan belum diatur" ? "" : normalized.jabatan;
@@ -41,7 +39,9 @@ export function getHrdEmployeeStruktur(
     jabatan: cleanJabatan,
     tipeKaryawan: normalized.tipeKaryawan,
     statusKerja: getOperationalStatusLabel(normalized.statusKerja),
-    sistemKerja: hrdInfo.sistemKerja || "WFO",
-    lokasiKerja: hrdInfo.lokasiKerja || "Head Office"
+    sistemKerja: normalized.workSystem || "",
+    lokasiKerja: profile?.hrdEmploymentInfo?.lokasiKerja || employee?.hrdEmploymentInfo?.lokasiKerja || "",
+    atasanLangsung: normalized.directSupervisorName || "",
+    structuralPosition: normalized.structuralPosition || ""
   };
 }

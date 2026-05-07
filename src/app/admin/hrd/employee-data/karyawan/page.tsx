@@ -1158,7 +1158,7 @@ export default function KaryawanDataPage() {
                                     !!emp.pendingBankRequest;
                                   return (
                                     <TableRow
-                                      key={emp.uid}
+                                      key={`${emp.uid}-${index}`}
                                       className={cn(
                                         "border-slate-800/50 hover:bg-slate-800/40 transition-colors group min-h-[88px]",
                                         hasPendingReq && "bg-amber-500/[0.04]",

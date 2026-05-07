@@ -26,6 +26,8 @@ export interface NormalizedEmployeeRow {
   employeeType?: string;
   employmentStatus?: string;
   directSupervisorUid?: string;
+  directSupervisorName?: string;
+  workSystem?: string;
 }
 
 /**
@@ -38,11 +40,12 @@ export function normalizeEmployeeRow(
   brands: Brand[] = [],
 ): NormalizedEmployeeRow {
   // 1. Resolve Brand
+  const hrdInfo = profile?.hrdEmploymentInfo || employee?.hrdEmploymentInfo || {};
+  
   const rawBrandId =
+    hrdInfo.brandId ||
     employee?.brandId ||
     employee?.companyId ||
-    employee?.hrdEmploymentInfo?.brandId ||
-    profile?.hrdEmploymentInfo?.brandId ||
     (typeof user?.brandId === "string"
       ? user?.brandId
       : Array.isArray(user?.brandId)
@@ -50,10 +53,10 @@ export function normalizeEmployeeRow(
         : "");
 
   const rawBrandName =
+    hrdInfo.brandName ||
+    hrdInfo.brand ||
     employee?.brandName ||
     employee?.companyName ||
-    employee?.hrdEmploymentInfo?.brand ||
-    profile?.hrdEmploymentInfo?.brand ||
     user?.brandName ||
     "";
 
@@ -61,7 +64,7 @@ export function normalizeEmployeeRow(
   let brandName = String(rawBrandName || "").trim();
 
   // If we have ID but no name, or name is a placeholder, resolve from brands collection
-  if (brandId && (!brandName || brandName === "Belum diatur")) {
+  if (brandId && (!brandName || brandName === "Belum diatur" || brandName === "Brand belum diatur")) {
     const foundBrand = brands.find((b) => b.id === brandId);
     if (foundBrand) {
       brandName = foundBrand.name;
@@ -78,84 +81,90 @@ export function normalizeEmployeeRow(
 
   // 2. Resolve Division
   const divisi = String(
-    employee?.division ||
-      employee?.hrdEmploymentInfo?.divisi ||
-      profile?.hrdEmploymentInfo?.divisi ||
+    hrdInfo.divisionName ||
+      employee?.divisionName ||
+      employee?.division ||
+      hrdInfo.divisi ||
       user?.division ||
       "",
   ).trim();
 
-  // 3. Resolve Jabatan
+  const divisionId = String(
+    hrdInfo.divisionId ||
+      employee?.divisionId ||
+      "",
+  ).trim();
+
+  // 3. Resolve Jabatan (Position) / Work Role
   const jabatan = String(
-    employee?.positionTitle ||
-      employee?.hrdEmploymentInfo?.jabatan ||
-      profile?.hrdEmploymentInfo?.jabatan ||
+    hrdInfo.workRole ||
+      employee?.workRole ||
+      hrdInfo.jabatan ||
+      employee?.jabatan ||
+      employee?.jobTitle ||
+      employee?.positionTitle ||
       user?.positionTitle ||
       "",
   ).trim();
 
   // 4. Resolve Type & Status
   const tipeKaryawan = String(
-    employee?.employmentType ||
+    hrdInfo.employeeType ||
       employee?.employeeType ||
-      employee?.hrdEmploymentInfo?.tipeKaryawan ||
-      profile?.hrdEmploymentInfo?.tipeKaryawan ||
+      hrdInfo.tipeKaryawan ||
+      employee?.tipeKaryawan ||
+      employee?.employmentType ||
       user?.employmentType ||
       "",
   ).trim();
+  
+  const employeeType = tipeKaryawan;
 
-  // New structure fields
-  const employeeId = String(
-    employee?.employeeId ||
-      employee?.hrdEmploymentInfo?.employeeId ||
-      profile?.hrdEmploymentInfo?.employeeId ||
+  const employmentStatus = String(
+    hrdInfo.employmentStatus ||
+      employee?.employmentStatus ||
+      hrdInfo.statusKerja ||
+      employee?.statusKerja ||
       "",
   ).trim();
 
-  const divisionId = String(
-    employee?.divisionId ||
-      employee?.hrdEmploymentInfo?.divisionId ||
-      profile?.hrdEmploymentInfo?.divisionId ||
+  // 5. System & Structure fields
+  const workSystem = String(
+    hrdInfo.sistemKerja ||
+      hrdInfo.workSystem ||
+      employee?.sistemKerja ||
+      employee?.workSystem ||
+      "",
+  ).trim();
+
+  const employeeId = String(
+    hrdInfo.employeeId ||
+      employee?.employeeId ||
       "",
   ).trim();
 
   const structuralPosition = String(
-    employee?.structuralPosition ||
-      employee?.hrdEmploymentInfo?.structuralPosition ||
-      profile?.hrdEmploymentInfo?.structuralPosition ||
+    hrdInfo.structuralPosition ||
+      employee?.structuralPosition ||
+      employee?.position ||
       "",
   ).trim();
 
-  const workRole = String(
-    employee?.workRole ||
-      employee?.hrdEmploymentInfo?.workRole ||
-      profile?.hrdEmploymentInfo?.workRole ||
-      "",
-  ).trim();
-
-  const employeeType = String(
-    employee?.employeeType ||
-      employee?.hrdEmploymentInfo?.employeeType ||
-      profile?.hrdEmploymentInfo?.employeeType ||
-      tipeKaryawan ||
-      "",
-  ).trim();
-
-  const employmentStatus = String(
-    employee?.employmentStatus ||
-      employee?.hrdEmploymentInfo?.employmentStatus ||
-      profile?.hrdEmploymentInfo?.employmentStatus ||
-      employee?.statusKerja ||
-      profile?.hrdEmploymentInfo?.statusKerja ||
-      "",
-  ).trim();
+  const workRole = jabatan; // Sync with resolved jabatan
 
   const directSupervisorUid = String(
-    employee?.directSupervisorUid ||
-      employee?.hrdEmploymentInfo?.directSupervisorUid ||
-      profile?.hrdEmploymentInfo?.directSupervisorUid ||
+    hrdInfo.directSupervisorUid ||
+      employee?.directSupervisorUid ||
       employee?.supervisorUid ||
       profile?.supervisorUid ||
+      "",
+  ).trim();
+
+  const directSupervisorName = String(
+    hrdInfo.directSupervisorName ||
+      employee?.directSupervisorName ||
+      employee?.supervisorName ||
+      hrdInfo.atasanLangsung ||
       "",
   ).trim();
 
@@ -165,7 +174,7 @@ export function normalizeEmployeeRow(
     user,
   );
 
-  // 5. Determine if HRD attention is needed
+  // 6. Determine if HRD attention is needed
   const needsHrdAttention =
     !brandId || !divisi || !jabatan || statusKerja === "unknown";
 
@@ -184,5 +193,7 @@ export function normalizeEmployeeRow(
     employeeType: employeeType || undefined,
     employmentStatus: employmentStatus || undefined,
     directSupervisorUid: directSupervisorUid || undefined,
+    directSupervisorName: directSupervisorName || undefined,
+    workSystem: workSystem || undefined,
   };
 }
