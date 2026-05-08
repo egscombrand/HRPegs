@@ -92,6 +92,8 @@ interface MergedEmployee {
   hasProfile: boolean;
   operationalStatus: OperationalStatus;
   operationalStatusLabel: string;
+  mappedType: "tetap" | "kontrak" | "probation" | "magang" | "belum_diatur" | "nonaktif";
+  mappedTypeLabel: string;
   needsHrdAttention: boolean;
   pendingBankRequest?: any;
 }
@@ -114,6 +116,58 @@ function StatusKepegawaanBadge({ status }: { status: OperationalStatus }) {
               : variant === "destructive"
                 ? "bg-red-500/10 text-red-500 border-red-500/20"
                 : "bg-slate-500/10 text-slate-400 border-slate-500/20",
+      )}
+    >
+      {label}
+    </Badge>
+  );
+}
+
+export type MappedEmployeeType = "tetap" | "kontrak" | "probation" | "magang" | "belum_diatur" | "nonaktif";
+
+export function getMappedEmployeeType(emp: Partial<MergedEmployee>): MappedEmployeeType {
+  const status = (emp.employmentStatus || "").toLowerCase();
+  if (status === "resigned" || status === "terminated" || status === "nonaktif") {
+    return "nonaktif";
+  }
+
+  const rawType = (emp.hrdEmploymentInfo?.employeeType || emp.employmentType || emp.hrdEmploymentInfo?.tipeKaryawan || emp.employmentStatus || emp.hrdEmploymentInfo?.statusKerja || "").toLowerCase();
+
+  if (rawType.includes("tetap") || rawType === "karyawan tetap") return "tetap";
+  if (rawType.includes("kontrak") || rawType === "pkwt") return "kontrak";
+  if (rawType.includes("probation") || rawType === "percobaan") return "probation";
+  if (rawType.includes("magang") || rawType === "intern" || rawType === "internship") return "magang";
+
+  return "belum_diatur";
+}
+
+export function getMappedEmployeeTypeLabel(type: MappedEmployeeType): string {
+  switch (type) {
+    case "tetap": return "Karyawan Tetap";
+    case "kontrak": return "Kontrak";
+    case "probation": return "Probation";
+    case "magang": return "Magang";
+    case "nonaktif": return "Nonaktif / Resigned";
+    case "belum_diatur": return "Belum Diatur";
+    default: return "Belum Diatur";
+  }
+}
+
+export function EmployeeTypeBadge({ type }: { type: MappedEmployeeType }) {
+  const label = getMappedEmployeeTypeLabel(type);
+  let variantClass = "bg-slate-500/10 text-slate-400 border-slate-500/20";
+  if (type === "tetap") variantClass = "bg-emerald-500/10 text-emerald-500 border-emerald-500/20";
+  else if (type === "kontrak") variantClass = "bg-blue-500/10 text-blue-500 border-blue-500/20";
+  else if (type === "probation") variantClass = "bg-amber-500/10 text-amber-500 border-amber-500/20";
+  else if (type === "magang") variantClass = "bg-indigo-500/10 text-indigo-500 border-indigo-500/20";
+  else if (type === "nonaktif") variantClass = "bg-red-500/10 text-red-500 border-red-500/20";
+
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "px-2 py-0 h-5 text-[10px] font-semibold uppercase tracking-wider",
+        variantClass
       )}
     >
       {label}
@@ -278,8 +332,7 @@ function generateEmployeeId(employee: MergedEmployee, index: number): string {
   if (employee.employeeNumber) {
     return employee.employeeNumber;
   }
-  // Generate fallback ID based on index
-  return `EMP-${String(index + 1).padStart(4, "0")}`;
+  return "-";
 }
 
 function SummaryCard({
@@ -432,6 +485,15 @@ export default function KaryawanDataPage() {
 
       const normalized = normalizeEmployeeRow(emp, profile, user, brands || []);
 
+      const employmentStatus = emp.employmentStatus || profile?.hrdEmploymentInfo?.statusKerja || "";
+      const hrdEmploymentInfo = profile?.hrdEmploymentInfo || {};
+      
+      const mappedType = getMappedEmployeeType({
+        employmentStatus,
+        employmentType: normalized.tipeKaryawan,
+        hrdEmploymentInfo,
+      });
+
       result.push({
         uid: emp.uid,
         fullName:
@@ -441,22 +503,29 @@ export default function KaryawanDataPage() {
           "",
         email: emp.email || profile?.email || "",
         employeeNumber:
-          (emp.employeeNumber || profile?.employeeNumber) ?? undefined,
+          hrdEmploymentInfo?.employeeId ||
+          (emp as any)?.employeeId ||
+          (emp as any)?.employeeCode ||
+          (emp as any)?.nomorIndukKaryawan ||
+          profile?.employeeNumber ||
+          (emp as any)?.employeeNumber ||
+          undefined,
         positionTitle: normalized.jabatan,
         division: normalized.divisi,
         brandId: normalized.brandId,
         brandName: normalized.brandName,
-        employmentStatus:
-          emp.employmentStatus || profile?.hrdEmploymentInfo?.statusKerja || "",
+        employmentStatus,
         employmentType: normalized.tipeKaryawan,
         joinDate: emp.joinDate ?? emp.startDate,
         employeeProfile: profile,
-        hrdEmploymentInfo: profile?.hrdEmploymentInfo || {},
+        hrdEmploymentInfo,
         hasProfile: !!profile,
         operationalStatus: normalized.statusKerja,
         operationalStatusLabel: getOperationalStatusLabel(
           normalized.statusKerja,
         ),
+        mappedType,
+        mappedTypeLabel: getMappedEmployeeTypeLabel(mappedType),
         needsHrdAttention: normalized.needsHrdAttention,
         pendingBankRequest: pendingBankRequests?.find(
           (r) => r.employeeUid === emp.uid,
@@ -474,24 +543,42 @@ export default function KaryawanDataPage() {
 
       const normalized = normalizeEmployeeRow(u, profile, u, brands || []);
 
+      const employmentStatus = profile?.hrdEmploymentInfo?.statusKerja || "";
+      const hrdEmploymentInfo = profile?.hrdEmploymentInfo || {};
+      
+      const mappedType = getMappedEmployeeType({
+        employmentStatus,
+        employmentType: normalized.tipeKaryawan,
+        hrdEmploymentInfo,
+      });
+
       result.push({
         uid: u.uid,
         fullName: u.fullName || profile?.fullName || "",
         email: u.email || "",
-        employeeNumber: profile?.employeeNumber ?? undefined,
+        employeeNumber: 
+          hrdEmploymentInfo?.employeeId ||
+          (u as any)?.employeeId ||
+          (u as any)?.employeeCode ||
+          (u as any)?.nomorIndukKaryawan ||
+          profile?.employeeNumber ||
+          (u as any)?.employeeNumber ||
+          undefined,
         positionTitle: normalized.jabatan,
         division: normalized.divisi,
         brandId: normalized.brandId,
         brandName: normalized.brandName,
-        employmentStatus: profile?.hrdEmploymentInfo?.statusKerja || "",
+        employmentStatus,
         employmentType: normalized.tipeKaryawan,
         employeeProfile: profile,
-        hrdEmploymentInfo: profile?.hrdEmploymentInfo || {},
+        hrdEmploymentInfo,
         hasProfile: !!profile,
         operationalStatus: normalized.statusKerja,
         operationalStatusLabel: getOperationalStatusLabel(
           normalized.statusKerja,
         ),
+        mappedType,
+        mappedTypeLabel: getMappedEmployeeTypeLabel(mappedType),
         needsHrdAttention: normalized.needsHrdAttention,
         pendingBankRequest: pendingBankRequests?.find(
           (r) => r.employeeUid === u.uid,
@@ -515,13 +602,12 @@ export default function KaryawanDataPage() {
       let tabMatch = false;
       if (activeTab === "all") tabMatch = true;
       else if (activeTab === "review") tabMatch = !!emp.pendingBankRequest;
-      else if (activeTab === "active") tabMatch = status === "active";
-      else if (activeTab === "training") tabMatch = status === "training";
-      else if (activeTab === "intern") tabMatch = status === "intern";
-      else if (activeTab === "probation") tabMatch = status === "probation";
-      else if (activeTab === "contract") tabMatch = status === "contract";
-      else if (activeTab === "inactive")
-        tabMatch = status === "resigned" || status === "terminated";
+      else if (activeTab === "tetap") tabMatch = emp.mappedType === "tetap";
+      else if (activeTab === "kontrak") tabMatch = emp.mappedType === "kontrak";
+      else if (activeTab === "probation") tabMatch = emp.mappedType === "probation";
+      else if (activeTab === "magang") tabMatch = emp.mappedType === "magang";
+      else if (activeTab === "belum_diatur") tabMatch = emp.mappedType === "belum_diatur";
+      else if (activeTab === "nonaktif") tabMatch = emp.mappedType === "nonaktif";
 
       if (!tabMatch) return false;
       const brandMatch = brandFilter === "all" || emp.brandId === brandFilter;
@@ -637,19 +723,17 @@ export default function KaryawanDataPage() {
 
   const groupedEmployees = useMemo(() => {
     const groups: Record<string, MergedEmployee[]> = {
-      active: [],
-      training: [],
-      intern: [],
+      tetap: [],
+      kontrak: [],
       probation: [],
-      contract: [],
-      resigned: [],
-      terminated: [],
-      unknown: [],
+      magang: [],
+      belum_diatur: [],
+      nonaktif: [],
     };
     paginatedEmployees.forEach((emp) => {
-      if (groups[emp.operationalStatus])
-        groups[emp.operationalStatus].push(emp);
-      else groups.unknown.push(emp);
+      if (groups[emp.mappedType])
+        groups[emp.mappedType].push(emp);
+      else groups.belum_diatur.push(emp);
     });
     return groups;
   }, [paginatedEmployees]);
@@ -657,17 +741,12 @@ export default function KaryawanDataPage() {
   const stats = useMemo(() => {
     return {
       total: allMerged.length,
-      active: allMerged.filter((e) => e.operationalStatus === "active").length,
-      training: allMerged.filter((e) => e.operationalStatus === "training")
-        .length,
-      intern: allMerged.filter((e) => e.operationalStatus === "intern").length,
-      probation: allMerged.filter((e) => e.operationalStatus === "probation")
-        .length,
-      contract: allMerged.filter((e) => e.operationalStatus === "contract")
-        .length,
-      inactive: allMerged.filter((e) =>
-        ["resigned", "terminated"].includes(e.operationalStatus),
-      ).length,
+      tetap: allMerged.filter((e) => e.mappedType === "tetap").length,
+      kontrak: allMerged.filter((e) => e.mappedType === "kontrak").length,
+      probation: allMerged.filter((e) => e.mappedType === "probation").length,
+      magang: allMerged.filter((e) => e.mappedType === "magang").length,
+      belum_diatur: allMerged.filter((e) => e.mappedType === "belum_diatur").length,
+      nonaktif: allMerged.filter((e) => e.mappedType === "nonaktif").length,
       // Administrative stats
       needsReview: allMerged.filter((e) => e.pendingBankRequest).length,
       bankPending: allMerged.filter((e) => e.pendingBankRequest).length,
@@ -830,38 +909,38 @@ export default function KaryawanDataPage() {
               color="bg-slate-500/10 text-slate-500"
             />
             <SummaryCard
-              label="Aktif"
-              count={stats.active}
+              label="Tetap"
+              count={stats.tetap}
               icon={CheckCircle}
               color="bg-emerald-500/10 text-emerald-500"
             />
             <SummaryCard
-              label="Training"
-              count={stats.training}
-              icon={GraduationCap}
-              color="bg-amber-500/10 text-amber-500"
+              label="Kontrak"
+              count={stats.kontrak}
+              icon={FileSpreadsheet}
+              color="bg-blue-500/10 text-blue-500"
             />
             <SummaryCard
-              label="Magang"
-              count={stats.intern}
-              icon={Briefcase}
-              color="bg-indigo-500/10 text-indigo-500"
-            />
-            <SummaryCard
-              label="Percobaan"
+              label="Probation"
               count={stats.probation}
               icon={AlertTriangle}
               color="bg-orange-500/10 text-orange-500"
             />
             <SummaryCard
-              label="Kontrak"
-              count={stats.contract}
-              icon={FileSpreadsheet}
-              color="bg-blue-500/10 text-blue-500"
+              label="Magang"
+              count={stats.magang}
+              icon={Briefcase}
+              color="bg-indigo-500/10 text-indigo-500"
+            />
+            <SummaryCard
+              label="Belum Diatur"
+              count={stats.belum_diatur}
+              icon={GraduationCap}
+              color="bg-slate-500/10 text-slate-500"
             />
             <SummaryCard
               label="Nonaktif"
-              count={stats.inactive}
+              count={stats.nonaktif}
               icon={XCircle}
               color="bg-red-500/10 text-red-500"
             />
@@ -1011,37 +1090,37 @@ export default function KaryawanDataPage() {
                       Perlu Review HRD
                     </TabsTrigger>
                     <TabsTrigger
-                      value="active"
+                      value="tetap"
                       className="h-7 text-xs uppercase font-bold rounded-lg px-4"
                     >
-                      Aktif
+                      Tetap
                     </TabsTrigger>
                     <TabsTrigger
-                      value="training"
-                      className="h-7 text-xs uppercase font-bold rounded-lg px-4"
-                    >
-                      Training
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="intern"
-                      className="h-7 text-xs uppercase font-bold rounded-lg px-4"
-                    >
-                      Magang
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="probation"
-                      className="h-7 text-xs uppercase font-bold rounded-lg px-4"
-                    >
-                      Percobaan
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="contract"
+                      value="kontrak"
                       className="h-7 text-xs uppercase font-bold rounded-lg px-4"
                     >
                       Kontrak
                     </TabsTrigger>
                     <TabsTrigger
-                      value="inactive"
+                      value="probation"
+                      className="h-7 text-xs uppercase font-bold rounded-lg px-4"
+                    >
+                      Probation
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="magang"
+                      className="h-7 text-xs uppercase font-bold rounded-lg px-4"
+                    >
+                      Magang
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="belum_diatur"
+                      className="h-7 text-xs uppercase font-bold rounded-lg px-4"
+                    >
+                      Belum Diatur
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="nonaktif"
                       className="h-7 text-xs uppercase font-bold rounded-lg px-4"
                     >
                       Nonaktif
@@ -1099,8 +1178,8 @@ export default function KaryawanDataPage() {
                       >
                         <AccordionTrigger className="px-6 py-3 bg-slate-900/20 hover:no-underline group">
                           <div className="flex items-center gap-3">
-                            <StatusKepegawaanBadge
-                              status={status as OperationalStatus}
+                            <EmployeeTypeBadge
+                              type={status as MappedEmployeeType}
                             />
                             <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
                               {emps.length} Personel
@@ -1195,8 +1274,8 @@ export default function KaryawanDataPage() {
                                         </div>
                                       </TableCell>
                                       <TableCell className="py-6 align-middle">
-                                        <StatusKepegawaanBadge
-                                          status={emp.operationalStatus}
+                                        <EmployeeTypeBadge
+                                          type={emp.mappedType}
                                         />
                                       </TableCell>
                                       <TableCell className="py-6 align-middle">

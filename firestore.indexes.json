@@ -26,6 +26,15 @@
         { "fieldPath": "submittedAt", "order": "DESCENDING" },
         { "fieldPath": "__name__", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "overtime_submissions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "directSupervisorUid", "order": "ASCENDING" },
+        { "fieldPath": "submittedAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

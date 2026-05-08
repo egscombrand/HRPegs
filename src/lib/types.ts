@@ -557,13 +557,28 @@ export type HrdEmploymentInfo = {
   // New structure fields
   employeeId?: string;
   divisionId?: string;
+  divisionName?: string;
+  brandName?: string;
   structuralPosition?: string;
   workRole?: string;
   employeeType?: string;
   employmentStatus?: string;
   directSupervisorUid?: string;
+  directSupervisorName?: string;
+  workLocation?: string;
   structureEffectiveDate?: string;
   structureChangeReason?: string;
+
+  // New contract fields
+  contractCycleStatus?: string;
+  contractNumber?: string;
+  contractStartDate?: string;
+  contractEndDate?: string;
+  probationStartDate?: string;
+  probationEndDate?: string;
+  finalEvaluationDate?: string;
+  leaveQuotaAnnual?: number;
+  contractNotes?: string;
 
   gajiPokok?: number;
   tunjanganTetap?: number;
@@ -1732,6 +1747,7 @@ export type DailyReport = {
 
 export const OVERTIME_SUBMISSION_STATUSES = [
   "draft",
+  "pending_supervisor",
   "pending_manager",
   "rejected_manager",
   "revision_manager",
@@ -1747,26 +1763,50 @@ export type OvertimeSubmissionStatus =
 export type OvertimeSubmission = {
   id?: string;
   uid: string;
-  fullName: string;
+  employeeName: string;
+  fullName?: string;
   brandId: string;
   brandName?: string;
-  division: string;
-  positionTitle: string;
-  date: Timestamp;
+  divisionId?: string;
+  divisionName?: string;
+  division?: string;
+  workRole?: string;
+  positionTitle?: string;
+  overtimeDate: Timestamp | string | Date;
+  date?: Timestamp;
   startTime: string; // "HH:mm"
   endTime: string; // "HH:mm"
   totalDurationMinutes: number;
   overtimeType: "hari_kerja" | "hari_libur" | "urgent";
-  tasks: {
+  overtimeTypeLabel?: string;
+  taskDetails?: {
+    description: string;
+    estimatedMinutes?: number;
+    actualMinutes?: number | null;
+  }[];
+  tasks?: {
     description: string;
     estimatedMinutes?: number;
     actualMinutes?: number | null;
   }[];
   reason: string;
-  location: "kantor" | "remote" | "site";
+  location?: "kantor" | "remote" | "site";
+  workLocation?: string;
+  workLocationLabel?: string;
   employeeNotes?: string | null;
   attachments?: string[];
   status: OvertimeSubmissionStatus;
+  approvalStatus?: string;
+  directSupervisorUid?: string;
+  supervisorApprovedAt?: Timestamp | null;
+  supervisorApprovedBy?: string | null;
+  supervisorApprovedByName?: string | null;
+  revisionRequestedAt?: Timestamp | null;
+  revisionRequestedBy?: string | null;
+  revisionNote?: string | null;
+  rejectedAt?: Timestamp | null;
+  rejectedBy?: string | null;
+  rejectionReason?: string | null;
   managerUid?: string | null;
   managerNotes?: string | null;
   managerDecisionAt?: Timestamp | null;
@@ -1887,7 +1927,9 @@ export function isActionableStatus(
   if (mode === "manager") {
     // For normal flow
     const normalActionable =
-      status === "pending_manager" || status === "revision_manager";
+      status === "pending_supervisor" ||
+      status === "pending_manager" ||
+      status === "revision_manager";
     // For non-blocking office exit flow
     // A manager can verify either after reported OR after returned (tap-in detected)
     const officeExitActionable = status === "reported" || status === "returned";

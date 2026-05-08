@@ -51,6 +51,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -137,13 +138,7 @@ import {
   addDays,
 } from "date-fns";
 
-const TIPE_KARYAWAN_OPTIONS = [
-  "Karyawan Tetap",
-  "Kontrak",
-  "Probation",
-  "Magang",
-  "Freelance",
-];
+const TIPE_KARYAWAN_OPTIONS = ["Magang", "Probation", "Kontrak", "Tetap"];
 
 const STATUS_KERJA_OPTIONS = [
   "Training",
@@ -410,9 +405,9 @@ const VerificationActionCard = ({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <FormLabel className="text-xs uppercase tracking-widest text-slate-500">
+          <Label className="text-xs uppercase tracking-widest text-slate-500">
             Catatan Revisi / Penolakan
-          </FormLabel>
+          </Label>
           <Textarea
             placeholder="Masukkan catatan jika data perlu direvisi atau ditolak..."
             value={note}
@@ -480,26 +475,37 @@ export default function EmployeeDetailPage({
   }, [userProfile]);
 
   // Fetch data
-  const { data: userDoc, isLoading: userLoading, mutate: mutateUser } = useDoc<UserProfile>(
+  const {
+    data: userDoc,
+    isLoading: userLoading,
+    mutate: mutateUser,
+  } = useDoc<UserProfile>(
     useMemoFirebase(
       () => (employeeId ? doc(firestore, "users", employeeId) : null),
       [firestore, employeeId],
     ),
   );
-  const { data: empDoc, isLoading: empLoading, mutate: mutateEmp } = useDoc<EmployeeMasterData>(
+  const {
+    data: empDoc,
+    isLoading: empLoading,
+    mutate: mutateEmp,
+  } = useDoc<EmployeeMasterData>(
     useMemoFirebase(
       () => (employeeId ? doc(firestore, "employees", employeeId) : null),
       [firestore, employeeId],
     ),
   );
-  const { data: profileDoc, isLoading: profileLoading, mutate: mutateProfile } =
-    useDoc<EmployeeProfile>(
-      useMemoFirebase(
-        () =>
-          employeeId ? doc(firestore, "employee_profiles", employeeId) : null,
-        [firestore, employeeId],
-      ),
-    );
+  const {
+    data: profileDoc,
+    isLoading: profileLoading,
+    mutate: mutateProfile,
+  } = useDoc<EmployeeProfile>(
+    useMemoFirebase(
+      () =>
+        employeeId ? doc(firestore, "employee_profiles", employeeId) : null,
+      [firestore, employeeId],
+    ),
+  );
   const { data: brands, isLoading: brandsLoading } = useCollection<Brand>(
     useMemoFirebase(() => collection(firestore, "brands"), [firestore]),
   );
@@ -623,6 +629,25 @@ export default function EmployeeDetailPage({
       catatanInternalHrd: hrdInfo.catatanInternalHrd || "",
       catatanAdministrasi: hrdInfo.catatanAdministrasi || "",
       tanggalEfektif: format(new Date(), "yyyy-MM-dd"),
+      // New contract fields
+      contractCycleStatus:
+        hrdInfo.contractCycleStatus || hrdInfo.statusKontrak || "Draft",
+      contractNumber: hrdInfo.contractNumber || hrdInfo.nomorKontrakSK || "",
+      contractStartDate:
+        hrdInfo.contractStartDate || hrdInfo.kontrakMulai || "",
+      contractEndDate: hrdInfo.contractEndDate || hrdInfo.kontrakSelesai || "",
+      contractDurationType: (hrdInfo as any).contractDurationType || "custom",
+      contractDurationMonths: (hrdInfo as any).contractDurationMonths || 0,
+      probationStartDate:
+        hrdInfo.probationStartDate || hrdInfo.masaPercobaanMulai || "",
+      probationEndDate:
+        hrdInfo.probationEndDate || hrdInfo.masaPercobaanSelesai || "",
+      finalEvaluationDate:
+        hrdInfo.finalEvaluationDate || hrdInfo.tanggalEvaluasi || "",
+      leaveQuotaAnnual: hrdInfo.leaveQuotaAnnual ?? hrdInfo.jatahCuti ?? 0,
+      workLocation: hrdInfo.workLocation || hrdInfo.lokasiKerja || "",
+      contractNotes: hrdInfo.contractNotes || hrdInfo.catatanKontrak || "",
+
       additionalFields: {
         historyType: "promotion",
         historyTitle: "",
@@ -633,7 +658,7 @@ export default function EmployeeDetailPage({
     [normalizedData, hrdInfo],
   );
 
-  const form = useForm<HrdEmploymentInfo>({
+  const form = useForm<any>({
     defaultValues: employmentDefaultValues,
   });
 
@@ -650,7 +675,64 @@ export default function EmployeeDetailPage({
     form.reset(employmentDefaultValues);
   }, [isLoading, employeeId, employmentDefaultValues, form]);
 
-  // Load divisions when brand changes
+  // Auto-calculate Contract End Date logic
+  const watchEmployeeType = form.watch("employeeType");
+  const watchContractDurationType = form.watch("contractDurationType");
+  const watchContractStartDate = form.watch("contractStartDate");
+  const watchProbationStartDate = form.watch("probationStartDate");
+
+  useEffect(() => {
+    const employeeType = watchEmployeeType;
+    const durationType = watchContractDurationType;
+    // Skip auto-calculation for Tetap or custom duration
+    if (employeeType === "Tetap" || durationType === "custom" || !durationType)
+      return;
+
+    const months = parseInt(durationType);
+    if (isNaN(months)) return;
+
+    let startDateStr = "";
+    let targetField = "";
+
+    if (employeeType === "Magang") {
+      startDateStr = form.getValues("contractStartDate");
+      targetField = "contractEndDate";
+    } else if (employeeType === "Probation") {
+      startDateStr = watchProbationStartDate;
+      targetField = "probationEndDate";
+    } else if (employeeType === "Kontrak") {
+      startDateStr = watchContractStartDate;
+      targetField = "contractEndDate";
+    }
+
+    if (startDateStr && targetField) {
+      const start = new Date(startDateStr);
+      if (!isNaN(start.getTime())) {
+        const end = new Date(start);
+        end.setMonth(start.getMonth() + months);
+        // Subtract 1 day to make it exactly X months
+        end.setDate(end.getDate() - 1);
+        form.setValue(targetField as any, format(end, "yyyy-MM-dd"));
+      }
+    }
+  }, [
+    watchEmployeeType,
+    watchContractDurationType,
+    watchContractStartDate,
+    watchProbationStartDate,
+    form,
+  ]);
+
+  // Sync contractDurationMonths with contractDurationType when not custom
+  useEffect(() => {
+    const durationType = watchContractDurationType;
+    if (durationType && durationType !== "custom") {
+      const months = parseInt(durationType);
+      if (!isNaN(months)) {
+        form.setValue("contractDurationMonths", months as any);
+      }
+    }
+  }, [watchContractDurationType]);
   // Watch brandId for divisions
   const watchBrandIdForDivisions = form.watch("brandId");
 
@@ -712,7 +794,7 @@ export default function EmployeeDetailPage({
     // Load managers (users with role that are division managers for this brand/division)
     const loadManagers = async () => {
       try {
-        const selectedDivision = divisions.find(d => d.id === divisionId);
+        const selectedDivision = divisions.find((d) => d.id === divisionId);
         const divisionName = selectedDivision?.name || "";
 
         // Query users who are marked as Division Managers
@@ -720,7 +802,7 @@ export default function EmployeeDetailPage({
           collection(firestore, "users"),
           where("isDivisionManager", "==", true),
         );
-        
+
         const managersSnap = await getDocs(managersQuery);
         const allManagers = managersSnap.docs.map((doc) => ({
           uid: doc.id,
@@ -728,16 +810,19 @@ export default function EmployeeDetailPage({
         })) as any[];
 
         // Filter in memory for precise brand & division matching
-        const filteredManagers = allManagers.filter(u => {
+        const filteredManagers = allManagers.filter((u) => {
           // Brand match
-          const brandMatch = u.brandId === brandId || u.managedBrandId === brandId;
+          const brandMatch =
+            u.brandId === brandId || u.managedBrandId === brandId;
           if (!brandMatch) return false;
 
           // Division match (by ID or Name fallback)
-          const idMatch = u.divisionId === divisionId || u.managedDivisionId === divisionId;
-          const nameMatch = (u.managedDivision?.toLowerCase() === divisionName.toLowerCase()) || 
-                           (u.divisionName?.toLowerCase() === divisionName.toLowerCase());
-          
+          const idMatch =
+            u.divisionId === divisionId || u.managedDivisionId === divisionId;
+          const nameMatch =
+            u.managedDivision?.toLowerCase() === divisionName.toLowerCase() ||
+            u.divisionName?.toLowerCase() === divisionName.toLowerCase();
+
           return idMatch || nameMatch;
         });
 
@@ -749,7 +834,10 @@ export default function EmployeeDetailPage({
         } else {
           // If the current supervisor is not in the new list, clear it
           const currentSupervisor = form.getValues("directSupervisorUid");
-          if (currentSupervisor && !filteredManagers.find(m => m.uid === currentSupervisor)) {
+          if (
+            currentSupervisor &&
+            !filteredManagers.find((m) => m.uid === currentSupervisor)
+          ) {
             form.setValue("directSupervisorUid", "");
           }
         }
@@ -760,7 +848,13 @@ export default function EmployeeDetailPage({
     };
 
     loadManagers();
-  }, [watchBrandIdForManagers, watchDivisionIdForManagers, firestore, form, divisions]);
+  }, [
+    watchBrandIdForManagers,
+    watchDivisionIdForManagers,
+    firestore,
+    form,
+    divisions,
+  ]);
 
   // Auto-calculate contract duration or end date
   const watchKontrakMulai = form.watch("kontrakMulai");
@@ -815,20 +909,43 @@ export default function EmployeeDetailPage({
     }
   }, [watchKontrakMulai, watchKontrakSelesai, form]);
 
-  const handleSaveHrd = async (values: HrdEmploymentInfo, additionalHistory?: any) => {
+  // Duplicate watchEmployeeType removed
+  useEffect(() => {
+    if (!watchEmployeeType) return;
+    let leave = 0;
+    if (watchEmployeeType === "Magang" || watchEmployeeType === "Probation") {
+      leave = 0;
+    } else if (watchEmployeeType === "Kontrak") {
+      leave = 12;
+    } else if (watchEmployeeType === "Tetap") {
+      leave = 15;
+    }
+
+    if (form.getValues("leaveQuotaAnnual") !== leave) {
+      form.setValue("leaveQuotaAnnual", leave, { shouldDirty: true });
+      form.setValue("jatahCuti", leave, { shouldDirty: true });
+    }
+  }, [watchEmployeeType, form]);
+
+  const handleSaveHrd = async (
+    values: HrdEmploymentInfo,
+    additionalHistory?: any,
+  ) => {
     if (!firebaseUser || !userProfile || !employeeId) return;
     setIsSaving(true);
     try {
       const b = brands?.find((b) => b.id === values.brandId);
       const d = divisions?.find((div) => div.id === values.divisionId);
       const s = managers?.find((m) => m.uid === values.directSupervisorUid);
-      
-      const updatedValues = { 
-        ...values, 
+
+      const updatedValues = {
+        ...values,
         brand: b ? b.name : (values as any).brandName || "",
         brandName: b ? b.name : (values as any).brandName || "",
         divisionName: d ? d.name : (values as any).divisionName || "",
-        directSupervisorName: s ? s.fullName : (values as any).directSupervisorName || ""
+        directSupervisorName: s
+          ? s.fullName
+          : (values as any).directSupervisorName || "",
       };
 
       // Determine what changed for history
@@ -994,6 +1111,68 @@ export default function EmployeeDetailPage({
         updatedValues.bonusInsentif,
       );
 
+      if (editingSection === "kontrak") {
+        const type = updatedValues.employeeType || "Belum Diatur";
+        let start = "";
+        let end = "";
+        if (type === "Magang") {
+          start =
+            updatedValues.contractStartDate ||
+            (updatedValues as any).internshipStartDate ||
+            "";
+          end =
+            updatedValues.contractEndDate ||
+            (updatedValues as any).internshipEndDate ||
+            "";
+        } else if (type === "Probation" || type === "Percobaan") {
+          start =
+            updatedValues.probationStartDate ||
+            updatedValues.contractStartDate ||
+            "";
+          end =
+            updatedValues.probationEndDate ||
+            updatedValues.contractEndDate ||
+            "";
+        } else {
+          start =
+            updatedValues.contractStartDate || updatedValues.kontrakMulai || "";
+          end =
+            updatedValues.contractEndDate || updatedValues.kontrakSelesai || "";
+        }
+
+        let status = "Draft";
+        if (start) {
+          const now = new Date();
+          now.setHours(0, 0, 0, 0);
+          const startDate = new Date(start);
+          startDate.setHours(0, 0, 0, 0);
+
+          if (now < startDate) {
+            status = "Terjadwal";
+          } else if (type === "Tetap" || type === "Karyawan Tetap") {
+            status = "Aktif";
+          } else {
+            if (!end) {
+              status = "Draft";
+            } else {
+              const endDate = new Date(end);
+              endDate.setHours(0, 0, 0, 0);
+              if (now > endDate) {
+                status = "Expired";
+              } else {
+                status = "Aktif";
+              }
+            }
+          }
+        }
+
+        if (updatedValues.contractCycleStatus !== "Selesai") {
+          updatedValues.contractCycleStatus = status;
+          (updatedValues as any).contractCycleStatusLabel = status;
+          updatedValues.statusKontrak = status;
+        }
+      }
+
       // Save to employee_profiles.hrdEmploymentInfo
       const profileRef = doc(firestore, "employee_profiles", employeeId);
       await setDoc(
@@ -1017,6 +1196,7 @@ export default function EmployeeDetailPage({
           workRole: updatedValues.workRole,
           employeeType:
             updatedValues.employeeType || updatedValues.tipeKaryawan,
+          employeeId: updatedValues.employeeId,
           employmentStatus:
             updatedValues.employmentStatus || updatedValues.statusKerja,
           sistemKerja: updatedValues.sistemKerja,
@@ -1056,7 +1236,7 @@ export default function EmployeeDetailPage({
         title: "Tersimpan",
         description: `Data ${editingSection || "kepegawaian"} berhasil diperbarui.`,
       });
-      
+
       // Force immediate re-fetch for all relevant data
       mutateProfile?.();
       mutateEmp?.();
@@ -1164,25 +1344,56 @@ export default function EmployeeDetailPage({
   const buktiRekeningUrl = docUrls.bankProofUrl;
 
   const employeePhone = dd.phone || "";
-  const brandLabel = hrdStruktur?.brandName || "Belum diatur";
-  const divisionLabel = hrdStruktur?.divisi || "Belum diatur";
-  const positionLabel = hrdStruktur?.jabatan || "Belum diatur";
-  const employmentStatusLabel = hrdStruktur?.statusKerja || "Belum diatur";
+  const employeeIdLabel =
+    hrdInfo.employeeId ||
+    (empDoc as any)?.employeeId ||
+    (empDoc as any)?.employeeCode ||
+    (empDoc as any)?.nomorIndukKaryawan ||
+    "-";
 
-  const profileStatusLabel =
-    completeness.status === "complete"
-      ? "Lengkap"
-      : completeness.status === "partial"
-        ? "Sebagian"
-        : "Belum Mengisi";
+  const rawEmployeeType =
+    hrdInfo.employeeType ||
+    (empDoc as any)?.employeeType ||
+    normalizedData?.tipeKaryawan ||
+    "Belum Diatur";
+  let employeeTypeBadgeLabel = rawEmployeeType;
+  const _lowerType = rawEmployeeType.toLowerCase();
+  if (_lowerType.includes("kontrak")) employeeTypeBadgeLabel = "Kontrak";
+  else if (_lowerType.includes("tetap") || _lowerType === "karyawan tetap")
+    employeeTypeBadgeLabel = "Tetap";
+  else if (_lowerType.includes("probation") || _lowerType === "percobaan")
+    employeeTypeBadgeLabel = "Probation";
+  else if (_lowerType.includes("magang")) employeeTypeBadgeLabel = "Magang";
 
-  const profileStatusClass =
-    completeness.status === "complete"
-      ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/20"
-      : completeness.status === "partial"
-        ? "bg-amber-500/15 text-amber-400 border-amber-500/20"
-        : "bg-red-500/15 text-red-400 border-red-500/20";
+  const rawEmploymentStatus =
+    hrdInfo.employmentStatus ||
+    (empDoc as any)?.employmentStatus ||
+    normalizedData?.statusKerja ||
+    "Belum Diatur";
 
+  const brandLabel =
+    hrdInfo.brandName ||
+    (empDoc as any)?.brandName ||
+    (empDoc as any)?.brand ||
+    "Belum diisi";
+  const divisionLabel =
+    hrdInfo.divisionName ||
+    (empDoc as any)?.divisionName ||
+    normalizedData?.divisi ||
+    "Belum diisi";
+  const positionLabel =
+    hrdInfo.workRole ||
+    (empDoc as any)?.workRole ||
+    normalizedData?.jabatan ||
+    (empDoc as any)?.jobTitle ||
+    "Belum diisi";
+  const supervisorLabel =
+    hrdInfo.directSupervisorName ||
+    (empDoc as any)?.directSupervisorName ||
+    (empDoc as any)?.supervisorName ||
+    "Belum diisi";
+
+  const employmentStatusLabel = rawEmploymentStatus;
   const employmentStatusClass = (employmentStatusLabel || "")
     .toLowerCase()
     .includes("aktif")
@@ -1191,6 +1402,20 @@ export default function EmployeeDetailPage({
         (employmentStatusLabel || "").toLowerCase().includes("terminated")
       ? "bg-red-500/15 text-red-400 border-red-500/20"
       : "bg-blue-500/15 text-blue-400 border-blue-500/20";
+
+  const employeeTypeBadgeClass =
+    employeeTypeBadgeLabel === "Tetap"
+      ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/20"
+      : employeeTypeBadgeLabel === "Kontrak"
+        ? "bg-blue-500/15 text-blue-400 border-blue-500/20"
+        : employeeTypeBadgeLabel === "Probation"
+          ? "bg-amber-500/15 text-amber-400 border-amber-500/20"
+          : employeeTypeBadgeLabel === "Magang"
+            ? "bg-indigo-500/15 text-indigo-400 border-indigo-500/20"
+            : employeeTypeBadgeLabel.toLowerCase().includes("nonaktif") ||
+                employeeTypeBadgeLabel.toLowerCase().includes("resigned")
+              ? "bg-red-500/15 text-red-400 border-red-500/20"
+              : "bg-slate-500/15 text-slate-400 border-slate-500/20";
 
   const initials = fullName
     .split(" ")
@@ -1253,13 +1478,13 @@ export default function EmployeeDetailPage({
             <div>
               <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 mb-2">
                 <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-emerald-500/80">
-                  Employee ID: {employeeId.substring(0, 8).toUpperCase()}
+                  NIK: {employeeIdLabel}
                 </p>
                 <Badge
                   variant="outline"
-                  className={`rounded-full px-3 py-0.5 text-[10px] font-bold uppercase tracking-widest ${employmentStatusClass}`}
+                  className={`rounded-full px-3 py-0.5 text-[10px] font-bold uppercase tracking-widest ${employeeTypeBadgeClass}`}
                 >
-                  {employmentStatusLabel}
+                  {employeeTypeBadgeLabel}
                 </Badge>
               </div>
               <h1 className="text-4xl font-bold tracking-tight text-white mb-1">
@@ -1449,7 +1674,11 @@ export default function EmployeeDetailPage({
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-1">
-                        <DataRow label="NIK" value={dd.nik} />
+                        <DataRow label="NIK (KTP)" value={dd.nik} />
+                        <DataRow
+                          label="Nomor Induk Karyawan"
+                          value={employeeIdLabel}
+                        />
                         <DataRow label="Phone" value={employeePhone} />
                         <DataRow label="Work Email" value={email} />
                       </CardContent>
@@ -1477,19 +1706,27 @@ export default function EmployeeDetailPage({
                           <DataRow label="Position" value={positionLabel} />
                           <DataRow
                             label="Manager/Atasan"
-                            value={hrdInfo.atasanLangsung}
+                            value={supervisorLabel}
                           />
                           <DataRow
                             label="Lokasi Kerja"
-                            value={hrdInfo.lokasiKerja}
+                            value={
+                              hrdInfo.workLocation ||
+                              hrdInfo.lokasiKerja ||
+                              "Belum diisi"
+                            }
                           />
                           <DataRow
                             label="Sistem Kerja"
-                            value={hrdInfo.sistemKerja || hrdInfo.workSystem || "WFO"}
+                            value={
+                              hrdInfo.sistemKerja ||
+                              hrdInfo.workSystem ||
+                              "Belum diisi"
+                            }
                           />
                           <DataRow
                             label="Tipe Karyawan"
-                            value={normalizedData?.tipeKaryawan}
+                            value={employeeTypeBadgeLabel}
                           />
                         </div>
                       </CardContent>
@@ -2175,32 +2412,33 @@ export default function EmployeeDetailPage({
                       </Button>
                     </CardHeader>
                     <CardContent className="pt-6">
-                        <div className="grid grid-cols-1 gap-y-2">
-                          <DataRow
-                            label="Brand / Unit"
-                            value={hrdStruktur?.brandName}
-                          />
-                          <DataRow label="Divisi" value={hrdStruktur?.divisi} />
-                          <DataRow label="Jabatan / Fungsi" value={hrdStruktur?.jabatan} />
-                          <DataRow label="Level Struktural" value={hrdStruktur?.structuralPosition} />
-                          <DataRow
-                            label="Tipe Karyawan"
-                            value={hrdStruktur?.tipeKaryawan}
-                          />
-                          <DataRow
-                            label="Status Kerja"
-                            value={hrdStruktur?.statusKerja}
-                            className={employmentStatusClass}
-                          />
-                          <DataRow
-                            label="Sistem Kerja"
-                            value={hrdStruktur?.sistemKerja}
-                          />
-                          <DataRow
-                            label="Atasan Langsung"
-                            value={hrdStruktur?.atasanLangsung}
-                          />
-                        </div>
+                      <div className="grid grid-cols-1 gap-y-2">
+                        <DataRow label="Brand / Unit" value={brandLabel} />
+                        <DataRow label="Divisi" value={divisionLabel} />
+                        <DataRow
+                          label="Jabatan / Fungsi"
+                          value={positionLabel}
+                        />
+                        <DataRow
+                          label="Level Struktural"
+                          value={
+                            hrdStruktur?.structuralPosition ||
+                            normalizedData?.structuralPosition
+                          }
+                        />
+                        <DataRow
+                          label="Sistem Kerja"
+                          value={
+                            hrdInfo.sistemKerja ||
+                            hrdStruktur?.sistemKerja ||
+                            "Belum diatur"
+                          }
+                        />
+                        <DataRow
+                          label="Atasan Langsung"
+                          value={supervisorLabel}
+                        />
+                      </div>
                     </CardContent>
                   </Card>
 
@@ -2227,80 +2465,45 @@ export default function EmployeeDetailPage({
                     <CardContent className="pt-6">
                       <div className="grid grid-cols-1 gap-y-2">
                         <DataRow
-                          label="Tanggal Masuk"
-                          value={hrdInfo.tanggalMasuk || "N/A"}
+                          label="Jenis Kontrak / Tipe"
+                          value={employeeTypeBadgeLabel}
                         />
                         <DataRow
-                          label="Tipe Kepegawaian"
-                          value={hrdStruktur?.tipeKaryawan}
+                          label="Status Siklus"
+                          value={
+                            hrdInfo.contractCycleStatus ||
+                            hrdInfo.statusKontrak ||
+                            "-"
+                          }
                         />
-
-                        {hrdStruktur?.tipeKaryawan === "Karyawan Tetap" ? (
-                          <>
-                            <DataRow
-                              label="SK Pengangkatan"
-                              value={
-                                hrdInfo.nomorSK || hrdInfo.nomorKontrakSK || "-"
-                              }
-                            />
-                            <DataRow
-                              label="Status"
-                              value="Pegawai Tetap"
-                              className="text-emerald-400 font-bold"
-                            />
-                          </>
-                        ) : (
-                          <>
-                            <DataRow
-                              label="No Kontrak / SK"
-                              value={hrdInfo.nomorKontrakSK || "-"}
-                            />
-                            <div className="grid grid-cols-2 gap-4">
-                              <DataRow
-                                label="Mulai"
-                                value={hrdInfo.kontrakMulai || "-"}
-                              />
-                              <DataRow
-                                label="Selesai"
-                                value={
-                                  hrdInfo.kontrakSelesai ||
-                                  (hrdStruktur?.tipeKaryawan ===
-                                  "Karyawan Tetap"
-                                    ? "Tidak terbatas"
-                                    : "-")
-                                }
-                              />
-                            </div>
-                            <DataRow
-                              label="Durasi"
-                              value={hrdInfo.durasiKontrak || "-"}
-                            />
-                          </>
-                        )}
-
-                        {/* Conditional Info */}
-                        {hrdStruktur?.tipeKaryawan === "Magang" &&
-                          hrdInfo.mentor && (
-                            <DataRow label="Mentor" value={hrdInfo.mentor} />
-                          )}
-                        {hrdStruktur?.tipeKaryawan === "Training" &&
-                          hrdInfo.evaluator && (
-                            <DataRow
-                              label="Evaluator"
-                              value={hrdInfo.evaluator}
-                            />
-                          )}
-                        {hrdStruktur?.tipeKaryawan === "Probation" && (
+                        <div className="grid grid-cols-2 gap-4">
                           <DataRow
-                            label="Periode Probation"
-                            value={`${hrdInfo.masaPercobaanMulai || "?"} s/d ${hrdInfo.masaPercobaanSelesai || "?"}`}
+                            label="Tanggal Mulai"
+                            value={
+                              hrdInfo.contractStartDate ||
+                              hrdInfo.probationStartDate ||
+                              hrdInfo.kontrakMulai ||
+                              hrdInfo.tanggalMasuk ||
+                              "-"
+                            }
                           />
-                        )}
-
-                        <div className="h-px bg-slate-800/50 my-2"></div>
+                          <DataRow
+                            label="Tanggal Selesai"
+                            value={
+                              hrdInfo.contractEndDate ||
+                              hrdInfo.probationEndDate ||
+                              hrdInfo.kontrakSelesai ||
+                              "-"
+                            }
+                          />
+                        </div>
                         <DataRow
-                          label="Jadwal & Lokasi"
-                          value={`${hrdInfo.hariKerja || "Senin-Jumat"} | ${hrdInfo.lokasiKerja || "Office"}`}
+                          label="Durasi"
+                          value={hrdInfo.durasiKontrak || "-"}
+                        />
+                        <DataRow
+                          label="Hak Cuti Tahunan"
+                          value={`${hrdInfo.leaveQuotaAnnual ?? hrdInfo.jatahCuti ?? 0} Hari`}
                         />
                       </div>
                     </CardContent>
@@ -2715,402 +2918,327 @@ export default function EmployeeDetailPage({
                               </div>
 
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-8">
-
-                              {/* Employee ID */}
-                              <FormField
-                                control={form.control}
-                                name="employeeId"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                                      Nomor Induk Karyawan
-                                    </FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        {...field}
-                                        placeholder="Contoh: EMP-0001 atau EGS-2026-001"
-                                        className="bg-slate-900/50 border-slate-800 h-12 rounded-xl focus:border-emerald-500/50"
-                                      />
-                                    </FormControl>
-                                    <p className="text-xs text-slate-500 mt-1">
-                                      Nomor identitas internal karyawan yang
-                                      digunakan untuk administrasi HRD.
-                                    </p>
-                                  </FormItem>
-                                )}
-                              />
-
-                              {/* Brand / Perusahaan */}
-                              <FormField
-                                control={form.control}
-                                name="brandId"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                                      Brand / Perusahaan
-                                    </FormLabel>
-                                    <Select
-                                      onValueChange={(value) => {
-                                        field.onChange(value);
-                                        // Reset division and supervisor when brand changes
-                                        form.setValue("divisionId", "");
-                                        form.setValue(
-                                          "directSupervisorUid",
-                                          "",
-                                        );
-                                      }}
-                                      value={field.value}
-                                    >
+                                {/* Employee ID */}
+                                <FormField
+                                  control={form.control}
+                                  name="employeeId"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                        Nomor Induk Karyawan
+                                      </FormLabel>
                                       <FormControl>
-                                        <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
-                                          <SelectValue placeholder="Pilih Brand" />
-                                        </SelectTrigger>
+                                        <Input
+                                          {...field}
+                                          placeholder="Contoh: EMP-0001 atau EGS-2026-001"
+                                          className="bg-slate-900/50 border-slate-800 h-12 rounded-xl focus:border-emerald-500/50"
+                                        />
                                       </FormControl>
-                                      <SelectContent className="bg-slate-900 border-slate-800">
-                                        {brands?.map((b) => (
-                                          <SelectItem key={b.id!} value={b.id!}>
-                                            {b.name}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                    <p className="text-xs text-slate-500 mt-1">
-                                      Pilih perusahaan/brand tempat karyawan
-                                      ditempatkan.
-                                    </p>
-                                  </FormItem>
-                                )}
-                              />
-
-                              {/* Divisi */}
-                              <FormField
-                                control={form.control}
-                                name="divisionId"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                                      Divisi
-                                    </FormLabel>
-                                    <Select
-                                      onValueChange={(value) => {
-                                        field.onChange(value);
-                                        // Reset supervisor when division changes
-                                        form.setValue(
-                                          "directSupervisorUid",
-                                          "",
-                                        );
-                                      }}
-                                      value={field.value}
-                                      disabled={!form.watch("brandId")}
-                                    >
-                                      <FormControl>
-                                        <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
-                                          <SelectValue placeholder="Pilih Divisi" />
-                                        </SelectTrigger>
-                                      </FormControl>
-                                      <SelectContent className="bg-slate-900 border-slate-800">
-                                        {divisions.map((d) => (
-                                          <SelectItem key={d.id} value={d.id}>
-                                            {d.name}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                    <p className="text-xs text-slate-500 mt-1">
-                                      Divisi akan menentukan struktur tim dan
-                                      atasan langsung karyawan.
-                                    </p>
-                                    {divisions.length === 0 && (
-                                      <p className="text-xs text-amber-600 mt-2">
-                                        ⚠️ Belum ada divisi untuk brand ini.
-                                        Tambahkan terlebih dahulu di Master
-                                        Data.
+                                      <p className="text-xs text-slate-500 mt-1">
+                                        Nomor identitas internal karyawan yang
+                                        digunakan untuk administrasi HRD.
                                       </p>
-                                    )}
-                                  </FormItem>
-                                )}
-                              />
+                                    </FormItem>
+                                  )}
+                                />
 
-                              {/* Jabatan Struktural */}
-                              <FormField
-                                control={form.control}
-                                name="structuralPosition"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                                      Jabatan Struktural
-                                    </FormLabel>
-                                    <Select
-                                      onValueChange={field.onChange}
-                                      value={field.value}
-                                    >
-                                      <FormControl>
-                                        <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
-                                          <SelectValue placeholder="Pilih Jabatan Struktural" />
-                                        </SelectTrigger>
-                                      </FormControl>
-                                      <SelectContent className="bg-slate-900 border-slate-800">
-                                        <SelectItem value="staff">
-                                          Staff
-                                        </SelectItem>
-                                        <SelectItem value="division_manager">
-                                          Manager Divisi
-                                        </SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                    <p className="text-xs text-slate-500 mt-1">
-                                      Jabatan struktural digunakan untuk
-                                      membedakan level tanggung jawab karyawan.
-                                    </p>
-                                  </FormItem>
-                                )}
-                              />
+                                {/* Brand / Perusahaan */}
+                                <FormField
+                                  control={form.control}
+                                  name="brandId"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                        Brand / Perusahaan
+                                      </FormLabel>
+                                      <Select
+                                        onValueChange={(value) => {
+                                          field.onChange(value);
+                                          // Reset division and supervisor when brand changes
+                                          form.setValue("divisionId", "");
+                                          form.setValue(
+                                            "directSupervisorUid",
+                                            "",
+                                          );
+                                        }}
+                                        value={field.value}
+                                      >
+                                        <FormControl>
+                                          <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
+                                            <SelectValue placeholder="Pilih Brand" />
+                                          </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent className="bg-slate-900 border-slate-800">
+                                          {brands?.map((b) => (
+                                            <SelectItem
+                                              key={b.id!}
+                                              value={b.id!}
+                                            >
+                                              {b.name}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <p className="text-xs text-slate-500 mt-1">
+                                        Pilih perusahaan/brand tempat karyawan
+                                        ditempatkan.
+                                      </p>
+                                    </FormItem>
+                                  )}
+                                />
 
-                              {/* Role / Fungsi Kerja */}
-                              <FormField
-                                control={form.control}
-                                name="workRole"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                                      Role / Fungsi Kerja
-                                    </FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        {...field}
-                                        placeholder="Contoh: Web Developer, Creative Staff, Finance Staff"
-                                        className="bg-slate-900/50 border-slate-800 h-12 rounded-xl focus:border-emerald-500/50"
-                                      />
-                                    </FormControl>
-                                    <p className="text-xs text-slate-500 mt-1">
-                                      Isi fungsi kerja spesifik karyawan di
-                                      dalam divisi.
-                                    </p>
-                                  </FormItem>
-                                )}
-                              />
-
-                              {/* Tipe Karyawan */}
-                              <FormField
-                                control={form.control}
-                                name="employeeType"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                                      Tipe Karyawan
-                                    </FormLabel>
-                                    <Select
-                                      onValueChange={field.onChange}
-                                      value={field.value}
-                                    >
-                                      <FormControl>
-                                        <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
-                                          <SelectValue placeholder="Pilih Tipe Karyawan" />
-                                        </SelectTrigger>
-                                      </FormControl>
-                                      <SelectContent className="bg-slate-900 border-slate-800">
-                                        <SelectItem value="Karyawan Tetap">
-                                          Karyawan Tetap
-                                        </SelectItem>
-                                        <SelectItem value="Kontrak">
-                                          Kontrak
-                                        </SelectItem>
-                                        <SelectItem value="Probation">
-                                          Probation
-                                        </SelectItem>
-                                        <SelectItem value="Magang">
-                                          Magang
-                                        </SelectItem>
-                                        <SelectItem value="Freelance">
-                                          Freelance
-                                        </SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                    <p className="text-xs text-slate-500 mt-1">
-                                      Tipe karyawan menjelaskan jenis hubungan
-                                      kerja dengan perusahaan.
-                                    </p>
-                                  </FormItem>
-                                )}
-                              />
-
-                              {/* Status Kerja */}
-                              <FormField
-                                control={form.control}
-                                name="employmentStatus"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                                      Status Kerja
-                                    </FormLabel>
-                                    <Select
-                                      onValueChange={field.onChange}
-                                      value={field.value}
-                                    >
-                                      <FormControl>
-                                        <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
-                                          <SelectValue placeholder="Pilih Status Kerja" />
-                                        </SelectTrigger>
-                                      </FormControl>
-                                      <SelectContent className="bg-slate-900 border-slate-800">
-                                        <SelectItem value="Training">
-                                          Training
-                                        </SelectItem>
-                                        <SelectItem value="Masa Percobaan">
-                                          Masa Percobaan
-                                        </SelectItem>
-                                        <SelectItem value="Aktif">
-                                          Aktif
-                                        </SelectItem>
-                                        <SelectItem value="Kontrak">
-                                          Kontrak
-                                        </SelectItem>
-                                        <SelectItem value="Magang">
-                                          Magang
-                                        </SelectItem>
-                                        <SelectItem value="Resigned">
-                                          Resigned
-                                        </SelectItem>
-                                        <SelectItem value="Terminated">
-                                          Terminated
-                                        </SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                    <p className="text-xs text-slate-500 mt-1">
-                                      Status kerja menjelaskan kondisi aktif
-                                      karyawan saat ini.
-                                    </p>
-                                  </FormItem>
-                                )}
-                              />
-
-                              {/* Atasan Langsung */}
-                              <FormField
-                                control={form.control}
-                                name="directSupervisorUid"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                                      Atasan Langsung
-                                    </FormLabel>
-                                    <Select
-                                      onValueChange={field.onChange}
-                                      value={field.value}
-                                      disabled={
-                                        !form.watch("brandId") ||
-                                        !form.watch("divisionId")
-                                      }
-                                    >
-                                      <FormControl>
-                                        <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
-                                          <SelectValue placeholder="Pilih Atasan Langsung" />
-                                        </SelectTrigger>
-                                      </FormControl>
-                                      <SelectContent className="bg-slate-900 border-slate-800">
-                                        {managers.map((m) => (
-                                          <SelectItem key={m.uid} value={m.uid}>
-                                            {m.fullName}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                    <p className="text-xs text-slate-500 mt-1">
-                                      Atasan langsung diambil dari Manager
-                                      Divisi sesuai brand dan divisi karyawan.
-                                    </p>
-                                    {managers.length === 0 &&
-                                      form.watch("divisionId") && (
+                                {/* Divisi */}
+                                <FormField
+                                  control={form.control}
+                                  name="divisionId"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                        Divisi
+                                      </FormLabel>
+                                      <Select
+                                        onValueChange={(value) => {
+                                          field.onChange(value);
+                                          // Reset supervisor when division changes
+                                          form.setValue(
+                                            "directSupervisorUid",
+                                            "",
+                                          );
+                                        }}
+                                        value={field.value}
+                                        disabled={!form.watch("brandId")}
+                                      >
+                                        <FormControl>
+                                          <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
+                                            <SelectValue placeholder="Pilih Divisi" />
+                                          </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent className="bg-slate-900 border-slate-800">
+                                          {divisions.map((d) => (
+                                            <SelectItem key={d.id} value={d.id}>
+                                              {d.name}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <p className="text-xs text-slate-500 mt-1">
+                                        Divisi akan menentukan struktur tim dan
+                                        atasan langsung karyawan.
+                                      </p>
+                                      {divisions.length === 0 && (
                                         <p className="text-xs text-amber-600 mt-2">
-                                          ⚠️ Belum ada Manager Divisi untuk
-                                          divisi ini. Silakan tetapkan melalui
-                                          User Management.
+                                          ⚠️ Belum ada divisi untuk brand ini.
+                                          Tambahkan terlebih dahulu di Master
+                                          Data.
                                         </p>
                                       )}
-                                  </FormItem>
-                                )}
-                              />
-                          
-                              {/* Sistem Kerja */}
-                              <FormField
-                                control={form.control}
-                                name="sistemKerja"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                                      Sistem Kerja
-                                    </FormLabel>
-                                    <Select
-                                      onValueChange={field.onChange}
-                                      value={field.value}
-                                    >
+                                    </FormItem>
+                                  )}
+                                />
+
+                                {/* Jabatan Struktural */}
+                                <FormField
+                                  control={form.control}
+                                  name="structuralPosition"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                        Jabatan Struktural
+                                      </FormLabel>
+                                      <Select
+                                        onValueChange={field.onChange}
+                                        value={field.value}
+                                      >
+                                        <FormControl>
+                                          <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
+                                            <SelectValue placeholder="Pilih Jabatan Struktural" />
+                                          </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent className="bg-slate-900 border-slate-800">
+                                          <SelectItem value="staff">
+                                            Staff
+                                          </SelectItem>
+                                          <SelectItem value="division_manager">
+                                            Manager Divisi
+                                          </SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                      <p className="text-xs text-slate-500 mt-1">
+                                        Jabatan struktural digunakan untuk
+                                        membedakan level tanggung jawab
+                                        karyawan.
+                                      </p>
+                                    </FormItem>
+                                  )}
+                                />
+
+                                {/* Role / Fungsi Kerja */}
+                                <FormField
+                                  control={form.control}
+                                  name="workRole"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                        Role / Fungsi Kerja
+                                      </FormLabel>
                                       <FormControl>
-                                        <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
-                                          <SelectValue placeholder="Pilih Sistem Kerja" />
-                                        </SelectTrigger>
+                                        <Input
+                                          {...field}
+                                          placeholder="Contoh: Web Developer, Creative Staff, Finance Staff"
+                                          className="bg-slate-900/50 border-slate-800 h-12 rounded-xl focus:border-emerald-500/50"
+                                        />
                                       </FormControl>
-                                      <SelectContent className="bg-slate-900 border-slate-800">
-                                        <SelectItem value="WFO">WFO (Office)</SelectItem>
-                                        <SelectItem value="WFH">WFH (Remote)</SelectItem>
-                                        <SelectItem value="Hybrid">Hybrid</SelectItem>
-                                        <SelectItem value="Shift">Shift</SelectItem>
-                                        <SelectItem value="Lapangan">Lapangan / On-Site</SelectItem>
-                                        <SelectItem value="Fleksibel">Fleksibel</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                    <p className="text-xs text-slate-500 mt-1">
-                                      Tentukan metode kehadiran atau pola kerja karyawan.
-                                    </p>
-                                  </FormItem>
-                                )}
-                              />
+                                      <p className="text-xs text-slate-500 mt-1">
+                                        Isi fungsi kerja spesifik karyawan di
+                                        dalam divisi.
+                                      </p>
+                                    </FormItem>
+                                  )}
+                                />
 
-                              {/* Tanggal Efektif Perubahan */}
-                              <FormField
-                                control={form.control}
-                                name="structureEffectiveDate"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                                      Tanggal Efektif Perubahan *
-                                    </FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        type="date"
-                                        {...field}
-                                        className="bg-slate-900/50 border-slate-800 h-12 rounded-xl focus:border-emerald-500/50"
-                                      />
-                                    </FormControl>
-                                    <p className="text-xs text-slate-500 mt-1">
-                                      Tanggal mulai berlakunya perubahan
-                                      struktur karyawan.
-                                    </p>
-                                  </FormItem>
-                                )}
-                              />
+                                {/* Atasan Langsung */}
+                                <FormField
+                                  control={form.control}
+                                  name="directSupervisorUid"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                        Atasan Langsung
+                                      </FormLabel>
+                                      <Select
+                                        onValueChange={field.onChange}
+                                        value={field.value}
+                                        disabled={
+                                          !form.watch("brandId") ||
+                                          !form.watch("divisionId")
+                                        }
+                                      >
+                                        <FormControl>
+                                          <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
+                                            <SelectValue placeholder="Pilih Atasan Langsung" />
+                                          </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent className="bg-slate-900 border-slate-800">
+                                          {managers.map((m) => (
+                                            <SelectItem
+                                              key={m.uid}
+                                              value={m.uid}
+                                            >
+                                              {m.fullName}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <p className="text-xs text-slate-500 mt-1">
+                                        Atasan langsung diambil dari Manager
+                                        Divisi sesuai brand dan divisi karyawan.
+                                      </p>
+                                      {managers.length === 0 &&
+                                        form.watch("divisionId") && (
+                                          <p className="text-xs text-amber-600 mt-2">
+                                            ⚠️ Belum ada Manager Divisi untuk
+                                            divisi ini. Silakan tetapkan melalui
+                                            User Management.
+                                          </p>
+                                        )}
+                                    </FormItem>
+                                  )}
+                                />
 
-                              {/* Alasan Perubahan - Full Width */}
-                              <FormField
-                                control={form.control}
-                                name="structureChangeReason"
-                                render={({ field }) => (
-                                  <FormItem className="lg:col-span-2">
-                                    <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                                      Alasan Perubahan *
-                                    </FormLabel>
-                                    <FormControl>
-                                      <Textarea
-                                        {...field}
-                                        placeholder="Contoh: Mutasi internal, promosi, penyesuaian struktur, koreksi data HRD"
-                                        className="bg-slate-900/50 border-slate-800 min-h-[80px] rounded-xl focus:border-emerald-500/50"
-                                      />
-                                    </FormControl>
-                                    <p className="text-xs text-slate-500 mt-1">
-                                      Alasan ini akan disimpan sebagai log audit
-                                      perubahan struktur.
-                                    </p>
-                                  </FormItem>
-                                )}
-                              />
+                                {/* Sistem Kerja */}
+                                <FormField
+                                  control={form.control}
+                                  name="sistemKerja"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                        Sistem Kerja
+                                      </FormLabel>
+                                      <Select
+                                        onValueChange={field.onChange}
+                                        value={field.value}
+                                      >
+                                        <FormControl>
+                                          <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
+                                            <SelectValue placeholder="Pilih Sistem Kerja" />
+                                          </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent className="bg-slate-900 border-slate-800">
+                                          <SelectItem value="WFO">
+                                            WFO (Office)
+                                          </SelectItem>
+                                          <SelectItem value="WFH">
+                                            WFH (Remote)
+                                          </SelectItem>
+                                          <SelectItem value="Hybrid">
+                                            Hybrid
+                                          </SelectItem>
+                                          <SelectItem value="Shift">
+                                            Shift
+                                          </SelectItem>
+                                          <SelectItem value="Lapangan">
+                                            Lapangan / On-Site
+                                          </SelectItem>
+                                          <SelectItem value="Fleksibel">
+                                            Fleksibel
+                                          </SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                      <p className="text-xs text-slate-500 mt-1">
+                                        Tentukan metode kehadiran atau pola
+                                        kerja karyawan.
+                                      </p>
+                                    </FormItem>
+                                  )}
+                                />
+
+                                {/* Tanggal Efektif Perubahan */}
+                                <FormField
+                                  control={form.control}
+                                  name="structureEffectiveDate"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                        Tanggal Efektif Perubahan *
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type="date"
+                                          {...field}
+                                          className="bg-slate-900/50 border-slate-800 h-12 rounded-xl focus:border-emerald-500/50"
+                                        />
+                                      </FormControl>
+                                      <p className="text-xs text-slate-500 mt-1">
+                                        Tanggal mulai berlakunya perubahan
+                                        struktur karyawan.
+                                      </p>
+                                    </FormItem>
+                                  )}
+                                />
+
+                                {/* Alasan Perubahan - Full Width */}
+                                <FormField
+                                  control={form.control}
+                                  name="structureChangeReason"
+                                  render={({ field }) => (
+                                    <FormItem className="lg:col-span-2">
+                                      <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                        Alasan Perubahan *
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Textarea
+                                          {...field}
+                                          placeholder="Contoh: Mutasi internal, promosi, penyesuaian struktur, koreksi data HRD"
+                                          className="bg-slate-900/50 border-slate-800 min-h-[80px] rounded-xl focus:border-emerald-500/50"
+                                        />
+                                      </FormControl>
+                                      <p className="text-xs text-slate-500 mt-1">
+                                        Alasan ini akan disimpan sebagai log
+                                        audit perubahan struktur.
+                                      </p>
+                                    </FormItem>
+                                  )}
+                                />
                               </div>
                             </div>
                           ) : null}
@@ -3247,7 +3375,7 @@ export default function EmployeeDetailPage({
                               <div className="grid grid-cols-2 gap-4">
                                 <FormField
                                   control={form.control}
-                                  name="tipeKaryawan"
+                                  name="employeeType"
                                   render={({ field }) => (
                                     <FormItem>
                                       <FormLabel className="text-xs font-black text-slate-500 uppercase">
@@ -3270,9 +3398,11 @@ export default function EmployeeDetailPage({
                                           ))}
                                         </SelectContent>
                                       </Select>
-                                      {normalizedData?.tipeKaryawan ===
-                                        "Karyawan Tetap" &&
-                                        field.value !== "Karyawan Tetap" && (
+                                      {(normalizedData?.employeeType ===
+                                        "Tetap" ||
+                                        normalizedData?.tipeKaryawan ===
+                                          "Karyawan Tetap") &&
+                                        field.value !== "Tetap" && (
                                           <div className="flex items-center gap-2 mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
                                             <AlertTriangle className="h-3 w-3 text-amber-500" />
                                             <p className="text-[10px] text-amber-200 font-medium">
@@ -3284,55 +3414,119 @@ export default function EmployeeDetailPage({
                                     </FormItem>
                                   )}
                                 />
-                                <FormField
-                                  control={form.control}
-                                  name="statusKontrak"
-                                  render={({ field }) => (
-                                    <FormItem>
+                                {(() => {
+                                  const vals = form.watch() as any;
+                                  const type = vals.employeeType;
+                                  let start = "";
+                                  let end = "";
+                                  if (type === "Magang") {
+                                    start =
+                                      vals.internshipStartDate ||
+                                      vals.contractStartDate ||
+                                      "";
+                                    end =
+                                      vals.internshipEndDate ||
+                                      vals.contractEndDate ||
+                                      "";
+                                  } else if (
+                                    type === "Probation" ||
+                                    type === "Percobaan"
+                                  ) {
+                                    start =
+                                      vals.probationStartDate ||
+                                      vals.contractStartDate ||
+                                      "";
+                                    end =
+                                      vals.probationEndDate ||
+                                      vals.contractEndDate ||
+                                      "";
+                                  } else {
+                                    start =
+                                      vals.contractStartDate ||
+                                      vals.kontrakMulai ||
+                                      "";
+                                    end =
+                                      vals.contractEndDate ||
+                                      vals.kontrakSelesai ||
+                                      "";
+                                  }
+
+                                  let status = "Draft";
+                                  const now = new Date();
+                                  now.setHours(0, 0, 0, 0);
+
+                                  if (start) {
+                                    const startDate = new Date(start);
+                                    startDate.setHours(0, 0, 0, 0);
+                                    if (now < startDate) {
+                                      status = "Terjadwal";
+                                    } else if (
+                                      type === "Tetap" ||
+                                      type === "Karyawan Tetap"
+                                    ) {
+                                      status = "Aktif";
+                                    } else {
+                                      if (!end) {
+                                        status = "Draft";
+                                      } else {
+                                        const endDate = new Date(end);
+                                        endDate.setHours(0, 0, 0, 0);
+                                        if (now > endDate) {
+                                          status = "Expired";
+                                        } else {
+                                          status = "Aktif";
+                                        }
+                                      }
+                                    }
+                                  }
+
+                                  return (
+                                    <div className="flex flex-col gap-2">
                                       <FormLabel className="text-xs font-black text-slate-500 uppercase">
-                                        Status Siklus
+                                        Status Siklus (Auto)
                                       </FormLabel>
-                                      <Select
-                                        onValueChange={field.onChange}
-                                        value={field.value || ""}
-                                      >
-                                        <FormControl>
-                                          <SelectTrigger className="bg-slate-900 border-slate-800">
-                                            <SelectValue />
-                                          </SelectTrigger>
-                                        </FormControl>
-                                        <SelectContent className="bg-slate-900 border-slate-800">
-                                          <SelectItem value="Draft">
-                                            Draft
-                                          </SelectItem>
-                                          <SelectItem value="Aktif">
-                                            Aktif
-                                          </SelectItem>
-                                          <SelectItem value="Diperpanjang">
-                                            Diperpanjang
-                                          </SelectItem>
-                                          <SelectItem value="Selesai">
-                                            Selesai
-                                          </SelectItem>
-                                          <SelectItem value="Expired">
-                                            Expired
-                                          </SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                    </FormItem>
-                                  )}
-                                />
+                                      <div className="flex items-center gap-3 h-10 px-3 bg-slate-900 border border-slate-800 rounded-md">
+                                        <Badge
+                                          variant="outline"
+                                          className={
+                                            status === "Aktif"
+                                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                              : status === "Expired"
+                                                ? "bg-red-500/10 text-red-400 border-red-500/20"
+                                                : status === "Terjadwal"
+                                                  ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                                                  : "bg-slate-500/10 text-slate-400 border-slate-500/20"
+                                          }
+                                        >
+                                          {status}
+                                        </Badge>
+                                        <span className="text-[10px] text-slate-500 italic flex-1 truncate">
+                                          Dihitung otomatis berdasar tgl.
+                                        </span>
+                                      </div>
+                                      {status === "Expired" && (
+                                        <div className="flex items-start gap-2 mt-1 p-2 rounded-lg bg-red-500/10 border border-red-500/20">
+                                          <AlertTriangle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
+                                          <p className="text-[10px] text-red-300 leading-tight">
+                                            Masa berlaku habis. Perpanjang atau
+                                            tandai selesai jika offboarding.
+                                          </p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                               </div>
 
                               {/* 2. Kondisional berdasarkan Tipe */}
                               <div className="space-y-4 pt-4 border-t border-slate-800">
                                 {/* Magang / Intern */}
-                                {form.watch("tipeKaryawan") === "Magang" && (
+                                {form.watch("employeeType") === "Magang" && (
                                   <>
                                     <div className="grid grid-cols-2 gap-4">
                                       <FormField
                                         control={form.control}
-                                        name="kontrakMulai"
+                                        name="contractStartDate"
                                         render={({ field }) => (
                                           <FormItem>
                                             <FormLabel className="text-xs font-bold text-slate-500">
@@ -3351,85 +3545,81 @@ export default function EmployeeDetailPage({
                                       />
                                       <FormField
                                         control={form.control}
-                                        name="durasiKontrak"
+                                        name="contractDurationType"
                                         render={({ field }) => (
                                           <FormItem>
                                             <FormLabel className="text-xs font-bold text-slate-500">
-                                              Durasi Magang
+                                              Durasi
                                             </FormLabel>
                                             <Select
                                               onValueChange={field.onChange}
-                                              value={
-                                                DURASI_OPTIONS.includes(
-                                                  field.value || "",
-                                                )
-                                                  ? field.value
-                                                  : "Custom"
-                                              }
+                                              value={field.value || "custom"}
                                             >
                                               <FormControl>
                                                 <SelectTrigger className="bg-slate-900 border-slate-800">
-                                                  <SelectValue />
+                                                  <SelectValue placeholder="Pilih Durasi" />
                                                 </SelectTrigger>
                                               </FormControl>
                                               <SelectContent className="bg-slate-900 border-slate-800">
-                                                {DURASI_OPTIONS.map((o) => (
-                                                  <SelectItem key={o} value={o}>
-                                                    {o}
-                                                  </SelectItem>
-                                                ))}
+                                                <SelectItem value="1">
+                                                  1 Bulan
+                                                </SelectItem>
+                                                <SelectItem value="3">
+                                                  3 Bulan
+                                                </SelectItem>
+                                                <SelectItem value="6">
+                                                  6 Bulan
+                                                </SelectItem>
+                                                <SelectItem value="12">
+                                                  12 Bulan
+                                                </SelectItem>
+                                                <SelectItem value="24">
+                                                  24 Bulan
+                                                </SelectItem>
+                                                <SelectItem value="custom">
+                                                  Custom
+                                                </SelectItem>
                                               </SelectContent>
                                             </Select>
-                                            {!DURASI_OPTIONS.includes(
-                                              field.value || "",
-                                            ) &&
-                                              field.value !== "Custom" && (
-                                                <Input
-                                                  {...field}
-                                                  value={field.value || ""}
-                                                  className="mt-2 bg-slate-900 border-slate-800"
-                                                  placeholder="Isi durasi manual..."
-                                                />
-                                              )}
-                                            {field.value === "Custom" && (
+                                            <p className="text-[10px] text-slate-500 mt-1 italic">
+                                              Pilih durasi agar tanggal selesai
+                                              otomatis terisi.
+                                            </p>
+                                          </FormItem>
+                                        )}
+                                      />
+                                      <FormField
+                                        control={form.control}
+                                        name="contractEndDate"
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <FormLabel className="text-xs font-bold text-slate-500">
+                                              Selesai Magang
+                                            </FormLabel>
+                                            <FormControl>
                                               <Input
-                                                onChange={(e) =>
-                                                  field.onChange(e.target.value)
+                                                type="date"
+                                                {...field}
+                                                value={field.value || ""}
+                                                readOnly={
+                                                  form.watch(
+                                                    "contractDurationType",
+                                                  ) !== "custom"
                                                 }
-                                                className="mt-2 bg-slate-900 border-slate-800"
-                                                placeholder="Contoh: 45 Hari"
+                                                className={`bg-slate-900 border-slate-800 ${form.watch("contractDurationType") !== "custom" ? "opacity-70 cursor-not-allowed" : ""}`}
                                               />
-                                            )}
+                                            </FormControl>
                                           </FormItem>
                                         )}
                                       />
                                     </div>
                                     <FormField
                                       control={form.control}
-                                      name="kontrakSelesai"
-                                      render={({ field }) => (
-                                        <FormItem>
-                                          <FormLabel className="text-xs font-bold text-slate-500">
-                                            Selesai Magang (Auto)
-                                          </FormLabel>
-                                          <FormControl>
-                                            <Input
-                                              type="date"
-                                              {...field}
-                                              value={field.value || ""}
-                                              className="bg-slate-900 border-slate-800"
-                                            />
-                                          </FormControl>
-                                        </FormItem>
-                                      )}
-                                    />
-                                    <FormField
-                                      control={form.control}
                                       name="mentor"
                                       render={({ field }) => (
                                         <FormItem>
                                           <FormLabel className="text-xs font-bold text-slate-500">
-                                            Mentor / Pembimbing
+                                            Mentor Pembimbing
                                           </FormLabel>
                                           <FormControl>
                                             <Input
@@ -3445,112 +3635,13 @@ export default function EmployeeDetailPage({
                                   </>
                                 )}
 
-                                {/* Training */}
-                                {form.watch("tipeKaryawan") === "Training" && (
-                                  <>
-                                    <div className="grid grid-cols-2 gap-4">
-                                      <FormField
-                                        control={form.control}
-                                        name="kontrakMulai"
-                                        render={({ field }) => (
-                                          <FormItem>
-                                            <FormLabel className="text-xs font-bold text-slate-500">
-                                              Mulai Training
-                                            </FormLabel>
-                                            <FormControl>
-                                              <Input
-                                                type="date"
-                                                {...field}
-                                                value={field.value || ""}
-                                                className="bg-slate-900 border-slate-800"
-                                              />
-                                            </FormControl>
-                                          </FormItem>
-                                        )}
-                                      />
-                                      <FormField
-                                        control={form.control}
-                                        name="durasiKontrak"
-                                        render={({ field }) => (
-                                          <FormItem>
-                                            <FormLabel className="text-xs font-bold text-slate-500">
-                                              Durasi Training
-                                            </FormLabel>
-                                            <Select
-                                              onValueChange={field.onChange}
-                                              value={
-                                                DURASI_OPTIONS.includes(
-                                                  field.value || "",
-                                                )
-                                                  ? field.value
-                                                  : "Custom"
-                                              }
-                                            >
-                                              <FormControl>
-                                                <SelectTrigger className="bg-slate-900 border-slate-800">
-                                                  <SelectValue />
-                                                </SelectTrigger>
-                                              </FormControl>
-                                              <SelectContent className="bg-slate-900 border-slate-800">
-                                                {DURASI_OPTIONS.map((o) => (
-                                                  <SelectItem key={o} value={o}>
-                                                    {o}
-                                                  </SelectItem>
-                                                ))}
-                                              </SelectContent>
-                                            </Select>
-                                          </FormItem>
-                                        )}
-                                      />
-                                    </div>
-                                    <FormField
-                                      control={form.control}
-                                      name="kontrakSelesai"
-                                      render={({ field }) => (
-                                        <FormItem>
-                                          <FormLabel className="text-xs font-bold text-slate-500">
-                                            Selesai Training (Auto)
-                                          </FormLabel>
-                                          <FormControl>
-                                            <Input
-                                              type="date"
-                                              {...field}
-                                              value={field.value || ""}
-                                              className="bg-slate-900 border-slate-800"
-                                            />
-                                          </FormControl>
-                                        </FormItem>
-                                      )}
-                                    />
-                                    <FormField
-                                      control={form.control}
-                                      name="evaluator"
-                                      render={({ field }) => (
-                                        <FormItem>
-                                          <FormLabel className="text-xs font-bold text-slate-500">
-                                            Evaluator / Penanggung Jawab
-                                          </FormLabel>
-                                          <FormControl>
-                                            <Input
-                                              {...field}
-                                              value={field.value || ""}
-                                              placeholder="Nama Evaluator"
-                                              className="bg-slate-900 border-slate-800"
-                                            />
-                                          </FormControl>
-                                        </FormItem>
-                                      )}
-                                    />
-                                  </>
-                                )}
-
                                 {/* Probation */}
-                                {form.watch("tipeKaryawan") === "Probation" && (
+                                {form.watch("employeeType") === "Probation" && (
                                   <>
                                     <div className="grid grid-cols-2 gap-4">
                                       <FormField
                                         control={form.control}
-                                        name="masaPercobaanMulai"
+                                        name="probationStartDate"
                                         render={({ field }) => (
                                           <FormItem>
                                             <FormLabel className="text-xs font-bold text-slate-500">
@@ -3569,7 +3660,52 @@ export default function EmployeeDetailPage({
                                       />
                                       <FormField
                                         control={form.control}
-                                        name="masaPercobaanSelesai"
+                                        name="contractDurationType"
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <FormLabel className="text-xs font-bold text-slate-500">
+                                              Durasi
+                                            </FormLabel>
+                                            <Select
+                                              onValueChange={field.onChange}
+                                              value={field.value || "custom"}
+                                            >
+                                              <FormControl>
+                                                <SelectTrigger className="bg-slate-900 border-slate-800">
+                                                  <SelectValue placeholder="Pilih Durasi" />
+                                                </SelectTrigger>
+                                              </FormControl>
+                                              <SelectContent className="bg-slate-900 border-slate-800">
+                                                <SelectItem value="1">
+                                                  1 Bulan
+                                                </SelectItem>
+                                                <SelectItem value="3">
+                                                  3 Bulan
+                                                </SelectItem>
+                                                <SelectItem value="6">
+                                                  6 Bulan
+                                                </SelectItem>
+                                                <SelectItem value="12">
+                                                  12 Bulan
+                                                </SelectItem>
+                                                <SelectItem value="24">
+                                                  24 Bulan
+                                                </SelectItem>
+                                                <SelectItem value="custom">
+                                                  Custom
+                                                </SelectItem>
+                                              </SelectContent>
+                                            </Select>
+                                            <p className="text-[10px] text-slate-500 mt-1 italic">
+                                              Pilih durasi agar tanggal selesai
+                                              otomatis terisi.
+                                            </p>
+                                          </FormItem>
+                                        )}
+                                      />
+                                      <FormField
+                                        control={form.control}
+                                        name="probationEndDate"
                                         render={({ field }) => (
                                           <FormItem>
                                             <FormLabel className="text-xs font-bold text-slate-500">
@@ -3580,7 +3716,12 @@ export default function EmployeeDetailPage({
                                                 type="date"
                                                 {...field}
                                                 value={field.value || ""}
-                                                className="bg-slate-900 border-slate-800"
+                                                readOnly={
+                                                  form.watch(
+                                                    "contractDurationType",
+                                                  ) !== "custom"
+                                                }
+                                                className={`bg-slate-900 border-slate-800 ${form.watch("contractDurationType") !== "custom" ? "opacity-70 cursor-not-allowed" : ""}`}
                                               />
                                             </FormControl>
                                           </FormItem>
@@ -3589,11 +3730,11 @@ export default function EmployeeDetailPage({
                                     </div>
                                     <FormField
                                       control={form.control}
-                                      name="tanggalEvaluasi"
+                                      name="finalEvaluationDate"
                                       render={({ field }) => (
                                         <FormItem>
                                           <FormLabel className="text-xs font-bold text-slate-500">
-                                            Tanggal Evaluasi Akhir
+                                            Jadwal Evaluasi
                                           </FormLabel>
                                           <FormControl>
                                             <Input
@@ -3609,12 +3750,12 @@ export default function EmployeeDetailPage({
                                   </>
                                 )}
 
-                                {/* Kontrak */}
-                                {form.watch("tipeKaryawan") === "Kontrak" && (
+                                {/* Kontrak / PKWT */}
+                                {form.watch("employeeType") === "Kontrak" && (
                                   <>
                                     <FormField
                                       control={form.control}
-                                      name="nomorKontrakSK"
+                                      name="contractNumber"
                                       render={({ field }) => (
                                         <FormItem>
                                           <FormLabel className="text-xs font-bold text-slate-500">
@@ -3624,7 +3765,7 @@ export default function EmployeeDetailPage({
                                             <Input
                                               {...field}
                                               value={field.value || ""}
-                                              placeholder="Contoh: 001/KTR/ENV/2024"
+                                              placeholder="Contoh: 001/HRD/KONTRAK/2024"
                                               className="bg-slate-900 border-slate-800"
                                             />
                                           </FormControl>
@@ -3634,11 +3775,11 @@ export default function EmployeeDetailPage({
                                     <div className="grid grid-cols-2 gap-4">
                                       <FormField
                                         control={form.control}
-                                        name="kontrakMulai"
+                                        name="contractStartDate"
                                         render={({ field }) => (
                                           <FormItem>
                                             <FormLabel className="text-xs font-bold text-slate-500">
-                                              Kontrak Mulai
+                                              Mulai Kontrak
                                             </FormLabel>
                                             <FormControl>
                                               <Input
@@ -3653,72 +3794,87 @@ export default function EmployeeDetailPage({
                                       />
                                       <FormField
                                         control={form.control}
-                                        name="durasiKontrak"
+                                        name="contractDurationType"
                                         render={({ field }) => (
                                           <FormItem>
                                             <FormLabel className="text-xs font-bold text-slate-500">
-                                              Durasi Kontrak
+                                              Durasi
                                             </FormLabel>
                                             <Select
                                               onValueChange={field.onChange}
-                                              value={
-                                                DURASI_OPTIONS.includes(
-                                                  field.value || "",
-                                                )
-                                                  ? field.value
-                                                  : "Custom"
-                                              }
+                                              value={field.value || "custom"}
                                             >
                                               <FormControl>
                                                 <SelectTrigger className="bg-slate-900 border-slate-800">
-                                                  <SelectValue />
+                                                  <SelectValue placeholder="Pilih Durasi" />
                                                 </SelectTrigger>
                                               </FormControl>
                                               <SelectContent className="bg-slate-900 border-slate-800">
-                                                {DURASI_OPTIONS.map((o) => (
-                                                  <SelectItem key={o} value={o}>
-                                                    {o}
-                                                  </SelectItem>
-                                                ))}
+                                                <SelectItem value="1">
+                                                  1 Bulan
+                                                </SelectItem>
+                                                <SelectItem value="3">
+                                                  3 Bulan
+                                                </SelectItem>
+                                                <SelectItem value="6">
+                                                  6 Bulan
+                                                </SelectItem>
+                                                <SelectItem value="12">
+                                                  12 Bulan
+                                                </SelectItem>
+                                                <SelectItem value="24">
+                                                  24 Bulan
+                                                </SelectItem>
+                                                <SelectItem value="custom">
+                                                  Custom
+                                                </SelectItem>
                                               </SelectContent>
                                             </Select>
+                                            <p className="text-[10px] text-slate-500 mt-1 italic">
+                                              Pilih durasi agar tanggal selesai
+                                              otomatis terisi.
+                                            </p>
+                                          </FormItem>
+                                        )}
+                                      />
+                                      <FormField
+                                        control={form.control}
+                                        name="contractEndDate"
+                                        render={({ field }) => (
+                                          <FormItem>
+                                            <FormLabel className="text-xs font-bold text-slate-500">
+                                              Selesai Kontrak
+                                            </FormLabel>
+                                            <FormControl>
+                                              <Input
+                                                type="date"
+                                                {...field}
+                                                value={field.value || ""}
+                                                readOnly={
+                                                  form.watch(
+                                                    "contractDurationType",
+                                                  ) !== "custom"
+                                                }
+                                                className={`bg-slate-900 border-slate-800 ${form.watch("contractDurationType") !== "custom" ? "opacity-70 cursor-not-allowed" : ""}`}
+                                              />
+                                            </FormControl>
                                           </FormItem>
                                         )}
                                       />
                                     </div>
-                                    <FormField
-                                      control={form.control}
-                                      name="kontrakSelesai"
-                                      render={({ field }) => (
-                                        <FormItem>
-                                          <FormLabel className="text-xs font-bold text-slate-500">
-                                            Kontrak Selesai (Auto)
-                                          </FormLabel>
-                                          <FormControl>
-                                            <Input
-                                              type="date"
-                                              {...field}
-                                              value={field.value || ""}
-                                              className="bg-slate-900 border-slate-800"
-                                            />
-                                          </FormControl>
-                                        </FormItem>
-                                      )}
-                                    />
                                   </>
                                 )}
 
-                                {/* Karyawan Tetap */}
-                                {form.watch("tipeKaryawan") ===
-                                  "Karyawan Tetap" && (
+                                {/* Tetap */}
+                                {form.watch("employeeType") === "Tetap" && (
                                   <>
                                     <FormField
                                       control={form.control}
-                                      name="tanggalMasuk"
+                                      name="contractStartDate"
                                       render={({ field }) => (
                                         <FormItem>
                                           <FormLabel className="text-xs font-bold text-slate-500">
-                                            Tanggal Efektif Aktif / Pengangkatan
+                                            Tanggal Efektif Pengangkatan
                                           </FormLabel>
                                           <FormControl>
                                             <Input
@@ -3733,7 +3889,7 @@ export default function EmployeeDetailPage({
                                     />
                                     <FormField
                                       control={form.control}
-                                      name="nomorSK"
+                                      name="contractNumber"
                                       render={({ field }) => (
                                         <FormItem>
                                           <FormLabel className="text-xs font-bold text-slate-500">
@@ -3792,7 +3948,7 @@ export default function EmployeeDetailPage({
                                   />
                                   <FormField
                                     control={form.control}
-                                    name="lokasiKerja"
+                                    name="workLocation"
                                     render={({ field }) => (
                                       <FormItem>
                                         <FormLabel className="text-xs font-bold text-slate-500">
@@ -3811,7 +3967,7 @@ export default function EmployeeDetailPage({
                                 </div>
                                 <FormField
                                   control={form.control}
-                                  name="catatanKontrak"
+                                  name="contractNotes"
                                   render={({ field }) => (
                                     <FormItem>
                                       <FormLabel className="text-xs font-bold text-slate-500">
@@ -3888,7 +4044,7 @@ export default function EmployeeDetailPage({
                                 </div>
                                 <div className="space-y-3">
                                   {(form.watch("allowances") || []).map(
-                                    (al, idx) => (
+                                    (al: any, idx: number) => (
                                       <div
                                         key={al.id}
                                         className="p-4 rounded-xl border border-slate-800 bg-slate-900/30 flex flex-col gap-3"

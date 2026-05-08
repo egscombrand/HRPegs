@@ -23,3 +23,19 @@ export async function sendNotification(
     createdAt: Timestamp.now(),
   });
 }
+
+export async function sendHrdNotification(
+  firestore: Firestore,
+  notification: Omit<
+    Omit<Notification, "id" | "createdAt" | "isRead" | "userId">,
+    "targetType"
+  > & { targetType: "user" | "job" | "application" | "employee" },
+) {
+  const notificationsRef = collection(firestore, "hrd_notifications");
+
+  await addDoc(notificationsRef, {
+    ...notification,
+    isRead: false,
+    createdAt: Timestamp.now(),
+  });
+}
