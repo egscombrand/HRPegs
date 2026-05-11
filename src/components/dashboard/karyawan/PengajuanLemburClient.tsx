@@ -22,6 +22,14 @@ import {
   CardFooter,
 } from "@/components/ui/card";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   Loader2,
   PlusCircle,
   Eye,
@@ -56,14 +64,16 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 const approvalStatusLabel: Record<string, string> = {
   draft: "Draft",
   pending_supervisor: "Menunggu Manager Divisi",
-  pending_hrd: "Menunggu Review HRD",
   pending_manager: "Menunggu Manager Divisi",
-  pending_approval: "Menunggu Review HRD",
+  approved_by_manager: "Menunggu Review HRD",
+  pending_hrd: "Menunggu Review HRD",
   needs_revision: "Perlu Revisi",
-  revision_requested: "Perlu Revisi",
+  revision_manager: "Perlu Revisi",
+  revision_hrd: "Perlu Revisi",
+  rejected_manager: "Ditolak",
+  rejected_hrd: "Ditolak",
   approved: "Disetujui",
   approved_hrd: "Disetujui",
-  rejected: "Ditolak",
   cancelled: "Dibatalkan",
 };
 
@@ -111,7 +121,7 @@ const getTimelineSteps = (
   };
 
   const step2 = {
-    title: "Review Atasan",
+    title: "Review Manager Divisi",
     state:
       status === "pending_supervisor"
         ? "active"
@@ -640,6 +650,12 @@ export function PengajuanLemburClient() {
     setIsFormOpen(true);
   };
 
+  const handleCloseModal = () => {
+    setIsFormOpen(false);
+    setSelectedSubmission(null);
+    setFormMode("edit");
+  };
+
   const handleCancel = (submission: OvertimeSubmission) => {
     setSelectedSubmission(submission);
     const status = getSubmissionStatus(submission);
@@ -751,149 +767,76 @@ export function PengajuanLemburClient() {
           <CardHeader>
             <CardTitle>Riwayat Pengajuan</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="overflow-x-auto">
             {sortedSubmissions.length > 0 ? (
-              <div className="grid gap-4">
-                {sortedSubmissions.map((s) => {
-                  const status = getSubmissionStatus(s);
-                  const statusMeta = getStatusMeta(status);
-                  const overtimeDate =
-                    (s as any).overtimeDate?.toDate?.() ?? s.date?.toDate?.();
-                  // Task count: use taskDetails if available, fallback to tasks length
-                  const taskDetails = (s as any).taskDetails || s.tasks || [];
-                  const taskCount = taskDetails.length || (s.reason ? 1 : 0);
-                  const supervisor =
-                    (s as any).directSupervisorName ||
-                    employeeProfile?.supervisorName ||
-                    "Belum Ditentukan";
-                  const statusLabel =
-                    approvalStatusLabel[status] || status.replace(/_/g, " ");
-                  const supervisorViewedAt = (s as any).supervisorViewedAt;
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="px-3 py-3 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                      Tanggal
+                    </TableHead>
+                    <TableHead className="px-3 py-3 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                      Jam
+                    </TableHead>
+                    <TableHead className="px-3 py-3 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                      Durasi
+                    </TableHead>
+                    <TableHead className="px-3 py-3 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                      Lokasi
+                    </TableHead>
+                    <TableHead className="px-3 py-3 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                      Ringkasan Pekerjaan
+                    </TableHead>
+                    <TableHead className="px-3 py-3 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                      Status
+                    </TableHead>
+                    <TableHead className="px-3 py-3 text-right text-xs uppercase tracking-wide text-muted-foreground">
+                      Aksi
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sortedSubmissions.map((s) => {
+                    const status = getSubmissionStatus(s);
+                    const overtimeDate =
+                      (s as any).overtimeDate?.toDate?.() ?? s.date?.toDate?.();
+                    const locationLabel =
+                      (s as any).workLocationLabel ||
+                      (s.location ? workLocationLabels[s.location] : "") ||
+                      s.location ||
+                      "-";
 
-                  // Determine which actions are available based on status and viewing state
-                  const canEdit =
-                    status === "draft" ||
-                    status === "needs_revision" ||
-                    status.startsWith("revision") ||
-                    (status === "pending_supervisor" && !supervisorViewedAt);
-                  const canCancel =
-                    status === "draft" ||
-                    (status === "pending_supervisor" && !supervisorViewedAt) ||
-                    status === "pending_hrd" ||
-                    status === "pending_manager" ||
-                    status === "approved_by_manager" ||
-                    status === "pending_approval";
-                  const canRevise =
-                    status === "needs_revision" ||
-                    status.startsWith("revision");
-
-                  return (
-                    <Card key={s.id} className="border">
-                      <CardHeader className="grid gap-4 md:grid-cols-2">
-                        <div>
-                          <div className="flex items-center justify-between gap-4">
-                            <div>
-                              <p className="text-xs uppercase text-muted-foreground">
-                                Tanggal Lembur
-                              </p>
-                              <p className="text-base font-semibold">
-                                {overtimeDate
-                                  ? format(overtimeDate, "dd MMM yyyy", {
-                                      locale: idLocale,
-                                    })
-                                  : "-"}
-                              </p>
-                            </div>
-                            <OvertimeStatusBadge status={status as any} />
-                          </div>
-                          <p className="mt-3 text-sm text-muted-foreground line-clamp-2">
-                            {s.reason || "Tidak ada alasan tambahan."}
-                          </p>
-                        </div>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <div className="rounded-2xl bg-muted p-3">
-                            <p className="text-xs uppercase text-muted-foreground">
-                              Jam
-                            </p>
-                            <p className="font-semibold">
-                              {s.startTime}–{s.endTime}
-                            </p>
-                          </div>
-                          <div className="rounded-2xl bg-muted p-3">
-                            <p className="text-xs uppercase text-muted-foreground">
-                              Durasi
-                            </p>
-                            <p className="font-semibold">
-                              {s.totalDurationMinutes} menit
-                            </p>
-                          </div>
-                          <div className="rounded-2xl bg-muted p-3">
-                            <p className="text-xs uppercase text-muted-foreground">
-                              Lokasi
-                            </p>
-                            <p className="font-semibold">
-                              {(s as any).workLocationLabel ||
-                                (s.location
-                                  ? workLocationLabels[s.location]
-                                  : undefined) ||
-                                s.location}
-                            </p>
-                          </div>
-                          <div className="rounded-2xl bg-muted p-3">
-                            <p className="text-xs uppercase text-muted-foreground">
-                              Tipe Lembur
-                            </p>
-                            <p className="font-semibold">
-                              {(s as any).overtimeTypeLabel ||
-                                (s.overtimeType
-                                  ? overtimeTypeLabels[s.overtimeType]
-                                  : undefined) ||
-                                s.overtimeType}
-                            </p>
-                          </div>
-                          <div className="rounded-2xl bg-muted p-3">
-                            <p className="text-xs uppercase text-muted-foreground">
-                              Total Tugas
-                            </p>
-                            <p className="font-semibold">{taskCount}</p>
-                          </div>
-                          <div className="rounded-2xl bg-muted p-3">
-                            <p className="text-xs uppercase text-muted-foreground">
-                              Atasan Tujuan
-                            </p>
-                            <p className="font-semibold">{supervisor}</p>
-                          </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="grid gap-3 md:grid-cols-2">
-                        <div>
-                          <p className="text-xs uppercase text-muted-foreground">
-                            Alasan Lembur
-                          </p>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            {s.reason || "Belum ada alasan."}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs uppercase text-muted-foreground">
-                            Langkah Berikutnya
-                          </p>
-                          <p className="mt-1 text-sm font-semibold">
-                            {statusMeta.nextStep}
-                          </p>
-                        </div>
-                      </CardContent>
-                      <CardFooter className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="text-sm text-muted-foreground">
-                          Terakhir diupdate{" "}
-                          {s.updatedAt?.toDate
-                            ? formatDistanceToNow(s.updatedAt.toDate(), {
-                                addSuffix: true,
+                    return (
+                      <TableRow
+                        key={s.id}
+                        className="border-b transition-colors hover:bg-muted"
+                      >
+                        <TableCell className="px-3 py-3 align-top">
+                          {overtimeDate
+                            ? format(overtimeDate, "dd MMM yyyy", {
                                 locale: idLocale,
                               })
-                            : "baru saja"}
-                        </div>
-                        <div className="flex flex-wrap gap-2">
+                            : "-"}
+                        </TableCell>
+                        <TableCell className="px-3 py-3 align-top">
+                          <div className="text-sm">{s.startTime}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {s.endTime}
+                          </div>
+                        </TableCell>
+                        <TableCell className="px-3 py-3 align-top">
+                          {s.totalDurationMinutes} menit
+                        </TableCell>
+                        <TableCell className="px-3 py-3 align-top">
+                          {locationLabel}
+                        </TableCell>
+                        <TableCell className="px-3 py-3 align-top text-sm text-muted-foreground truncate">
+                          {s.reason || "Tidak ada ringkasan pekerjaan."}
+                        </TableCell>
+                        <TableCell className="px-3 py-3 align-top">
+                          <OvertimeStatusBadge status={status as any} />
+                        </TableCell>
+                        <TableCell className="px-3 py-3 align-top text-right">
                           <Button
                             size="sm"
                             variant="secondary"
@@ -905,32 +848,12 @@ export function PengajuanLemburClient() {
                                 ? "Lihat Alasan"
                                 : "Lihat Detail"}
                           </Button>
-
-                          {status === "pending_supervisor" &&
-                            !supervisorViewedAt && (
-                              <>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleAction("edit", s)}
-                                >
-                                  Edit Pengajuan
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  onClick={() => handleCancel(s)}
-                                >
-                                  Batalkan
-                                </Button>
-                              </>
-                            )}
-                        </div>
-                      </CardFooter>
-                    </Card>
-                  );
-                })}
-              </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
             ) : (
               <div className="h-24 flex items-center justify-center text-muted-foreground">
                 Belum ada pengajuan lembur.
@@ -942,12 +865,13 @@ export function PengajuanLemburClient() {
 
       <OvertimeSubmissionForm
         open={isFormOpen}
-        onOpenChange={setIsFormOpen}
+        onOpenChange={handleCloseModal}
         submission={selectedSubmission}
         employeeProfile={employeeProfile}
         brands={brands || []}
         formMode={formMode}
         onSuccess={mutate}
+        onRequestEdit={() => setFormMode("edit")}
       />
 
       <DeleteConfirmationDialog

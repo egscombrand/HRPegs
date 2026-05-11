@@ -65,6 +65,7 @@ export function ReviewOvertimeDialog({
   mode,
 }: ReviewOvertimeDialogProps) {
   const [isSaving, setIsSaving] = useState(false);
+  const [showApproveDialog, setShowApproveDialog] = useState(false);
   const [showRevisionDialog, setShowRevisionDialog] = useState(false);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [revisionNote, setRevisionNote] = useState("");
@@ -87,6 +88,10 @@ export function ReviewOvertimeDialog({
   const resolvedStatus =
     (submission as any).approvalStatus || submission.status || "draft";
   const tasks = submission.taskDetails || submission.tasks || [];
+  const totalEstimatedMinutes = tasks.reduce(
+    (sum, task) => sum + (task.estimatedMinutes || 0),
+    0,
+  );
   const submittedAt =
     parseSafeDate((submission as any).submittedAt ?? submission.createdAt) ||
     new Date();
@@ -96,6 +101,45 @@ export function ReviewOvertimeDialog({
   const isFinal = isFinalStatus(resolvedStatus);
   const canAct = isActionableStatus(resolvedStatus, mode);
   const operatorName = userProfile?.fullName || userProfile?.email || "";
+
+  const approvalStatusLabels: Record<string, string> = {
+    pending_supervisor: "Menunggu Review Manager Divisi",
+    pending_hrd: "Diteruskan ke HRD",
+    needs_revision: "Perlu Revisi",
+    revision_manager: "Perlu Revisi",
+    revision_hrd: "Perlu Revisi",
+    approved_hrd: "Disetujui HRD",
+    approved: "Disetujui HRD",
+    rejected_manager: "Ditolak Manager Divisi",
+    rejected_hrd: "Ditolak HRD",
+    rejected: "Ditolak",
+    cancelled: "Dibatalkan",
+    draft: "Draft",
+  };
+
+  const getApprovalStatusLabel = (status: string) =>
+    approvalStatusLabels[status] || status || "-";
+
+  const workLocationLabel =
+    submission.workLocationLabel ||
+    submission.workLocation ||
+    (submission.location === "kantor"
+      ? "Kantor"
+      : submission.location === "remote"
+        ? "Remote"
+        : submission.location === "site"
+          ? "Site"
+          : submission.location || "-");
+
+  const overtimeTypeLabel =
+    submission.overtimeTypeLabel ||
+    (submission.overtimeType === "hari_kerja"
+      ? "Hari Kerja"
+      : submission.overtimeType === "hari_libur"
+        ? "Hari Libur"
+        : submission.overtimeType === "urgent"
+          ? "Urgent"
+          : submission.overtimeType || "-");
 
   const handleDecision = async (
     decision: "approve" | "reject" | "revise",
@@ -192,11 +236,11 @@ export function ReviewOvertimeDialog({
                 createdBy: userProfile.uid,
                 meta: {
                   submissionId: submission.id,
-                  employeeUid: submission.uid,
+                  employeeUid: submission.employeeUid || submission.uid,
                 },
               }),
               sendNotification(firestore, {
-                userId: submission.uid,
+                userId: submission.employeeUid || submission.uid!,
                 type: "status_update",
                 module: "employee",
                 title: "Pengajuan Lembur Diteruskan ke HRD",
@@ -210,13 +254,13 @@ export function ReviewOvertimeDialog({
             ]);
           } else if (decision === "reject") {
             await sendNotification(firestore, {
-              userId: submission.uid,
+              userId: submission.employeeUid || submission.uid!,
               type: "status_update",
               module: "employee",
-              title: "Pengajuan Lembur Ditolak oleh Manager",
+              title: "Pengajuan Lembur Ditolak oleh Manager Divisi",
               message: note
-                ? `Manager menolak pengajuan lembur Anda: ${note}`
-                : "Manager menolak pengajuan lembur Anda.",
+                ? `Manager Divisi menolak pengajuan lembur Anda: ${note}`
+                : "Manager Divisi menolak pengajuan lembur Anda.",
               targetType: "user",
               targetId: submission.id || "",
               actionUrl: "/admin/karyawan/pengajuan-lembur",
@@ -224,7 +268,7 @@ export function ReviewOvertimeDialog({
             });
           } else if (decision === "revise") {
             await sendNotification(firestore, {
-              userId: submission.uid,
+              userId: submission.employeeUid || submission.uid!,
               type: "status_update",
               module: "employee",
               title: "Revisi Pengajuan Lembur Diperlukan",
@@ -254,7 +298,7 @@ export function ReviewOvertimeDialog({
           };
 
           await sendNotification(firestore, {
-            userId: submission.uid,
+            userId: submission.employeeUid || submission.uid!,
             type: "status_update",
             module: "employee",
             title: titles[decision],
@@ -271,13 +315,9 @@ export function ReviewOvertimeDialog({
 
       toast({
         title: "Keputusan Disimpan",
-        description: `Pengajuan telah ${
-          decision === "approve"
-            ? "disetujui"
-            : decision === "reject"
-              ? "ditolak"
-              : "diminta revisi"
-        }`,
+        description: decision === "approve" 
+          ? "Pengajuan lembur berhasil disetujui dan diteruskan ke HRD untuk review final."
+          : `Pengajuan telah ${decision === "reject" ? "ditolak" : "diminta revisi"}`,
       });
       onSuccess();
       onOpenChange(false);
@@ -296,11 +336,12 @@ export function ReviewOvertimeDialog({
     }
   };
 
-  const handleApprove = async () => {
-    const confirmed = window.confirm(
-      "Setujui pengajuan lembur ini dan teruskan ke HRD?",
-    );
-    if (!confirmed) return;
+  const handleApprove = () => {
+    setShowApproveDialog(true);
+  };
+
+  const handleApproveConfirm = async () => {
+    setShowApproveDialog(false);
     setIsSaving(true);
     await handleDecision("approve");
   };
@@ -342,7 +383,9 @@ export function ReviewOvertimeDialog({
                   {submission.employeeName || submission.fullName}
                 </DialogTitle>
                 <DialogDescription className="text-sm text-muted-foreground">
-                  Tinjau detail pengajuan sebelum mengambil keputusan.
+                  {mode === "manager"
+                    ? "Tinjau detail pengajuan untuk membuat keputusan persetujuan sebagai Manager Divisi."
+                    : "Tinjau detail pengajuan dan bukti approval Manager Divisi sebelum memutuskan."}
                 </DialogDescription>
               </div>
               <OvertimeApprovalStatusBadge
@@ -399,7 +442,7 @@ export function ReviewOvertimeDialog({
                   </p>
                   <div className="mt-3 space-y-3 text-sm">
                     <InfoRow
-                      label="Jabatan"
+                      label="Jabatan / Bagian"
                       value={submission.workRole || submission.positionTitle}
                     />
                     <InfoRow label="Brand" value={submission.brandName} />
@@ -419,38 +462,86 @@ export function ReviewOvertimeDialog({
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6 px-5 pb-5 pt-0">
-                    <div className="space-y-3">
-                      {tasks.length > 0 ? (
-                        tasks.map((task, index) => (
-                          <div
-                            key={index}
-                            className="rounded-3xl border border-border bg-background p-4"
-                          >
-                            <p className="font-medium">{task.description}</p>
-                            <p className="mt-2 text-xs text-muted-foreground">
-                              Estimasi: {task.estimatedMinutes} menit
-                            </p>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-sm text-muted-foreground">
-                          Tidak ada rincian tugas.
-                        </p>
-                      )}
-                    </div>
+                    {tasks.length > 0 ? (
+                      <>
+                        <div className="overflow-x-auto rounded-lg border border-border bg-background">
+                          <Table className="text-sm">
+                            <TableHeader>
+                              <TableRow className="bg-muted hover:bg-muted">
+                                <TableHead className="px-3 py-2 text-left text-xs text-muted-foreground uppercase tracking-wide w-8">
+                                  No
+                                </TableHead>
+                                <TableHead className="px-3 py-2 text-left text-xs text-muted-foreground uppercase tracking-wide">
+                                  Uraian Tugas
+                                </TableHead>
+                                <TableHead className="px-3 py-2 text-right text-xs text-muted-foreground uppercase tracking-wide w-32">
+                                  Estimasi
+                                </TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {tasks.map((task, index) => (
+                                <TableRow
+                                  key={index}
+                                  className="border-b last:border-0"
+                                >
+                                  <TableCell className="px-3 py-2 text-xs text-muted-foreground">
+                                    {index + 1}
+                                  </TableCell>
+                                  <TableCell className="px-3 py-2 text-sm">
+                                    {task.description || "-"}
+                                  </TableCell>
+                                  <TableCell className="px-3 py-2 text-right text-sm font-medium">
+                                    {task.estimatedMinutes || 0} menit
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                              <TableRow className="bg-muted/50 font-semibold">
+                                <TableCell
+                                  colSpan={2}
+                                  className="px-3 py-2 text-right text-sm"
+                                >
+                                  Total Estimasi:
+                                </TableCell>
+                                <TableCell className="px-3 py-2 text-right text-sm font-semibold">
+                                  {totalEstimatedMinutes} menit
+                                </TableCell>
+                              </TableRow>
+                            </TableBody>
+                          </Table>
+                        </div>
 
-                    <div>
-                      <p className="text-xs uppercase text-muted-foreground">
-                        Total Estimasi
+                        <div className="pt-2">
+                          <div className="flex items-center justify-between rounded-lg border border-border bg-background p-3">
+                            <div>
+                              <p className="text-xs text-muted-foreground uppercase">
+                                Total Durasi Aktual
+                              </p>
+                              <p className="font-semibold text-base">
+                                {submission.totalDurationMinutes} menit
+                              </p>
+                            </div>
+                            {totalEstimatedMinutes !==
+                              (submission.totalDurationMinutes || 0) && (
+                              <Alert className="border-amber-200 bg-amber-50 w-auto dark:border-amber-900 dark:bg-amber-950">
+                                <AlertDescription className="text-xs text-amber-800 dark:text-amber-200">
+                                  ⚠️ Selisih:{" "}
+                                  {Math.abs(
+                                    totalEstimatedMinutes -
+                                      (submission.totalDurationMinutes || 0),
+                                  )}{" "}
+                                  menit
+                                </AlertDescription>
+                              </Alert>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Tidak ada rincian tugas.
                       </p>
-                      <p className="mt-2 font-semibold">
-                        {tasks.reduce(
-                          (sum, task) => sum + (task.estimatedMinutes || 0),
-                          0,
-                        )}{" "}
-                        menit
-                      </p>
-                    </div>
+                    )}
 
                     <div>
                       <p className="text-xs uppercase text-muted-foreground">
@@ -492,81 +583,149 @@ export function ReviewOvertimeDialog({
                   </CardContent>
                 </Card>
 
-                <Card className="rounded-3xl border border-border bg-muted shadow-sm">
-                  <CardHeader className="px-5 py-4">
-                    <CardTitle className="text-base">
-                      Timeline Persetujuan
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4 px-5 pb-5 pt-0">
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="text-sm text-muted-foreground">
-                        Status
-                      </span>
-                      <OvertimeApprovalStatusBadge
-                        status={resolvedStatus as any}
-                        mode={mode}
-                      />
-                    </div>
-                    <InfoRow
-                      label="Diajukan"
-                      value={format(submittedAt, "eeee, dd MMM yyyy HH:mm", {
-                        locale: idLocale,
-                      })}
-                    />
-                    {managerDecisionAt ? (
+                <div className="space-y-4">
+                  <Card className="rounded-3xl border border-border bg-muted shadow-sm">
+                    <CardHeader className="px-5 py-4">
+                      <CardTitle className="text-base">
+                        Validasi Durasi
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4 px-5 pb-5 pt-0">
                       <InfoRow
-                        label="Keputusan Manager"
-                        value={format(
-                          managerDecisionAt,
-                          "eeee, dd MMM yyyy HH:mm",
-                          {
-                            locale: idLocale,
-                          },
+                        label="Estimasi Total"
+                        value={`${totalEstimatedMinutes} menit`}
+                      />
+                      <InfoRow
+                        label="Durasi Aktual"
+                        value={`${submission.totalDurationMinutes || 0} menit`}
+                      />
+                      <div className="rounded-xl border border-border bg-background p-3 text-sm">
+                        {totalEstimatedMinutes !==
+                        (submission.totalDurationMinutes || 0) ? (
+                          <p className="text-amber-700 dark:text-amber-200">
+                            ⚠️ Selisih durasi terdeteksi. Pastikan total
+                            estimasi tugas sesuai dengan durasi lembur.
+                          </p>
+                        ) : (
+                          <p className="text-emerald-700 dark:text-emerald-200">
+                            Durasi sudah sesuai dengan estimasi tugas.
+                          </p>
                         )}
-                      />
-                    ) : (
-                      <InfoRow
-                        label="Keputusan Manager"
-                        value="Belum ada keputusan"
-                      />
-                    )}
-                    {submission.revisionRequestedAt && (
-                      <InfoRow
-                        label="Revisi Diminta"
-                        value={format(
-                          parseSafeDate(submission.revisionRequestedAt) ||
-                            new Date(),
-                          "eeee, dd MMM yyyy HH:mm",
-                          { locale: idLocale },
-                        )}
-                      />
-                    )}
-                    {submission.rejectedAt && (
-                      <InfoRow
-                        label="Ditolak"
-                        value={format(
-                          parseSafeDate(submission.rejectedAt) || new Date(),
-                          "eeee, dd MMM yyyy HH:mm",
-                          { locale: idLocale },
-                        )}
-                      />
-                    )}
-                    {submission.managerNotes && (
-                      <div>
-                        <p className="text-xs uppercase text-muted-foreground">
-                          Catatan Manager
-                        </p>
-                        <p className="mt-2 text-sm leading-6">
-                          {submission.managerNotes}
-                        </p>
                       </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
+                    </CardContent>
+                  </Card>
 
-              {/* Digital Approval Note */}
+                  <Card className="rounded-3xl border border-border bg-muted shadow-sm">
+                    <CardHeader className="px-5 py-4">
+                      <CardTitle className="text-base">Alasan Lembur</CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-5 pb-5 pt-0 text-sm leading-6">
+                      {submission.reason || "Tidak ada alasan tambahan."}
+                    </CardContent>
+                  </Card>
+
+                  <Card className="rounded-3xl border border-border bg-muted shadow-sm">
+                    <CardHeader className="px-5 py-4">
+                      <CardTitle className="text-base">
+                        Timeline Persetujuan
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4 px-5 pb-5 pt-0">
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-sm text-muted-foreground">
+                          Status Saat Ini
+                        </span>
+                        <OvertimeApprovalStatusBadge
+                          status={resolvedStatus as any}
+                          mode={mode}
+                        />
+                      </div>
+                      <Separator className="my-2 opacity-50" />
+                      <InfoRow
+                        label="Waktu Pengajuan"
+                        value={format(submittedAt, "eeee, dd MMMM yyyy HH:mm", {
+                          locale: idLocale,
+                        })}
+                      />
+                      
+                      {submission.supervisorApprovedAt && (
+                        <div className="space-y-2 pt-2 border-t border-border/50">
+                          <InfoRow
+                            label="Disetujui Manager Divisi oleh"
+                            value={submission.supervisorApprovedByName || "Manager Divisi"}
+                          />
+                          <InfoRow
+                            label="Waktu Persetujuan Manager"
+                            value={format(
+                              parseSafeDate(submission.supervisorApprovedAt) || new Date(),
+                              "eeee, dd MMMM yyyy HH:mm",
+                              { locale: idLocale }
+                            )}
+                          />
+                          <div className="flex justify-between text-sm">
+                            <p className="text-muted-foreground">Status Lanjutan</p>
+                            <p className="font-bold text-blue-500">Diteruskan ke HRD</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {submission.revisionRequestedAt && (
+                        <InfoRow
+                          label="Revisi Diminta Pada"
+                          value={format(
+                            parseSafeDate(submission.revisionRequestedAt) ||
+                              new Date(),
+                            "eeee, dd MMMM yyyy HH:mm",
+                            { locale: idLocale },
+                          )}
+                        />
+                      )}
+                      {submission.rejectedAt && (
+                        <InfoRow
+                          label="Ditolak Pada"
+                          value={format(
+                            parseSafeDate(submission.rejectedAt) || new Date(),
+                            "eeee, dd MMMM yyyy HH:mm",
+                            { locale: idLocale },
+                          )}
+                        />
+                      )}
+                      {submission.hrdDecisionAt && (
+                        <div className="space-y-2 pt-2 border-t border-border/50">
+                           <InfoRow
+                            label="Keputusan Final HRD"
+                            value={format(
+                              parseSafeDate(submission.hrdDecisionAt) || new Date(),
+                              "eeee, dd MMMM yyyy HH:mm",
+                              { locale: idLocale }
+                            )}
+                          />
+                        </div>
+                      )}
+                      {submission.managerNotes && (
+                        <div className="pt-2">
+                          <p className="text-xs uppercase text-muted-foreground">
+                            Catatan Manager Divisi
+                          </p>
+                          <p className="mt-1 text-sm leading-6 italic">
+                            "{submission.managerNotes}"
+                          </p>
+                        </div>
+                      )}
+                      {submission.hrdNotes && (
+                        <div className="pt-2">
+                          <p className="text-xs uppercase text-muted-foreground">
+                            Catatan HRD
+                          </p>
+                          <p className="mt-1 text-sm leading-6 italic">
+                            "{submission.hrdNotes}"
+                          </p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
               <Alert className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950">
                 <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                 <AlertTitle className="text-blue-900 dark:text-blue-100">
@@ -614,12 +773,44 @@ export function ReviewOvertimeDialog({
         </DialogContent>
       </Dialog>
 
+      {/* Approval Confirmation Dialog */}
+      <Dialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>
+        <DialogContent className="w-[min(90vw,480px)] max-w-[480px] max-h-[320px] rounded-3xl border border-border bg-slate-950 text-slate-50 p-6 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle>Setujui Pengajuan Lembur?</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Pengajuan ini akan diteruskan ke HRD untuk review final.
+            </DialogDescription>
+            <p className="mt-4 text-sm text-slate-400">
+              Keputusan ini akan tercatat dalam riwayat persetujuan.
+            </p>
+          </DialogHeader>
+          <DialogFooter className="mt-6 flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setShowApproveDialog(false)}
+              disabled={isSaving}
+            >
+              Batal
+            </Button>
+            <Button onClick={handleApproveConfirm} disabled={isSaving}>
+              {isSaving ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle className="mr-2 h-4 w-4" />
+              )}
+              Setujui & Teruskan ke HRD
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Revision Dialog */}
       <Dialog open={showRevisionDialog} onOpenChange={setShowRevisionDialog}>
-        <DialogContent className="w-[90vw] max-w-[640px]">
+        <DialogContent className="w-[min(90vw,640px)] max-w-[640px] rounded-3xl border border-border bg-slate-950 text-slate-50 p-6 shadow-2xl">
           <DialogHeader>
             <DialogTitle>Minta Revisi Pengajuan</DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-slate-400">
               Berikan catatan revisi agar karyawan dapat memperbaiki
               pengajuannya.
             </DialogDescription>
@@ -684,33 +875,45 @@ export function ReviewOvertimeDialog({
 
       {/* Reject Dialog */}
       <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
-        <DialogContent className="w-[90vw] max-w-[640px]">
+        <DialogContent className="w-[min(90vw,640px)] max-w-[640px] rounded-3xl border border-border bg-slate-950 text-slate-50 p-6 shadow-2xl">
           <DialogHeader>
             <DialogTitle>Tolak Pengajuan Lembur</DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-slate-400">
               Berikan alasan penolakan agar karyawan memahami keputusan Anda.
             </DialogDescription>
           </DialogHeader>
           {/* Summary Section */}
-          <div className="rounded-lg border border-border bg-muted p-3 text-sm space-y-2">
+          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-4 text-sm text-slate-300 space-y-3">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Karyawan:</span>
-              <span className="font-medium">
+              <span className="text-muted-foreground">Karyawan</span>
+              <span className="font-medium text-slate-100">
                 {submission.employeeName || submission.fullName}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Tanggal Lembur:</span>
-              <span className="font-medium">
+              <span className="text-muted-foreground">Tanggal Lembur</span>
+              <span className="font-medium text-slate-100">
                 {overtimeDate
                   ? format(overtimeDate, "dd MMM yyyy", { locale: idLocale })
                   : "-"}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Durasi:</span>
-              <span className="font-medium">
+              <span className="text-muted-foreground">Durasi</span>
+              <span className="font-medium text-slate-100">
                 {submission.totalDurationMinutes} menit
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Lokasi</span>
+              <span className="font-medium text-slate-100">
+                {workLocationLabel}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Tipe</span>
+              <span className="font-medium text-slate-100">
+                {overtimeTypeLabel}
               </span>
             </div>
           </div>

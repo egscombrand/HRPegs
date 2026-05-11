@@ -32,6 +32,11 @@ import {
   uploadBytesResumable,
   getDownloadURL,
 } from "firebase/storage";
+import { 
+  validateStorageFile, 
+  compressImage, 
+  handleStorageError 
+} from "@/lib/storage-utils";
 import type {
   Job,
   JobApplication,
@@ -598,13 +603,21 @@ function ApplicationCard({
     setUploadProgress(0);
 
     try {
+      const validation = validateStorageFile(signedFile);
+      if (!validation.isValid) {
+        setUploadError(validation.message || 'File tidak valid');
+        setIsUploading(false);
+        return;
+      }
+      
+      const processedFile = await compressImage(signedFile);
       const storage = getStorage();
       const storageRef = ref(
         storage,
-        `offerings/${activeOfferingId}/signed_documents/${Date.now()}_${signedFile.name}`,
+        `offerings/${activeOfferingId}/signed_documents/${Date.now()}_${processedFile.name.replace(/[^a-zA-Z0-9.]/g, '_')}`,
       );
-      const uploadTask = uploadBytesResumable(storageRef, signedFile, {
-        contentType: signedFile.type,
+      const uploadTask = uploadBytesResumable(storageRef, processedFile, {
+        contentType: processedFile.type,
       });
 
       await new Promise<void>((resolve, reject) => {
@@ -617,6 +630,7 @@ function ApplicationCard({
             setUploadProgress(progress);
           },
           (error) => {
+            handleStorageError(error);
             setUploadError(error.message || "Gagal mengunggah dokumen.");
             setIsUploading(false);
             reject(error);

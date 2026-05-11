@@ -19,13 +19,13 @@ const statusConfig: Record<
     className: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
   },
   pending_supervisor: {
-    managerLabel: "Menunggu Persetujuan Anda",
+    managerLabel: "Menunggu Review Anda",
     hrdLabel: "Menunggu Manager Divisi",
     className:
       "bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-200",
   },
   pending_manager: {
-    managerLabel: "Menunggu Persetujuan Anda",
+    managerLabel: "Menunggu Review Anda",
     hrdLabel: "Menunggu Manager Divisi",
     className:
       "bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-200",
@@ -35,12 +35,6 @@ const statusConfig: Record<
     hrdLabel: "Ditolak",
     className: "bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-200",
   },
-  needs_revision: {
-    managerLabel: "Perlu Revisi",
-    hrdLabel: "Perlu Revisi",
-    className:
-      "bg-amber-100 text-amber-800 dark:bg-amber-800 dark:text-amber-200",
-  },
   revision_manager: {
     managerLabel: "Revisi Diminta",
     hrdLabel: "Revisi dari Manajer",
@@ -48,12 +42,12 @@ const statusConfig: Record<
       "bg-amber-100 text-amber-800 dark:bg-amber-800 dark:text-amber-200",
   },
   approved_by_manager: {
-    managerLabel: "Disetujui Anda",
+    managerLabel: "Diteruskan ke HRD",
     hrdLabel: "Menunggu Review HRD",
     className: "bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-200",
   },
   pending_hrd: {
-    managerLabel: "Menunggu Review HRD",
+    managerLabel: "Diteruskan ke HRD",
     hrdLabel: "Menunggu Review HRD",
     className: "bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-200",
   },
@@ -69,13 +63,7 @@ const statusConfig: Record<
       "bg-amber-100 text-amber-800 dark:bg-amber-800 dark:text-amber-200",
   },
   approved: {
-    managerLabel: "Disetujui",
-    hrdLabel: "Disetujui HRD",
-    className:
-      "bg-green-200 text-green-900 dark:bg-green-900 dark:text-green-200",
-  },
-  approved_hrd: {
-    managerLabel: "Disetujui",
+    managerLabel: "Disetujui HRD",
     hrdLabel: "Disetujui HRD",
     className:
       "bg-green-200 text-green-900 dark:bg-green-900 dark:text-green-200",

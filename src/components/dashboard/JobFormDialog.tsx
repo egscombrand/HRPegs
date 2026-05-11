@@ -4,8 +4,13 @@ import { useEffect, useState, useMemo } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { doc, collection, serverTimestamp, query, where } from 'firebase/firestore';
+import { doc, collection, serverTimestamp, query, where, Timestamp } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { 
+  validateStorageFile, 
+  compressImage, 
+  handleStorageError 
+} from "@/lib/storage-utils";
 import { useFirestore, setDocumentNonBlocking, useFirebaseApp, useCollection, useMemoFirebase } from '@/firebase';
 import { useAuth } from '@/providers/auth-provider';
 import { Button } from '@/components/ui/button';
@@ -129,13 +134,13 @@ export function JobFormDialog({ open, onOpenChange, job, brands }: JobFormDialog
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Type and Size validation
-    if (!file.type.startsWith('image/')) {
-      toast({ variant: 'destructive', title: 'Invalid File Type', description: 'Please upload an image file.' });
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) { // 5MB
-      toast({ variant: 'destructive', title: 'File Too Large', description: 'Image size should not exceed 5MB.' });
+    const validation = validateStorageFile(file);
+    if (!validation.isValid) {
+      toast({ 
+        variant: 'destructive', 
+        title: 'File Tidak Valid', 
+        description: validation.message 
+      });
       return;
     }
     
@@ -146,9 +151,10 @@ export function JobFormDialog({ open, onOpenChange, job, brands }: JobFormDialog
   };
 
   const uploadCoverImage = async (jobId: string, imageFile: File): Promise<string> => {
-    const filePath = `jobs/${jobId}/cover-${Date.now()}`;
+    const processedFile = await compressImage(imageFile);
+    const filePath = `jobs/${jobId}/cover-${Date.now()}-${processedFile.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
     const storageRef = ref(storage, filePath);
-    await uploadBytes(storageRef, imageFile);
+    await uploadBytes(storageRef, processedFile);
     return getDownloadURL(storageRef);
   };
 
@@ -174,7 +180,7 @@ export function JobFormDialog({ open, onOpenChange, job, brands }: JobFormDialog
       const jobData: Omit<Job, 'id'> = {
         ...restOfValues,
         numberOfOpenings: values.numberOfOpenings || 1,
-        applyDeadline: values.applyDeadline || null,
+        applyDeadline: values.applyDeadline ? Timestamp.fromDate(values.applyDeadline) : undefined,
         coverImageUrl: finalCoverImageUrl,
         slug: job?.slug || `${slugify(values.position)}-${slugify(brandName)}-${Math.random().toString(36).substring(2, 7)}`,
         publishStatus: job?.publishStatus || 'draft',
@@ -193,11 +199,7 @@ export function JobFormDialog({ open, onOpenChange, job, brands }: JobFormDialog
       });
       onOpenChange(false);
     } catch (error: any) {
-      toast({
-        variant: 'destructive',
-        title: `Error saving job`,
-        description: error.message,
-      });
+      handleStorageError(error);
     } finally {
       setLoading(false);
     }
@@ -359,7 +361,7 @@ export function JobFormDialog({ open, onOpenChange, job, brands }: JobFormDialog
                           </label>
                           <p className="pl-1">or drag and drop</p>
                         </div>
-                        <p className="text-xs leading-5 text-muted-foreground">PNG, JPG, WEBP up to 5MB.</p>
+                        <p className="text-xs leading-5 text-muted-foreground">PNG, JPG, WEBP up to 1MB.</p>
                       </div>
                     </div>
                   </FormControl>

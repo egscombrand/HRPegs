@@ -41,11 +41,13 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import {
-  getStorage,
-  ref,
-  uploadBytesResumable,
   getDownloadURL,
 } from "firebase/storage";
+import { 
+  validateStorageFile, 
+  compressImage, 
+  handleStorageError 
+} from "@/lib/storage-utils";
 import type { OfferingTemplate, Brand } from "@/lib/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -208,21 +210,28 @@ export function OfferingTemplateDialog({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const validation = validateStorageFile(file);
+    if (!validation.isValid) {
+      toast({
+        variant: "destructive",
+        title: "File Terlalu Besar",
+        description: validation.message,
+      });
+      return;
+    }
+
+    const processedFile = await compressImage(file);
     setIsUploading(true);
     const storage = getStorage();
-    const filePath = `offering_templates/${Date.now()}_${file.name}`;
+    const filePath = `offering_templates/${Date.now()}_${processedFile.name.replace(/[^a-zA-Z0-9.]/g, "_")}`;
     const storageRef = ref(storage, filePath);
-    const uploadTask = uploadBytesResumable(storageRef, file);
+    const uploadTask = uploadBytesResumable(storageRef, processedFile);
 
     uploadTask.on(
       "state_changed",
       null,
       (error) => {
-        toast({
-          variant: "destructive",
-          title: "Upload Gagal",
-          description: error.message,
-        });
+        handleStorageError(error);
         setIsUploading(false);
       },
       async () => {

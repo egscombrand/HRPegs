@@ -15,6 +15,11 @@ import { Loader2, Save, UploadCloud, Trash2, PlusCircle } from 'lucide-react';
 import { useFirestore, setDocumentNonBlocking, useFirebaseApp } from '@/firebase';
 import { doc, collection, serverTimestamp } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { 
+  validateStorageFile, 
+  compressImage, 
+  handleStorageError 
+} from '@/lib/storage-utils';
 import Image from 'next/image';
 import type { EcosystemSection } from '@/lib/types';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -128,12 +133,13 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
     if (!files || files.length === 0) return;
 
     const newImageFiles = Array.from(files).filter(file => {
-        if (!file.type.startsWith('image/')) {
-            toast({ variant: "destructive", title: "Invalid File Type", description: `${file.name} is not an image.` });
-            return false;
-        }
-        if (file.size > 5 * 1024 * 1024) { // 5MB
-            toast({ variant: "destructive", title: "File Too Large", description: `${file.name} is larger than 5MB.` });
+        const validation = validateStorageFile(file);
+        if (!validation.isValid) {
+            toast({ 
+                variant: "destructive", 
+                title: "File Tidak Valid", 
+                description: `${file.name}: ${validation.message}` 
+            });
             return false;
         }
         return true;
@@ -208,9 +214,10 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
 
         const newImageUrls = await Promise.all(
             (values.imageFiles || []).map(async (file) => {
-                const filePath = `ecosystem_sections/${sectionKey}/${Date.now()}-${file.name}`;
+                const processedFile = await compressImage(file);
+                const filePath = `ecosystem_sections/${sectionKey}/${Date.now()}-${processedFile.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
                 const storageRef = ref(storage, filePath);
-                await uploadBytes(storageRef, file);
+                await uploadBytes(storageRef, processedFile);
                 return getDownloadURL(storageRef);
             })
         );
@@ -241,7 +248,7 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
         onSuccess();
         onOpenChange(false);
     } catch (e: any) {
-        toast({ variant: 'destructive', title: `Failed to ${mode.toLowerCase()} section`, description: e.message });
+        handleStorageError(e);
     } finally {
         setIsSaving(false);
     }
@@ -343,7 +350,7 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
                           {imagePreviews.length > 0 ? "Tambah gambar lain" : "Seret & lepas gambar di sini"}, atau klik untuk memilih file
                         </p>
                         <p className="text-xs">Anda dapat memilih beberapa file sekaligus.</p>
-                        <p className="text-xs">PNG, JPG, WEBP hingga 5MB.</p>
+                        <p className="text-xs">PNG, JPG, WEBP hingga 1MB.</p>
                       </div>
                     </label>
                     <Input id="image-upload" type="file" multiple className="hidden" onChange={handleFileChange} accept="image/png, image/jpeg, image/webp" />

@@ -15,6 +15,11 @@ import { useAuth } from '@/providers/auth-provider';
 import { useFirestore, setDocumentNonBlocking, useFirebaseApp } from '@/firebase';
 import { doc, collection, serverTimestamp } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { 
+  validateStorageFile, 
+  compressImage, 
+  handleStorageError 
+} from '@/lib/storage-utils';
 import Image from 'next/image';
 import type { EcosystemCompany, Brand } from '@/lib/types';
 import { Label } from '@/components/ui/label';
@@ -67,8 +72,13 @@ export function EcosystemCompanyFormDialog({ open, onOpenChange, item, brands }:
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) { // 2MB
-      toast({ variant: "destructive", title: "File too large", description: "Logo size should not exceed 2MB." });
+    const validation = validateStorageFile(file);
+    if (!validation.isValid) {
+      toast({ 
+        variant: "destructive", 
+        title: "File Tidak Valid", 
+        description: validation.message 
+      });
       return;
     }
     setImagePreview(URL.createObjectURL(file));
@@ -76,9 +86,10 @@ export function EcosystemCompanyFormDialog({ open, onOpenChange, item, brands }:
   };
 
   const uploadIcon = async (docId: string, file: File): Promise<string> => {
-    const filePath = `ecosystem_logos/${docId}/${file.name}`;
+    const processedFile = await compressImage(file);
+    const filePath = `ecosystem_logos/${docId}/${processedFile.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
     const storageRef = ref(storage, filePath);
-    await uploadBytes(storageRef, file);
+    await uploadBytes(storageRef, processedFile);
     return getDownloadURL(storageRef);
   };
 
@@ -110,7 +121,7 @@ export function EcosystemCompanyFormDialog({ open, onOpenChange, item, brands }:
       toast({ title: `Company ${mode}d`, description: `"${values.name}" has been saved.` });
       onOpenChange(false);
     } catch (e: any) {
-      toast({ variant: 'destructive', title: `Failed to ${mode.toLowerCase()} company`, description: e.message });
+      handleStorageError(e);
     } finally {
       setIsSaving(false);
     }
@@ -166,7 +177,7 @@ export function EcosystemCompanyFormDialog({ open, onOpenChange, item, brands }:
                                   <div className="flex flex-col items-center justify-center pt-5 pb-6">
                                       <UploadCloud className="w-10 h-10 mb-3 text-muted-foreground" />
                                       <p className="mb-2 text-sm text-primary font-semibold">Choose Logo</p>
-                                      <p className="text-xs text-muted-foreground">PNG, JPG, WEBP up to 2MB</p>
+                                      <p className="text-xs text-muted-foreground">PNG, JPG, WEBP up to 1MB</p>
                                   </div>
                               )}
                               <Input id="icon-upload" name={field.name} type="file" className="hidden" onChange={handleFileChange} accept="image/*" />

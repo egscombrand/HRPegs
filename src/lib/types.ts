@@ -2,6 +2,16 @@
 
 import type { Timestamp } from "firebase/firestore";
 
+export type FileMetadata = {
+  fileName: string;
+  fileSize: number;
+  fileType: string;
+  filePath: string;
+  downloadUrl: string;
+  uploadedAt: Timestamp;
+  uploadedBy: string;
+};
+
 export const ROLES = [
   "super-admin",
   "hrd",
@@ -58,6 +68,7 @@ export type UserProfile = {
   isProfileComplete?: boolean;
   isAssessmentComplete?: boolean;
   photoUrl?: string;
+  photoPath?: string;
   inviteBatchId?: string;
 
   // Division Manager fields
@@ -272,6 +283,8 @@ export type EmployeeVerificationStatus = {
 export type EmployeeProfile = {
   id?: string;
   uid: string;
+  photoUrl?: string;
+  photoPath?: string;
 
   // --- Data Pribadi (Nested) ---
   dataDiriIdentitas: {
@@ -1762,7 +1775,8 @@ export type OvertimeSubmissionStatus =
 
 export type OvertimeSubmission = {
   id?: string;
-  uid: string;
+  uid?: string; // Legacy field, use employeeUid
+  employeeUid: string;
   employeeName: string;
   fullName?: string;
   brandId: string;
@@ -1798,6 +1812,9 @@ export type OvertimeSubmission = {
   status: OvertimeSubmissionStatus;
   approvalStatus?: string;
   directSupervisorUid?: string;
+  directSupervisorName?: string;
+  supervisorUid?: string;
+  supervisorName?: string;
   supervisorApprovedAt?: Timestamp | null;
   supervisorApprovedBy?: string | null;
   supervisorApprovedByName?: string | null;

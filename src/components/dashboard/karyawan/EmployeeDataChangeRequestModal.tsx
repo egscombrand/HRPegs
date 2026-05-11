@@ -22,6 +22,11 @@ import {
   uploadBytesResumable,
   getDownloadURL,
 } from "firebase/storage";
+import { 
+  validateStorageFile, 
+  compressImage, 
+  handleStorageError 
+} from "@/lib/storage-utils";
 import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
@@ -234,21 +239,23 @@ export function EmployeeDataChangeRequestModal({
     const storage = getStorage();
 
     for (const file of fileList) {
-      if (file.size > 10 * 1024 * 1024) {
+      const validation = validateStorageFile(file);
+      if (!validation.isValid) {
         toast({
           variant: "destructive",
           title: "File Terlalu Besar",
-          description: `${file.name} melebihi 10MB`,
+          description: `${file.name}: ${validation.message}`,
         });
         continue;
       }
 
+      const processedFile = await compressImage(file);
       const fileId = Math.random().toString(36).substring(7);
       const storageRef = ref(
         storage,
-        `change_requests/${firebaseUser.uid}/${Date.now()}_${file.name}`,
+        `change_requests/${firebaseUser.uid}/${Date.now()}_${processedFile.name.replace(/[^a-zA-Z0-9.]/g, "_")}`,
       );
-      const uploadTask = uploadBytesResumable(storageRef, file);
+      const uploadTask = uploadBytesResumable(storageRef, processedFile);
 
       uploadTask.on(
         "state_changed",
@@ -259,11 +266,7 @@ export function EmployeeDataChangeRequestModal({
           setUploadProgress((prev) => ({ ...prev, [fileId]: progress }));
         },
         (error) => {
-          toast({
-            variant: "destructive",
-            title: "Gagal upload",
-            description: error.message,
-          });
+          handleStorageError(error);
         },
         async () => {
           const url = await getDownloadURL(uploadTask.snapshot.ref);

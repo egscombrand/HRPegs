@@ -58,6 +58,11 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { 
+  validateStorageFile, 
+  compressImage, 
+  handleStorageError 
+} from "@/lib/storage-utils";
 import { useFirestore, useStorage } from "@/firebase";
 import { useAuth } from "@/providers/auth-provider";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
@@ -244,11 +249,17 @@ export function OfferEditor({
     fileOrMetadata: File | z.infer<typeof fileMetadataSchema>,
   ): Promise<string> => {
     if (fileOrMetadata instanceof File) {
+      const validation = validateStorageFile(fileOrMetadata);
+      if (!validation.isValid) {
+        throw new Error(validation.message);
+      }
+      
+      const processedFile = await compressImage(fileOrMetadata);
       const storageRef = ref(
         storage,
-        `offerings/${application.id}/${Date.now()}-${fileOrMetadata.name}`,
+        `offerings/${application.id}/${Date.now()}-${processedFile.name.replace(/[^a-zA-Z0-9.]/g, \"_\")}`,
       );
-      await uploadBytes(storageRef, fileOrMetadata);
+      await uploadBytes(storageRef, processedFile);
       return getDownloadURL(storageRef);
     }
     return fileOrMetadata.url;
@@ -296,6 +307,15 @@ export function OfferEditor({
     const pdfFile = files.find((file) => file.type === "application/pdf");
 
     if (pdfFile) {
+      const validation = validateStorageFile(pdfFile);
+      if (!validation.isValid) {
+        toast({
+          variant: "destructive",
+          title: "File Terlalu Besar",
+          description: validation.message,
+        });
+        return;
+      }
       handleFileSelect(pdfFile);
     } else {
       toast({
@@ -308,6 +328,17 @@ export function OfferEditor({
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    if (file) {
+      const validation = validateStorageFile(file);
+      if (!validation.isValid) {
+        toast({
+          variant: \"destructive\",
+          title: \"File Terlalu Besar\",
+          description: validation.message,
+        });
+        return;
+      }
+    }
     handleFileSelect(file || null);
   };
 

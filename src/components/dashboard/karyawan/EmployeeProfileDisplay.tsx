@@ -37,6 +37,10 @@ import type { UserProfile, EmployeeProfile } from "@/lib/types";
 import { format } from "date-fns";
 import { parseDateValue } from "@/lib/utils";
 import { calculateProfileCompleteness } from "@/lib/employee-completeness";
+import { getEmployeePhotoUrl } from "@/lib/profile-utils";
+import { ChangeProfilePhotoModal } from "./ChangeProfilePhotoModal";
+import { Camera, Pencil } from "lucide-react";
+import { useAuth } from "@/providers/auth-provider";
 
 const SectionTitle = ({
   children,
@@ -240,6 +244,11 @@ export function EmployeeProfileDisplay({
   userProfile: UserProfile;
   onEdit: () => void;
 }) {
+  const { firebaseUser } = useAuth();
+  const [showPhotoModal, setShowPhotoModal] = React.useState(false);
+  
+  const profilePhotoUrl = getEmployeePhotoUrl(employeeProfile, userProfile, firebaseUser);
+  
   const isProfileComplete = employeeProfile?.completeness?.isComplete;
   const iden = employeeProfile?.dataDiriIdentitas || ({} as any);
   const addr = employeeProfile?.alamat || ({} as any);
@@ -288,12 +297,31 @@ export function EmployeeProfileDisplay({
       <div className="relative group overflow-hidden rounded-[2.5rem] bg-slate-900/40 border border-slate-800/60 p-8 md:p-10 shadow-2xl shadow-blue-500/5">
         <div className="absolute top-0 right-0 -m-8 h-64 w-64 rounded-full bg-primary/5 blur-3xl group-hover:bg-primary/10 transition-colors duration-1000" />
         <div className="relative flex flex-col md:flex-row items-center gap-8 md:gap-10">
-          <Avatar className="h-32 w-32 md:h-40 md:w-40 rounded-[2.5rem] border-4 border-slate-800 shadow-2xl transition-transform duration-500 hover:scale-105">
-            <AvatarImage src={iden.profilePhotoUrl} className="object-cover" />
-            <AvatarFallback className="bg-slate-800 text-slate-400">
-              <User className="h-16 w-16" />
-            </AvatarFallback>
-          </Avatar>
+          <div className="relative group/avatar">
+            <Avatar className="h-32 w-32 md:h-40 md:w-40 rounded-[2.5rem] border-4 border-slate-800 shadow-2xl transition-all duration-500 group-hover/avatar:scale-[1.02] group-hover/avatar:border-primary/30">
+              <AvatarImage 
+                src={profilePhotoUrl || ""} 
+                className="object-cover" 
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = ""; // Force fallback
+                }}
+              />
+              <AvatarFallback className="bg-slate-800 text-slate-400">
+                <User className="h-16 w-16" />
+              </AvatarFallback>
+            </Avatar>
+            
+            {/* Shortcut Ganti Foto */}
+            {firebaseUser?.uid === userProfile.uid && (
+              <button
+                onClick={() => setShowPhotoModal(true)}
+                className="absolute bottom-1 right-1 md:bottom-2 md:right-2 p-2.5 rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20 border-2 border-slate-900 transition-all duration-300 hover:scale-110 hover:rotate-6 active:scale-95 z-10"
+                title="Ganti Foto Profil"
+              >
+                <Pencil className="h-4 w-4 md:h-5 md:w-5" />
+              </button>
+            )}
+          </div>
 
           <div className="flex-1 text-center md:text-left space-y-4">
             <div className="space-y-1">
@@ -820,6 +848,16 @@ export function EmployeeProfileDisplay({
           </Card>
         </div>
       </div>
+      <ChangeProfilePhotoModal
+        open={showPhotoModal}
+        onOpenChange={setShowPhotoModal}
+        uid={userProfile.uid}
+        currentPhotoUrl={profilePhotoUrl}
+        currentPhotoPath={employeeProfile?.photoPath}
+        onSuccess={() => {
+          window.location.reload(); 
+        }}
+      />
     </div>
   );
 }

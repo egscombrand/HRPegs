@@ -25,6 +25,11 @@ import {
   getDownloadURL,
   type UploadTask,
 } from "firebase/storage";
+import { 
+  validateStorageFile, 
+  compressImage, 
+  handleStorageError 
+} from "@/lib/storage-utils";
 import { useToast } from "@/hooks/use-toast";
 import {
   Card,
@@ -796,23 +801,26 @@ function DocumentUploadCard({
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 10 * 1024 * 1024) {
+    const validation = validateStorageFile(file);
+    if (!validation.isValid) {
       toast({
         variant: "destructive",
         title: "File Terlalu Besar",
-        description: "Ukuran file maksimal 10MB.",
+        description: validation.message,
       });
       return;
     }
 
+    const processedFile = await compressImage(file);
+    
     setIsUploading(true);
     setProgress(0);
     const storage = getStorage();
     const storageRef = ref(
       storage,
-      `employee_profiles/${userId}/${fieldKey}_${Date.now()}_${file.name}`,
+      `employee_profiles/${userId}/${fieldKey}_${Date.now()}_${processedFile.name.replace(/[^a-zA-Z0-9.]/g, "_")}`,
     );
-    const uploadTask = uploadBytesResumable(storageRef, file);
+    const uploadTask = uploadBytesResumable(storageRef, processedFile);
 
     uploadTask.on(
       "state_changed",
@@ -822,11 +830,7 @@ function DocumentUploadCard({
         );
       },
       (error) => {
-        toast({
-          variant: "destructive",
-          title: "Upload Gagal",
-          description: error.message,
-        });
+        handleStorageError(error);
         setIsUploading(false);
       },
       async () => {

@@ -52,6 +52,11 @@ import {
   getDownloadURL,
   type UploadTask,
 } from "firebase/storage";
+import { 
+  validateStorageFile, 
+  compressImage, 
+  handleStorageError 
+} from "@/lib/storage-utils";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "../ui/progress";
 import { Alert, AlertDescription } from "../ui/alert";
@@ -90,7 +95,7 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
-const FILE_SIZE_LIMIT = 5 * 1024 * 1024; // 5MB
+const FILE_SIZE_LIMIT = 1 * 1024 * 1024; // 1MB
 
 interface FileUploadFieldProps {
   label: string;
@@ -139,34 +144,32 @@ function FileUploadField({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > FILE_SIZE_LIMIT) {
+    const validation = validateStorageFile(file);
+    if (!validation.isValid) {
       toast({
         variant: "destructive",
         title: "File Terlalu Besar",
-        description: `Maksimal ukuran file adalah 5MB. Untuk file lebih besar, gunakan link external.`,
+        description: validation.message,
       });
       return;
     }
 
-    setFileName(file.name);
+    const processedFile = await compressImage(file);
+    setFileName(processedFile.name);
     setIsUploading(true);
     const storage = getStorage();
     const storageRef = ref(
       storage,
-      `user_docs/${userId}/${pathPrefix}_${Date.now()}_${file.name}`,
+      `user_docs/${userId}/${pathPrefix}_${Date.now()}_${processedFile.name.replace(/[^a-zA-Z0-9.]/g, "_")}`,
     );
-    const uploadTask = uploadBytesResumable(storageRef, file);
+    const uploadTask = uploadBytesResumable(storageRef, processedFile);
 
     uploadTask.on(
       "state_changed",
       (snapshot) =>
         setProgress((snapshot.bytesTransferred / snapshot.totalBytes) * 100),
       (error) => {
-        toast({
-          variant: "destructive",
-          title: "Upload Gagal",
-          description: error.message,
-        });
+        handleStorageError(error);
         setIsUploading(false);
       },
       async () => {
@@ -461,7 +464,7 @@ export function SkillsForm({
           <CardHeader>
             <CardTitle>Unggah Dokumen Wajib</CardTitle>
             <CardDescription>
-              Lampirkan dokumen pendukung lamaran Anda. Ukuran file maksimal 5MB
+              Lampirkan dokumen pendukung lamaran Anda. Ukuran file maksimal 1MB
               per file atau lampirkan link external jika ukuran file lebih
               besar.
             </CardDescription>

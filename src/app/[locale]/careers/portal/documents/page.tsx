@@ -5,6 +5,11 @@ import { useAuth } from '@/providers/auth-provider';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { collection, query, where, serverTimestamp, writeBatch, doc } from 'firebase/firestore';
 import { getStorage, ref, uploadBytesResumable, getDownloadURL, UploadTask } from 'firebase/storage';
+import { 
+  validateStorageFile, 
+  compressImage, 
+  handleStorageError 
+} from '@/lib/storage-utils';
 import type { JobApplication } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -87,18 +92,21 @@ function DocumentUploadSlot({ label, fileType, userId, applicationId, initialFil
     const [isUploading, setIsUploading] = useState(false);
     const [task, setTask] = useState<UploadTask | null>(null);
 
-    const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
         const selectedFile = e.target.files?.[0];
         setError(null);
 
         if (selectedFile) {
-            if (selectedFile.size > 5 * 1024 * 1024) { // 5MB limit
-                setError('Ukuran file tidak boleh lebih dari 5MB.');
+            const validation = validateStorageFile(selectedFile);
+            if (!validation.isValid) {
+                setError(validation.message || 'File tidak valid');
                 setFile(null);
                 e.target.value = '';
                 return;
             }
-            setFile(selectedFile);
+            
+            const processedFile = await compressImage(selectedFile);
+            setFile(processedFile);
         } else {
             setFile(null);
         }
@@ -112,7 +120,7 @@ function DocumentUploadSlot({ label, fileType, userId, applicationId, initialFil
         setProgress(0);
 
         const storage = getStorage();
-        const filePath = `userDocs/${userId}/${applicationId}/${fileType}-${file.name}`;
+        const filePath = `userDocs/${userId}/${applicationId}/${fileType}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
         const storageRef = ref(storage, filePath);
         const uploadTask = uploadBytesResumable(storageRef, file);
 
@@ -123,6 +131,7 @@ function DocumentUploadSlot({ label, fileType, userId, applicationId, initialFil
                 setProgress((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
             },
             (uploadError) => {
+                handleStorageError(uploadError);
                 setError('Gagal mengunggah file. Silakan coba lagi.');
                 setIsUploading(false);
                 setTask(null);
@@ -144,7 +153,7 @@ function DocumentUploadSlot({ label, fileType, userId, applicationId, initialFil
         );
     };
 
-    const fileDescription = fileType === 'cv' ? '(pdf, doc, docx, maks. 5MB)' : '(pdf, jpg, png, maks. 5MB)';
+    const fileDescription = '(maks. 1MB - PDF, JPG, PNG, DOCX)';
 
     return (
         <div className="rounded-lg border bg-card p-4 space-y-3">

@@ -13,6 +13,11 @@ import {
   uploadBytesResumable,
   getDownloadURL,
 } from "firebase/storage";
+import { 
+  validateStorageFile, 
+  compressImage, 
+  handleStorageError 
+} from "@/lib/storage-utils";
 import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
@@ -144,21 +149,23 @@ export function BankChangeRequestModal({
     const file = e.target.files?.[0];
     if (!file || !firebaseUser) return;
 
-    if (file.size > 5 * 1024 * 1024) {
+    const validation = validateStorageFile(file);
+    if (!validation.isValid) {
       toast({
         variant: "destructive",
         title: "File Terlalu Besar",
-        description: "Maksimal 5MB",
+        description: validation.message,
       });
       return;
     }
 
+    const processedFile = await compressImage(file);
     const storage = getStorage();
     const storageRef = ref(
       storage,
-      `bank_proofs/${firebaseUser.uid}_${Date.now()}_${file.name}`,
+      `bank_proofs/${firebaseUser.uid}_${Date.now()}_${processedFile.name.replace(/[^a-zA-Z0-9.]/g, "_")}`,
     );
-    const uploadTask = uploadBytesResumable(storageRef, file);
+    const uploadTask = uploadBytesResumable(storageRef, processedFile);
 
     uploadTask.on(
       "state_changed",
@@ -168,11 +175,7 @@ export function BankChangeRequestModal({
         );
       },
       (error) => {
-        toast({
-          variant: "destructive",
-          title: "Gagal upload",
-          description: error.message,
-        });
+        handleStorageError(error);
         setUploadProgress(0);
       },
       async () => {

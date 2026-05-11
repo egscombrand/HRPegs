@@ -17,6 +17,11 @@ import { useFirestore, setDocumentNonBlocking } from '@/firebase';
 import { doc, serverTimestamp, Timestamp, collection } from 'firebase/firestore';
 import { PERMISSION_TYPES, type PermissionRequest, type UserProfile, type EmployeeProfile, type Brand, type PermissionType } from '@/lib/types';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { 
+  validateStorageFile, 
+  compressImage, 
+  handleStorageError 
+} from '@/lib/storage-utils';
 import { GoogleDatePicker } from '@/components/ui/google-date-picker';
 import { format, differenceInMinutes, set, addDays, startOfDay, endOfDay, isBefore } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
@@ -194,9 +199,20 @@ export function PermissionRequestForm({ open, onOpenChange, submission, employee
     let attachmentUrl = '';
     try {
         if (values.attachment instanceof File) {
-            const compressedFile = await compressAndResizeImage(values.attachment, 1024, 0.8);
+            const validation = validateStorageFile(values.attachment);
+            if (!validation.isValid) {
+              toast({
+                variant: 'destructive',
+                title: 'File Terlalu Besar',
+                description: validation.message,
+              });
+              setIsSaving(false);
+              return;
+            }
+            
+            const compressedFile = await compressImage(values.attachment);
             const storage = getStorage();
-            const storageRef = ref(storage, `permission-attachments/${userProfile.uid}/${Date.now()}-${compressedFile.name}`);
+            const storageRef = ref(storage, `permission-attachments/${userProfile.uid}/${Date.now()}-${compressedFile.name.replace(/[^a-zA-Z0-9.]/g, '_')}`);
             const uploadSnapshot = await uploadBytes(storageRef, compressedFile);
             attachmentUrl = await getDownloadURL(uploadSnapshot.ref);
         } else if (typeof values.attachment === 'string') {
