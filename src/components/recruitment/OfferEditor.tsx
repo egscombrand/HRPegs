@@ -255,9 +255,10 @@ export function OfferEditor({
       }
       
       const processedFile = await compressImage(fileOrMetadata);
+      const safeFileName = processedFile.name.replace(/[^a-zA-Z0-9.]/g, "_");
       const storageRef = ref(
         storage,
-        `offerings/${application.id}/${Date.now()}-${processedFile.name.replace(/[^a-zA-Z0-9.]/g, \"_\")}`,
+        `offerings/${application.id}/${Date.now()}-${safeFileName}`,
       );
       await uploadBytes(storageRef, processedFile);
       return getDownloadURL(storageRef);
@@ -332,8 +333,8 @@ export function OfferEditor({
       const validation = validateStorageFile(file);
       if (!validation.isValid) {
         toast({
-          variant: \"destructive\",
-          title: \"File Terlalu Besar\",
+          variant: "destructive",
+          title: "File Terlalu Besar",
           description: validation.message,
         });
         return;
