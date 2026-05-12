@@ -2,7 +2,7 @@
 import { createElement, type ReactNode } from 'react';
 import { 
     LayoutDashboard, Users, Briefcase, User, Calendar, DollarSign, Settings, ShieldCheck, Database, History, 
-    Contact, UserPlus, FolderKanban, CalendarOff, UserMinus, KanbanSquare, CheckSquare, BarChart, ClipboardCheck, Award, Search, FileText, FileUp, Video, BrainCircuit, Timer, MapPin, BookUser, FileHeart, FileClock, GraduationCap, PenSquare, Globe, Wallet
+    Contact, UserPlus, FolderKanban, CalendarOff, UserMinus, KanbanSquare, CheckSquare, BarChart, ClipboardCheck, Award, Search, FileText, FileUp, Video, BrainCircuit, Timer, MapPin, BookUser, FileHeart, FileClock, GraduationCap, PenSquare, Globe, Wallet, Wrench
 } from 'lucide-react';
 import type { UserRole } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
@@ -63,6 +63,18 @@ const REVIEW_ITEMS: MenuGroup = {
     ]
 };
 
+const DEVELOPER_MENU_ITEMS: MenuGroup = {
+    title: "Developer Tools",
+    items: [
+        { 
+            key: 'dev.storage-test', 
+            href: '/admin/dev/storage-test', 
+            label: 'Storage Test', 
+            icon: createElement(Wrench) 
+        },
+    ]
+};
+
 export const ALL_MENU_GROUPS: MenuGroup[] = [
     RECRUITMENT_MENU_ITEMS,
     EMPLOYEE_MANAGEMENT_ITEMS,
@@ -115,7 +127,8 @@ export const ALL_MENU_GROUPS: MenuGroup[] = [
             { key: 'candidate.documents', href: '/careers/portal/documents', label: 'Pengumpulan Dokumen', icon: createElement(FileUp) },
             { key: 'candidate.interviews', href: '/careers/portal/interviews', label: 'Jadwal Wawancara', icon: createElement(Calendar) },
         ]
-    }
+    },
+    DEVELOPER_MENU_ITEMS
 ];
 
 export const MENU_CONFIG: Record<string, MenuGroup[]> = {
@@ -140,7 +153,8 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
             { key: 'personal.interviews', href: '/admin/interviews', label: 'My Interviews', icon: createElement(Video) },
             { key: 'recruitment.tasks', href: '/admin/recruitment/my-tasks', label: 'Tugas Rekrutmen', icon: createElement(Briefcase) },
         ]
-    }
+    },
+    DEVELOPER_MENU_ITEMS
   ],
   'hrd': [
     RECRUITMENT_MENU_ITEMS,
