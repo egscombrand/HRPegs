@@ -45,13 +45,7 @@ import { Separator } from "../ui/separator";
 import { useAuth } from "@/providers/auth-provider";
 import { useFirestore, setDocumentNonBlocking } from "@/firebase";
 import { doc, serverTimestamp, Timestamp } from "firebase/firestore";
-import {
-  getStorage,
-  ref,
-  uploadBytesResumable,
-  getDownloadURL,
-  type UploadTask,
-} from "firebase/storage";
+import { uploadFile } from "@/lib/storage/storage-adapter";
 import { 
   validateStorageFile, 
   compressImage, 
@@ -157,31 +151,31 @@ function FileUploadField({
     const processedFile = await compressImage(file);
     setFileName(processedFile.name);
     setIsUploading(true);
-    const storage = getStorage();
-    const storageRef = ref(
-      storage,
-      `user_docs/${userId}/${pathPrefix}_${Date.now()}_${processedFile.name.replace(/[^a-zA-Z0-9.]/g, "_")}`,
-    );
-    const uploadTask = uploadBytesResumable(storageRef, processedFile);
+    
+    try {
+      setProgress(10);
+      
+      const filePath = `user_docs/${userId}/${pathPrefix}_${Date.now()}_${processedFile.name.replace(/[^a-zA-Z0-9.]/g, "_")}`;
+      
+      const result = await uploadFile(processedFile, filePath, userId, {
+        category: 'user_document',
+        ownerUid: userId,
+        compress: false // Already compressed
+      });
 
-    uploadTask.on(
-      "state_changed",
-      (snapshot) =>
-        setProgress((snapshot.bytesTransferred / snapshot.totalBytes) * 100),
-      (error) => {
-        handleStorageError(error);
-        setIsUploading(false);
-      },
-      async () => {
-        const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-        onChange(downloadUrl);
-        setIsUploading(false);
-        toast({
-          title: "Upload Berhasil",
-          description: `${label} telah diunggah.`,
-        });
-      },
-    );
+      const downloadUrl = result.webViewLink || result.downloadUrl || "";
+      
+      onChange(downloadUrl);
+      setIsUploading(false);
+      toast({
+        title: "Upload Berhasil",
+        description: `${label} telah diunggah ke Google Drive.`,
+      });
+    } catch (error: any) {
+      console.error("Skill document upload error:", error);
+      handleStorageError(error);
+      setIsUploading(false);
+    }
   };
 
   const isImage =

@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useEffect } from "react";
 import { useParams } from "next/navigation";
+import { resolveProfilePhotoUrl } from "@/lib/profile-photo";
 import { useAuth } from "@/providers/auth-provider";
 import {
   useDoc,
@@ -20,7 +21,6 @@ import {
   where,
   getDocs,
 } from "firebase/firestore";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import {
   generateOfferingPDFBlob,
   buildOfferingHtml,
@@ -377,10 +377,7 @@ export default function ApplicationDetailPage() {
                   <div className="flex items-start gap-4">
                     <Avatar className="h-16 w-16 border">
                       <AvatarImage
-                        src={
-                          application.candidatePhotoUrl ||
-                          `https://picsum.photos/seed/${application.candidateUid}/100/100`
-                        }
+                        src={resolveProfilePhotoUrl(application)}
                         alt={profile.fullName}
                         data-ai-hint="profile avatar"
                       />

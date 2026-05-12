@@ -13,15 +13,14 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Loader2, Upload, X, Camera, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { uploadFile } from "@/lib/storage/storage-adapter";
 import { doc, serverTimestamp } from "firebase/firestore";
 import { useFirestore, updateDocumentNonBlocking } from "@/firebase";
 import { User } from "lucide-react";
 import { 
   validateStorageFile, 
   compressImage, 
-  handleStorageError, 
-  safeDeleteObject 
+  handleStorageError 
 } from "@/lib/storage-utils";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -77,81 +76,62 @@ export function ChangeProfilePhotoModal({
     if (!selectedFile) return;
 
     setIsUploading(true);
-    setUploadProgress(0);
+    setUploadProgress(10);
 
     try {
-      const storage = getStorage();
       const timestamp = Date.now();
       const filename = selectedFile.name.replace(/[^a-zA-Z0-9.]/g, "_");
       const storagePath = `employee_profiles/${uid}/profile-photo/${timestamp}-${filename}`;
-      const storageRef = ref(storage, storagePath);
+      
+      // Use unified storage adapter
+      const result = await uploadFile(selectedFile, storagePath, userProfile?.uid || uid, {
+        category: "profile_photo",
+        ownerUid: uid,
+        compress: false // Already compressed above
+      });
 
-      const uploadTask = uploadBytesResumable(storageRef, selectedFile);
+      const finalUrl = result.thumbnailUrl || result.directViewUrl || result.webViewLink || "";
 
-      uploadTask.on(
-        "state_changed",
-        (snapshot) => {
-          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          setUploadProgress(progress);
+      // Update Firestore: employee_profiles
+      const employeeProfileRef = doc(firestore, "employee_profiles", uid);
+      await updateDocumentNonBlocking(employeeProfileRef, {
+        photoUrl: finalUrl,
+        photoPath: result.filePath || storagePath,
+        profilePhotoUrl: finalUrl,
+        profilePhotoFile: {
+          ...result,
+          uploadedBy: userProfile?.uid || uid,
         },
-        (error) => {
-          handleStorageError(error);
-          setIsUploading(false);
-        },
-        async () => {
-          const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+        // Update nested fields for UI display
+        "dataDiriIdentitas.profilePhotoUrl": finalUrl,
+        "dataDiriIdentitas.photoUrl": finalUrl,
+        updatedAt: serverTimestamp() as any,
+      });
 
-          // Delete old photo if path exists
-          if (currentPhotoPath) {
-            await safeDeleteObject(currentPhotoPath);
-          }
+      // Sync with users collection
+      const userRef = doc(firestore, "users", uid);
+      await updateDocumentNonBlocking(userRef, {
+        photoURL: finalUrl,
+        photoPath: result.filePath || storagePath,
+        updatedAt: serverTimestamp() as any,
+      });
 
-          // Update Firestore: employee_profiles
-          const employeeProfileRef = doc(firestore, "employee_profiles", uid);
-          await updateDocumentNonBlocking(employeeProfileRef, {
-            photoUrl: downloadUrl,
-            photoPath: storagePath,
-            // Also update the nested field if the system uses it
-            "dataDiriIdentitas.profilePhotoUrl": downloadUrl,
-            "dataDiriIdentitas.photoUrl": downloadUrl,
-            updatedAt: serverTimestamp() as any,
-          });
+      toast({
+        title: "Foto profil diperbarui",
+        description: "Foto profil Anda berhasil diperbarui ke Google Drive.",
+      });
 
-          // Sync with users collection
-          const userRef = doc(firestore, "users", uid);
-          await updateDocumentNonBlocking(userRef, {
-            photoURL: downloadUrl,
-            photoPath: storagePath,
-            updatedAt: serverTimestamp() as any,
-          });
-
-          // Store metadata in separate collection if needed, 
-          // or just as part of the document. The user requested:
-          // fileName, fileSize, fileType, filePath, downloadUrl, uploadedAt, uploadedBy
-          const metadataRef = doc(firestore, "storage_metadata", `${uid}_profile_photo`);
-          await updateDocumentNonBlocking(metadataRef, {
-            fileName: selectedFile.name,
-            fileSize: selectedFile.size,
-            fileType: selectedFile.type,
-            filePath: storagePath,
-            downloadUrl: downloadUrl,
-            uploadedAt: serverTimestamp(),
-            uploadedBy: userProfile?.uid || uid,
-          });
-
-          toast({
-            title: "Foto profil diperbarui",
-            description: "Foto profil Anda berhasil diperbarui.",
-          });
-
-          setIsUploading(false);
-          onSuccess();
-          onOpenChange(false);
-          resetState();
-        }
-      );
+      setIsUploading(false);
+      onSuccess();
+      onOpenChange(false);
+      resetState();
     } catch (error: any) {
-      handleStorageError(error);
+      console.error("Profile photo upload error:", error);
+      toast({
+        variant: "destructive",
+        title: "Upload Gagal",
+        description: error.message || "Terjadi kesalahan saat mengunggah foto profil.",
+      });
       setIsUploading(false);
     }
   };

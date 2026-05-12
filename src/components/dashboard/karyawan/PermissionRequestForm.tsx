@@ -16,7 +16,7 @@ import { useAuth } from '@/providers/auth-provider';
 import { useFirestore, setDocumentNonBlocking } from '@/firebase';
 import { doc, serverTimestamp, Timestamp, collection } from 'firebase/firestore';
 import { PERMISSION_TYPES, type PermissionRequest, type UserProfile, type EmployeeProfile, type Brand, type PermissionType } from '@/lib/types';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { uploadFile } from '@/lib/storage/storage-adapter';
 import { 
   validateStorageFile, 
   compressImage, 
@@ -211,10 +211,16 @@ export function PermissionRequestForm({ open, onOpenChange, submission, employee
             }
             
             const compressedFile = await compressImage(values.attachment);
-            const storage = getStorage();
-            const storageRef = ref(storage, `permission-attachments/${userProfile.uid}/${Date.now()}-${compressedFile.name.replace(/[^a-zA-Z0-9.]/g, '_')}`);
-            const uploadSnapshot = await uploadBytes(storageRef, compressedFile);
-            attachmentUrl = await getDownloadURL(uploadSnapshot.ref);
+            
+            const filePath = `permission-attachments/${userProfile.uid}/${Date.now()}-${compressedFile.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+            
+            const result = await uploadFile(compressedFile, filePath, userProfile.uid, {
+                category: 'permission_attachment',
+                ownerUid: userProfile.uid,
+                compress: false // Already compressed
+            });
+
+            attachmentUrl = result.webViewLink || result.downloadUrl || "";
         } else if (typeof values.attachment === 'string') {
             attachmentUrl = values.attachment; // Keep existing URL if file not changed
         }

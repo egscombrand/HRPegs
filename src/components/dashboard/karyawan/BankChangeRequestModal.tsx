@@ -7,12 +7,7 @@ import * as z from "zod";
 import { useAuth } from "@/providers/auth-provider";
 import { useFirestore } from "@/firebase";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
-import {
-  getStorage,
-  ref,
-  uploadBytesResumable,
-  getDownloadURL,
-} from "firebase/storage";
+import { uploadFile } from "@/lib/storage/storage-adapter";
 import { 
   validateStorageFile, 
   compressImage, 
@@ -160,31 +155,32 @@ export function BankChangeRequestModal({
     }
 
     const processedFile = await compressImage(file);
-    const storage = getStorage();
-    const storageRef = ref(
-      storage,
-      `bank_proofs/${firebaseUser.uid}_${Date.now()}_${processedFile.name.replace(/[^a-zA-Z0-9.]/g, "_")}`,
-    );
-    const uploadTask = uploadBytesResumable(storageRef, processedFile);
+    
+    try {
+      setUploadProgress(10);
+      
+      const filePath = `bank_proofs/${firebaseUser.uid}_${Date.now()}_${processedFile.name.replace(/[^a-zA-Z0-9.]/g, "_")}`;
+      
+      const result = await uploadFile(processedFile, filePath, firebaseUser.uid, {
+        category: 'bank_proof',
+        ownerUid: firebaseUser.uid,
+        compress: false // Already compressed
+      });
 
-    uploadTask.on(
-      "state_changed",
-      (snapshot) => {
-        setUploadProgress(
-          Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100),
-        );
-      },
-      (error) => {
-        handleStorageError(error);
-        setUploadProgress(0);
-      },
-      async () => {
-        const url = await getDownloadURL(uploadTask.snapshot.ref);
-        form.setValue("requestedProofUrl", url, { shouldValidate: true });
-        setUploadProgress(0);
-        toast({ title: "Berhasil", description: "Bukti rekening terunggah" });
-      },
-    );
+      const url = result.webViewLink || result.downloadUrl || "";
+      
+      form.setValue("requestedProofUrl", url, { shouldValidate: true });
+      setUploadProgress(0);
+      toast({ title: "Berhasil", description: "Bukti rekening terunggah ke Google Drive" });
+    } catch (error: any) {
+      console.error("Bank proof upload error:", error);
+      toast({
+        variant: "destructive",
+        title: "Upload Gagal",
+        description: "Gagal mengunggah bukti rekening ke Google Drive.",
+      });
+      setUploadProgress(0);
+    }
   };
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {

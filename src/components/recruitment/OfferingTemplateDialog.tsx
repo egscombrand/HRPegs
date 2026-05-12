@@ -40,12 +40,7 @@ import {
   doc,
   serverTimestamp,
 } from "firebase/firestore";
-import {
-  getStorage,
-  ref,
-  uploadBytesResumable,
-  getDownloadURL,
-} from "firebase/storage";
+import { uploadFile } from "@/lib/storage/storage-adapter";
 import { 
   validateStorageFile, 
   compressImage, 
@@ -225,29 +220,34 @@ export function OfferingTemplateDialog({
 
     const processedFile = await compressImage(file);
     setIsUploading(true);
-    const storage = getStorage();
-    const filePath = `offering_templates/${Date.now()}_${processedFile.name.replace(/[^a-zA-Z0-9.]/g, "_")}`;
-    const storageRef = ref(storage, filePath);
-    const uploadTask = uploadBytesResumable(storageRef, processedFile);
+    
+    try {
+      const filePath = `offering_templates/${Date.now()}_${processedFile.name.replace(/[^a-zA-Z0-9.]/g, "_")}`;
+      
+      const result = await uploadFile(processedFile, filePath, userProfile?.uid || "system", {
+        category: "offering_template",
+        ownerUid: userProfile?.uid || "system",
+        compress: false // Already compressed
+      });
 
-    uploadTask.on(
-      "state_changed",
-      null,
-      (error: Error) => {
-        handleStorageError(error);
-        setIsUploading(false);
-      },
-      async () => {
-        const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-        form.setValue("referenceFileUrl", downloadUrl);
-        form.setValue("referenceFileName", file.name);
-        setIsUploading(false);
-        toast({
-          title: "Upload Berhasil",
-          description: "Template referensi telah diunggah.",
-        });
-      },
-    );
+      const downloadUrl = result.webViewLink || result.downloadUrl || "";
+      
+      form.setValue("referenceFileUrl", downloadUrl);
+      form.setValue("referenceFileName", file.name);
+      setIsUploading(false);
+      toast({
+        title: "Upload Berhasil",
+        description: "Template referensi telah diunggah ke Google Drive.",
+      });
+    } catch (error: any) {
+      console.error("Offering template upload error:", error);
+      toast({
+        variant: "destructive",
+        title: "Upload Gagal",
+        description: error.message || "Gagal mengunggah template ke Google Drive.",
+      });
+      setIsUploading(false);
+    }
   };
 
   const onSubmit = async (values: FormValues) => {

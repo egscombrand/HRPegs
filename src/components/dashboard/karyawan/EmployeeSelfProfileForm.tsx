@@ -18,18 +18,13 @@ import {
   limit,
   getDocs,
 } from "firebase/firestore";
-import {
-  getStorage,
-  ref,
-  uploadBytesResumable,
-  getDownloadURL,
-  type UploadTask,
-} from "firebase/storage";
 import { 
   validateStorageFile, 
   compressImage, 
   handleStorageError 
 } from "@/lib/storage-utils";
+import { normalizeGoogleDriveImageUrl } from "@/lib/profile-photo";
+import { uploadFile } from "@/lib/storage/storage-adapter";
 import { useToast } from "@/hooks/use-toast";
 import {
   Card,
@@ -815,34 +810,37 @@ function DocumentUploadCard({
     
     setIsUploading(true);
     setProgress(0);
-    const storage = getStorage();
-    const storageRef = ref(
-      storage,
-      `employee_profiles/${userId}/${fieldKey}_${Date.now()}_${processedFile.name.replace(/[^a-zA-Z0-9.]/g, "_")}`,
-    );
-    const uploadTask = uploadBytesResumable(storageRef, processedFile);
+    
+    try {
+      const storagePath = `employee_profiles/${userId}/${fieldKey}_${Date.now()}_${processedFile.name.replace(/[^a-zA-Z0-9.]/g, "_")}`;
+      
+      const result = await uploadFile(processedFile, storagePath, userId, {
+        category: fieldKey.includes("photo") || fieldKey.includes("profile") ? "profile_photo" : "employee_document",
+        ownerUid: userId,
+        compress: false // Already compressed
+      });
 
-    uploadTask.on(
-      "state_changed",
-      (snapshot) => {
-        setProgress(
-          Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100),
-        );
-      },
-      (error) => {
-        handleStorageError(error);
-        setIsUploading(false);
-      },
-      async () => {
-        const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-        onChange(downloadUrl);
-        setIsUploading(false);
-        toast({
-          title: "Upload Berhasil",
-          description: `${title} telah diunggah.`,
-        });
-      },
-    );
+      const downloadUrl = result.webViewLink || result.downloadUrl || "";
+      
+      onChange(downloadUrl);
+      
+      setIsUploading(true);
+      setProgress(100);
+      
+      setIsUploading(false);
+      toast({
+        title: "Upload Berhasil",
+        description: `${title} telah diunggah ke Google Drive.`,
+      });
+    } catch (error: any) {
+      console.error("Upload error:", error);
+      toast({
+        variant: "destructive",
+        title: "Upload Gagal",
+        description: error.message || "Terjadi kesalahan saat mengunggah file.",
+      });
+      setIsUploading(false);
+    }
   };
 
   const isPdf = value?.toLowerCase().endsWith(".pdf") || value?.includes("pdf");
@@ -945,7 +943,7 @@ function DocumentUploadCard({
               <div className="group relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 shadow-2xl transition-all hover:border-primary/30">
                 {!isPdf ? (
                   <img
-                    src={value}
+                    src={normalizeGoogleDriveImageUrl(value)}
                     alt={title}
                     className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                   />

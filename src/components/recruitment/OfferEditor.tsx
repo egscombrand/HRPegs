@@ -57,7 +57,7 @@ import {
   deleteField,
   Timestamp,
 } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { uploadFile } from "@/lib/storage/storage-adapter";
 import { 
   validateStorageFile, 
   compressImage, 
@@ -191,7 +191,6 @@ export function OfferEditor({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const firestore = useFirestore();
-  const storage = useStorage();
   const { userProfile } = useAuth();
   const { toast } = useToast();
 
@@ -256,12 +255,17 @@ export function OfferEditor({
       
       const processedFile = await compressImage(fileOrMetadata);
       const safeFileName = processedFile.name.replace(/[^a-zA-Z0-9.]/g, "_");
-      const storageRef = ref(
-        storage,
-        `offerings/${application.id}/${Date.now()}-${safeFileName}`,
-      );
-      await uploadBytes(storageRef, processedFile);
-      return getDownloadURL(storageRef);
+      
+      const filePath = `offerings/${application.id}/${Date.now()}-${safeFileName}`;
+      
+      const result = await uploadFile(processedFile, filePath, userProfile?.uid || 'system', {
+        category: 'job_offering',
+        ownerUid: userProfile?.uid || 'system',
+        applicationId: application.id,
+        compress: false // Already compressed
+      });
+
+      return result.webViewLink || result.downloadUrl || "";
     }
     return fileOrMetadata.url;
   };

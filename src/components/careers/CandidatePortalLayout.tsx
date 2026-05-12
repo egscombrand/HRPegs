@@ -10,6 +10,7 @@ import { doc, collection, query, where } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { LogOut, ArrowLeft, Leaf, Bell } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { getEmployeePhotoUrl } from '@/lib/profile-utils';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import {
   Sidebar,
@@ -36,7 +37,7 @@ import { NotificationPanel } from '../dashboard/NotificationPanel';
 
 
 function UserNav() {
-  const { userProfile } = useAuth();
+  const { userProfile, firebaseUser } = useAuth();
   const auth = useFirebaseAuth();
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
@@ -57,7 +58,7 @@ function UserNav() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-8 w-8 rounded-full">
           <Avatar className="h-9 w-9">
-            <AvatarImage src={`https://picsum.photos/seed/${userProfile.uid}/40/40`} alt={userProfile.fullName} data-ai-hint="profile avatar" />
+            <AvatarImage src={getEmployeePhotoUrl(null, userProfile, firebaseUser)} alt={userProfile.fullName} data-ai-hint="profile avatar" />
             <AvatarFallback>{getInitials(userProfile.fullName)}</AvatarFallback>
           </Avatar>
         </Button>

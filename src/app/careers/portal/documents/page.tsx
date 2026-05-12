@@ -4,7 +4,7 @@ import { useMemo, useState, useCallback, ChangeEvent, useEffect } from 'react';
 import { useAuth } from '@/providers/auth-provider';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { collection, query, where, serverTimestamp, writeBatch, doc } from 'firebase/firestore';
-import { getStorage, ref, uploadBytesResumable, getDownloadURL, UploadTask } from 'firebase/storage';
+import { uploadFile } from '@/lib/storage/storage-adapter';
 import { 
   validateStorageFile, 
   compressImage, 
@@ -90,7 +90,6 @@ function DocumentUploadSlot({ label, fileType, userId, applicationId, initialFil
     const [progress, setProgress] = useState(0);
     const [error, setError] = useState<string | null>(null);
     const [isUploading, setIsUploading] = useState(false);
-    const [task, setTask] = useState<UploadTask | null>(null);
 
     const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
         const selectedFile = e.target.files?.[0];
@@ -112,45 +111,41 @@ function DocumentUploadSlot({ label, fileType, userId, applicationId, initialFil
         }
     };
 
-    const handleUpload = () => {
+    const handleUpload = async () => {
         if (!file) return;
 
         setIsUploading(true);
         setError(null);
         setProgress(0);
 
-        const storage = getStorage();
-        const filePath = `userDocs/${userId}/${applicationId}/${fileType}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
-        const storageRef = ref(storage, filePath);
-        const uploadTask = uploadBytesResumable(storageRef, file);
+        try {
+            const filePath = `candidate_docs/${userId}/${fileType}-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+            
+            const result = await uploadFile(file, filePath, userId, {
+                category: fileType === 'cv' ? 'cv' : 'ijazah',
+                ownerUid: userId,
+                applicationId: applicationId,
+                compress: false // Already compressed above
+            });
 
-        setTask(uploadTask);
-
-        uploadTask.on('state_changed',
-            (snapshot) => {
-                setProgress((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-            },
-            (uploadError) => {
-                handleStorageError(uploadError);
-                setError('Gagal mengunggah file. Silakan coba lagi.');
-                setIsUploading(false);
-                setTask(null);
-            },
-            async () => {
-                try {
-                    const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-                    onUploadComplete(fileType, { url: downloadURL, name: file.name });
-                    setFile(null);
-                    const input = document.getElementById(`${fileType}-upload`) as HTMLInputElement;
-                    if (input) input.value = '';
-                } catch (urlError) {
-                    setError('Gagal mendapatkan URL file.');
-                } finally {
-                    setIsUploading(false);
-                    setTask(null);
-                }
-            }
-        );
+            const downloadURL = result.webViewLink || result.downloadUrl || "";
+            
+            onUploadComplete(fileType, { 
+                url: downloadURL, 
+                name: file.name 
+            });
+            
+            setFile(null);
+            const input = document.getElementById(`${fileType}-upload`) as HTMLInputElement;
+            if (input) input.value = '';
+            
+            setProgress(100);
+        } catch (uploadError: any) {
+            console.error("Candidate upload error:", uploadError);
+            setError(uploadError.message || 'Gagal mengunggah file ke Google Drive.');
+        } finally {
+            setIsUploading(false);
+        }
     };
 
     const fileDescription = '(maks. 1MB - PDF, JPG, PNG, DOCX)';

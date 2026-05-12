@@ -14,6 +14,7 @@ import { format, startOfDay, endOfDay, differenceInMinutes } from 'date-fns';
 import { Badge } from '../ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { getInitials } from '@/lib/utils';
+import { normalizeGoogleDriveImageUrl } from '@/lib/profile-photo';
 import Link from 'next/link';
 import { XCircle } from 'lucide-react';
 import { DeleteConfirmationDialog } from './DeleteConfirmationDialog';
@@ -111,7 +112,7 @@ export function AttendanceMonitoringClient() {
                 return user.brandId === brandFilter;
             });
 
-        const summary = { hadir: 0, offsite: 0, anomali: 0, terlambat: 0 };
+        const summary = { hadir: 0, offsite: 0, anomali: 0, terlambat: 0, belumTapIn: 0 };
         
         const processedData = relevantUsers.map(user => {
             const userEvents = attendanceEvents.filter(e => (e.uid === user.uid || e.userId === user.uid));
@@ -168,7 +169,7 @@ export function AttendanceMonitoringClient() {
                 tapInId: tapIn?.id || null,
                 tapOutId: tapOut?.id || null,
                 status: status,
-                mode: (tapIn?.mode as string)?.toLowerCase() || '-',
+                mode: ((tapIn?.mode as string)?.toLowerCase() || '-') as AttendanceRecord['mode'],
                 photoUrl: tapIn?.photoUrl,
                 address: tapIn?.address || '-',
                 location: tapIn?.location || null,
@@ -299,7 +300,7 @@ export function AttendanceMonitoringClient() {
                                             {row.photoUrl ? (
                                                 <Link href={row.photoUrl} target="_blank">
                                                     <Avatar>
-                                                        <AvatarImage src={row.photoUrl} alt={`Foto ${row.name}`} />
+                                                        <AvatarImage src={normalizeGoogleDriveImageUrl(row.photoUrl)} alt={`Foto ${row.name}`} />
                                                         <AvatarFallback>{getInitials(row.name)}</AvatarFallback>
                                                     </Avatar>
                                                 </Link>

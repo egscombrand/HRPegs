@@ -11,8 +11,9 @@ export type StorageProvider = "firebaseStorage" | "googleDrive" | "googleDriveAp
 
 export type StorageCategory = 
   | "profile_photo" | "ktp" | "npwp" | "bpjs" | "bank_proof"
-  | "cv" | "ijazah" | "sertifikat"
-  | "offering" | "offering_template"
+  | "cv" | "ijazah" | "sertifikat" | "user_document" | "employee_document"
+  | "offering" | "job_offering" | "signed_offering" | "offering_template"
+  | "job_cover" | "change_request_supporting"
   | "overtime" | "leave" | "permission"
   | "logo" | "section_asset";
 
@@ -21,6 +22,7 @@ export interface UploadOptions {
   category?: StorageCategory;
   ownerUid?: string;
   applicationId?: string;
+  offeringId?: string;
   brandId?: string;
 }
 
@@ -35,6 +37,8 @@ export interface UploadResult {
   driveFolderPath?: string;
   downloadUrl?: string;
   webViewLink?: string;
+  thumbnailUrl?: string;
+  directViewUrl?: string;
   uploadedAt: any;
   uploadedBy: string;
 }
@@ -107,6 +111,7 @@ async function uploadToGoogleDrive(
   if (options.category) formData.append("category", options.category);
   if (options.ownerUid) formData.append("ownerUid", options.ownerUid);
   if (options.applicationId) formData.append("applicationId", options.applicationId);
+  if (options.offeringId) formData.append("offeringId", options.offeringId);
   if (options.brandId) formData.append("brandId", options.brandId);
 
   const response = await fetch("/api/storage/google-drive-upload", {

@@ -11,6 +11,7 @@ import { LogOut, Search, Bell } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { getInitials } from '@/lib/utils';
+import { getEmployeePhotoUrl } from '@/lib/profile-utils';
 import { ThemeToggle } from '../ui/ThemeToggle';
 import { Input } from '../ui/input';
 import { SidebarTrigger } from '../ui/sidebar';
@@ -24,6 +25,7 @@ import type { Notification } from '@/lib/types';
 function UserNav() {
     const { userProfile } = useAuth();
     const auth = useFirebaseAuth();
+    const { firebaseUser } = auth;
     const router = useRouter();
     const [open, setOpen] = React.useState(false);
 
@@ -41,7 +43,7 @@ function UserNav() {
         <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="relative h-10 w-10 rounded-full">
             <Avatar className="h-10 w-10">
-                <AvatarImage src={`https://picsum.photos/seed/${userProfile.uid}/40/40`} alt={userProfile.fullName} data-ai-hint="profile avatar" />
+                <AvatarImage src={getEmployeePhotoUrl(null, userProfile, firebaseUser)} alt={userProfile.fullName} data-ai-hint="profile avatar" />
                 <AvatarFallback>{getInitials(userProfile.fullName)}</AvatarFallback>
             </Avatar>
             </Button>

@@ -5,7 +5,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { doc, collection, serverTimestamp, query, where, Timestamp } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { uploadFile } from '@/lib/storage/storage-adapter';
 import { 
   validateStorageFile, 
   compressImage, 
@@ -57,7 +57,6 @@ interface JobFormDialogProps {
 export function JobFormDialog({ open, onOpenChange, job, brands }: JobFormDialogProps) {
   const firestore = useFirestore();
   const firebaseApp = useFirebaseApp();
-  const storage = useMemo(() => getStorage(firebaseApp), [firebaseApp]);
   const { userProfile } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -153,9 +152,14 @@ export function JobFormDialog({ open, onOpenChange, job, brands }: JobFormDialog
   const uploadCoverImage = async (jobId: string, imageFile: File): Promise<string> => {
     const processedFile = await compressImage(imageFile);
     const filePath = `jobs/${jobId}/cover-${Date.now()}-${processedFile.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
-    const storageRef = ref(storage, filePath);
-    await uploadBytes(storageRef, processedFile);
-    return getDownloadURL(storageRef);
+    
+    const result = await uploadFile(processedFile, filePath, userProfile?.uid || 'system', {
+      category: 'job_cover',
+      ownerUid: userProfile?.uid || 'system',
+      compress: false // Already compressed
+    });
+
+    return result.webViewLink || result.downloadUrl || "";
   };
 
   const onSubmit = async (values: FormValues) => {

@@ -127,6 +127,7 @@ export async function POST(req: NextRequest) {
     const category = (formData.get("category") as string) || "";
     const ownerUid = (formData.get("ownerUid") as string) || "";
     const applicationId = (formData.get("applicationId") as string) || "";
+    const offeringId = (formData.get("offeringId") as string) || "";
     const brandId = (formData.get("brandId") as string) || "";
 
     if (!file) {
@@ -145,12 +146,22 @@ export async function POST(req: NextRequest) {
       const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
       const uploadSecret = process.env.GOOGLE_DRIVE_UPLOAD_SECRET;
 
-      if (!appsScriptUrl) {
-        return NextResponse.json({ success: false, message: "GOOGLE_DRIVE_APPS_SCRIPT_URL belum diisi." }, { status: 500 });
+      // Tugas 2: Validasi URL Apps Script
+      if (!appsScriptUrl || appsScriptUrl.includes("ISI_WEB_APP_URL")) {
+        return NextResponse.json({ success: false, message: "GOOGLE_DRIVE_APPS_SCRIPT_URL belum diisi dengan Web app URL Apps Script." }, { status: 500 });
       }
-      if (!uploadSecret) {
-        return NextResponse.json({ success: false, message: "GOOGLE_DRIVE_UPLOAD_SECRET belum diisi." }, { status: 500 });
+      
+      if (!appsScriptUrl.startsWith("https://script.google.com/macros/s/") || !appsScriptUrl.endsWith("/exec")) {
+        return NextResponse.json({ 
+          success: false, 
+          message: "GOOGLE_DRIVE_APPS_SCRIPT_URL harus Web app URL Apps Script yang berakhir /exec." 
+        }, { status: 500 });
       }
+
+      if (!uploadSecret || uploadSecret.includes("ISI_SECRET")) {
+        return NextResponse.json({ success: false, message: "GOOGLE_DRIVE_UPLOAD_SECRET belum diganti dengan secret asli yang sama dengan Code.gs." }, { status: 500 });
+      }
+      
       if (!rootFolderId) {
         return NextResponse.json({ success: false, message: "GOOGLE_DRIVE_ROOT_FOLDER_ID belum diisi." }, { status: 500 });
       }
@@ -168,6 +179,7 @@ export async function POST(req: NextRequest) {
         category: category,
         ownerUid: ownerUid,
         applicationId: applicationId,
+        offeringId: offeringId,
         brandId: brandId,
         uploadedBy: userId
       };
@@ -178,7 +190,39 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify(appsScriptPayload),
       });
 
-      const appsScriptData = await appsScriptResponse.json();
+      // Tugas 1: Ambil response sebagai text dulu untuk menghindari JSON parse error
+      const rawText = await appsScriptResponse.text();
+      const contentType = appsScriptResponse.headers.get("content-type") || "";
+
+      // Tugas 3: Log aman server-side
+      console.log("Apps Script Upload Debug:", {
+        urlStart: appsScriptUrl.slice(0, 50) + "...",
+        provider: storageProvider,
+        hasSecret: !!uploadSecret,
+        status: appsScriptResponse.status,
+        contentType,
+        rawTextStart: rawText.slice(0, 120).replace(/\n/g, " "),
+      });
+
+      // Tugas 1.4: Cek jika response adalah HTML
+      if (rawText.trim().startsWith("<!DOCTYPE") || rawText.trim().startsWith("<html")) {
+        return NextResponse.json({ 
+          success: false, 
+          message: "Apps Script mengembalikan HTML, bukan JSON. Cek Web app URL harus /exec, akses harus Anyone, dan deployment harus Web App.",
+          debug: rawText.slice(0, 200)
+        }, { status: 502 }); // Bad Gateway
+      }
+
+      let appsScriptData;
+      try {
+        appsScriptData = JSON.parse(rawText);
+      } catch (parseError) {
+        return NextResponse.json({ 
+          success: false, 
+          message: "Apps Script mengembalikan format tidak valid (Bukan JSON).",
+          rawResponse: rawText.slice(0, 300)
+        }, { status: 502 });
+      }
 
       if (!appsScriptResponse.ok || !appsScriptData.success) {
         let message = appsScriptData.message || "Gagal upload via Apps Script bridge";
@@ -202,6 +246,8 @@ export async function POST(req: NextRequest) {
         driveFolderId: appsScriptData.driveFolderId,
         driveFolderPath: appsScriptData.driveFolderPath,
         webViewLink: appsScriptData.webViewLink,
+        thumbnailUrl: appsScriptData.thumbnailUrl,
+        directViewUrl: appsScriptData.directViewUrl,
         uploadedAt: appsScriptData.uploadedAt || new Date().toISOString(),
         uploadedBy: userId,
       });

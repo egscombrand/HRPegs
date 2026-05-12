@@ -26,12 +26,7 @@ import {
   Timestamp,
   where,
 } from "firebase/firestore";
-import {
-  getStorage,
-  ref,
-  uploadBytesResumable,
-  getDownloadURL,
-} from "firebase/storage";
+import { uploadFile } from "@/lib/storage/storage-adapter";
 import { 
   validateStorageFile, 
   compressImage, 
@@ -611,37 +606,20 @@ function ApplicationCard({
       }
       
       const processedFile = await compressImage(signedFile);
-      const storage = getStorage();
-      const storageRef = ref(
-        storage,
-        `offerings/${activeOfferingId}/signed_documents/${Date.now()}_${processedFile.name.replace(/[^a-zA-Z0-9.]/g, '_')}`,
-      );
-      const uploadTask = uploadBytesResumable(storageRef, processedFile, {
-        contentType: processedFile.type,
+      setUploadProgress(10);
+      
+      const filePath = `offerings/${activeOfferingId}/signed_documents/${Date.now()}_${processedFile.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+      
+      const result = await uploadFile(processedFile, filePath, firebaseUser.uid, {
+        category: 'signed_offering',
+        ownerUid: firebaseUser.uid,
+        applicationId: application.id,
+        offeringId: activeOfferingId,
+        compress: false // Already compressed
       });
 
-      await new Promise<void>((resolve, reject) => {
-        uploadTask.on(
-          "state_changed",
-          (snapshot) => {
-            const progress = Math.round(
-              (snapshot.bytesTransferred / snapshot.totalBytes) * 100,
-            );
-            setUploadProgress(progress);
-          },
-          (error) => {
-            handleStorageError(error);
-            setUploadError(error.message || "Gagal mengunggah dokumen.");
-            setIsUploading(false);
-            reject(error);
-          },
-          () => {
-            resolve();
-          },
-        );
-      });
-
-      const signedDocumentUrl = await getDownloadURL(uploadTask.snapshot.ref);
+      const signedDocumentUrl = result.webViewLink || result.downloadUrl || "";
+      
       const offeringRef = doc(firestore, "offerings", activeOfferingId);
       const appRef = doc(firestore, "applications", application.id!);
       await updateDocumentNonBlocking(appRef, {
@@ -659,7 +637,7 @@ function ApplicationCard({
       toast({
         title: "Dokumen Terkirim",
         description:
-          "Dokumen penawaran telah dikirim. Tim HRD akan memverifikasi segera.",
+          "Dokumen penawaran telah dikirim ke Google Drive. Tim HRD akan memverifikasi segera.",
       });
     } catch (error: any) {
       console.error("Upload signed document failed:", error);
@@ -668,7 +646,7 @@ function ApplicationCard({
         variant: "destructive",
         title: "Unggah Gagal",
         description:
-          error?.message || "Terjadi kesalahan saat mengunggah dokumen.",
+          error?.message || "Terjadi kesalahan saat mengunggah dokumen ke Google Drive.",
       });
     } finally {
       setIsUploading(false);

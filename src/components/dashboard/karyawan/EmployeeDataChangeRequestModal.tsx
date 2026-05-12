@@ -16,12 +16,7 @@ import {
   orderBy,
   limit,
 } from "firebase/firestore";
-import {
-  getStorage,
-  ref,
-  uploadBytesResumable,
-  getDownloadURL,
-} from "firebase/storage";
+import { uploadFile } from "@/lib/storage/storage-adapter";
 import { 
   validateStorageFile, 
   compressImage, 
@@ -236,7 +231,6 @@ export function EmployeeDataChangeRequestModal({
     if (!files || !firebaseUser) return;
 
     const fileList = Array.from(files);
-    const storage = getStorage();
 
     for (const file of fileList) {
       const validation = validateStorageFile(file);
@@ -251,36 +245,43 @@ export function EmployeeDataChangeRequestModal({
 
       const processedFile = await compressImage(file);
       const fileId = Math.random().toString(36).substring(7);
-      const storageRef = ref(
-        storage,
-        `change_requests/${firebaseUser.uid}/${Date.now()}_${processedFile.name.replace(/[^a-zA-Z0-9.]/g, "_")}`,
-      );
-      const uploadTask = uploadBytesResumable(storageRef, processedFile);
+      
+      try {
+        setUploadProgress((prev) => ({ ...prev, [fileId]: 10 }));
+        
+        const filePath = `change_requests/${firebaseUser.uid}/${Date.now()}_${processedFile.name.replace(/[^a-zA-Z0-9.]/g, "_")}`;
+        
+        const result = await uploadFile(processedFile, filePath, firebaseUser.uid, {
+          category: 'change_request_supporting',
+          ownerUid: firebaseUser.uid,
+          compress: false // Already compressed
+        });
 
-      uploadTask.on(
-        "state_changed",
-        (snapshot) => {
-          const progress = Math.round(
-            (snapshot.bytesTransferred / snapshot.totalBytes) * 100,
-          );
-          setUploadProgress((prev) => ({ ...prev, [fileId]: progress }));
-        },
-        (error) => {
-          handleStorageError(error);
-        },
-        async () => {
-          const url = await getDownloadURL(uploadTask.snapshot.ref);
-          const currentDocs = form.getValues("supportingDocuments") || [];
-          form.setValue("supportingDocuments", [...currentDocs, url], {
-            shouldValidate: true,
-          });
-          setUploadProgress((prev) => {
-            const next = { ...prev };
-            delete next[fileId];
-            return next;
-          });
-        },
-      );
+        const url = result.webViewLink || result.downloadUrl || "";
+        
+        const currentDocs = form.getValues("supportingDocuments") || [];
+        form.setValue("supportingDocuments", [...currentDocs, url], {
+          shouldValidate: true,
+        });
+        
+        setUploadProgress((prev) => {
+          const next = { ...prev };
+          delete next[fileId];
+          return next;
+        });
+      } catch (error: any) {
+        console.error("Change request upload error:", error);
+        toast({
+          variant: "destructive",
+          title: "Upload Gagal",
+          description: `Gagal mengunggah ${file.name} ke Google Drive.`,
+        });
+        setUploadProgress((prev) => {
+          const next = { ...prev };
+          delete next[fileId];
+          return next;
+        });
+      }
     }
   };
 

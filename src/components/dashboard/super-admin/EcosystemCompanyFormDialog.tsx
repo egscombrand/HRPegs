@@ -14,7 +14,7 @@ import { Loader2, UploadCloud, Save } from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
 import { useFirestore, setDocumentNonBlocking, useFirebaseApp } from '@/firebase';
 import { doc, collection, serverTimestamp } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { uploadFile } from '@/lib/storage/storage-adapter';
 import { 
   validateStorageFile, 
   compressImage, 
@@ -48,7 +48,6 @@ export function EcosystemCompanyFormDialog({ open, onOpenChange, item, brands }:
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const firestore = useFirestore();
   const firebaseApp = useFirebaseApp();
-  const storage = getStorage(firebaseApp);
   const { toast } = useToast();
   const mode = item ? 'Edit' : 'Create';
 
@@ -88,9 +87,13 @@ export function EcosystemCompanyFormDialog({ open, onOpenChange, item, brands }:
   const uploadIcon = async (docId: string, file: File): Promise<string> => {
     const processedFile = await compressImage(file);
     const filePath = `ecosystem_logos/${docId}/${processedFile.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
-    const storageRef = ref(storage, filePath);
-    await uploadBytes(storageRef, processedFile);
-    return getDownloadURL(storageRef);
+    
+    const result = await uploadFile(processedFile, filePath, 'ecosystem-admin', {
+      category: 'ecosystem_logo',
+      compress: false // Already compressed above
+    });
+
+    return result.webViewLink || result.downloadUrl || "";
   };
 
   const onSubmit = async (values: FormValues) => {
