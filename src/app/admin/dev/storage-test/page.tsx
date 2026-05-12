@@ -156,6 +156,7 @@ export default function StorageTestPage() {
                       <p><span className="text-muted-foreground">fileSize:</span> {result.fileSize} bytes</p>
                       <p><span className="text-muted-foreground">fileType:</span> {result.fileType}</p>
                       <p><span className="text-muted-foreground">driveFolderId:</span> {result.driveFolderId}</p>
+                      <p><span className="text-muted-foreground">driveFolderPath:</span> {result.driveFolderPath}</p>
                       <p><span className="text-muted-foreground">uploadedBy:</span> {result.uploadedBy}</p>
                     </div>
                   </div>

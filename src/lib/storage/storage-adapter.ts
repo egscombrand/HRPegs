@@ -7,7 +7,7 @@ import {
 import { validateStorageFile, compressImage } from "@/lib/storage-utils";
 import { serverTimestamp } from "firebase/firestore";
 
-export type StorageProvider = "firebaseStorage" | "googleDrive";
+export type StorageProvider = "firebaseStorage" | "googleDrive" | "googleDriveAppsScript";
 
 export type StorageCategory = 
   | "profile_photo" | "ktp" | "npwp" | "bpjs" | "bank_proof"
@@ -42,7 +42,7 @@ export interface UploadResult {
 const STORAGE_PROVIDER = (process.env.NEXT_PUBLIC_STORAGE_PROVIDER || "firebaseStorage") as StorageProvider;
 
 /**
- * Global upload function that handles both Firebase and Google Drive.
+ * Global upload function that handles Firebase, Google Drive API, and Apps Script.
  */
 export async function uploadFile(
   file: File, 
@@ -63,7 +63,7 @@ export async function uploadFile(
   }
 
   // 3. Choose Provider
-  if (STORAGE_PROVIDER === "googleDrive") {
+  if (STORAGE_PROVIDER === "googleDrive" || STORAGE_PROVIDER === "googleDriveAppsScript") {
     return uploadToGoogleDrive(processedFile, userId, options);
   } else {
     return uploadToFirebase(processedFile, path, userId);
@@ -93,6 +93,7 @@ async function uploadToFirebase(file: File, path: string, userId: string): Promi
 
 /**
  * Uploads file to Google Drive via server-side API route.
+ * Handles both Service Account and Apps Script modes based on server env.
  */
 async function uploadToGoogleDrive(
   file: File, 
@@ -127,7 +128,7 @@ async function uploadToGoogleDrive(
   }
 
   return {
-    storageProvider: "googleDrive",
+    storageProvider: data.storageProvider || STORAGE_PROVIDER,
     fileId: data.fileId,
     fileName: data.fileName,
     fileSize: data.fileSize,
@@ -135,7 +136,7 @@ async function uploadToGoogleDrive(
     driveFolderId: data.driveFolderId,
     driveFolderPath: data.driveFolderPath,
     webViewLink: data.webViewLink,
-    uploadedAt: new Date().toISOString(),
+    uploadedAt: data.uploadedAt || new Date().toISOString(),
     uploadedBy: data.uploadedBy,
   };
 }

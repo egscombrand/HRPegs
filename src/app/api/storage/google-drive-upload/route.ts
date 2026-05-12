@@ -6,7 +6,7 @@ import { Readable } from "stream";
 const MAX_FILE_SIZE = 1 * 1024 * 1024;
 
 /**
- * Helper to find or create a folder in Google Drive
+ * Helper to find or create a folder in Google Drive (Service Account Mode)
  */
 async function getOrCreateFolder(
   drive: drive_v3.Drive,
@@ -19,6 +19,8 @@ async function getOrCreateFolder(
     q: query,
     fields: "files(id, name)",
     spaces: "drive",
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
   });
 
   const folders = response.data.files;
@@ -33,13 +35,14 @@ async function getOrCreateFolder(
       parents: [parentId],
     },
     fields: "id",
+    supportsAllDrives: true,
   });
 
   return createResponse.data.id!;
 }
 
 /**
- * Resolves the final folder ID based on category and options
+ * Resolves the final folder ID based on category and options (Service Account Mode)
  */
 async function resolveDrivePath(
   drive: drive_v3.Drive,
@@ -121,146 +124,154 @@ export async function POST(req: NextRequest) {
     const file = formData.get("file") as File;
     const userId = formData.get("userId") as string;
     
-    // Stage 2 fields
-    const category = formData.get("category") as string;
-    const ownerUid = formData.get("ownerUid") as string;
-    const applicationId = formData.get("applicationId") as string;
-    const brandId = formData.get("brandId") as string;
+    const category = (formData.get("category") as string) || "";
+    const ownerUid = (formData.get("ownerUid") as string) || "";
+    const applicationId = (formData.get("applicationId") as string) || "";
+    const brandId = (formData.get("brandId") as string) || "";
 
     if (!file) {
       return NextResponse.json({ success: false, message: "File tidak ditemukan" }, { status: 400 });
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json({ success: false, message: "Ukuran file melebihi 1 MB" }, { status: 400 });
+      return NextResponse.json({ success: false, message: "Ukuran file terlalu besar. Maksimal 1 MB." }, { status: 400 });
     }
 
-    // Google Drive Authentication ENV
-    console.log("Google Drive ENV Check:", {
-      hasClientEmail: !!process.env.GOOGLE_DRIVE_CLIENT_EMAIL,
-      hasPrivateKey: !!process.env.GOOGLE_DRIVE_PRIVATE_KEY,
-      hasRootFolderId: !!process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID,
-      privateKeyLength: process.env.GOOGLE_DRIVE_PRIVATE_KEY?.length || 0,
-    });
+    const storageProvider = process.env.STORAGE_PROVIDER || "firebaseStorage";
 
-    const clientEmail = process.env.GOOGLE_DRIVE_CLIENT_EMAIL;
-    const privateKeyRaw = process.env.GOOGLE_DRIVE_PRIVATE_KEY;
-    const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
+    // --- CASE A: Google Drive Apps Script Mode (Bridge Account) ---
+    if (storageProvider === "googleDriveAppsScript") {
+      const appsScriptUrl = process.env.GOOGLE_DRIVE_APPS_SCRIPT_URL;
+      const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
+      const uploadSecret = process.env.GOOGLE_DRIVE_UPLOAD_SECRET;
 
-    // Detailed server-side check
-    if (!clientEmail || !privateKeyRaw || !rootFolderId) {
-      console.error("CRITICAL: Missing Google Drive credentials at runtime");
-    }
-
-    // 1. Check for missing ENV
-    const missingEnv: string[] = [];
-    if (!clientEmail) missingEnv.push("GOOGLE_DRIVE_CLIENT_EMAIL");
-    if (!privateKeyRaw) missingEnv.push("GOOGLE_DRIVE_PRIVATE_KEY");
-    if (!rootFolderId) missingEnv.push("GOOGLE_DRIVE_ROOT_FOLDER_ID");
-
-    if (missingEnv.length > 0) {
-      return NextResponse.json({ 
-        success: false,
-        message: "Konfigurasi Google Drive belum lengkap",
-        missingEnv: missingEnv
-      }, { status: 500 });
-    }
-
-    // 2. Check for placeholder values
-    if (privateKeyRaw && (privateKeyRaw.includes("ISI_PRIVATE_KEY") || privateKeyRaw.includes("PLACEHOLDER"))) {
-      return NextResponse.json({ 
-        success: false,
-        message: "GOOGLE_DRIVE_PRIVATE_KEY masih placeholder"
-      }, { status: 500 });
-    }
-
-    // Process private key
-    const privateKey = privateKeyRaw!.replace(/\\n/g, "\n");
-
-    const auth = new google.auth.JWT({
-      email: clientEmail,
-      key: privateKey,
-      scopes: ["https://www.googleapis.com/auth/drive"],
-    });
-
-    const drive = google.drive({ version: "v3", auth });
-
-    // Resolve target folder (Stage 2)
-    let targetFolderId = rootFolderId!;
-    let driveFolderPath = "/";
-    
-    try {
-      if (category) {
-        const resolved = await resolveDrivePath(drive, rootFolderId!, category, {
-          ownerUid,
-          applicationId,
-          brandId,
-        });
-        targetFolderId = resolved.folderId;
-        driveFolderPath = resolved.folderPath;
+      if (!appsScriptUrl) {
+        return NextResponse.json({ success: false, message: "GOOGLE_DRIVE_APPS_SCRIPT_URL belum diisi." }, { status: 500 });
       }
-    } catch (err: any) {
-      console.error("Folder resolution error:", err);
-      return NextResponse.json({ 
-        success: false,
-        message: `Gagal memproses folder tujuan: ${err.message}`,
-        details: "Pastikan Folder ID benar dan Service Account memiliki akses 'Editor'."
-      }, { status: 400 });
+      if (!uploadSecret) {
+        return NextResponse.json({ success: false, message: "GOOGLE_DRIVE_UPLOAD_SECRET belum diisi." }, { status: 500 });
+      }
+      if (!rootFolderId) {
+        return NextResponse.json({ success: false, message: "GOOGLE_DRIVE_ROOT_FOLDER_ID belum diisi." }, { status: 500 });
+      }
+
+      // Convert file to base64 for Apps Script
+      const arrayBuffer = await file.arrayBuffer();
+      const base64File = Buffer.from(arrayBuffer).toString('base64');
+
+      const appsScriptPayload = {
+        secret: uploadSecret,
+        fileName: file.name,
+        fileType: file.type,
+        base64: base64File,
+        rootFolderId: rootFolderId,
+        category: category,
+        ownerUid: ownerUid,
+        applicationId: applicationId,
+        brandId: brandId,
+        uploadedBy: userId
+      };
+
+      const appsScriptResponse = await fetch(appsScriptUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(appsScriptPayload),
+      });
+
+      const appsScriptData = await appsScriptResponse.json();
+
+      if (!appsScriptResponse.ok || !appsScriptData.success) {
+        let message = appsScriptData.message || "Gagal upload via Apps Script bridge";
+        if (message.toLowerCase().includes("unauthorized")) {
+          message = "Secret upload tidak sesuai dengan Apps Script.";
+        }
+        return NextResponse.json({ 
+          success: false, 
+          message,
+          error: appsScriptData.error
+        }, { status: appsScriptResponse.status || 500 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        storageProvider: "googleDriveAppsScript",
+        fileId: appsScriptData.fileId,
+        fileName: appsScriptData.fileName,
+        fileSize: appsScriptData.fileSize || file.size,
+        fileType: appsScriptData.fileType || file.type,
+        driveFolderId: appsScriptData.driveFolderId,
+        driveFolderPath: appsScriptData.driveFolderPath,
+        webViewLink: appsScriptData.webViewLink,
+        uploadedAt: appsScriptData.uploadedAt || new Date().toISOString(),
+        uploadedBy: userId,
+      });
     }
 
-    // Convert File to Buffer then to Readable Stream
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const bufferStream = new Readable();
-    bufferStream.push(buffer);
-    bufferStream.push(null);
+    // --- CASE B: Google Drive Service Account Mode (Legacy/Direct) ---
+    if (storageProvider === "googleDrive") {
+      const clientEmail = process.env.GOOGLE_DRIVE_CLIENT_EMAIL;
+      const privateKeyRaw = process.env.GOOGLE_DRIVE_PRIVATE_KEY;
+      const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
 
-    const driveResponse = await drive.files.create({
-      requestBody: {
-        name: file.name,
-        parents: [targetFolderId],
-      },
-      media: {
-        mimeType: file.type,
-        body: bufferStream,
-      },
-      fields: "id, name, size, mimeType, webViewLink",
-    });
+      if (!clientEmail || !privateKeyRaw || !rootFolderId) {
+        return NextResponse.json({ 
+          success: false,
+          message: "Konfigurasi Service Account belum lengkap",
+          missingEnv: [!clientEmail && "GOOGLE_DRIVE_CLIENT_EMAIL", !privateKeyRaw && "GOOGLE_DRIVE_PRIVATE_KEY", !rootFolderId && "GOOGLE_DRIVE_ROOT_FOLDER_ID"].filter(Boolean)
+        }, { status: 500 });
+      }
 
-    const driveFile = driveResponse.data;
+      const privateKey = privateKeyRaw.replace(/\\n/g, "\n");
+      const auth = new google.auth.JWT({
+        email: clientEmail,
+        key: privateKey,
+        scopes: ["https://www.googleapis.com/auth/drive"],
+      });
 
-    return NextResponse.json({
-      success: true,
-      fileId: driveFile.id,
-      fileName: driveFile.name,
-      fileSize: parseInt(driveFile.size || "0"),
-      fileType: driveFile.mimeType,
-      driveFolderId: targetFolderId,
-      driveFolderPath: driveFolderPath,
-      webViewLink: driveFile.webViewLink,
-      uploadedBy: userId,
-    });
+      const drive = google.drive({ version: "v3", auth });
+
+      const resolved = await resolveDrivePath(drive, rootFolderId, category, {
+        ownerUid,
+        applicationId,
+        brandId,
+      });
+
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const bufferStream = new Readable();
+      bufferStream.push(buffer);
+      bufferStream.push(null);
+
+      const driveResponse = await drive.files.create({
+        requestBody: { name: file.name, parents: [resolved.folderId] },
+        media: { mimeType: file.type, body: bufferStream },
+        fields: "id, name, size, mimeType, webViewLink",
+        supportsAllDrives: true,
+      });
+
+      const driveFile = driveResponse.data;
+
+      return NextResponse.json({
+        success: true,
+        storageProvider: "googleDrive",
+        fileId: driveFile.id,
+        fileName: driveFile.name,
+        fileSize: parseInt(driveFile.size || "0"),
+        fileType: driveFile.mimeType,
+        driveFolderId: resolved.folderId,
+        driveFolderPath: resolved.folderPath,
+        webViewLink: driveFile.webViewLink,
+        uploadedAt: new Date().toISOString(),
+        uploadedBy: userId,
+      });
+    }
+
+    return NextResponse.json({ success: false, message: "Storage provider tidak valid atau belum diatur" }, { status: 400 });
 
   } catch (error: any) {
-    console.error("Google Drive Upload API Error:", error);
-    
-    let message = "Terjadi kesalahan server saat upload";
-    let status = 500;
-
-    if (error.message?.includes("invalid_grant") || error.message?.includes("PEM routines")) {
-      message = "Google Drive Error: Private Key tidak valid atau salah format";
-    } else if (error.message?.includes("access_denied") || error.code === 403) {
-      message = "Google Drive Access Denied. Cek apakah service account sudah Editor pada root folder dan scope API menggunakan https://www.googleapis.com/auth/drive.";
-    } else if (error.message?.includes("File not found") || error.code === 404) {
-      message = "Google Drive Error: Root folder ID tidak ditemukan atau tidak valid";
-    } else if (error.code === 'ENOTFOUND') {
-      message = "Network Error: Tidak dapat menghubungi server Google API";
-    } else {
-      message = error.message || message;
-    }
-
+    console.error("Google Drive API Proxy Error:", error);
     return NextResponse.json(
-      { success: false, message, error: error.message },
-      { status: status }
+      { success: false, message: error.message || "Terjadi kesalahan server saat proxy upload" },
+      { status: 500 }
     );
   }
 }
