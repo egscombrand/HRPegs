@@ -113,7 +113,15 @@ export async function uploadFile(
     STORAGE_PROVIDER === "googleDrive" ||
     STORAGE_PROVIDER === "googleDriveAppsScript"
   ) {
-    result = await uploadToGoogleDrive(processedFile, userId, options);
+    try {
+      result = await uploadToGoogleDrive(processedFile, userId, options);
+    } catch (error) {
+      console.warn(
+        "Google Drive upload failed, falling back to Firebase Storage:",
+        error,
+      );
+      result = await uploadToFirebase(processedFile, path, userId);
+    }
   } else {
     result = await uploadToFirebase(processedFile, path, userId);
   }
@@ -124,9 +132,6 @@ export async function uploadFile(
 
   // Normalize Google Drive image URL for webViewLink if available
   if (result.webViewLink) {
-    const { normalizeGoogleDriveImageUrl } =
-      await import("@/lib/profile-photo");
-    result.thumbnailUrl = normalizeGoogleDriveImageUrl(result.webViewLink);
     result.googleDriveWebViewLink = result.webViewLink;
   }
 

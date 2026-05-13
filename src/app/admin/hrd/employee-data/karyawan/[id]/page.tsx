@@ -1321,7 +1321,7 @@ export default function EmployeeDetailPage({
   const docsObj: any = (profileDoc as any)?.documents ?? {};
 
   const docUrls = getEmployeeDocumentUrls(profileDoc);
-  const profilePhotoUrl = docUrls.profilePhotoUrl;
+  const profilePhotoUrl = null;
   const ktpPhotoUrl = docUrls.ktpPhotoUrl;
   const ijazahUrl = docUrls.ijazahUrl;
   const npwpUrl = docUrls.npwpUrl;
@@ -1446,15 +1446,7 @@ export default function EmployeeDetailPage({
           <div className="flex flex-col sm:flex-row items-center gap-6 text-center sm:text-left">
             <div className="relative">
               <div className="flex h-24 w-24 items-center justify-center rounded-[2rem] bg-gradient-to-br from-slate-800 to-slate-900 text-3xl font-bold text-white shadow-2xl ring-1 ring-slate-700">
-                {profilePhotoUrl ? (
-                  <img
-                    src={profilePhotoUrl}
-                    alt={fullName}
-                    className="h-full w-full object-cover rounded-[2rem]"
-                  />
-                ) : (
-                  initials || "HR"
-                )}
+                {initials || "HR"}
               </div>
               <div className="absolute -bottom-1 -right-1 h-8 w-8 rounded-full border-4 border-slate-950 bg-emerald-500 flex items-center justify-center shadow-lg">
                 <CheckCircle className="h-4 w-4 text-white" />

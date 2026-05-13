@@ -9,10 +9,9 @@ function resolveMetadataFileUrl(fileObj: any): string | null {
     return `/api/storage/view?fileId=${fileObj.fileId}`;
   }
   if (fileObj.directViewUrl) return fileObj.directViewUrl;
-  if (fileObj.thumbnailUrl) return fileObj.thumbnailUrl;
-  if (fileObj.webViewLink) return fileObj.webViewLink;
-  if (fileObj.googleDriveWebViewLink) return fileObj.googleDriveWebViewLink;
-  if (fileObj.url) return fileObj.url;
+  if (fileObj.url && typeof fileObj.url === "string") {
+    return fileObj.url;
+  }
   return null;
 }
 
@@ -60,13 +59,7 @@ export function getEmployeeDocumentUrls(profile: any) {
   };
 
   return {
-    profilePhotoUrl: resolve([
-      "profilePhoto",
-      "profilePhotoFile",
-      "dataDiriIdentitas.profilePhotoUrl",
-      "profilePhotoUrl",
-      "photoUrl",
-    ]),
+    profilePhotoUrl: null,
     ktpPhotoUrl: resolve([
       "dataDiriIdentitas.ktpPhotoUrl",
       "ktpPhotoUrl",

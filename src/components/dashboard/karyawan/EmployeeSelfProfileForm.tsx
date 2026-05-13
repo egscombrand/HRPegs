@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from "react";
 import { useForm, useFieldArray, type FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -20,6 +28,7 @@ import {
   addDoc,
   updateDoc,
 } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import {
   validateStorageFile,
@@ -297,7 +306,16 @@ const selfFormSchema = z.object({
       birthPlace: z.string().min(2, "Tempat lahir harus diisi."),
       birthDate: z
         .string()
-        .refine((val) => val, { message: "Tanggal lahir harus diisi." }),
+        .min(1, "Tanggal lahir harus diisi.")
+        .refine(
+          (val) => {
+            const date = new Date(val);
+            return !isNaN(date.getTime()) && date <= new Date();
+          },
+          {
+            message: "Tanggal lahir tidak boleh di masa depan.",
+          },
+        ),
       maritalStatus: z
         .string()
         .min(1, "Status pernikahan harus dipilih.")
@@ -328,15 +346,24 @@ const selfFormSchema = z.object({
       physicalConditionDetails: z.string().optional(),
       nik: z
         .string()
-        .optional()
-        .refine((val) => !val || /^[0-9]{16}$/.test(val), {
-          message: "NIK harus tepat 16 digit angka.",
+        .transform((value) => value.replace(/\D/g, ""))
+        .refine((val) => val.length === 16, {
+          message: "Nomor KTP harus tepat 16 digit angka.",
         }),
       profilePhotoUrl: z
         .string()
+        .min(1, "Foto Diri harus diunggah.")
         .url("URL foto profil tidak valid.")
-        .optional(),
-      ktpPhotoUrl: z.string().url("URL foto KTP tidak valid.").optional(),
+        .refine((value) => !!extractFileIdFromViewUrl(value), {
+          message: "Foto Diri belum memiliki fileId. Silakan unggah ulang.",
+        }),
+      ktpPhotoUrl: z
+        .string()
+        .min(1, "Foto KTP harus diunggah.")
+        .url("URL foto KTP tidak valid.")
+        .refine((value) => !!extractFileIdFromViewUrl(value), {
+          message: "Foto KTP belum memiliki fileId. Silakan unggah ulang.",
+        }),
     })
     .superRefine((data, ctx) => {
       if (
@@ -751,15 +778,53 @@ const INDONESIAN_BANKS = [
   "Bank Lampung",
 ];
 
+type FileMetadata = {
+  fileId?: string;
+  fileName: string;
+  fileType: string;
+  finalSize?: number;
+  uploadedAt?: any;
+  viewUrl: string;
+};
+
 type FileUploadFieldProps = {
   label: string;
   value?: string;
-  onChange: (url: string) => void;
+  onChange: (url: string, metadata?: FileMetadata) => void;
   userId: string;
   fieldKey: string;
   required?: boolean;
   helperText?: string;
 };
+
+type UploadStateContextValue = {
+  setUploadStatus: (
+    fieldKey: string,
+    status: "uploading" | "success" | "error",
+    errorMessage?: string,
+  ) => void;
+  setUploadMetadata: (fieldKey: string, metadata: FileMetadata | null) => void;
+};
+
+const UploadStateContext = createContext<UploadStateContextValue | null>(null);
+
+function extractFileIdFromViewUrl(viewUrl?: string) {
+  if (!viewUrl) return null;
+  try {
+    const url = new URL(
+      viewUrl,
+      typeof window === "undefined"
+        ? "http://localhost"
+        : window.location.origin,
+    );
+    const fileId = url.searchParams.get("fileId");
+    if (fileId) return fileId;
+  } catch {
+    // ignore invalid URL format
+  }
+  const match = viewUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  return match?.[1] ?? null;
+}
 
 function DocumentUploadCard({
   title,
@@ -772,11 +837,12 @@ function DocumentUploadCard({
   helperText,
   icon: Icon,
   disabled = false,
+  hasError = false,
 }: {
   title: string;
   description: string;
   value?: string;
-  onChange: (url: string) => void;
+  onChange: (url: string, metadata?: FileMetadata) => void;
   userId: string;
   fieldKey: string;
   status:
@@ -789,11 +855,12 @@ function DocumentUploadCard({
   helperText: string;
   icon: any;
   disabled?: boolean;
+  hasError?: boolean;
 }) {
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
-  const [imageError, setImageError] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const uploadContext = useContext(UploadStateContext);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -805,18 +872,25 @@ function DocumentUploadCard({
     if (!validation.isValid) {
       toast({
         variant: "destructive",
-        title: "File Terlalu Besar",
+        title: "File tidak valid",
         description: validation.message,
       });
       return;
     }
 
+    setUploadError(null);
     setIsUploading(true);
     setProgress(0);
+    uploadContext?.setUploadStatus(fieldKey, "uploading");
+
+    console.log("Upload started", {
+      fieldKey,
+      fileName: file.name,
+      fileSize: file.size,
+    });
 
     try {
       const processedFile = await compressImage(file);
-
       const storagePath = `employee_profiles/${userId}/${fieldKey}_${Date.now()}_${processedFile.name.replace(/[^a-zA-Z0-9.]/g, "_")}`;
 
       const result = await uploadFile(processedFile, storagePath, userId, {
@@ -825,67 +899,101 @@ function DocumentUploadCard({
             ? "profile_photo"
             : "employee_document",
         ownerUid: userId,
-        compress: false, // Already compressed
+        compress: false,
       });
 
-      const viewUrl =
-        result.viewUrl || result.webViewLink || result.downloadUrl || "";
+      const viewUrl = result.fileId
+        ? `/api/storage/view?fileId=${result.fileId}`
+        : result.downloadUrl || "";
 
-      // Simpan metadata ke employee_profiles
-      try {
-        const firestore = getFirestore();
-        const docRef = doc(firestore, "employee_profiles", userId);
-        const fileObj = {
-          storageProvider: "google_drive",
-          fileId: result.fileId || "",
-          fileName: result.originalFileName || file.name,
-          mimeType: processedFile.type,
-          finalSize: result.finalSize || processedFile.size,
-          viewUrl,
-          downloadUrl: result.downloadUrl || "",
-          googleDriveWebViewLink:
-            result.googleDriveWebViewLink || result.webViewLink || "",
-          webViewLink: result.webViewLink || "",
-          uploadedAt: new Date().toISOString(),
-        };
-        const metadataField = fieldKey.replace(/Url$/, "File");
-        // Only attempt to set the file object if fieldKey seems to be a valid path
-        if (metadataField !== fieldKey || fieldKey.includes(".")) {
-          await updateDoc(docRef, { [metadataField]: fileObj });
-        } else {
-          // Fallback if fieldKey doesn't have Url, just append File
-          await updateDoc(docRef, { [`${fieldKey}File`]: fileObj });
-        }
-      } catch (metaErr) {
-        console.warn("Gagal menyimpan metadata file", metaErr);
-      }
+      const metadata: FileMetadata = {
+        fileId: result.fileId,
+        fileName: result.fileName,
+        fileType: result.fileType,
+        finalSize: result.finalSize,
+        uploadedAt: result.uploadedAt,
+        viewUrl,
+      };
 
-      onChange(viewUrl);
-
-      setIsUploading(true);
+      onChange(viewUrl, metadata);
+      uploadContext?.setUploadMetadata(fieldKey, metadata);
+      uploadContext?.setUploadStatus(fieldKey, "success");
       setProgress(100);
-
-      setIsUploading(false);
+      console.log("Upload finished", { fieldKey, metadata });
       toast({
         title: "Berhasil",
         description: "File berhasil diunggah.",
       });
     } catch (error: any) {
-      console.error("Upload error:", error);
+      const errorMessage =
+        error?.message ||
+        "Upload dokumen gagal. Silakan coba lagi atau hubungi admin.";
+      console.error("Upload error:", { fieldKey, error });
+      setUploadError(errorMessage);
+      uploadContext?.setUploadStatus(fieldKey, "error", errorMessage);
       toast({
         variant: "destructive",
-        title: "Error",
-        description: error.message || "File terlalu besar.",
+        title: "Upload dokumen gagal",
+        description: errorMessage,
       });
+    } finally {
       setIsUploading(false);
     }
   };
 
-  const isPdf = value?.toLowerCase().endsWith(".pdf") || value?.includes("pdf");
+  const fileId = extractFileIdFromViewUrl(value);
+
+  const openSecureFile = async () => {
+    if (!fileId) {
+      toast({
+        variant: "destructive",
+        title: "Dokumen tidak dapat dibuka",
+        description: "FileId tidak tersedia untuk dokumen ini.",
+      });
+      return;
+    }
+
+    try {
+      const auth = getAuth();
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        throw new Error("Autentikasi tidak ditemukan.");
+      }
+      const token = await currentUser.getIdToken();
+      const response = await fetch(`/api/storage/view?fileId=${fileId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) {
+        throw new Error("Gagal mengambil dokumen.");
+      }
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.target = "_blank";
+      link.rel = "noreferrer noopener";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+    } catch (error: any) {
+      console.error("openSecureFile error:", error);
+      toast({
+        variant: "destructive",
+        title: "Gagal membuka dokumen",
+        description:
+          error?.message || "Tidak dapat membuka dokumen. Silakan coba lagi.",
+      });
+    }
+  };
 
   return (
     <Card
-      className={`overflow-hidden border-slate-800 bg-slate-900/40 rounded-3xl shadow-sm hover:shadow-md transition-all duration-300 ${disabled ? "opacity-70 cursor-not-allowed" : ""}`}
+      className={`overflow-hidden rounded-3xl shadow-sm transition-all duration-300 ${
+        disabled ? "opacity-70 cursor-not-allowed" : ""
+      } ${hasError ? "border-red-500/40 bg-red-500/5 shadow-red-500/10" : "border-slate-800 bg-slate-900/40 hover:shadow-md"}`}
     >
       <CardContent className="p-0">
         <div className="flex flex-col lg:flex-row">
@@ -968,6 +1076,22 @@ function DocumentUploadCard({
                 </p>
               </div>
             )}
+
+            {uploadError ? (
+              <Alert className="bg-red-500/10 border-red-500 text-red-200">
+                <AlertTitle className="text-sm font-semibold">
+                  Upload gagal
+                </AlertTitle>
+                <AlertDescription className="text-sm text-red-100">
+                  {uploadError}
+                </AlertDescription>
+              </Alert>
+            ) : null}
+            {hasError ? (
+              <p className="text-sm font-medium text-destructive">
+                Silakan periksa kembali dokumen dan unggah ulang jika perlu.
+              </p>
+            ) : null}
           </div>
 
           <div
@@ -977,50 +1101,36 @@ function DocumentUploadCard({
                 : "bg-slate-950/60"
             }`}
           >
-            {value ? (
-              <div className="group relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 shadow-2xl transition-all hover:border-primary/30">
-                <div className="w-full h-full flex flex-col items-center justify-center gap-4 text-slate-400 bg-slate-800/30">
-                  <div className="h-16 w-16 rounded-2xl bg-slate-800 flex items-center justify-center text-slate-500 shadow-lg group-hover:scale-110 transition-transform duration-500">
-                    <FileText className="h-10 w-10" />
-                  </div>
-                  <div className="text-center">
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em] block mb-1">
-                      File sudah diunggah
-                    </span>
-                    {title && (
-                      <span className="text-[9px] text-slate-500 font-medium truncate max-w-[120px]">
-                        {title}
-                      </span>
-                    )}
-                  </div>
+            <div className="group relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 shadow-2xl transition-all hover:border-primary/30">
+              <div className="w-full h-full flex flex-col items-center justify-center gap-4 text-slate-400 bg-slate-800/30">
+                <div className="h-16 w-16 rounded-2xl bg-slate-800 flex items-center justify-center text-slate-500 shadow-lg group-hover:scale-110 transition-transform duration-500">
+                  <FileText className="h-10 w-10" />
                 </div>
+                <div className="text-center">
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] block mb-1">
+                    {value ? "File sudah diunggah" : "Belum Ada Dokumen"}
+                  </span>
+                  {title && (
+                    <span className="text-[9px] text-slate-500 font-medium truncate max-w-[120px]">
+                      {title}
+                    </span>
+                  )}
+                </div>
+              </div>
+              {fileId ? (
                 <div className="absolute inset-0 bg-slate-950/80 opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-center gap-3">
                   <Button
                     type="button"
                     variant="default"
                     size="sm"
                     className="rounded-full px-6 h-9 font-bold text-xs"
-                    onClick={() => window.open(value, "_blank")}
+                    onClick={openSecureFile}
                   >
                     <Eye className="mr-2 h-4 w-4" /> Lihat Dokumen
                   </Button>
                 </div>
-              </div>
-            ) : (
-              <div className="w-full aspect-[4/3] rounded-2xl border-2 border-dashed border-slate-800 flex flex-col items-center justify-center gap-4 text-slate-600 transition-colors group-hover:border-slate-700">
-                <div className="h-14 w-14 rounded-full bg-slate-900 flex items-center justify-center">
-                  <FileUp className="h-7 w-7" />
-                </div>
-                <div className="text-center space-y-1">
-                  <span className="text-[10px] font-black uppercase tracking-[0.15em] block">
-                    Belum Ada Preview
-                  </span>
-                  <span className="text-[9px] text-slate-700 block">
-                    Silakan unggah file terlebih dahulu
-                  </span>
-                </div>
-              </div>
-            )}
+              ) : null}
+            </div>
           </div>
         </div>
       </CardContent>
@@ -1047,10 +1157,11 @@ function FileUploadField({
   icon,
   helperText = "Format: JPG, PNG, PDF (Max 10MB)",
   disabled = false,
+  hasError = false,
 }: {
   label: string;
   value?: string;
-  onChange: (url: string) => void;
+  onChange: (url: string, metadata?: FileMetadata) => void;
   userId: string;
   fieldKey: string;
   status:
@@ -1064,6 +1175,7 @@ function FileUploadField({
   icon: any;
   helperText?: string;
   disabled?: boolean;
+  hasError?: boolean;
 }) {
   return (
     <DocumentUploadCard
@@ -1077,6 +1189,7 @@ function FileUploadField({
       helperText={helperText}
       icon={icon}
       disabled={disabled}
+      hasError={hasError}
     />
   );
 }
@@ -1876,6 +1989,54 @@ export function EmployeeSelfProfileForm({
   const [currentStep, setCurrentStep] = useState(0);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
+  const [uploadStatusByField, setUploadStatusByField] = useState<
+    Record<string, boolean>
+  >({});
+  const [uploadErrorsByField, setUploadErrorsByField] = useState<
+    Record<string, string>
+  >({});
+  const [uploadMetadataByField, setUploadMetadataByField] = useState<
+    Record<string, FileMetadata>
+  >({});
+
+  const setUploadStatus = (
+    fieldKey: string,
+    status: "uploading" | "success" | "error",
+    errorMessage?: string,
+  ) => {
+    setUploadStatusByField((prev) => ({
+      ...prev,
+      [fieldKey]: status === "uploading",
+    }));
+    setUploadErrorsByField((prev) => {
+      const next = { ...prev };
+      if (status === "error") {
+        next[fieldKey] = errorMessage || "Upload dokumen gagal.";
+      } else {
+        delete next[fieldKey];
+      }
+      return next;
+    });
+  };
+
+  const setUploadMetadata = (
+    fieldKey: string,
+    metadata: FileMetadata | null,
+  ) => {
+    setUploadMetadataByField((prev) => {
+      const next = { ...prev };
+      if (metadata) {
+        next[fieldKey] = metadata;
+      } else {
+        delete next[fieldKey];
+      }
+      return next;
+    });
+  };
+
+  const isAnyUploadInProgress =
+    Object.values(uploadStatusByField).some(Boolean);
+  const hasUploadErrors = Object.keys(uploadErrorsByField).length > 0;
 
   const watchedAddressKtp = form.watch("alamat.ktp");
   const watchedDomicileSame = form.watch("alamat.isDomicileSameAsKtp");
@@ -2026,28 +2187,79 @@ export function EmployeeSelfProfileForm({
         ? { id: region.id, name: region.name }
         : null;
 
+    const resolveDocumentMetadata = (
+      fieldKey: string,
+      url?: string,
+    ): {
+      fileId?: string;
+      fileName?: string;
+      fileType?: string;
+      finalSize?: number;
+      uploadedAt?: any;
+      viewUrl?: string;
+    } => {
+      const metadata = uploadMetadataByField[fieldKey];
+      if (metadata?.fileId) {
+        return {
+          fileId: metadata.fileId,
+          fileName: metadata.fileName,
+          fileType: metadata.fileType,
+          finalSize: metadata.finalSize,
+          uploadedAt: metadata.uploadedAt,
+          viewUrl: metadata.viewUrl,
+        };
+      }
+      if (!url) return {};
+      const fileId = extractFileIdFromViewUrl(url);
+      return fileId ? { fileId, viewUrl: url } : {};
+    };
+
     const employeeDocuments = [
       {
         name: "NPWP",
         url: values.dokumenAdministratif.npwpPhotoUrl,
         type: "npwp",
+        ...resolveDocumentMetadata(
+          "npwp",
+          values.dokumenAdministratif.npwpPhotoUrl,
+        ),
       },
       {
         name: "BPJS Kesehatan",
         url: values.dokumenAdministratif.bpjsKesehatanPhotoUrl,
         type: "bpjs_ks",
+        ...resolveDocumentMetadata(
+          "bpjs_kesehatan",
+          values.dokumenAdministratif.bpjsKesehatanPhotoUrl,
+        ),
       },
       {
         name: "BPJS Ketenagakerjaan",
         url: values.dokumenAdministratif.bpjsKetenagakerjaanPhotoUrl,
         type: "bpjs_tk",
+        ...resolveDocumentMetadata(
+          "bpjs_ketenagakerjaan",
+          values.dokumenAdministratif.bpjsKetenagakerjaanPhotoUrl,
+        ),
       },
       {
         name: "Bukti Rekening",
         url: values.dataRekening.bankDocumentUrl,
         type: "bank_proof",
+        ...resolveDocumentMetadata(
+          "bank_proof",
+          values.dataRekening.bankDocumentUrl,
+        ),
       },
-      { name: "KTP", url: values.dataDiriIdentitas.ktpPhotoUrl, type: "ktp" },
+      {
+        name: "KTP",
+        url: values.dataDiriIdentitas.ktpPhotoUrl,
+        type: "ktp",
+        ...resolveDocumentMetadata(
+          "ktp_photo",
+          values.dataDiriIdentitas.ktpPhotoUrl,
+        ),
+      },
       ...(values.pendidikanDanPengembangan?.riwayatPendidikan
         ?.filter((p: any) => p.ijazahUrl)
         .map((p: any) => ({
@@ -2069,16 +2281,25 @@ export function EmployeeSelfProfileForm({
         name: "Kartu Keluarga",
         url: values.familyDocuments?.kk?.fileUrl,
         type: "family_kk",
+        ...resolveDocumentMetadata("kk", values.familyDocuments?.kk?.fileUrl),
       },
       {
         name: "Buku/Akta Nikah",
         url: values.familyDocuments?.marriageCertificate?.fileUrl,
         type: "family_marriage_cert",
+        ...resolveDocumentMetadata(
+          "marriage_cert",
+          values.familyDocuments?.marriageCertificate?.fileUrl,
+        ),
       },
       {
         name: "KTP Pasangan",
         url: values.familyDocuments?.spouseKtp?.fileUrl,
         type: "family_spouse_ktp",
+        ...resolveDocumentMetadata(
+          "spouse_ktp",
+          values.familyDocuments?.spouseKtp?.fileUrl,
+        ),
       },
       ...(values.familyDocuments?.familyBpjsMembers || []).map((m: any) => ({
         name: `BPJS: ${m.dependentName} (${m.relationship})`,
@@ -2140,6 +2361,12 @@ export function EmployeeSelfProfileForm({
         : {}),
     });
 
+    console.log("Firestore payload preparation", {
+      uid: firebaseUser.uid,
+      isDraft,
+      employeePayload,
+    });
+
     batch.set(employeeProfileRef, employeePayload, { merge: true });
     batch.update(userRef, {
       fullName: values.dataDiriIdentitas.fullName,
@@ -2158,8 +2385,34 @@ export function EmployeeSelfProfileForm({
       return;
     }
 
+    console.log("Simpan draft diklik", {
+      isSavingDraft,
+      isSaving,
+      isNavigating,
+      isAnyUploadInProgress,
+      hasUploadErrors,
+    });
+    if (isAnyUploadInProgress) {
+      toast({
+        variant: "destructive",
+        title: "File masih diunggah",
+        description:
+          "Silakan tunggu sampai semua dokumen selesai diunggah sebelum menyimpan draft.",
+      });
+      return;
+    }
+    if (hasUploadErrors) {
+      toast({
+        variant: "destructive",
+        title: "Upload dokumen gagal",
+        description:
+          "Beberapa unggahan dokumen mengalami masalah. Perbaiki dan coba lagi sebelum menyimpan.",
+      });
+      return;
+    }
     setIsSavingDraft(true);
     const values = form.getValues();
+    console.log("Draft payload", { values });
     try {
       await saveEmployeeProfile(values, true);
       toast({
@@ -2167,10 +2420,13 @@ export function EmployeeSelfProfileForm({
         description: "Data Anda telah disimpan sebagai draft.",
       });
     } catch (error: any) {
+      console.error("handleSaveDraft error:", error);
       toast({
         variant: "destructive",
         title: "Gagal Menyimpan Draft",
-        description: error.message,
+        description:
+          error?.message ||
+          "Tidak dapat menyimpan draft. Periksa koneksi atau hak akses Anda.",
       });
     } finally {
       setIsSavingDraft(false);
@@ -2187,6 +2443,29 @@ export function EmployeeSelfProfileForm({
       return;
     }
 
+    console.log("Submit diklik", {
+      values,
+      isAnyUploadInProgress,
+      hasUploadErrors,
+    });
+    if (isAnyUploadInProgress) {
+      toast({
+        variant: "destructive",
+        title: "File masih diunggah",
+        description:
+          "Silakan tunggu sampai semua dokumen selesai diunggah sebelum menyimpan profil.",
+      });
+      return;
+    }
+    if (hasUploadErrors) {
+      toast({
+        variant: "destructive",
+        title: "Upload dokumen gagal",
+        description:
+          "Beberapa unggahan dokumen mengalami masalah. Perbaiki dan coba lagi sebelum menyimpan.",
+      });
+      return;
+    }
     setIsSaving(true);
     try {
       await saveEmployeeProfile(values, false);
@@ -2197,64 +2476,201 @@ export function EmployeeSelfProfileForm({
       refreshUserProfile();
       onSaveSuccess();
     } catch (e: any) {
+      console.error("handleSubmit error:", e);
       toast({
         variant: "destructive",
         title: "Gagal Menyimpan Profil",
-        description: e.message,
+        description:
+          e?.message ||
+          "Tidak dapat menyimpan profil. Periksa koneksi atau hak akses Anda.",
       });
     } finally {
       setIsSaving(false);
     }
   };
 
-  const onInvalid: (errors: FieldErrors<FormValues>) => void = (errors) => {
-    const firstErrorKey = Object.keys(errors)[0] as
-      | keyof FormValues
-      | undefined;
-    if (firstErrorKey) {
-      let actualErrorKey: string = firstErrorKey;
-      const stepErrors = (errors as any)[firstErrorKey];
-      if (stepErrors && typeof stepErrors === "object") {
-        const firstNestedKey = Object.keys(stepErrors)[0];
-        actualErrorKey = firstNestedKey;
+  const flattenFieldErrors = (
+    errors: FieldErrors<any>,
+    parentPath = "",
+  ): Array<{ path: string; message: string }> => {
+    return Object.entries(errors).flatMap(([key, error]) => {
+      const path = parentPath ? `${parentPath}.${key}` : key;
+      if (!error || typeof error !== "object") {
+        return [];
       }
+      if ("message" in error && error.message) {
+        return [{ path, message: String(error.message) }];
+      }
+      if (error.types && typeof error.types === "object") {
+        return Object.values(error.types)
+          .filter((message): message is string => typeof message === "string")
+          .map((message) => ({ path, message }));
+      }
+      return flattenFieldErrors(error as FieldErrors<any>, path);
+    });
+  };
 
-      const readableFieldName = actualErrorKey
-        .replace(/([A-Z])/g, " $1")
-        .replace(/^./, (str) => str.toUpperCase());
-      toast({
-        variant: "destructive",
-        title: "Validasi Gagal",
-        description: `Harap periksa kembali isian Anda. Kolom "${readableFieldName}" sepertinya belum valid.`,
-      });
-      (form.setFocus as any)(firstErrorKey);
+  const getReadableLabel = (path: string) => {
+    const LABEL_OVERRIDES: Record<string, string> = {
+      "dataDiriIdentitas.nik": "Nomor KTP",
+      "dataDiriIdentitas.birthDate": "Tanggal Lahir",
+      "dataDiriIdentitas.profilePhotoUrl": "Foto Diri",
+      "dataDiriIdentitas.ktpPhotoUrl": "Foto KTP",
+      "dataDiriIdentitas.fullName": "Nama Lengkap",
+      "dataDiriIdentitas.nickName": "Nama Panggilan",
+      "dataDiriIdentitas.birthPlace": "Tempat Lahir",
+    };
+    return (
+      LABEL_OVERRIDES[path] ||
+      path
+        .split(".")
+        .pop()
+        ?.replace(/([A-Z])/g, " $1")
+        .replace(/^./, (str) => str.toUpperCase()) ||
+      path
+    );
+  };
+
+  const showValidationErrors = (errors: FieldErrors<FormValues>) => {
+    const invalidFields = flattenFieldErrors(errors);
+    if (!invalidFields.length) return;
+
+    const descriptions = invalidFields.slice(0, 3).map((item) => {
+      return `${getReadableLabel(item.path)}: ${item.message}`;
+    });
+    const description =
+      descriptions.join("; ") +
+      (invalidFields.length > 3
+        ? `; dan ${invalidFields.length - 3} lainnya.`
+        : "");
+
+    toast({
+      variant: "destructive",
+      title: "Validasi Gagal",
+      description,
+    });
+
+    const firstField = invalidFields[0];
+    if (firstField) {
+      form.setFocus(firstField.path as any);
     }
+  };
+
+  const onInvalid: (errors: FieldErrors<FormValues>) => void = (errors) => {
+    showValidationErrors(errors);
   };
 
   const stepCount = STEP_CONFIG.length;
   const currentStepConfig = STEP_CONFIG[currentStep];
 
   const handleNext = async () => {
+    console.log("Lanjutkan diklik", {
+      currentStep,
+      isNavigating,
+      isSaving,
+      isSavingDraft,
+      isAnyUploadInProgress,
+      hasUploadErrors,
+    });
+
+    if (isNavigating || isSaving || isSavingDraft) {
+      toast({
+        variant: "destructive",
+        title: "Tunggu proses berjalan",
+        description:
+          "Silakan selesaikan proses yang sedang berjalan sebelum melanjutkan.",
+      });
+      return;
+    }
+
+    if (isAnyUploadInProgress) {
+      toast({
+        variant: "destructive",
+        title: "File masih diunggah",
+        description:
+          "Silakan tunggu sampai semua unggahan dokumen selesai sebelum melanjutkan.",
+      });
+      return;
+    }
+
+    if (hasUploadErrors) {
+      toast({
+        variant: "destructive",
+        title: "Upload dokumen gagal",
+        description:
+          "Beberapa unggahan dokumen mengalami masalah. Periksa kembali dan coba lagi.",
+      });
+      return;
+    }
+
     const isValid = await form.trigger(
       currentStepConfig.fields as unknown as Array<keyof FormValues>,
     );
-    if (isValid) {
-      setIsNavigating(true);
-      try {
-        const values = form.getValues();
-        await saveEmployeeProfile(values, true);
-        setCurrentStep((prev) => Math.min(prev + 1, stepCount - 1));
-      } catch (error: any) {
-        setCurrentStep((prev) => Math.min(prev + 1, stepCount - 1));
+    console.log("Hasil validasi langkah", { currentStep, isValid });
+
+    const profilePhotoMetadata = uploadMetadataByField["profile_photo"];
+    const ktpPhotoMetadata = uploadMetadataByField["ktp_photo"];
+    const profilePhotoFileId =
+      profilePhotoMetadata?.fileId ||
+      extractFileIdFromViewUrl(
+        form.getValues("dataDiriIdentitas.profilePhotoUrl"),
+      );
+    const ktpPhotoFileId =
+      ktpPhotoMetadata?.fileId ||
+      extractFileIdFromViewUrl(form.getValues("dataDiriIdentitas.ktpPhotoUrl"));
+
+    console.log("Lanjutkan metadata", {
+      profilePhotoMetadata,
+      ktpPhotoMetadata,
+      profilePhotoFileId,
+      ktpPhotoFileId,
+      currentStep,
+      isValid,
+    });
+
+    if (!isValid) {
+      showValidationErrors(form.formState.errors);
+      return;
+    }
+
+    if (currentStep === 0) {
+      if (!profilePhotoFileId) {
         toast({
           variant: "destructive",
-          title: "Gagal Menyimpan Progres",
-          description:
-            "Data Anda belum tersimpan secara otomatis. Silakan coba klik 'Simpan Draft' secara manual.",
+          title: "Foto Diri belum lengkap",
+          description: "Foto Diri belum memiliki fileId. Silakan unggah ulang.",
         });
-      } finally {
-        setIsNavigating(false);
+        form.setFocus("dataDiriIdentitas.profilePhotoUrl" as any);
+        return;
       }
+      if (!ktpPhotoFileId) {
+        toast({
+          variant: "destructive",
+          title: "Foto KTP belum lengkap",
+          description: "Foto KTP belum memiliki fileId. Silakan unggah ulang.",
+        });
+        form.setFocus("dataDiriIdentitas.ktpPhotoUrl" as any);
+        return;
+      }
+    }
+
+    setIsNavigating(true);
+    try {
+      const values = form.getValues();
+      await saveEmployeeProfile(values, true);
+      setCurrentStep((prev) => Math.min(prev + 1, stepCount - 1));
+    } catch (error: any) {
+      console.error("handleNext error:", error);
+      const message =
+        error?.message ||
+        "Gagal menyimpan progres. Periksa koneksi atau izin Firestore Anda.";
+      toast({
+        variant: "destructive",
+        title: "Gagal melanjutkan",
+        description: message,
+      });
+    } finally {
+      setIsNavigating(false);
     }
   };
 
@@ -2722,7 +3138,7 @@ export function EmployeeSelfProfileForm({
                   <FormField
                     control={form.control}
                     name="dataDiriIdentitas.nik"
-                    render={({ field }) => (
+                    render={({ field, fieldState }) => (
                       <FormItem>
                         <FormControl>
                           <Input
@@ -2734,7 +3150,7 @@ export function EmployeeSelfProfileForm({
                             placeholder="16 digit NIK"
                             maxLength={16}
                             inputMode="numeric"
-                            className="bg-slate-950/40 border-slate-800"
+                            className={`bg-slate-950/40 ${fieldState.error ? "border-red-500 ring-1 ring-red-500 focus:ring-red-500" : "border-slate-800"}`}
                             onChange={(e) => {
                               const val = e.target.value.replace(/[^0-9]/g, "");
                               field.onChange(val);
@@ -2753,34 +3169,42 @@ export function EmployeeSelfProfileForm({
                   <FormField
                     control={form.control}
                     name="dataDiriIdentitas.profilePhotoUrl"
-                    render={({ field }) => (
-                      <FileUploadField
-                        label="Foto Diri"
-                        description="Unggah foto formal dengan latar belakang polos."
-                        userId={firebaseUser?.uid ?? ""}
-                        fieldKey="profile_photo"
-                        value={field.value}
-                        onChange={field.onChange}
-                        icon={Camera}
-                        status={field.value ? "Sudah Upload" : "Belum Upload"}
-                      />
+                    render={({ field, fieldState }) => (
+                      <FormItem>
+                        <FileUploadField
+                          label="Foto Diri"
+                          description="Unggah foto formal dengan latar belakang polos."
+                          userId={firebaseUser?.uid ?? ""}
+                          fieldKey="profile_photo"
+                          value={field.value}
+                          onChange={field.onChange}
+                          icon={Camera}
+                          status={field.value ? "Sudah Upload" : "Belum Upload"}
+                          hasError={!!fieldState.error}
+                        />
+                        <FormMessage />
+                      </FormItem>
                     )}
                   />
                   <FormField
                     control={form.control}
                     name="dataDiriIdentitas.ktpPhotoUrl"
-                    render={({ field }) => (
-                      <FileUploadField
-                        label="Foto KTP"
-                        description="Unggah foto KTP asli yang terlihat jelas."
-                        userId={firebaseUser?.uid ?? ""}
-                        fieldKey="ktp_photo"
-                        value={field.value}
-                        onChange={field.onChange}
-                        disabled={!!pendingRequests.ktp || isIdentityVerified}
-                        icon={CreditCard}
-                        status={field.value ? "Sudah Upload" : "Belum Upload"}
-                      />
+                    render={({ field, fieldState }) => (
+                      <FormItem>
+                        <FileUploadField
+                          label="Foto KTP"
+                          description="Unggah foto KTP asli yang terlihat jelas."
+                          userId={firebaseUser?.uid ?? ""}
+                          fieldKey="ktp_photo"
+                          value={field.value}
+                          onChange={field.onChange}
+                          disabled={!!pendingRequests.ktp || isIdentityVerified}
+                          icon={CreditCard}
+                          status={field.value ? "Sudah Upload" : "Belum Upload"}
+                          hasError={!!fieldState.error}
+                        />
+                        <FormMessage />
+                      </FormItem>
                     )}
                   />
                 </div>
@@ -6414,70 +6838,74 @@ export function EmployeeSelfProfileForm({
             {currentStepConfig.description}
           </p>
         </div>
-        <Form {...form}>
-          <form
-            id="employee-self-form"
-            onSubmit={form.handleSubmit(handleSubmit, onInvalid)}
-            className="space-y-10"
-          >
-            {renderStepContent()}
-            <div className="space-y-5 border-t border-slate-800/60 pt-6">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <Button
-                    variant="outline"
-                    type="button"
-                    onClick={handleBack}
-                    disabled={currentStep === 0 || isNavigating}
-                  >
-                    Kembali
-                  </Button>
-                  {currentStep < stepCount - 1 ? (
+        <UploadStateContext.Provider
+          value={{ setUploadStatus, setUploadMetadata }}
+        >
+          <Form {...form}>
+            <form
+              id="employee-self-form"
+              onSubmit={form.handleSubmit(handleSubmit, onInvalid)}
+              className="space-y-10"
+            >
+              {renderStepContent()}
+              <div className="space-y-5 border-t border-slate-800/60 pt-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <Button
+                      variant="outline"
+                      type="button"
+                      onClick={handleBack}
+                      disabled={currentStep === 0 || isNavigating}
+                    >
+                      Kembali
+                    </Button>
+                    {currentStep < stepCount - 1 ? (
+                      <Button
+                        type="button"
+                        onClick={handleNext}
+                        disabled={isNavigating || isSaving || isSavingDraft}
+                        className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 rounded-xl font-semibold shadow-lg shadow-primary/20 min-w-[140px]"
+                      >
+                        {isNavigating ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            Lanjutkan
+                            <ArrowRight className="ml-2 h-4 w-4" />
+                          </>
+                        )}
+                      </Button>
+                    ) : null}
                     <Button
                       type="button"
-                      onClick={handleNext}
-                      disabled={isNavigating}
-                      className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 rounded-xl font-semibold shadow-lg shadow-primary/20 min-w-[140px]"
+                      variant="secondary"
+                      onClick={handleSaveDraft}
+                      disabled={isSavingDraft || isSaving}
                     >
-                      {isNavigating ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <>
-                          Lanjutkan
-                          <ArrowRight className="ml-2 h-4 w-4" />
-                        </>
+                      {isSavingDraft ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : null}
+                      Simpan Draft
+                    </Button>
+                  </div>
+                  {currentStep === stepCount - 1 ? (
+                    <Button type="submit" disabled={isSaving}>
+                      {isSaving && (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       )}
+                      Simpan Perubahan
                     </Button>
                   ) : null}
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={handleSaveDraft}
-                    disabled={isSavingDraft || isSaving}
-                  >
-                    {isSavingDraft ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : null}
-                    Simpan Draft
-                  </Button>
                 </div>
-                {currentStep === stepCount - 1 ? (
-                  <Button type="submit" disabled={isSaving}>
-                    {isSaving && (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    )}
-                    Simpan Perubahan
-                  </Button>
-                ) : null}
+                <p className="text-sm text-slate-500">
+                  {currentStep === stepCount - 1
+                    ? "Semua langkah selesai. Tekan Simpan Perubahan untuk menyimpan data Anda."
+                    : "Isi langkah ini, lalu lanjutkan ke bagian berikutnya dengan nyaman."}
+                </p>
               </div>
-              <p className="text-sm text-slate-500">
-                {currentStep === stepCount - 1
-                  ? "Semua langkah selesai. Tekan Simpan Perubahan untuk menyimpan data Anda."
-                  : "Isi langkah ini, lalu lanjutkan ke bagian berikutnya dengan nyaman."}
-              </p>
-            </div>
-          </form>
-        </Form>
+            </form>
+          </Form>
+        </UploadStateContext.Provider>
       </CardContent>
       <CardFooter className="flex flex-col gap-3 border-t border-slate-800/60 pt-5 sm:flex-row sm:items-center sm:justify-between">
         <Button variant="ghost" type="button" onClick={onCancel}>
