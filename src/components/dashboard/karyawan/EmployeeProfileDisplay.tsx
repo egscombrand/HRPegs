@@ -285,6 +285,24 @@ export function EmployeeProfileDisplay({
       .map((s) => s.name),
   };
 
+  // Extract profile photo fileId from metadata or viewUrl
+  const getProfilePhotoUrl = () => {
+    const file = (iden as any)?.profilePhotoFile;
+    if (file?.fileId) {
+      return `/api/storage/view?fileId=${file.fileId}`;
+    }
+    if (iden.profilePhotoUrl) {
+      // Try to extract fileId from /api/storage/view?fileId=...
+      const match = iden.profilePhotoUrl.match(/fileId=([a-zA-Z0-9_-]+)/);
+      if (match?.[1]) {
+        return `/api/storage/view?fileId=${match[1]}`;
+      }
+    }
+    return null;
+  };
+
+  const profilePhotoUrl = getProfilePhotoUrl();
+
   return (
     <div className="space-y-8 pb-12 animate-in fade-in duration-700">
       {/* 1. Header Profile */}
@@ -293,6 +311,17 @@ export function EmployeeProfileDisplay({
         <div className="relative flex flex-col md:flex-row items-center gap-8 md:gap-10">
           <div className="relative group/avatar">
             <Avatar className="h-32 w-32 md:h-40 md:w-40 rounded-[2.5rem] border-4 border-slate-800 shadow-2xl transition-all duration-500 group-hover/avatar:scale-[1.02] group-hover/avatar:border-primary/30">
+              {profilePhotoUrl && (
+                <img
+                  src={profilePhotoUrl}
+                  alt="Profile Photo"
+                  className="w-full h-full object-cover rounded-[2.5rem]"
+                  onError={(e) => {
+                    // Let AvatarFallback handle the display on error
+                    (e.target as HTMLImageElement).style.display = "none";
+                  }}
+                />
+              )}
               <AvatarFallback className="bg-slate-800 text-slate-400">
                 <User className="h-16 w-16" />
               </AvatarFallback>

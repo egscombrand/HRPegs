@@ -350,22 +350,51 @@ const selfFormSchema = z.object({
         .refine((val) => val.length === 16, {
           message: "Nomor KTP harus tepat 16 digit angka.",
         }),
-      profilePhotoUrl: z
-        .string()
-        .min(1, "Foto Diri harus diunggah.")
-        .url("URL foto profil tidak valid.")
-        .refine((value) => !!extractFileIdFromViewUrl(value), {
-          message: "Foto Diri belum memiliki fileId. Silakan unggah ulang.",
-        }),
-      ktpPhotoUrl: z
-        .string()
-        .min(1, "Foto KTP harus diunggah.")
-        .url("URL foto KTP tidak valid.")
-        .refine((value) => !!extractFileIdFromViewUrl(value), {
-          message: "Foto KTP belum memiliki fileId. Silakan unggah ulang.",
-        }),
+      profilePhotoUrl: z.string().min(1, "Foto Diri harus diunggah."),
+      profilePhotoFile: z
+        .object({
+          fileId: z.string().min(1, "FileId Foto Diri harus tersedia."),
+          fileName: z.string().optional(),
+          fileType: z.string().optional(),
+          finalSize: z.number().optional(),
+          uploadedAt: z.any().optional(),
+          viewUrl: z.string().optional(),
+        })
+        .optional(),
+      ktpPhotoUrl: z.string().min(1, "Foto KTP harus diunggah."),
+      ktpPhotoFile: z
+        .object({
+          fileId: z.string().min(1, "FileId Foto KTP harus tersedia."),
+          fileName: z.string().optional(),
+          fileType: z.string().optional(),
+          finalSize: z.number().optional(),
+          uploadedAt: z.any().optional(),
+          viewUrl: z.string().optional(),
+        })
+        .optional(),
     })
     .superRefine((data, ctx) => {
+      const profilePhotoFileId =
+        data.profilePhotoFile?.fileId ||
+        extractFileIdFromViewUrl(data.profilePhotoUrl);
+      if (!profilePhotoFileId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["profilePhotoUrl"],
+          message: "Foto Diri belum tersimpan sempurna. Silakan unggah ulang.",
+        });
+      }
+
+      const ktpPhotoFileId =
+        data.ktpPhotoFile?.fileId || extractFileIdFromViewUrl(data.ktpPhotoUrl);
+      if (!ktpPhotoFileId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["ktpPhotoUrl"],
+          message: "Foto KTP belum tersimpan sempurna. Silakan unggah ulang.",
+        });
+      }
+
       if (
         data.hasPhysicalCondition === "Ya" &&
         !data.physicalConditionDetails?.trim()
@@ -1448,7 +1477,10 @@ function normalizeEmployeeProfileToFormValues(initialProfile: any): any {
       nik: dd.nik || initialProfile.nik || "",
       profilePhotoUrl:
         dd.profilePhotoUrl || initialProfile.profilePhotoUrl || "",
+      profilePhotoFile:
+        dd.profilePhotoFile || initialProfile.profilePhotoFile || undefined,
       ktpPhotoUrl: dd.ktpPhotoUrl || initialProfile.ktpPhotoUrl || "",
+      ktpPhotoFile: dd.ktpPhotoFile || initialProfile.ktpPhotoFile || undefined,
     },
     alamat: {
       isDomicileSameAsKtp:
@@ -2190,6 +2222,7 @@ export function EmployeeSelfProfileForm({
     const resolveDocumentMetadata = (
       fieldKey: string,
       url?: string,
+      metadata?: FileMetadata,
     ): {
       fileId?: string;
       fileName?: string;
@@ -2198,15 +2231,15 @@ export function EmployeeSelfProfileForm({
       uploadedAt?: any;
       viewUrl?: string;
     } => {
-      const metadata = uploadMetadataByField[fieldKey];
-      if (metadata?.fileId) {
+      const currentMetadata = metadata || uploadMetadataByField[fieldKey];
+      if (currentMetadata?.fileId) {
         return {
-          fileId: metadata.fileId,
-          fileName: metadata.fileName,
-          fileType: metadata.fileType,
-          finalSize: metadata.finalSize,
-          uploadedAt: metadata.uploadedAt,
-          viewUrl: metadata.viewUrl,
+          fileId: currentMetadata.fileId,
+          fileName: currentMetadata.fileName,
+          fileType: currentMetadata.fileType,
+          finalSize: currentMetadata.finalSize,
+          uploadedAt: currentMetadata.uploadedAt,
+          viewUrl: currentMetadata.viewUrl,
         };
       }
       if (!url) return {};
@@ -2258,6 +2291,7 @@ export function EmployeeSelfProfileForm({
         ...resolveDocumentMetadata(
           "ktp_photo",
           values.dataDiriIdentitas.ktpPhotoUrl,
+          values.dataDiriIdentitas.ktpPhotoFile,
         ),
       },
       ...(values.pendidikanDanPengembangan?.riwayatPendidikan
@@ -2608,20 +2642,22 @@ export function EmployeeSelfProfileForm({
     );
     console.log("Hasil validasi langkah", { currentStep, isValid });
 
-    const profilePhotoMetadata = uploadMetadataByField["profile_photo"];
-    const ktpPhotoMetadata = uploadMetadataByField["ktp_photo"];
+    const profilePhotoFile = form.getValues(
+      "dataDiriIdentitas.profilePhotoFile",
+    );
+    const ktpPhotoFile = form.getValues("dataDiriIdentitas.ktpPhotoFile");
     const profilePhotoFileId =
-      profilePhotoMetadata?.fileId ||
+      profilePhotoFile?.fileId ||
       extractFileIdFromViewUrl(
         form.getValues("dataDiriIdentitas.profilePhotoUrl"),
       );
     const ktpPhotoFileId =
-      ktpPhotoMetadata?.fileId ||
+      ktpPhotoFile?.fileId ||
       extractFileIdFromViewUrl(form.getValues("dataDiriIdentitas.ktpPhotoUrl"));
 
     console.log("Lanjutkan metadata", {
-      profilePhotoMetadata,
-      ktpPhotoMetadata,
+      profilePhotoFile,
+      ktpPhotoFile,
       profilePhotoFileId,
       ktpPhotoFileId,
       currentStep,
@@ -3177,7 +3213,13 @@ export function EmployeeSelfProfileForm({
                           userId={firebaseUser?.uid ?? ""}
                           fieldKey="profile_photo"
                           value={field.value}
-                          onChange={field.onChange}
+                          onChange={(url, metadata) => {
+                            field.onChange(url);
+                            form.setValue(
+                              "dataDiriIdentitas.profilePhotoFile",
+                              metadata ?? undefined,
+                            );
+                          }}
                           icon={Camera}
                           status={field.value ? "Sudah Upload" : "Belum Upload"}
                           hasError={!!fieldState.error}
@@ -3197,7 +3239,13 @@ export function EmployeeSelfProfileForm({
                           userId={firebaseUser?.uid ?? ""}
                           fieldKey="ktp_photo"
                           value={field.value}
-                          onChange={field.onChange}
+                          onChange={(url, metadata) => {
+                            field.onChange(url);
+                            form.setValue(
+                              "dataDiriIdentitas.ktpPhotoFile",
+                              metadata ?? undefined,
+                            );
+                          }}
                           disabled={!!pendingRequests.ktp || isIdentityVerified}
                           icon={CreditCard}
                           status={field.value ? "Sudah Upload" : "Belum Upload"}

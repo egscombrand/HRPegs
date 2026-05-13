@@ -59,9 +59,16 @@ export function getEmployeeDocumentUrls(profile: any) {
   };
 
   return {
-    profilePhotoUrl: null,
+    profilePhotoUrl: resolve([
+      "dataDiriIdentitas.profilePhotoUrl",
+      "dataDiriIdentitas.profilePhotoFile",
+      "profilePhotoUrl",
+      "profilePhotoFile",
+      "documents.profilePhotoUrl",
+    ]),
     ktpPhotoUrl: resolve([
       "dataDiriIdentitas.ktpPhotoUrl",
+      "dataDiriIdentitas.ktpPhotoFile",
       "ktpPhotoUrl",
       "dokumenAdministratif.ktpPhotoUrl",
       "documents.ktpUrl",

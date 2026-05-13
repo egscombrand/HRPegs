@@ -1321,7 +1321,7 @@ export default function EmployeeDetailPage({
   const docsObj: any = (profileDoc as any)?.documents ?? {};
 
   const docUrls = getEmployeeDocumentUrls(profileDoc);
-  const profilePhotoUrl = null;
+  const profilePhotoUrl = docUrls.profilePhotoUrl;
   const ktpPhotoUrl = docUrls.ktpPhotoUrl;
   const ijazahUrl = docUrls.ijazahUrl;
   const npwpUrl = docUrls.npwpUrl;
@@ -1600,8 +1600,43 @@ export default function EmployeeDetailPage({
                       <CardContent className="p-0">
                         <div className="p-6 flex flex-col items-center text-center border-b border-slate-800/50">
                           <div className="relative mb-4 group">
-                            <div className="h-32 w-32 rounded-[2.5rem] bg-slate-800 p-1 ring-1 ring-slate-700 shadow-2xl transition-transform duration-500 group-hover:scale-105 flex items-center justify-center">
-                              <User className="h-12 w-12 text-slate-400" />
+                            <div className="h-32 w-32 rounded-[2.5rem] bg-slate-800 p-1 ring-1 ring-slate-700 shadow-2xl transition-transform duration-500 group-hover:scale-105 flex items-center justify-center overflow-hidden">
+                              {profilePhotoUrl ? (
+                                <img
+                                  src={profilePhotoUrl}
+                                  alt={fullName}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    // On image load error, hide it and show fallback icon
+                                    const container = (
+                                      e.target as HTMLImageElement
+                                    ).parentElement;
+                                    if (container) {
+                                      (
+                                        e.target as HTMLImageElement
+                                      ).style.display = "none";
+                                      const icon = container.querySelector(
+                                        "[data-fallback-icon]",
+                                      );
+                                      if (icon) {
+                                        (icon as HTMLElement).style.display =
+                                          "flex";
+                                      }
+                                    }
+                                  }}
+                                />
+                              ) : null}
+                              {!profilePhotoUrl && (
+                                <User className="h-12 w-12 text-slate-400" />
+                              )}
+                              {profilePhotoUrl && (
+                                <div
+                                  data-fallback-icon
+                                  className="absolute inset-0 flex items-center justify-center bg-slate-800 hidden"
+                                >
+                                  <User className="h-12 w-12 text-slate-400" />
+                                </div>
+                              )}
                             </div>
                           </div>
                           <h2 className="text-xl font-bold text-white mb-1">
