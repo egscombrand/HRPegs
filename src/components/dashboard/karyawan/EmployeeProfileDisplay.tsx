@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Edit,
   User,
@@ -37,10 +37,6 @@ import type { UserProfile, EmployeeProfile } from "@/lib/types";
 import { format } from "date-fns";
 import { parseDateValue } from "@/lib/utils";
 import { calculateProfileCompleteness } from "@/lib/employee-completeness";
-import { getEmployeePhotoUrl } from "@/lib/profile-utils";
-import { ChangeProfilePhotoModal } from "./ChangeProfilePhotoModal";
-import { Camera, Pencil } from "lucide-react";
-import { useAuth } from "@/providers/auth-provider";
 
 const SectionTitle = ({
   children,
@@ -119,7 +115,7 @@ const FileStatus = ({
           variant="outline"
           className="bg-slate-900/50 text-slate-500 border-slate-800 text-[10px]"
         >
-          Belum Memiliki
+          File belum tersedia
         </Badge>
       </div>
     );
@@ -128,11 +124,7 @@ const FileStatus = ({
   return (
     <div className="flex items-center justify-between py-3 border-b border-slate-800/40 last:border-0 group">
       <div className="flex items-center gap-3">
-        {url && /\.(jpeg|jpg|gif|png|webp)$/i.test(url) ? (
-          <div className="h-8 w-8 rounded-lg overflow-hidden border border-slate-700 shrink-0">
-            <img src={url} alt={label} className="h-full w-full object-cover" />
-          </div>
-        ) : url ? (
+        {url ? (
           <div className="h-8 w-8 rounded-lg bg-slate-800/50 flex items-center justify-center border border-slate-700 shrink-0 text-slate-500">
             <FileText className="h-4 w-4" />
           </div>
@@ -156,7 +148,7 @@ const FileStatus = ({
               className="h-7 px-2 text-[10px] text-primary hover:bg-primary/10 font-bold"
               onClick={() => url && window.open(url, "_blank")}
             >
-              <Eye className="mr-1 h-3 w-3" /> Lihat
+              <Eye className="mr-1 h-3 w-3" /> Lihat Dokumen
             </Button>
           </>
         ) : pending ? (
@@ -171,7 +163,7 @@ const FileStatus = ({
             variant="outline"
             className="bg-red-500/10 text-red-500 border-red-500/20 text-[10px] gap-1 px-2 py-0.5 font-bold"
           >
-            <XCircle className="h-3 w-3" /> Belum diunggah
+            <XCircle className="h-3 w-3" /> File belum tersedia
           </Badge>
         )}
       </div>
@@ -239,16 +231,13 @@ export function EmployeeProfileDisplay({
   employeeProfile,
   userProfile,
   onEdit,
+  onPhotoChange,
 }: {
   employeeProfile: EmployeeProfile;
   userProfile: UserProfile;
   onEdit: () => void;
+  onPhotoChange?: () => void;
 }) {
-  const { firebaseUser } = useAuth();
-  const [showPhotoModal, setShowPhotoModal] = React.useState(false);
-  
-  const profilePhotoUrl = getEmployeePhotoUrl(employeeProfile, userProfile, firebaseUser);
-  
   const isProfileComplete = employeeProfile?.completeness?.isComplete;
   const iden = employeeProfile?.dataDiriIdentitas || ({} as any);
   const addr = employeeProfile?.alamat || ({} as any);
@@ -284,11 +273,16 @@ export function EmployeeProfileDisplay({
   // Use SSOT helper — same calculation as HRD view
   const _completeness = calculateProfileCompleteness(employeeProfile);
   const completeness = {
-    completedMandatoryCount: _completeness.sections.filter((s) => s.mandatory && s.isComplete).length,
-    totalMandatoryCount: _completeness.sections.filter((s) => s.mandatory).length,
+    completedMandatoryCount: _completeness.sections.filter(
+      (s) => s.mandatory && s.isComplete,
+    ).length,
+    totalMandatoryCount: _completeness.sections.filter((s) => s.mandatory)
+      .length,
     isFullyComplete: _completeness.status === "complete",
     percentage: _completeness.percentage,
-    missingBlocks: _completeness.sections.filter((s) => s.mandatory && !s.isComplete).map((s) => s.name),
+    missingBlocks: _completeness.sections
+      .filter((s) => s.mandatory && !s.isComplete)
+      .map((s) => s.name),
   };
 
   return (
@@ -299,28 +293,10 @@ export function EmployeeProfileDisplay({
         <div className="relative flex flex-col md:flex-row items-center gap-8 md:gap-10">
           <div className="relative group/avatar">
             <Avatar className="h-32 w-32 md:h-40 md:w-40 rounded-[2.5rem] border-4 border-slate-800 shadow-2xl transition-all duration-500 group-hover/avatar:scale-[1.02] group-hover/avatar:border-primary/30">
-              <AvatarImage 
-                src={profilePhotoUrl || ""} 
-                className="object-cover" 
-                onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).src = ""; // Force fallback
-                }}
-              />
               <AvatarFallback className="bg-slate-800 text-slate-400">
                 <User className="h-16 w-16" />
               </AvatarFallback>
             </Avatar>
-            
-            {/* Shortcut Ganti Foto */}
-            {firebaseUser?.uid === userProfile.uid && (
-              <button
-                onClick={() => setShowPhotoModal(true)}
-                className="absolute bottom-1 right-1 md:bottom-2 md:right-2 p-2.5 rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20 border-2 border-slate-900 transition-all duration-300 hover:scale-110 hover:rotate-6 active:scale-95 z-10"
-                title="Ganti Foto Profil"
-              >
-                <Pencil className="h-4 w-4 md:h-5 md:w-5" />
-              </button>
-            )}
           </div>
 
           <div className="flex-1 text-center md:text-left space-y-4">
@@ -575,7 +551,8 @@ export function EmployeeProfileDisplay({
                               </span>
                               <div className="text-right flex-shrink-0">
                                 <span className="text-[10px] font-black uppercase tracking-widest text-primary block">
-                                  Diperoleh: {cert.tahunPerolehan || cert.tahun || "-"}
+                                  Diperoleh:{" "}
+                                  {cert.tahunPerolehan || cert.tahun || "-"}
                                 </span>
                                 <span className="text-[9px] font-bold text-slate-500 block">
                                   Exp: {cert.tahunExpired || "Tidak ada"}
@@ -608,16 +585,36 @@ export function EmployeeProfileDisplay({
               {pp.riwayatPendidikan && pp.riwayatPendidikan.length > 0 && (
                 <div className="mt-8 space-y-4">
                   <h4 className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-2">
-                    <GraduationCap className="h-3 w-3" /> Riwayat Pendidikan Lainnya
+                    <GraduationCap className="h-3 w-3" /> Riwayat Pendidikan
+                    Lainnya
                   </h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {pp.riwayatPendidikan.map((edu: any, idx: number) => (
-                      <div key={idx} className="bg-slate-900/20 p-5 rounded-[2rem] border border-slate-800/40">
-                         <DataRow label="Jenjang" value={edu.jenjang} className="py-2" />
-                         <DataRow label="Institusi" value={edu.namaInstitusi} className="py-2" />
-                         <DataRow label="Jurusan" value={edu.jurusan} className="py-2" />
-                         <DataRow label="Tahun Lulus" value={edu.tahunLulus} className="py-2" />
-                         <FileStatus label="Bukti Ijazah" url={edu.ijazahUrl} />
+                      <div
+                        key={idx}
+                        className="bg-slate-900/20 p-5 rounded-[2rem] border border-slate-800/40"
+                      >
+                        <DataRow
+                          label="Jenjang"
+                          value={edu.jenjang}
+                          className="py-2"
+                        />
+                        <DataRow
+                          label="Institusi"
+                          value={edu.namaInstitusi}
+                          className="py-2"
+                        />
+                        <DataRow
+                          label="Jurusan"
+                          value={edu.jurusan}
+                          className="py-2"
+                        />
+                        <DataRow
+                          label="Tahun Lulus"
+                          value={edu.tahunLulus}
+                          className="py-2"
+                        />
+                        <FileStatus label="Bukti Ijazah" url={edu.ijazahUrl} />
                       </div>
                     ))}
                   </div>
@@ -848,16 +845,6 @@ export function EmployeeProfileDisplay({
           </Card>
         </div>
       </div>
-      <ChangeProfilePhotoModal
-        open={showPhotoModal}
-        onOpenChange={setShowPhotoModal}
-        uid={userProfile.uid}
-        currentPhotoUrl={profilePhotoUrl}
-        currentPhotoPath={employeeProfile?.photoPath}
-        onSuccess={() => {
-          window.location.reload(); 
-        }}
-      />
     </div>
   );
 }

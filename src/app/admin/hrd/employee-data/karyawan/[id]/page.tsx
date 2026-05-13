@@ -86,6 +86,7 @@ import {
   Users as UsersIcon,
   AlertCircle,
   Info,
+  FileX,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useToast } from "@/hooks/use-toast";
@@ -199,6 +200,8 @@ const DataRow = ({
   </div>
 );
 
+import { normalizeGoogleDriveImageUrl } from "@/lib/profile-photo";
+
 const DocumentPreviewCard = ({
   label,
   url,
@@ -212,7 +215,8 @@ const DocumentPreviewCard = ({
   type?: string;
   value?: string | null;
 }) => {
-  const isImage = url && /\.(jpg|jpeg|png|webp|gif)/i.test(url);
+  const [imageError, setImageError] = React.useState(false);
+  const isImage = false; // Disabled preview as per new UX rules
 
   return (
     <Card className="group border-slate-800 bg-slate-950/40 backdrop-blur-xl hover:border-slate-700 transition-all duration-300">
@@ -247,31 +251,15 @@ const DocumentPreviewCard = ({
       <CardContent className="pt-6">
         {url ? (
           <div className="space-y-4">
-            {isImage ? (
-              <div
-                className="relative aspect-video rounded-xl overflow-hidden border border-slate-800 bg-slate-900/50 cursor-pointer group-hover:ring-1 group-hover:ring-emerald-500/30 transition-all"
-                onClick={() => window.open(url, "_blank")}
-              >
-                <img
-                  src={url}
-                  className="h-full w-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
-                  alt={label}
-                />
-                <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <Eye className="h-5 w-5 text-white" />
-                </div>
-              </div>
-            ) : (
-              <div
-                className="aspect-video rounded-xl border border-slate-800 bg-slate-900/50 flex flex-col items-center justify-center text-slate-500 cursor-pointer hover:bg-slate-800/50 transition-colors"
-                onClick={() => window.open(url, "_blank")}
-              >
-                <FileText className="h-8 w-8 mb-2 opacity-20" />
-                <span className="text-[10px] uppercase tracking-widest font-bold">
-                  PDF / Document
-                </span>
-              </div>
-            )}
+            <div
+              className="aspect-video rounded-xl border border-slate-800 bg-slate-900/50 flex flex-col items-center justify-center text-slate-500 cursor-pointer hover:bg-slate-800/50 transition-colors text-center p-4 group"
+              onClick={() => window.open(url, "_blank")}
+            >
+              <FileText className="h-8 w-8 mb-2 opacity-40 group-hover:scale-110 transition-transform duration-500" />
+              <span className="text-[10px] uppercase tracking-widest font-bold">
+                File sudah diunggah
+              </span>
+            </div>
             <div className="flex gap-2">
               <Button
                 variant="outline"
@@ -280,7 +268,7 @@ const DocumentPreviewCard = ({
                 onClick={() => window.open(url, "_blank")}
               >
                 <Eye className="h-3.5 w-3.5 mr-2" />
-                Lihat
+                Lihat Dokumen
               </Button>
               <a
                 href={url}
@@ -301,12 +289,10 @@ const DocumentPreviewCard = ({
             </div>
           </div>
         ) : (
-          <div className="aspect-video rounded-xl border-2 border-dashed border-slate-800 bg-slate-900/20 flex flex-col items-center justify-center text-slate-600">
-            <AlertOctagon className="h-6 w-6 mb-2 opacity-20" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-center px-4">
-              {status === "Tidak Punya"
-                ? "Karyawan Tidak Memiliki"
-                : "Belum Diunggah"}
+          <div className="aspect-video rounded-xl border border-dashed border-slate-800 bg-slate-900/20 flex flex-col items-center justify-center text-slate-500 p-4 text-center">
+            <FileX className="h-8 w-8 mb-2 opacity-20" />
+            <span className="text-[10px] uppercase tracking-widest font-bold">
+              File belum tersedia
             </span>
           </div>
         )}
@@ -1622,18 +1608,8 @@ export default function EmployeeDetailPage({
                       <CardContent className="p-0">
                         <div className="p-6 flex flex-col items-center text-center border-b border-slate-800/50">
                           <div className="relative mb-4 group">
-                            <div className="h-32 w-32 rounded-[2.5rem] bg-slate-800 p-1 ring-1 ring-slate-700 shadow-2xl transition-transform duration-500 group-hover:scale-105">
-                              {profilePhotoUrl ? (
-                                <img
-                                  src={profilePhotoUrl}
-                                  alt={fullName}
-                                  className="h-full w-full object-cover rounded-[2.3rem]"
-                                />
-                              ) : (
-                                <div className="flex h-full w-full items-center justify-center text-4xl font-bold text-slate-600">
-                                  {initials}
-                                </div>
-                              )}
+                            <div className="h-32 w-32 rounded-[2.5rem] bg-slate-800 p-1 ring-1 ring-slate-700 shadow-2xl transition-transform duration-500 group-hover:scale-105 flex items-center justify-center">
+                              <User className="h-12 w-12 text-slate-400" />
                             </div>
                           </div>
                           <h2 className="text-xl font-bold text-white mb-1">

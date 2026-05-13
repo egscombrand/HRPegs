@@ -11,10 +11,10 @@ const MAX_FILE_SIZE = 1 * 1024 * 1024;
 async function getOrCreateFolder(
   drive: drive_v3.Drive,
   parentId: string,
-  folderName: string
+  folderName: string,
 ): Promise<string> {
   const query = `mimeType='application/vnd.google-apps.folder' and name='${folderName}' and '${parentId}' in parents and trashed=false`;
-  
+
   const response = await drive.files.list({
     q: query,
     fields: "files(id, name)",
@@ -48,7 +48,7 @@ async function resolveDrivePath(
   drive: drive_v3.Drive,
   rootId: string,
   category: string,
-  options: { ownerUid?: string; applicationId?: string; brandId?: string }
+  options: { ownerUid?: string; applicationId?: string; brandId?: string },
 ): Promise<{ folderId: string; folderPath: string }> {
   let pathSegments: string[] = [];
 
@@ -58,29 +58,34 @@ async function resolveDrivePath(
     case "npwp":
     case "bpjs":
     case "bank_proof":
-      if (!options.ownerUid) throw new Error("ownerUid is required for employee profiles");
+      if (!options.ownerUid)
+        throw new Error("ownerUid is required for employee profiles");
       pathSegments = ["employee_profiles", options.ownerUid, category];
       break;
 
     case "cv":
     case "ijazah":
     case "sertifikat":
-      if (!options.ownerUid) throw new Error("ownerUid is required for candidate docs");
+      if (!options.ownerUid)
+        throw new Error("ownerUid is required for candidate docs");
       pathSegments = ["candidate_docs", options.ownerUid, category];
       break;
 
     case "offering":
-      if (!options.applicationId) throw new Error("applicationId is required for offerings");
+      if (!options.applicationId)
+        throw new Error("applicationId is required for offerings");
       pathSegments = ["offerings", options.applicationId];
       break;
 
     case "offering_template":
-      if (!options.brandId) throw new Error("brandId is required for offering templates");
+      if (!options.brandId)
+        throw new Error("brandId is required for offering templates");
       pathSegments = ["offering_templates", options.brandId];
       break;
 
     case "overtime":
-      if (!options.ownerUid) throw new Error("ownerUid is required for overtime");
+      if (!options.ownerUid)
+        throw new Error("ownerUid is required for overtime");
       pathSegments = ["overtime_attachments", options.ownerUid];
       break;
 
@@ -90,7 +95,8 @@ async function resolveDrivePath(
       break;
 
     case "permission":
-      if (!options.ownerUid) throw new Error("ownerUid is required for permission");
+      if (!options.ownerUid)
+        throw new Error("ownerUid is required for permission");
       pathSegments = ["permission_attachments", options.ownerUid];
       break;
 
@@ -112,9 +118,9 @@ async function resolveDrivePath(
     currentParentId = await getOrCreateFolder(drive, currentParentId, segment);
   }
 
-  return { 
-    folderId: currentParentId, 
-    folderPath: pathSegments.join("/") 
+  return {
+    folderId: currentParentId,
+    folderPath: pathSegments.join("/"),
   };
 }
 
@@ -123,7 +129,7 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const file = formData.get("file") as File;
     const userId = formData.get("userId") as string;
-    
+
     const category = (formData.get("category") as string) || "";
     const ownerUid = (formData.get("ownerUid") as string) || "";
     const applicationId = (formData.get("applicationId") as string) || "";
@@ -131,11 +137,20 @@ export async function POST(req: NextRequest) {
     const brandId = (formData.get("brandId") as string) || "";
 
     if (!file) {
-      return NextResponse.json({ success: false, message: "File tidak ditemukan" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, message: "File tidak ditemukan" },
+        { status: 400 },
+      );
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json({ success: false, message: "Ukuran file terlalu besar. Maksimal 1 MB." }, { status: 400 });
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Ukuran file terlalu besar. Maksimal 1 MB.",
+        },
+        { status: 400 },
+      );
     }
 
     const storageProvider = process.env.STORAGE_PROVIDER || "firebaseStorage";
@@ -148,27 +163,54 @@ export async function POST(req: NextRequest) {
 
       // Tugas 2: Validasi URL Apps Script
       if (!appsScriptUrl || appsScriptUrl.includes("ISI_WEB_APP_URL")) {
-        return NextResponse.json({ success: false, message: "GOOGLE_DRIVE_APPS_SCRIPT_URL belum diisi dengan Web app URL Apps Script." }, { status: 500 });
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "GOOGLE_DRIVE_APPS_SCRIPT_URL belum diisi dengan Web app URL Apps Script.",
+          },
+          { status: 500 },
+        );
       }
-      
-      if (!appsScriptUrl.startsWith("https://script.google.com/macros/s/") || !appsScriptUrl.endsWith("/exec")) {
-        return NextResponse.json({ 
-          success: false, 
-          message: "GOOGLE_DRIVE_APPS_SCRIPT_URL harus Web app URL Apps Script yang berakhir /exec." 
-        }, { status: 500 });
+
+      if (
+        !appsScriptUrl.startsWith("https://script.google.com/macros/s/") ||
+        !appsScriptUrl.endsWith("/exec")
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "GOOGLE_DRIVE_APPS_SCRIPT_URL harus Web app URL Apps Script yang berakhir /exec.",
+          },
+          { status: 500 },
+        );
       }
 
       if (!uploadSecret || uploadSecret.includes("ISI_SECRET")) {
-        return NextResponse.json({ success: false, message: "GOOGLE_DRIVE_UPLOAD_SECRET belum diganti dengan secret asli yang sama dengan Code.gs." }, { status: 500 });
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "GOOGLE_DRIVE_UPLOAD_SECRET belum diganti dengan secret asli yang sama dengan Code.gs.",
+          },
+          { status: 500 },
+        );
       }
-      
+
       if (!rootFolderId) {
-        return NextResponse.json({ success: false, message: "GOOGLE_DRIVE_ROOT_FOLDER_ID belum diisi." }, { status: 500 });
+        return NextResponse.json(
+          {
+            success: false,
+            message: "GOOGLE_DRIVE_ROOT_FOLDER_ID belum diisi.",
+          },
+          { status: 500 },
+        );
       }
 
       // Convert file to base64 for Apps Script
       const arrayBuffer = await file.arrayBuffer();
-      const base64File = Buffer.from(arrayBuffer).toString('base64');
+      const base64File = Buffer.from(arrayBuffer).toString("base64");
 
       const appsScriptPayload = {
         secret: uploadSecret,
@@ -181,7 +223,7 @@ export async function POST(req: NextRequest) {
         applicationId: applicationId,
         offeringId: offeringId,
         brandId: brandId,
-        uploadedBy: userId
+        uploadedBy: userId,
       };
 
       const appsScriptResponse = await fetch(appsScriptUrl, {
@@ -205,35 +247,50 @@ export async function POST(req: NextRequest) {
       });
 
       // Tugas 1.4: Cek jika response adalah HTML
-      if (rawText.trim().startsWith("<!DOCTYPE") || rawText.trim().startsWith("<html")) {
-        return NextResponse.json({ 
-          success: false, 
-          message: "Apps Script mengembalikan HTML, bukan JSON. Cek Web app URL harus /exec, akses harus Anyone, dan deployment harus Web App.",
-          debug: rawText.slice(0, 200)
-        }, { status: 502 }); // Bad Gateway
+      if (
+        rawText.trim().startsWith("<!DOCTYPE") ||
+        rawText.trim().startsWith("<html")
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Apps Script mengembalikan HTML, bukan JSON. Cek Web app URL harus /exec, akses harus Anyone, dan deployment harus Web App.",
+            debug: rawText.slice(0, 200),
+          },
+          { status: 502 },
+        ); // Bad Gateway
       }
 
       let appsScriptData;
       try {
         appsScriptData = JSON.parse(rawText);
       } catch (parseError) {
-        return NextResponse.json({ 
-          success: false, 
-          message: "Apps Script mengembalikan format tidak valid (Bukan JSON).",
-          rawResponse: rawText.slice(0, 300)
-        }, { status: 502 });
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Apps Script mengembalikan format tidak valid (Bukan JSON).",
+            rawResponse: rawText.slice(0, 300),
+          },
+          { status: 502 },
+        );
       }
 
       if (!appsScriptResponse.ok || !appsScriptData.success) {
-        let message = appsScriptData.message || "Gagal upload via Apps Script bridge";
+        let message =
+          appsScriptData.message || "Gagal upload via Apps Script bridge";
         if (message.toLowerCase().includes("unauthorized")) {
           message = "Secret upload tidak sesuai dengan Apps Script.";
         }
-        return NextResponse.json({ 
-          success: false, 
-          message,
-          error: appsScriptData.error
-        }, { status: appsScriptResponse.status || 500 });
+        return NextResponse.json(
+          {
+            success: false,
+            message,
+            error: appsScriptData.error,
+          },
+          { status: appsScriptResponse.status || 500 },
+        );
       }
 
       return NextResponse.json({
@@ -246,8 +303,12 @@ export async function POST(req: NextRequest) {
         driveFolderId: appsScriptData.driveFolderId,
         driveFolderPath: appsScriptData.driveFolderPath,
         webViewLink: appsScriptData.webViewLink,
-        thumbnailUrl: appsScriptData.thumbnailUrl,
+        googleDriveWebViewLink: appsScriptData.webViewLink,
         directViewUrl: appsScriptData.directViewUrl,
+        viewUrl: appsScriptData.fileId
+          ? `/api/storage/view?fileId=${appsScriptData.fileId}`
+          : appsScriptData.directViewUrl || appsScriptData.webViewLink || "",
+        thumbnailUrl: appsScriptData.thumbnailUrl,
         uploadedAt: appsScriptData.uploadedAt || new Date().toISOString(),
         uploadedBy: userId,
       });
@@ -260,11 +321,18 @@ export async function POST(req: NextRequest) {
       const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
 
       if (!clientEmail || !privateKeyRaw || !rootFolderId) {
-        return NextResponse.json({ 
-          success: false,
-          message: "Konfigurasi Service Account belum lengkap",
-          missingEnv: [!clientEmail && "GOOGLE_DRIVE_CLIENT_EMAIL", !privateKeyRaw && "GOOGLE_DRIVE_PRIVATE_KEY", !rootFolderId && "GOOGLE_DRIVE_ROOT_FOLDER_ID"].filter(Boolean)
-        }, { status: 500 });
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Konfigurasi Service Account belum lengkap",
+            missingEnv: [
+              !clientEmail && "GOOGLE_DRIVE_CLIENT_EMAIL",
+              !privateKeyRaw && "GOOGLE_DRIVE_PRIVATE_KEY",
+              !rootFolderId && "GOOGLE_DRIVE_ROOT_FOLDER_ID",
+            ].filter(Boolean),
+          },
+          { status: 500 },
+        );
       }
 
       const privateKey = privateKeyRaw.replace(/\\n/g, "\n");
@@ -306,18 +374,30 @@ export async function POST(req: NextRequest) {
         driveFolderId: resolved.folderId,
         driveFolderPath: resolved.folderPath,
         webViewLink: driveFile.webViewLink,
+        googleDriveWebViewLink: driveFile.webViewLink,
+        viewUrl: driveFile.id
+          ? `/api/storage/view?fileId=${driveFile.id}`
+          : driveFile.webViewLink || "",
         uploadedAt: new Date().toISOString(),
         uploadedBy: userId,
       });
     }
 
-    return NextResponse.json({ success: false, message: "Storage provider tidak valid atau belum diatur" }, { status: 400 });
-
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Storage provider tidak valid atau belum diatur",
+      },
+      { status: 400 },
+    );
   } catch (error: any) {
     console.error("Google Drive API Proxy Error:", error);
     return NextResponse.json(
-      { success: false, message: error.message || "Terjadi kesalahan server saat proxy upload" },
-      { status: 500 }
+      {
+        success: false,
+        message: error.message || "Terjadi kesalahan server saat proxy upload",
+      },
+      { status: 500 },
     );
   }
 }

@@ -113,6 +113,10 @@ function InternProfilePageContent() {
           employeeProfile={employeeProfile as EmployeeProfile}
           userProfile={authProfile}
           onEdit={() => router.push('/admin/karyawan/magang/profile?mode=edit')}
+          onPhotoChange={() => {
+            refetchProfile();
+            refreshUserProfile();
+          }}
         />
       );
 }

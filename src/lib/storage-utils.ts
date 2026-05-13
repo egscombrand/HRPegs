@@ -8,7 +8,10 @@ import {
 } from "firebase/storage";
 import { toast } from "@/hooks/use-toast";
 
-const MAX_FILE_SIZE = 1 * 1024 * 1024; // 1 MB
+import imageCompression from 'browser-image-compression';
+import { PDFDocument } from 'pdf-lib';
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
 export interface StorageValidationResult {
   isValid: boolean;
@@ -32,7 +35,7 @@ export function validateStorageFile(file: File): StorageValidationResult {
   if (file.size > MAX_FILE_SIZE) {
     return { 
       isValid: false, 
-      message: "Ukuran file terlalu besar. Maksimal 1 MB." 
+      message: "Ukuran file terlalu besar. Maksimal 10 MB." 
     };
   }
 
@@ -50,57 +53,52 @@ export async function compressImage(file: File): Promise<File> {
   // If it's a GIF, don't compress as it might lose animation
   if (file.type === "image/gif") return file;
 
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
-      const img = new Image();
-      img.src = event.target?.result as string;
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        let width = img.width;
-        let height = img.height;
+  // Only compress if > 1MB
+  if (file.size <= 1024 * 1024) {
+    return file;
+  }
 
-        // Resize if wider than 800px
-        const MAX_WIDTH = 800;
-        if (width > MAX_WIDTH) {
-          height = Math.round((height * MAX_WIDTH) / width);
-          width = MAX_WIDTH;
-        }
+  const options = {
+    maxSizeMB: 1,
+    maxWidthOrHeight: 1600,
+    useWebWorker: true,
+    fileType: "image/webp"
+  };
 
-        canvas.width = width;
-        canvas.height = height;
+  try {
+    const compressedFile = await imageCompression(file, options);
+    const newName = file.name.replace(/\.[^/.]+$/, ".webp");
+    return new File([compressedFile], newName, {
+      type: "image/webp",
+      lastModified: Date.now(),
+    });
+  } catch (error) {
+    console.error("Image process error:", error);
+    return file;
+  }
+}
 
-        const ctx = canvas.getContext("2d");
-        ctx?.drawImage(img, 0, 0, width, height);
-
-        // Convert to blob with quality 0.75
-        canvas.toBlob(
-          (blob) => {
-            if (blob) {
-              const compressedFile = new File([blob], file.name, {
-                type: "image/jpeg", // Convert to JPEG for better compression
-                lastModified: Date.now(),
-              });
-              
-              // If compressed file is larger than original, return original
-              if (compressedFile.size >= file.size) {
-                resolve(file);
-              } else {
-                resolve(compressedFile);
-              }
-            } else {
-              resolve(file);
-            }
-          },
-          "image/jpeg",
-          0.75
-        );
-      };
-      img.onerror = () => resolve(file);
-    };
-    reader.onerror = () => resolve(file);
-  });
+/**
+ * Attempts to rebuild PDF to strip unnecessary metadata and optimize size without degrading quality.
+ */
+export async function processPDF(file: File): Promise<File> {
+  if (file.type !== "application/pdf") return file;
+  
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdfDoc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+    const pdfBytes = await pdfDoc.save({ useObjectStreams: false });
+    
+    const processedFile = new File([pdfBytes as any], file.name, {
+      type: "application/pdf",
+      lastModified: Date.now(),
+    });
+    
+    return processedFile.size < file.size ? processedFile : file;
+  } catch (error) {
+    console.error("PDF process error:", error);
+    return file;
+  }
 }
 
 /**

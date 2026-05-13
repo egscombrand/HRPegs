@@ -17,10 +17,10 @@ import { uploadFile } from "@/lib/storage/storage-adapter";
 import { doc, serverTimestamp } from "firebase/firestore";
 import { useFirestore, updateDocumentNonBlocking } from "@/firebase";
 import { User } from "lucide-react";
-import { 
-  validateStorageFile, 
-  compressImage, 
-  handleStorageError 
+import {
+  validateStorageFile,
+  compressImage,
+  handleStorageError,
 } from "@/lib/storage-utils";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -42,7 +42,6 @@ export function ChangeProfilePhotoModal({
   onSuccess,
 }: ChangeProfilePhotoModalProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const { toast } = useToast();
@@ -68,8 +67,6 @@ export function ChangeProfilePhotoModal({
     // Compress image
     const compressed = await compressImage(file);
     setSelectedFile(compressed);
-    const url = URL.createObjectURL(compressed);
-    setPreviewUrl(url);
   };
 
   const handleUpload = async () => {
@@ -82,37 +79,40 @@ export function ChangeProfilePhotoModal({
       const timestamp = Date.now();
       const filename = selectedFile.name.replace(/[^a-zA-Z0-9.]/g, "_");
       const storagePath = `employee_profiles/${uid}/profile-photo/${timestamp}-${filename}`;
-      
-      // Use unified storage adapter
-      const result = await uploadFile(selectedFile, storagePath, userProfile?.uid || uid, {
-        category: "profile_photo",
-        ownerUid: uid,
-        compress: false // Already compressed above
-      });
 
-      const finalUrl = result.thumbnailUrl || result.directViewUrl || result.webViewLink || "";
+      // Use unified storage adapter
+      const result = await uploadFile(
+        selectedFile,
+        storagePath,
+        userProfile?.uid || uid,
+        {
+          category: "profile_photo",
+          ownerUid: uid,
+          compress: false, // Already compressed above
+        },
+      );
+
+      const finalUrl =
+        result.viewUrl ||
+        result.thumbnailUrl ||
+        result.directViewUrl ||
+        result.webViewLink ||
+        "";
 
       // Update Firestore: employee_profiles
       const employeeProfileRef = doc(firestore, "employee_profiles", uid);
       await updateDocumentNonBlocking(employeeProfileRef, {
-        photoUrl: finalUrl,
-        photoPath: result.filePath || storagePath,
-        profilePhotoUrl: finalUrl,
-        profilePhotoFile: {
-          ...result,
-          uploadedBy: userProfile?.uid || uid,
+        profilePhoto: {
+          storageProvider: "google_drive",
+          fileId: result.fileId || "",
+          fileName: result.fileName || selectedFile.name,
+          mimeType: result.fileType || selectedFile.type,
+          finalSize: result.finalSize || selectedFile.size,
+          viewUrl: finalUrl,
+          googleDriveWebViewLink:
+            result.googleDriveWebViewLink || result.webViewLink || "",
+          uploadedAt: new Date().toISOString(),
         },
-        // Update nested fields for UI display
-        "dataDiriIdentitas.profilePhotoUrl": finalUrl,
-        "dataDiriIdentitas.photoUrl": finalUrl,
-        updatedAt: serverTimestamp() as any,
-      });
-
-      // Sync with users collection
-      const userRef = doc(firestore, "users", uid);
-      await updateDocumentNonBlocking(userRef, {
-        photoURL: finalUrl,
-        photoPath: result.filePath || storagePath,
         updatedAt: serverTimestamp() as any,
       });
 
@@ -130,7 +130,8 @@ export function ChangeProfilePhotoModal({
       toast({
         variant: "destructive",
         title: "Upload Gagal",
-        description: error.message || "Terjadi kesalahan saat mengunggah foto profil.",
+        description:
+          error.message || "Terjadi kesalahan saat mengunggah foto profil.",
       });
       setIsUploading(false);
     }
@@ -138,8 +139,6 @@ export function ChangeProfilePhotoModal({
 
   const resetState = () => {
     setSelectedFile(null);
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl(null);
     setUploadProgress(0);
   };
 
@@ -148,12 +147,15 @@ export function ChangeProfilePhotoModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(val) => {
-      if (!isUploading) {
-        onOpenChange(val);
-        if (!val) resetState();
-      }
-    }}>
+    <Dialog
+      open={open}
+      onOpenChange={(val) => {
+        if (!isUploading) {
+          onOpenChange(val);
+          if (!val) resetState();
+        }
+      }}
+    >
       <DialogContent className="sm:max-w-md bg-slate-950 border-slate-800 text-slate-100">
         <DialogHeader>
           <DialogTitle>Ganti Foto Profil</DialogTitle>
@@ -165,16 +167,17 @@ export function ChangeProfilePhotoModal({
         <div className="flex flex-col items-center justify-center py-6 gap-6">
           <div className="relative group">
             <Avatar className="h-48 w-48 rounded-[2.5rem] border-4 border-slate-800 shadow-2xl overflow-hidden bg-slate-900">
-              <AvatarImage src={previewUrl || currentPhotoUrl || ""} className="object-cover" />
               <AvatarFallback className="bg-slate-900 text-slate-500">
                 <User className="h-20 w-20" />
               </AvatarFallback>
             </Avatar>
-            
+
             {isUploading && (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 rounded-[2.5rem] z-10">
                 <Loader2 className="h-10 w-10 text-primary animate-spin mb-2" />
-                <span className="text-xs font-bold text-white">{Math.round(uploadProgress)}%</span>
+                <span className="text-xs font-bold text-white">
+                  {Math.round(uploadProgress)}%
+                </span>
               </div>
             )}
           </div>
@@ -212,7 +215,8 @@ export function ChangeProfilePhotoModal({
               >
                 {isUploading ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Mengunggah...
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />{" "}
+                    Mengunggah...
                   </>
                 ) : (
                   <>
@@ -226,7 +230,8 @@ export function ChangeProfilePhotoModal({
 
         <DialogFooter className="sm:justify-start">
           <p className="text-[10px] text-slate-500 italic">
-            * Perubahan foto profil akan terlihat di seluruh sistem setelah disimpan.
+            * Perubahan foto profil akan terlihat di seluruh sistem setelah
+            disimpan.
           </p>
         </DialogFooter>
       </DialogContent>

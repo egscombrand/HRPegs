@@ -17,11 +17,14 @@ import {
   orderBy,
   limit,
   getDocs,
+  addDoc,
+  updateDoc,
 } from "firebase/firestore";
-import { 
-  validateStorageFile, 
-  compressImage, 
-  handleStorageError 
+import { getFirestore } from "firebase/firestore";
+import {
+  validateStorageFile,
+  compressImage,
+  handleStorageError,
 } from "@/lib/storage-utils";
 import { normalizeGoogleDriveImageUrl } from "@/lib/profile-photo";
 import { uploadFile } from "@/lib/storage/storage-adapter";
@@ -789,6 +792,8 @@ function DocumentUploadCard({
 }) {
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
+  const [imageError, setImageError] = useState(false);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -806,38 +811,71 @@ function DocumentUploadCard({
       return;
     }
 
-    const processedFile = await compressImage(file);
-    
     setIsUploading(true);
     setProgress(0);
-    
+
     try {
+      const processedFile = await compressImage(file);
+
       const storagePath = `employee_profiles/${userId}/${fieldKey}_${Date.now()}_${processedFile.name.replace(/[^a-zA-Z0-9.]/g, "_")}`;
-      
+
       const result = await uploadFile(processedFile, storagePath, userId, {
-        category: fieldKey.includes("photo") || fieldKey.includes("profile") ? "profile_photo" : "employee_document",
+        category:
+          fieldKey.includes("photo") || fieldKey.includes("profile")
+            ? "profile_photo"
+            : "employee_document",
         ownerUid: userId,
-        compress: false // Already compressed
+        compress: false, // Already compressed
       });
 
-      const downloadUrl = result.webViewLink || result.downloadUrl || "";
-      
-      onChange(downloadUrl);
-      
+      const viewUrl =
+        result.viewUrl || result.webViewLink || result.downloadUrl || "";
+
+      // Simpan metadata ke employee_profiles
+      try {
+        const firestore = getFirestore();
+        const docRef = doc(firestore, "employee_profiles", userId);
+        const fileObj = {
+          storageProvider: "google_drive",
+          fileId: result.fileId || "",
+          fileName: result.originalFileName || file.name,
+          mimeType: processedFile.type,
+          finalSize: result.finalSize || processedFile.size,
+          viewUrl,
+          downloadUrl: result.downloadUrl || "",
+          googleDriveWebViewLink:
+            result.googleDriveWebViewLink || result.webViewLink || "",
+          webViewLink: result.webViewLink || "",
+          uploadedAt: new Date().toISOString(),
+        };
+        const metadataField = fieldKey.replace(/Url$/, "File");
+        // Only attempt to set the file object if fieldKey seems to be a valid path
+        if (metadataField !== fieldKey || fieldKey.includes(".")) {
+          await updateDoc(docRef, { [metadataField]: fileObj });
+        } else {
+          // Fallback if fieldKey doesn't have Url, just append File
+          await updateDoc(docRef, { [`${fieldKey}File`]: fileObj });
+        }
+      } catch (metaErr) {
+        console.warn("Gagal menyimpan metadata file", metaErr);
+      }
+
+      onChange(viewUrl);
+
       setIsUploading(true);
       setProgress(100);
-      
+
       setIsUploading(false);
       toast({
-        title: "Upload Berhasil",
-        description: `${title} telah diunggah ke Google Drive.`,
+        title: "Berhasil",
+        description: "File berhasil diunggah.",
       });
     } catch (error: any) {
       console.error("Upload error:", error);
       toast({
         variant: "destructive",
-        title: "Upload Gagal",
-        description: error.message || "Terjadi kesalahan saat mengunggah file.",
+        title: "Error",
+        description: error.message || "File terlalu besar.",
       });
       setIsUploading(false);
     }
@@ -926,7 +964,7 @@ function DocumentUploadCard({
               <div className="space-y-2 pt-2">
                 <Progress value={progress} className="h-1.5 rounded-full" />
                 <p className="text-[10px] text-right text-slate-400 font-medium">
-                  {progress}% mengunggah...
+                  Mengunggah file...
                 </p>
               </div>
             )}
@@ -941,27 +979,21 @@ function DocumentUploadCard({
           >
             {value ? (
               <div className="group relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 shadow-2xl transition-all hover:border-primary/30">
-                {!isPdf ? (
-                  <img
-                    src={normalizeGoogleDriveImageUrl(value)}
-                    alt={title}
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                  />
-                ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center gap-4 text-slate-400 bg-slate-800/30">
-                    <div className="h-16 w-16 rounded-2xl bg-slate-800 flex items-center justify-center text-red-400 shadow-lg">
-                      <FileText className="h-10 w-10" />
-                    </div>
-                    <div className="text-center">
-                      <span className="text-[10px] font-black uppercase tracking-[0.2em] block mb-1">
-                        PDF Document
-                      </span>
-                      <span className="text-[9px] text-slate-500 font-medium truncate max-w-[120px]">
-                        {title}.pdf
-                      </span>
-                    </div>
+                <div className="w-full h-full flex flex-col items-center justify-center gap-4 text-slate-400 bg-slate-800/30">
+                  <div className="h-16 w-16 rounded-2xl bg-slate-800 flex items-center justify-center text-slate-500 shadow-lg group-hover:scale-110 transition-transform duration-500">
+                    <FileText className="h-10 w-10" />
                   </div>
-                )}
+                  <div className="text-center">
+                    <span className="text-[10px] font-black uppercase tracking-[0.2em] block mb-1">
+                      File sudah diunggah
+                    </span>
+                    {title && (
+                      <span className="text-[9px] text-slate-500 font-medium truncate max-w-[120px]">
+                        {title}
+                      </span>
+                    )}
+                  </div>
+                </div>
                 <div className="absolute inset-0 bg-slate-950/80 opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-center gap-3">
                   <Button
                     type="button"
@@ -970,11 +1002,8 @@ function DocumentUploadCard({
                     className="rounded-full px-6 h-9 font-bold text-xs"
                     onClick={() => window.open(value, "_blank")}
                   >
-                    <Eye className="mr-2 h-4 w-4" /> Buka Dokumen
+                    <Eye className="mr-2 h-4 w-4" /> Lihat Dokumen
                   </Button>
-                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">
-                    Klik untuk melihat detail
-                  </p>
                 </div>
               </div>
             ) : (

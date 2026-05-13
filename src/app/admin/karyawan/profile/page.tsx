@@ -113,6 +113,10 @@ export default function EmployeeProfilePage() {
           employeeProfile={employeeProfile!}
           userProfile={userProfile!}
           onEdit={() => setEditMode(true)}
+          onPhotoChange={() => {
+            mutate();
+            refreshUserProfile();
+          }}
         />
       )}
     </DashboardLayout>

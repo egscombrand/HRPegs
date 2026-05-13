@@ -1,17 +1,29 @@
-'use client';
+"use client";
 
-import type { ReactNode } from 'react';
-import React, { useMemo, useState, useEffect } from 'react';
-import Link from 'next/link';
-import { useRouter, usePathname } from 'next/navigation';
-import { useAuth } from '@/providers/auth-provider';
-import { useAuth as useFirebaseAuth, useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase';
-import { doc, collection, query, where } from 'firebase/firestore';
-import { Button } from '@/components/ui/button';
-import { LogOut, ArrowLeft, Leaf, Bell } from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { getEmployeePhotoUrl } from '@/lib/profile-utils';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import type { ReactNode } from "react";
+import React, { useMemo, useState, useEffect } from "react";
+import Link from "next/link";
+import { useRouter, usePathname } from "next/navigation";
+import { useAuth } from "@/providers/auth-provider";
+import {
+  useAuth as useFirebaseAuth,
+  useFirestore,
+  useDoc,
+  useMemoFirebase,
+  useCollection,
+} from "@/firebase";
+import { doc, collection, query, where } from "firebase/firestore";
+import { Button } from "@/components/ui/button";
+import { LogOut, ArrowLeft, Leaf, Bell } from "lucide-react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Sidebar,
   SidebarProvider,
@@ -23,33 +35,54 @@ import {
   SidebarMenuButton,
   SidebarTrigger,
   SidebarFooter,
-} from '@/components/ui/sidebar';
-import { MENU_CONFIG } from '@/lib/menu-config';
-import type { NavigationSetting, UserRole, JobApplication, AssessmentSession, JobApplicationStatus, Notification } from '@/lib/types';
-import { cn } from '@/lib/utils';
-import { ThemeToggle } from '../ui/ThemeToggle';
-import { Separator } from '../ui/separator';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Badge } from '@/components/ui/badge';
-import { ORDERED_RECRUITMENT_STAGES } from '@/lib/types';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { NotificationPanel } from '../dashboard/NotificationPanel';
-
+} from "@/components/ui/sidebar";
+import { MENU_CONFIG } from "@/lib/menu-config";
+import type {
+  NavigationSetting,
+  UserRole,
+  JobApplication,
+  AssessmentSession,
+  JobApplicationStatus,
+  Notification,
+} from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { ThemeToggle } from "../ui/ThemeToggle";
+import { Separator } from "../ui/separator";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/badge";
+import { ORDERED_RECRUITMENT_STAGES } from "@/lib/types";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { NotificationPanel } from "../dashboard/NotificationPanel";
 
 function UserNav() {
-  const { userProfile, firebaseUser } = useAuth();
+  const { userProfile } = useAuth();
   const auth = useFirebaseAuth();
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
 
   const handleLogout = async () => {
     await auth.signOut();
-    router.push('/careers');
+    router.push("/careers");
   };
-  
-  const getInitials = (name: string = '') => {
-    return name.split(' ').map(n => n[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
-  }
+
+  const getInitials = (name: string = "") => {
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .filter(Boolean)
+      .slice(0, 2)
+      .join("")
+      .toUpperCase();
+  };
 
   if (!userProfile) return null;
 
@@ -58,7 +91,6 @@ function UserNav() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-8 w-8 rounded-full">
           <Avatar className="h-9 w-9">
-            <AvatarImage src={getEmployeePhotoUrl(null, userProfile, firebaseUser)} alt={userProfile.fullName} data-ai-hint="profile avatar" />
             <AvatarFallback>{getInitials(userProfile.fullName)}</AvatarFallback>
           </Avatar>
         </Button>
@@ -66,18 +98,22 @@ function UserNav() {
       <DropdownMenuContent className="w-56" align="end" forceMount>
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">{userProfile.fullName}</p>
+            <p className="text-sm font-medium leading-none">
+              {userProfile.fullName}
+            </p>
             <p className="text-xs leading-none text-muted-foreground">
               {userProfile.email}
             </p>
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={(e) => {
-          e.preventDefault();
-          setOpen(false);
-          queueMicrotask(handleLogout);
-        }}>
+        <DropdownMenuItem
+          onSelect={(e) => {
+            e.preventDefault();
+            setOpen(false);
+            queueMicrotask(handleLogout);
+          }}
+        >
           <LogOut className="mr-2 h-4 w-4" />
           <span>Logout</span>
         </DropdownMenuItem>
@@ -86,41 +122,53 @@ function UserNav() {
   );
 }
 
-
 export function CandidatePortalLayout({ children }: { children: ReactNode }) {
   const { userProfile } = useAuth();
   const firestore = useFirestore();
   const pathname = usePathname();
 
   const settingsDocRef = useMemoFirebase(
-    () => (userProfile ? doc(firestore, 'navigation_settings', userProfile.role) : null),
-    [userProfile, firestore]
+    () =>
+      userProfile
+        ? doc(firestore, "navigation_settings", userProfile.role)
+        : null,
+    [userProfile, firestore],
   );
 
-  const { data: navSettings, isLoading: isLoadingSettings } = useDoc<NavigationSetting>(settingsDocRef);
-  
+  const { data: navSettings, isLoading: isLoadingSettings } =
+    useDoc<NavigationSetting>(settingsDocRef);
+
   // --- Data Fetching for Badges & Gating ---
   const applicationsQuery = useMemoFirebase(() => {
     if (!userProfile?.uid) return null;
-    return query(collection(firestore, 'applications'), where('candidateUid', '==', userProfile.uid));
+    return query(
+      collection(firestore, "applications"),
+      where("candidateUid", "==", userProfile.uid),
+    );
   }, [userProfile?.uid, firestore]);
-  const { data: applications, isLoading: isLoadingApps } = useCollection<JobApplication>(applicationsQuery);
+  const { data: applications, isLoading: isLoadingApps } =
+    useCollection<JobApplication>(applicationsQuery);
 
   const sessionsQuery = useMemoFirebase(() => {
     if (!userProfile?.uid) return null;
-    return query(collection(firestore, 'assessment_sessions'), where('candidateUid', '==', userProfile.uid));
+    return query(
+      collection(firestore, "assessment_sessions"),
+      where("candidateUid", "==", userProfile.uid),
+    );
   }, [userProfile?.uid, firestore]);
-  const { data: sessions, isLoading: isLoadingSessions } = useCollection<AssessmentSession>(sessionsQuery);
+  const { data: sessions, isLoading: isLoadingSessions } =
+    useCollection<AssessmentSession>(sessionsQuery);
 
-    const unreadNotifsQuery = useMemoFirebase(() => {
-        if (!userProfile?.uid) return null;
-        return query(
-            collection(firestore, 'users', userProfile.uid, 'notifications'), 
-            where('isRead', '==', false)
-        );
-    }, [userProfile?.uid, firestore]);
-    const { data: unreadNotifications } = useCollection<Notification>(unreadNotifsQuery);
-    const unreadCount = unreadNotifications?.length || 0;
+  const unreadNotifsQuery = useMemoFirebase(() => {
+    if (!userProfile?.uid) return null;
+    return query(
+      collection(firestore, "users", userProfile.uid, "notifications"),
+      where("isRead", "==", false),
+    );
+  }, [userProfile?.uid, firestore]);
+  const { data: unreadNotifications } =
+    useCollection<Notification>(unreadNotifsQuery);
+  const unreadCount = unreadNotifications?.length || 0;
 
   const [now, setNow] = useState(new Date());
   useEffect(() => {
@@ -135,28 +183,30 @@ export function CandidatePortalLayout({ children }: { children: ReactNode }) {
     activeTestSession,
   } = useMemo(() => {
     const defaultResult = {
-        highestStatus: null as JobApplicationStatus | null,
-        assessmentStatus: 'Belum',
-        upcomingInterviewCount: 0,
-        activeTestSession: null as AssessmentSession | null,
+      highestStatus: null as JobApplicationStatus | null,
+      assessmentStatus: "Belum",
+      upcomingInterviewCount: 0,
+      activeTestSession: null as AssessmentSession | null,
     };
 
     if (!applications || !sessions) return defaultResult;
-    
-    const activeSession = sessions.find(s => s.status === 'draft');
+
+    const activeSession = sessions.find((s) => s.status === "draft");
     if (activeSession) {
-        const deadline = activeSession.deadlineAt?.toDate();
-        if (!deadline || now < deadline) {
-            defaultResult.activeTestSession = activeSession;
-        }
+      const deadline = activeSession.deadlineAt?.toDate();
+      if (!deadline || now < deadline) {
+        defaultResult.activeTestSession = activeSession;
+      }
     }
-    
+
     // Determine highest application status
-    const nonRejectedApps = applications.filter(app => app.status !== 'rejected');
+    const nonRejectedApps = applications.filter(
+      (app) => app.status !== "rejected",
+    );
     let highestStageIndex = -1;
     let highestStage: JobApplicationStatus | null = null;
     if (nonRejectedApps.length > 0) {
-      nonRejectedApps.forEach(app => {
+      nonRejectedApps.forEach((app) => {
         const currentIndex = ORDERED_RECRUITMENT_STAGES.indexOf(app.status);
         if (currentIndex > highestStageIndex) {
           highestStageIndex = currentIndex;
@@ -165,23 +215,24 @@ export function CandidatePortalLayout({ children }: { children: ReactNode }) {
       });
     }
     defaultResult.highestStatus = highestStage;
-    
+
     // Determine assessment status by looking at ALL sessions, not just application-specific ones.
-    const submitted = sessions.find(s => s.status === 'submitted');
-    const draft = sessions.find(s => s.status === 'draft');
-    if (submitted) defaultResult.assessmentStatus = 'Selesai';
-    else if (draft) defaultResult.assessmentStatus = 'Proses';
-    
+    const submitted = sessions.find((s) => s.status === "submitted");
+    const draft = sessions.find((s) => s.status === "draft");
+    if (submitted) defaultResult.assessmentStatus = "Selesai";
+    else if (draft) defaultResult.assessmentStatus = "Proses";
 
     // Determine upcoming interview count
-    const upcomingInterviews = applications.flatMap(app => app.interviews || [])
-        .filter(iv => iv.status === 'scheduled' && iv.startAt.toDate() > new Date());
+    const upcomingInterviews = applications
+      .flatMap((app) => app.interviews || [])
+      .filter(
+        (iv) => iv.status === "scheduled" && iv.startAt.toDate() > new Date(),
+      );
     defaultResult.upcomingInterviewCount = upcomingInterviews.length;
 
     return defaultResult;
-
   }, [applications, sessions, now]);
-  
+
   const menuConfig = useMemo(() => {
     const roleConfig = MENU_CONFIG[userProfile?.role as UserRole] || [];
     if (isLoadingSettings) {
@@ -189,145 +240,222 @@ export function CandidatePortalLayout({ children }: { children: ReactNode }) {
     }
     if (navSettings) {
       const visibleKeys = new Set(navSettings.visibleMenuItems);
-      return roleConfig.map(group => ({
-        ...group,
-        items: group.items.filter(item => visibleKeys.has(item.key))
-      })).filter(group => group.items.length > 0);
+      return roleConfig
+        .map((group) => ({
+          ...group,
+          items: group.items.filter((item) => visibleKeys.has(item.key)),
+        }))
+        .filter((group) => group.items.length > 0);
     }
     return roleConfig;
   }, [userProfile, navSettings, isLoadingSettings]);
 
   const getGatingInfo = (menuLabel: string) => {
-    if (!highestStatus) { // Case where user has account but never applied
-        const allowedBeforeFirstApp = ['Dashboard', 'Profil Pelamar', 'Daftar Lowongan', 'Lamaran Saya'];
-        if (allowedBeforeFirstApp.includes(menuLabel)) {
-            return { locked: false, reason: '' };
-        }
-        if (menuLabel === 'Tes Kepribadian' && !userProfile?.isProfileComplete) {
-            return { locked: true, reason: 'Lengkapi profil Anda untuk membuka tes kepribadian.' };
-        }
-        return { locked: true, reason: 'Lamar pekerjaan pertama Anda untuk memulai tahap ini.' };
+    if (!highestStatus) {
+      // Case where user has account but never applied
+      const allowedBeforeFirstApp = [
+        "Dashboard",
+        "Profil Pelamar",
+        "Daftar Lowongan",
+        "Lamaran Saya",
+      ];
+      if (allowedBeforeFirstApp.includes(menuLabel)) {
+        return { locked: false, reason: "" };
+      }
+      if (menuLabel === "Tes Kepribadian" && !userProfile?.isProfileComplete) {
+        return {
+          locked: true,
+          reason: "Lengkapi profil Anda untuk membuka tes kepribadian.",
+        };
+      }
+      return {
+        locked: true,
+        reason: "Lamar pekerjaan pertama Anda untuk memulai tahap ini.",
+      };
     }
 
-    const highestStatusIndex = ORDERED_RECRUITMENT_STAGES.indexOf(highestStatus);
+    const highestStatusIndex =
+      ORDERED_RECRUITMENT_STAGES.indexOf(highestStatus);
 
-    switch(menuLabel) {
-        case 'Pengumpulan Dokumen':
-            const docStageIndex = ORDERED_RECRUITMENT_STAGES.indexOf('document_submission');
-            return highestStatusIndex >= docStageIndex 
-                ? { locked: false, reason: '' }
-                : { locked: true, reason: 'Anda akan diundang untuk mengunggah dokumen setelah lolos tahap verifikasi.' };
-        case 'Jadwal Wawancara':
-            const interviewStageIndex = ORDERED_RECRUITMENT_STAGES.indexOf('interview');
-            return highestStatusIndex >= interviewStageIndex 
-                ? { locked: false, reason: '' }
-                : { locked: true, reason: 'Jadwal akan muncul di sini setelah diatur oleh HRD.' };
-        default:
-            return { locked: false, reason: '' };
+    switch (menuLabel) {
+      case "Pengumpulan Dokumen":
+        const docStageIndex = ORDERED_RECRUITMENT_STAGES.indexOf(
+          "document_submission",
+        );
+        return highestStatusIndex >= docStageIndex
+          ? { locked: false, reason: "" }
+          : {
+              locked: true,
+              reason:
+                "Anda akan diundang untuk mengunggah dokumen setelah lolos tahap verifikasi.",
+            };
+      case "Jadwal Wawancara":
+        const interviewStageIndex =
+          ORDERED_RECRUITMENT_STAGES.indexOf("interview");
+        return highestStatusIndex >= interviewStageIndex
+          ? { locked: false, reason: "" }
+          : {
+              locked: true,
+              reason: "Jadwal akan muncul di sini setelah diatur oleh HRD.",
+            };
+      default:
+        return { locked: false, reason: "" };
     }
   };
-
 
   if (!userProfile) {
     return null; // Should be handled by the parent layout's guard
   }
-  
+
   const isTestInProgress = !!activeTestSession;
 
   return (
     <SidebarProvider defaultOpen>
-      <Sidebar collapsible="icon" className="bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
+      <Sidebar
+        collapsible="icon"
+        className="bg-sidebar text-sidebar-foreground border-r border-sidebar-border"
+      >
         <SidebarHeader className="border-b border-sidebar-border p-0">
           <div className="flex h-16 items-center px-4">
-             <Link href="/careers/portal" className="flex items-center gap-3">
-               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-accent">
+            <Link href="/careers/portal" className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-accent">
                 <Leaf className="h-6 w-6 text-primary" />
-               </div>
-               <div className="leading-tight group-data-[state=collapsed]:hidden">
-                 <div className="font-semibold text-foreground text-base">Environesia Karir</div>
-                 <div className="text-xs text-muted-foreground">Portal Kandidat</div>
-               </div>
-             </Link>
-           </div>
+              </div>
+              <div className="leading-tight group-data-[state=collapsed]:hidden">
+                <div className="font-semibold text-foreground text-base">
+                  Environesia Karir
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Portal Kandidat
+                </div>
+              </div>
+            </Link>
+          </div>
         </SidebarHeader>
         <SidebarContent className="p-2">
           {menuConfig.map((group, groupIndex) => (
             <React.Fragment key={group.title || groupIndex}>
-                <SidebarMenu>
-                    {group.title && <h2 className="px-2 py-1 text-xs font-semibold text-muted-foreground tracking-wider group-data-[state=collapsed]:hidden">{group.title}</h2>}
-                    {group.items.map(item => {
-                        const { locked: isGated, reason: gateReason } = getGatingInfo(item.label);
-                        
-                        let locked = isGated;
-                        let reason = gateReason;
+              <SidebarMenu>
+                {group.title && (
+                  <h2 className="px-2 py-1 text-xs font-semibold text-muted-foreground tracking-wider group-data-[state=collapsed]:hidden">
+                    {group.title}
+                  </h2>
+                )}
+                {group.items.map((item) => {
+                  const { locked: isGated, reason: gateReason } = getGatingInfo(
+                    item.label,
+                  );
 
-                        if (isTestInProgress && !item.href.includes('/assessment/personality')) {
-                            locked = true;
-                            reason = "Selesaikan tes Anda yang sedang berjalan.";
-                        }
-                        
-                        const isActive = pathname === item.href || (item.href !== '/careers/portal' && pathname.startsWith(item.href));
-                        
-                        let badgeContent = null;
-                        if (item.label === 'Tes Kepribadian' && assessmentStatus && assessmentStatus !== 'Belum') {
-                            badgeContent = <Badge variant={assessmentStatus === 'Selesai' ? 'default' : 'secondary'} className="text-xs">{assessmentStatus}</Badge>;
-                        } else if (item.label === 'Jadwal Wawancara' && upcomingInterviewCount > 0) {
-                            badgeContent = <Badge variant="default" className="text-xs">{upcomingInterviewCount}</Badge>;
-                        }
-                        
-                        const button = (
-                           <SidebarMenuButton 
-                                asChild 
-                                tooltip={item.label}
-                                isActive={isActive}
-                                disabled={locked}
-                                className={cn(
-                                    "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground font-medium",
-                                    "justify-start",
-                                    locked && "cursor-not-allowed opacity-60"
-                                )}
-                            >
-                                <Link href={locked ? '#' : item.href}>
-                                    {item.icon}
-                                    <span className="group-data-[state=collapsed]:hidden">{item.label}</span>
-                                    <div className="ml-auto group-data-[state=collapsed]:hidden">{badgeContent}</div>
-                                </Link>
-                            </SidebarMenuButton>
-                        );
+                  let locked = isGated;
+                  let reason = gateReason;
 
-                        return (
-                            <SidebarMenuItem key={item.label}>
-                                {locked ? (
-                                    <TooltipProvider>
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>{button}</TooltipTrigger>
-                                            <TooltipContent side="right"><p>{reason}</p></TooltipContent>
-                                        </Tooltip>
-                                    </TooltipProvider>
-                                ) : button}
-                            </SidebarMenuItem>
-                        )
-                    })}
-                </SidebarMenu>
-                {groupIndex < menuConfig.length - 1 && <Separator className="my-2 bg-sidebar-border group-data-[state=collapsed]:mx-auto group-data-[state=collapsed]:w-1/2" />}
+                  if (
+                    isTestInProgress &&
+                    !item.href.includes("/assessment/personality")
+                  ) {
+                    locked = true;
+                    reason = "Selesaikan tes Anda yang sedang berjalan.";
+                  }
+
+                  const isActive =
+                    pathname === item.href ||
+                    (item.href !== "/careers/portal" &&
+                      pathname.startsWith(item.href));
+
+                  let badgeContent = null;
+                  if (
+                    item.label === "Tes Kepribadian" &&
+                    assessmentStatus &&
+                    assessmentStatus !== "Belum"
+                  ) {
+                    badgeContent = (
+                      <Badge
+                        variant={
+                          assessmentStatus === "Selesai"
+                            ? "default"
+                            : "secondary"
+                        }
+                        className="text-xs"
+                      >
+                        {assessmentStatus}
+                      </Badge>
+                    );
+                  } else if (
+                    item.label === "Jadwal Wawancara" &&
+                    upcomingInterviewCount > 0
+                  ) {
+                    badgeContent = (
+                      <Badge variant="default" className="text-xs">
+                        {upcomingInterviewCount}
+                      </Badge>
+                    );
+                  }
+
+                  const button = (
+                    <SidebarMenuButton
+                      asChild
+                      tooltip={item.label}
+                      isActive={isActive}
+                      disabled={locked}
+                      className={cn(
+                        "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground font-medium",
+                        "justify-start",
+                        locked && "cursor-not-allowed opacity-60",
+                      )}
+                    >
+                      <Link href={locked ? "#" : item.href}>
+                        {item.icon}
+                        <span className="group-data-[state=collapsed]:hidden">
+                          {item.label}
+                        </span>
+                        <div className="ml-auto group-data-[state=collapsed]:hidden">
+                          {badgeContent}
+                        </div>
+                      </Link>
+                    </SidebarMenuButton>
+                  );
+
+                  return (
+                    <SidebarMenuItem key={item.label}>
+                      {locked ? (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>{button}</TooltipTrigger>
+                            <TooltipContent side="right">
+                              <p>{reason}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        button
+                      )}
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+              {groupIndex < menuConfig.length - 1 && (
+                <Separator className="my-2 bg-sidebar-border group-data-[state=collapsed]:mx-auto group-data-[state=collapsed]:w-1/2" />
+              )}
             </React.Fragment>
           ))}
         </SidebarContent>
         <SidebarFooter className="mt-auto p-2">
-            <SidebarMenu>
-                 <SidebarMenuItem>
-                    <SidebarMenuButton 
-                      asChild 
-                      tooltip="Kembali ke Halaman Karir"
-                      className="text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground justify-start"
-                    >
-                        <Link href="/careers">
-                            <ArrowLeft />
-                            <span className="group-data-[state=collapsed]:hidden">Halaman Karir</span>
-                        </Link>
-                    </SidebarMenuButton>
-                </SidebarMenuItem>
-            </SidebarMenu>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                tooltip="Kembali ke Halaman Karir"
+                className="text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground justify-start"
+              >
+                <Link href="/careers">
+                  <ArrowLeft />
+                  <span className="group-data-[state=collapsed]:hidden">
+                    Halaman Karir
+                  </span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
         </SidebarFooter>
       </Sidebar>
 
@@ -338,29 +466,33 @@ export function CandidatePortalLayout({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-4">
             <ThemeToggle />
             <Popover>
-                <PopoverTrigger asChild>
-                    <Button variant="outline" size="icon" className="h-10 w-10 relative">
-                        <Bell className="h-5 w-5" />
-                        {unreadCount > 0 && (
-                            <span className="absolute top-1 right-1 flex h-4 w-4">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-4 w-4 bg-primary text-xs text-primary-foreground items-center justify-center">{unreadCount > 9 ? '9+' : unreadCount}</span>
-                            </span>
-                        )}
-                        <span className="sr-only">Notifications</span>
-                    </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-80 h-[50vh] p-0" align="end">
-                   <NotificationPanel />
-                </PopoverContent>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-10 w-10 relative"
+                >
+                  <Bell className="h-5 w-5" />
+                  {unreadCount > 0 && (
+                    <span className="absolute top-1 right-1 flex h-4 w-4">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-4 w-4 bg-primary text-xs text-primary-foreground items-center justify-center">
+                        {unreadCount > 9 ? "9+" : unreadCount}
+                      </span>
+                    </span>
+                  )}
+                  <span className="sr-only">Notifications</span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 h-[50vh] p-0" align="end">
+                <NotificationPanel />
+              </PopoverContent>
             </Popover>
             <UserNav />
           </div>
         </header>
 
-        <main className="flex-1 p-4 sm:px-6 sm:py-6 md:gap-8">
-            {children}
-        </main>
+        <main className="flex-1 p-4 sm:px-6 sm:py-6 md:gap-8">{children}</main>
       </SidebarInset>
     </SidebarProvider>
   );

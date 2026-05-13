@@ -285,6 +285,16 @@ export type EmployeeProfile = {
   uid: string;
   photoUrl?: string;
   photoPath?: string;
+  profilePhoto?: {
+    storageProvider?: string;
+    fileId?: string;
+    fileName?: string;
+    mimeType?: string;
+    finalSize?: number;
+    viewUrl?: string;
+    googleDriveWebViewLink?: string;
+    uploadedAt?: string;
+  };
 
   // --- Data Pribadi (Nested) ---
   dataDiriIdentitas: {
