@@ -44,11 +44,19 @@ export async function openSecureFile(
     throw new Error("FileId tidak ditemukan untuk dokumen ini.");
   }
 
+  // Open a blank window IMMEDIATELY before any async await calls
+  // This satisfies browser's requirement for user-triggered gestures
+  const newWindow = window.open("", "_blank");
+  if (newWindow) {
+    newWindow.document.title = "Memuat Dokumen...";
+  }
+
   try {
     const auth = getAuth();
     const currentUser = auth.currentUser;
 
     if (!currentUser) {
+      if (newWindow) newWindow.close();
       throw new Error("Autentikasi tidak ditemukan. Silakan login kembali.");
     }
 
@@ -60,6 +68,7 @@ export async function openSecureFile(
     });
 
     if (!response.ok) {
+      if (newWindow) newWindow.close();
       let errorMessage = "Gagal memuat dokumen";
 
       if (response.status === 401) {
@@ -67,7 +76,7 @@ export async function openSecureFile(
           "Sesi telah berakhir. Silakan login kembali untuk melihat dokumen.";
       } else if (response.status === 403) {
         errorMessage =
-          "Anda tidak memiliki akses untuk melihat dokumen ini. Hubungi administrator.";
+          "File belum tercatat sebagai milik akun ini. Silakan klik Simpan & Lanjut atau unggah ulang.";
       } else if (response.status === 404) {
         errorMessage =
           "Dokumen tidak ditemukan. File mungkin telah dihapus atau fileId tidak valid.";
@@ -80,23 +89,23 @@ export async function openSecureFile(
     }
 
     const blob = await response.blob();
-    const objectUrl = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = objectUrl;
-    link.target = "_blank";
-    link.rel = "noreferrer noopener";
-
-    if (fileName) {
-      link.download = fileName;
+    const blobUrl = URL.createObjectURL(blob);
+    
+    if (newWindow) {
+      newWindow.location.href = blobUrl;
+    } else {
+      // Fallback if the initial window was somehow blocked or closed
+      const fallbackWin = window.open(blobUrl, "_blank", "noopener,noreferrer");
+      if (!fallbackWin) {
+        URL.revokeObjectURL(blobUrl);
+        throw new Error("Popup diblokir browser. Izinkan popup untuk melihat dokumen.");
+      }
     }
 
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    // Cleanup object URL after a delay
-    setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+    // Cleanup object URL after a longer delay (60s) to allow browser to load the preview
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
   } catch (error: any) {
+    if (newWindow && !newWindow.closed) newWindow.close();
     console.error("openSecureFile error:", error);
     throw error;
   }

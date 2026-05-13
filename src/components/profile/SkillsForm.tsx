@@ -48,7 +48,18 @@ import {
 } from "@/lib/candidate-docs-utils";
 import { useAuth } from "@/providers/auth-provider";
 import { useFirestore, setDocumentNonBlocking } from "@/firebase";
-import { doc, serverTimestamp, Timestamp } from "firebase/firestore";
+import {
+  doc,
+  serverTimestamp,
+  Timestamp,
+  query,
+  collection,
+  where,
+  orderBy,
+  limit,
+  getDocs,
+  updateDoc,
+} from "firebase/firestore";
 import { uploadFile } from "@/lib/storage/storage-adapter";
 import {
   validateStorageFile,
@@ -157,9 +168,11 @@ function FileUploadField({
   required = false,
 }: FileUploadFieldProps) {
   const [isUploading, setIsUploading] = useState(false);
+  const [isSavingMetadata, setIsSavingMetadata] = useState(false);
   const [progress, setProgress] = useState(0);
   const [fileName, setFileName] = useState<string | null>(null);
   const { toast } = useToast();
+  const firestore = useFirestore();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -229,14 +242,51 @@ function FileUploadField({
 
       onChange(fileData);
       setIsUploading(false);
-      toast({
-        title: "Upload Berhasil",
-        description: `${label} telah diunggah ke Google Drive.`,
-      });
+
+      // Immediately persist metadata to Firestore to enable secure viewing
+      setIsSavingMetadata(true);
+      try {
+        const profileRef = doc(firestore, "profiles", userId);
+        const metadataUpdate: any = {
+          updatedAt: serverTimestamp(),
+        };
+
+        if (pathPrefix === "cv") {
+          metadataUpdate.cvUrl = secureUrl;
+          metadataUpdate.cvFileId = fileId;
+          metadataUpdate.cvFileName = processedFile.name;
+          metadataUpdate.cvGoogleDriveWebViewLink = result.webViewLink;
+        } else if (pathPrefix === "ijazah") {
+          metadataUpdate.ijazahUrl = secureUrl;
+          metadataUpdate.ijazahFileId = fileId;
+          metadataUpdate.ijazahFileName = processedFile.name;
+          metadataUpdate.ijazahGoogleDriveWebViewLink = result.webViewLink;
+        }
+
+        await setDocumentNonBlocking(profileRef, metadataUpdate, {
+          merge: true,
+        });
+
+        toast({
+          title: "Upload Berhasil",
+          description: `${label} telah diunggah dan siap dilihat.`,
+        });
+      } catch (metadataError: any) {
+        console.error("Autosave metadata failed:", metadataError);
+        toast({
+          variant: "destructive",
+          title: "Metadata Belum Tersimpan",
+          description:
+            "File berhasil diunggah, tetapi metadata belum tersimpan. Silakan unggah ulang.",
+        });
+      } finally {
+        setIsSavingMetadata(false);
+      }
     } catch (error: any) {
       console.error("Skill document upload error:", error);
       handleStorageError(error);
       setIsUploading(false);
+      setIsSavingMetadata(false);
     }
   };
 
@@ -291,11 +341,22 @@ function FileUploadField({
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8"
+                disabled={isUploading || isSavingMetadata || !value}
                 onClick={async () => {
                   const url = getDisplayUrl();
                   const fileId =
                     (typeof value !== "string" && value?.fileId) ||
                     extractFileIdFromUrl(url);
+                  
+                  if (!fileId) {
+                    toast({
+                      variant: "destructive",
+                      title: "FileId Tidak Ditemukan",
+                      description: "Silakan unggah ulang file untuk mengaktifkan akses aman.",
+                    });
+                    return;
+                  }
+
                   try {
                     await openSecureFile(fileId, fileName || "dokumen");
                   } catch (err: any) {
@@ -306,9 +367,13 @@ function FileUploadField({
                     });
                   }
                 }}
-                title="Lihat File"
+                title={isSavingMetadata ? "Menyimpan metadata..." : "Lihat File"}
               >
-                <Eye className="h-4 w-4" />
+                {isSavingMetadata ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
               </Button>
               <Button
                 type="button"
@@ -316,6 +381,7 @@ function FileUploadField({
                 size="icon"
                 className="h-8 w-8 text-destructive"
                 onClick={() => onChange("")}
+                disabled={isUploading || isSavingMetadata}
                 title="Hapus File"
               >
                 <Trash2 className="h-4 w-4" />
@@ -327,14 +393,14 @@ function FileUploadField({
             variant="outline"
             size="sm"
             onClick={() => fileInputRef.current?.click()}
-            disabled={isUploading}
+            disabled={isUploading || isSavingMetadata}
           >
-            {isUploading ? (
+            {isUploading || isSavingMetadata ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <FileUp className="mr-2 h-4 w-4" />
             )}
-            Ganti File
+            {isSavingMetadata ? "Menyimpan..." : "Ganti File"}
           </Button>
         </div>
       ) : (
@@ -536,7 +602,17 @@ export function SkillsForm({
 
       // Handle CV data
       if (typeof values.cvUrl === "string") {
-        payload.cvUrl = values.cvUrl;
+        if (values.cvUrl.includes("drive.google.com")) {
+          const extractedId = extractFileIdFromUrl(values.cvUrl);
+          if (extractedId) {
+            payload.cvFileId = extractedId;
+            payload.cvUrl = `/api/storage/view?fileId=${extractedId}`;
+          } else {
+            payload.cvUrl = values.cvUrl;
+          }
+        } else {
+          payload.cvUrl = values.cvUrl;
+        }
       } else if (values.cvUrl) {
         payload.cvUrl = values.cvUrl.url;
         payload.cvFileId = values.cvUrl.fileId;
@@ -546,7 +622,17 @@ export function SkillsForm({
 
       // Handle Ijazah data
       if (typeof values.ijazahUrl === "string") {
-        payload.ijazahUrl = values.ijazahUrl;
+        if (values.ijazahUrl.includes("drive.google.com")) {
+          const extractedId = extractFileIdFromUrl(values.ijazahUrl);
+          if (extractedId) {
+            payload.ijazahFileId = extractedId;
+            payload.ijazahUrl = `/api/storage/view?fileId=${extractedId}`;
+          } else {
+            payload.ijazahUrl = values.ijazahUrl;
+          }
+        } else {
+          payload.ijazahUrl = values.ijazahUrl;
+        }
       } else if (values.ijazahUrl) {
         payload.ijazahUrl = values.ijazahUrl.url;
         payload.ijazahFileId = values.ijazahUrl.fileId;
@@ -557,6 +643,40 @@ export function SkillsForm({
 
       const profileDocRef = doc(firestore, "profiles", firebaseUser.uid);
       await setDocumentNonBlocking(profileDocRef, payload, { merge: true });
+
+      // Sync to Active Application (if any) to ensure HRD sees current documents
+      try {
+        const appsQuery = query(
+          collection(firestore, "applications"),
+          where("candidateUid", "==", firebaseUser.uid),
+          orderBy("createdAt", "desc"),
+          limit(1)
+        );
+        const appSnap = await getDocs(appsQuery);
+        if (!appSnap.empty) {
+          const appDoc = appSnap.docs[0];
+          const appRef = doc(firestore, "applications", appDoc.id);
+          
+          // Sync only document fields that are present in payload
+          const appSyncPayload: any = {
+            updatedAt: serverTimestamp(),
+          };
+          
+          if (payload.cvUrl) appSyncPayload.cvUrl = payload.cvUrl;
+          if (payload.cvFileId) appSyncPayload.cvFileId = payload.cvFileId;
+          if (payload.cvFileName) appSyncPayload.cvFileName = payload.cvFileName;
+          if (payload.cvGoogleDriveWebViewLink) appSyncPayload.cvGoogleDriveWebViewLink = payload.cvGoogleDriveWebViewLink;
+          
+          if (payload.ijazahUrl) appSyncPayload.ijazahUrl = payload.ijazahUrl;
+          if (payload.ijazahFileId) appSyncPayload.ijazahFileId = payload.ijazahFileId;
+          if (payload.ijazahFileName) appSyncPayload.ijazahFileName = payload.ijazahFileName;
+          if (payload.ijazahGoogleDriveWebViewLink) appSyncPayload.ijazahGoogleDriveWebViewLink = payload.ijazahGoogleDriveWebViewLink;
+          
+          await updateDoc(appRef, appSyncPayload);
+        }
+      } catch (syncError) {
+        console.error("Failed to sync documents to application:", syncError);
+      }
 
       toast({
         title: "Dokumen & Sertifikasi Disimpan",

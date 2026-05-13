@@ -808,18 +808,28 @@ export function CandidateStepView({
     try {
       const fileId =
         docType === "cv"
-          ? application.cvFileId || extractFileIdFromUrl(application.cvUrl)
+          ? application.cvFileId ||
+            profile.cvFileId ||
+            extractFileIdFromUrl(application.cvUrl) ||
+            extractFileIdFromUrl(profile.cvUrl)
           : application.ijazahFileId ||
-            extractFileIdFromUrl(application.ijazahUrl);
+            profile.ijazahFileId ||
+            extractFileIdFromUrl(application.ijazahUrl) ||
+            extractFileIdFromUrl(profile.ijazahUrl);
 
       const fileName =
         docType === "cv"
-          ? profile.cvFileName || "CV.pdf"
-          : profile.ijazahFileName || "Ijazah.pdf";
+          ? application.cvFileName || profile.cvFileName || "CV.pdf"
+          : application.ijazahFileName || profile.ijazahFileName || "Ijazah.pdf";
 
       await openSecureFile(fileId, fileName);
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Error opening ${docType} document:`, error);
+      toast({
+        variant: "destructive",
+        title: "Gagal Membuka Dokumen",
+        description: error.message || "Terjadi kesalahan saat mencoba membuka dokumen.",
+      });
     } finally {
       setLoadingDoc(null);
     }

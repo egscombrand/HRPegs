@@ -108,19 +108,28 @@ export function CandidateDocumentsCard({
   const handleViewDocument = async (docType: "cv" | "ijazah") => {
     setLoadingDoc(docType);
     try {
+      // Priority lookup for fileId: application -> profile -> application URL -> profile URL
       const fileId =
         docType === "cv"
-          ? application.cvFileId || extractFileIdFromUrl(application.cvUrl)
-          : application.ijazahFileId || extractFileIdFromUrl(application.ijazahUrl);
+          ? application.cvFileId || 
+            profile.cvFileId || 
+            extractFileIdFromUrl(application.cvUrl) || 
+            extractFileIdFromUrl(profile.cvUrl)
+          : application.ijazahFileId || 
+            profile.ijazahFileId || 
+            extractFileIdFromUrl(application.ijazahUrl) || 
+            extractFileIdFromUrl(profile.ijazahUrl);
 
       const fileName =
-        docType === "cv" ? application.cvFileName : application.ijazahFileName;
+        docType === "cv" 
+          ? application.cvFileName || profile.cvFileName || "CV.pdf"
+          : application.ijazahFileName || profile.ijazahFileName || "Ijazah.pdf";
 
       if (!fileId) {
         toast({
           variant: "destructive",
           title: "Dokumen tidak tersedia",
-          description: "FileId tidak ditemukan untuk dokumen ini.",
+          description: "Dokumen belum memiliki fileId. Silakan minta kandidat unggah ulang dokumen.",
         });
         return;
       }
@@ -135,27 +144,9 @@ export function CandidateDocumentsCard({
     } finally {
       setLoadingDoc(null);
     }
-  }
+  };
 
   const handleVerificationToggle = async (docType: "cv" | "ijazah") => {
-    if (!userProfile) return;
-
-    const field = docType === "cv" ? "cvVerified" : "ijazahVerified";
-    const currentValue = application[field];
-
-    try {
-      await updateDocumentNonBlocking(
-        doc(firestore, "applications", application.id!),
-        {
-          [field]: !currentValue,
-        },
-      );
-      toast({ title: "Verifikasi Diperbarui" });
-      onVerificationChange();
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Gagal memperbarui verifikasi" });
-    }
-  };
     if (!userProfile) return;
 
     const field = docType === "cv" ? "cvVerified" : "ijazahVerified";
@@ -184,7 +175,7 @@ export function CandidateDocumentsCard({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-3">
-          {application.cvFileId || application.cvUrl ? (
+          {application.cvFileId || application.cvUrl || profile.cvFileId || profile.cvUrl ? (
             <button
               onClick={() => handleViewDocument("cv")}
               disabled={loadingDoc === "cv"}
@@ -207,7 +198,7 @@ export function CandidateDocumentsCard({
               CV belum diunggah.
             </div>
           )}
-          {application.ijazahFileId || application.ijazahUrl ? (
+          {application.ijazahFileId || application.ijazahUrl || profile.ijazahFileId || profile.ijazahUrl ? (
             <button
               onClick={() => handleViewDocument("ijazah")}
               disabled={loadingDoc === "ijazah"}
