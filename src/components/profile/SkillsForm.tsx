@@ -42,14 +42,18 @@ import {
   FileText,
 } from "lucide-react";
 import { Separator } from "../ui/separator";
+import {
+  extractFileIdFromUrl,
+  openSecureFile,
+} from "@/lib/candidate-docs-utils";
 import { useAuth } from "@/providers/auth-provider";
 import { useFirestore, setDocumentNonBlocking } from "@/firebase";
 import { doc, serverTimestamp, Timestamp } from "firebase/firestore";
 import { uploadFile } from "@/lib/storage/storage-adapter";
-import { 
-  validateStorageFile, 
-  compressImage, 
-  handleStorageError 
+import {
+  validateStorageFile,
+  compressImage,
+  handleStorageError,
 } from "@/lib/storage-utils";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "../ui/progress";
@@ -80,10 +84,36 @@ const certificationSchema = z.object({
 });
 
 const formSchema = z.object({
-  cvUrl: z.string().min(1, "CV harus diunggah atau dilampirkan via link"),
+  cvUrl: z
+    .union([
+      z.string(),
+      z.object({
+        url: z.string(),
+        fileId: z.string().optional(),
+        fileName: z.string().optional(),
+        mimeType: z.string().optional(),
+        googleDriveWebViewLink: z.string().optional(),
+      }),
+    ])
+    .refine((val) => {
+      if (typeof val === "string") return val.length > 0;
+      return val.url && val.url.length > 0;
+    }, "CV harus diunggah atau dilampirkan via link"),
   ijazahUrl: z
-    .string()
-    .min(1, "Ijazah harus diunggah atau dilampirkan via link"),
+    .union([
+      z.string(),
+      z.object({
+        url: z.string(),
+        fileId: z.string().optional(),
+        fileName: z.string().optional(),
+        mimeType: z.string().optional(),
+        googleDriveWebViewLink: z.string().optional(),
+      }),
+    ])
+    .refine((val) => {
+      if (typeof val === "string") return val.length > 0;
+      return val.url && val.url.length > 0;
+    }, "Ijazah harus diunggah atau dilampirkan via link"),
   certifications: z.array(certificationSchema).optional(),
 });
 
@@ -93,8 +123,26 @@ const FILE_SIZE_LIMIT = 1 * 1024 * 1024; // 1MB
 
 interface FileUploadFieldProps {
   label: string;
-  value?: string;
-  onChange: (url: string) => void;
+  value?:
+    | string
+    | {
+        url: string;
+        fileId?: string;
+        fileName?: string;
+        mimeType?: string;
+        googleDriveWebViewLink?: string;
+      };
+  onChange: (
+    value:
+      | string
+      | {
+          url: string;
+          fileId?: string;
+          fileName?: string;
+          mimeType?: string;
+          googleDriveWebViewLink?: string;
+        },
+  ) => void;
   userId: string;
   pathPrefix: string;
   required?: boolean;
@@ -116,18 +164,23 @@ function FileUploadField({
 
   useEffect(() => {
     if (value) {
-      try {
-        const url = new URL(value);
-        if (url.hostname.includes("firebasestorage.googleapis.com")) {
-          const pathParts = decodeURIComponent(url.pathname).split("/");
-          const lastPart = pathParts[pathParts.length - 1];
-          const name = lastPart.split("?")[0].split("_").slice(2).join("_");
-          setFileName(name || "File terunggah");
-        } else {
-          setFileName(url.pathname.split("/").pop() || "Link eksternal");
+      if (typeof value === "string") {
+        try {
+          const url = new URL(value);
+          if (url.hostname.includes("firebasestorage.googleapis.com")) {
+            const pathParts = decodeURIComponent(url.pathname).split("/");
+            const lastPart = pathParts[pathParts.length - 1];
+            const name = lastPart.split("?")[0].split("_").slice(2).join("_");
+            setFileName(name || "File terunggah");
+          } else {
+            setFileName(url.pathname.split("/").pop() || "Link eksternal");
+          }
+        } catch (e) {
+          setFileName("Link eksternal");
         }
-      } catch (e) {
-        setFileName("Link eksternal");
+      } else {
+        // Object format
+        setFileName(value.fileName || "File terunggah");
       }
     } else {
       setFileName(null);
@@ -151,21 +204,30 @@ function FileUploadField({
     const processedFile = await compressImage(file);
     setFileName(processedFile.name);
     setIsUploading(true);
-    
+
     try {
       setProgress(10);
-      
+
       const filePath = `user_docs/${userId}/${pathPrefix}_${Date.now()}_${processedFile.name.replace(/[^a-zA-Z0-9.]/g, "_")}`;
-      
+
       const result = await uploadFile(processedFile, filePath, userId, {
-        category: 'user_document',
+        category: "user_document",
         ownerUid: userId,
-        compress: false // Already compressed
+        compress: false, // Already compressed
       });
 
-      const downloadUrl = result.webViewLink || result.downloadUrl || "";
-      
-      onChange(downloadUrl);
+      const fileId = result.fileId;
+      const secureUrl = fileId ? "/api/storage/view?fileId=" + fileId : "";
+
+      const fileData = {
+        url: secureUrl,
+        fileId,
+        fileName: processedFile.name,
+        mimeType: result.fileType,
+        googleDriveWebViewLink: result.webViewLink,
+      };
+
+      onChange(fileData);
       setIsUploading(false);
       toast({
         title: "Upload Berhasil",
@@ -178,8 +240,25 @@ function FileUploadField({
     }
   };
 
-  const isImage =
-    value && /\.(jpg|jpeg|png|webp|gif)$/i.test(new URL(value).pathname);
+  const getDisplayUrl = () => {
+    if (typeof value === "string") return value;
+    return value?.url || "";
+  };
+
+  const isImage = (() => {
+    const url = getDisplayUrl();
+    if (!url) return false;
+    try {
+      // If it's an absolute URL
+      if (url.startsWith("http")) {
+        return /\.(jpg|jpeg|png|webp|gif)$/i.test(new URL(url).pathname);
+      }
+      // If it's a relative URL or path
+      return /\.(jpg|jpeg|png|webp|gif)$/i.test(url.split("?")[0]);
+    } catch (e) {
+      return false;
+    }
+  })();
 
   return (
     <FormItem>
@@ -191,7 +270,7 @@ function FileUploadField({
           <div className="flex items-center gap-3 p-2 border rounded-lg bg-muted/50">
             {isImage ? (
               <Image
-                src={value}
+                src={getDisplayUrl()}
                 alt="Preview"
                 width={40}
                 height={40}
@@ -212,16 +291,24 @@ function FileUploadField({
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8"
-                asChild
+                onClick={async () => {
+                  const url = getDisplayUrl();
+                  const fileId =
+                    (typeof value !== "string" && value?.fileId) ||
+                    extractFileIdFromUrl(url);
+                  try {
+                    await openSecureFile(fileId, fileName || "dokumen");
+                  } catch (err: any) {
+                    toast({
+                      variant: "destructive",
+                      title: "Gagal Membuka File",
+                      description: err.message,
+                    });
+                  }
+                }}
+                title="Lihat File"
               >
-                <a
-                  href={value}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="Lihat File"
-                >
-                  <Eye className="h-4 w-4" />
-                </a>
+                <Eye className="h-4 w-4" />
               </Button>
               <Button
                 type="button"
@@ -378,8 +465,24 @@ interface SkillsFormProps {
   initialData: {
     skills?: string[];
     certifications?: any[];
-    cvUrl?: string;
-    ijazahUrl?: string;
+    cvUrl?:
+      | string
+      | {
+          url: string;
+          fileId?: string;
+          fileName?: string;
+          mimeType?: string;
+          googleDriveWebViewLink?: string;
+        };
+    ijazahUrl?:
+      | string
+      | {
+          url: string;
+          fileId?: string;
+          fileName?: string;
+          mimeType?: string;
+          googleDriveWebViewLink?: string;
+        };
   };
   onSaveSuccess: () => void;
   onBack: () => void;
@@ -424,14 +527,34 @@ export function SkillsForm({
     }
     setIsSaving(true);
     try {
-      const payload = {
-        cvUrl: values.cvUrl,
-        ijazahUrl: values.ijazahUrl,
+      const payload: any = {
         certifications: values.certifications,
         profileStatus: "draft",
         profileStep: 6,
         updatedAt: serverTimestamp() as Timestamp,
       };
+
+      // Handle CV data
+      if (typeof values.cvUrl === "string") {
+        payload.cvUrl = values.cvUrl;
+      } else if (values.cvUrl) {
+        payload.cvUrl = values.cvUrl.url;
+        payload.cvFileId = values.cvUrl.fileId;
+        payload.cvFileName = values.cvUrl.fileName;
+        payload.cvGoogleDriveWebViewLink = values.cvUrl.googleDriveWebViewLink;
+      }
+
+      // Handle Ijazah data
+      if (typeof values.ijazahUrl === "string") {
+        payload.ijazahUrl = values.ijazahUrl;
+      } else if (values.ijazahUrl) {
+        payload.ijazahUrl = values.ijazahUrl.url;
+        payload.ijazahFileId = values.ijazahUrl.fileId;
+        payload.ijazahFileName = values.ijazahUrl.fileName;
+        payload.ijazahGoogleDriveWebViewLink =
+          values.ijazahUrl.googleDriveWebViewLink;
+      }
+
       const profileDocRef = doc(firestore, "profiles", firebaseUser.uid);
       await setDocumentNonBlocking(profileDocRef, payload, { merge: true });
 

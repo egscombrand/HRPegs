@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // --- ROLE CHECK: Get user role from Firestore ---
+    // --- ROLE CHECK: Get user role from Firestore and dedicated role collections ---
     try {
       const userDoc = await admin
         .firestore()
@@ -58,12 +58,28 @@ export async function GET(req: NextRequest) {
       userRole = "employee";
     }
 
-    const isPrivileged =
+    let isPrivileged =
       userRole === "Super Admin" ||
       userRole === "superadmin" ||
       userRole === "HRD" ||
       userRole === "hrd" ||
       userRole === "admin";
+
+    // Double check dedicated role collections for HRD/Admin
+    if (!isPrivileged) {
+      try {
+        const [hrdSnap, adminSnap, superSnap] = await Promise.all([
+          admin.firestore().collection("roles_hrd").doc(uid).get(),
+          admin.firestore().collection("roles_admin").doc(uid).get(),
+          admin.firestore().collection("roles_superadmin").doc(uid).get(),
+        ]);
+        if (hrdSnap.exists || adminSnap.exists || superSnap.exists) {
+          isPrivileged = true;
+        }
+      } catch (e) {
+        // Continue
+      }
+    }
 
     // For non-privileged users, verify they own the file
     if (!isPrivileged) {
@@ -88,17 +104,39 @@ export async function GET(req: NextRequest) {
         // Continue to next check
       }
 
-      // 2. Check applications (candidate documents)
+      // 2. Check profiles (candidate profile documents)
       if (!hasAccess) {
         try {
-          const applicationsSnap = await admin
+          const candidateProfileDoc = await admin
             .firestore()
-            .collection("applications")
-            .where("candidateUid", "==", uid)
-            .limit(100)
+            .collection("profiles")
+            .doc(uid)
             .get();
+          const candidateData = candidateProfileDoc.data();
+          if (candidateData) {
+            const candidateJson = JSON.stringify(candidateData);
+            if (candidateJson.includes(fileId)) {
+              hasAccess = true;
+            }
+          }
+        } catch {
+          // Continue
+        }
+      }
 
-          for (const appDoc of applicationsSnap.docs) {
+      // 3. Check applications (candidate application documents)
+      if (!hasAccess) {
+        try {
+          // Check various possible candidate UID fields in applications
+          const [snap1, snap2, snap3] = await Promise.all([
+            admin.firestore().collection("applications").where("candidateUid", "==", uid).get(),
+            admin.firestore().collection("applications").where("userId", "==", uid).get(),
+            admin.firestore().collection("applications").where("applicantUid", "==", uid).get(),
+          ]);
+
+          const allDocs = [...snap1.docs, ...snap2.docs, ...snap3.docs];
+
+          for (const appDoc of allDocs) {
             const appData = appDoc.data();
             const appJson = JSON.stringify(appData);
             if (appJson.includes(fileId)) {

@@ -48,6 +48,11 @@ import { collection, query, where } from "firebase/firestore";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { JOB_TYPE_LABELS } from "@/lib/types";
 import Link from "next/link";
+import { useToast } from "@/hooks/use-toast";
+import {
+  extractFileIdFromUrl,
+  openSecureFile,
+} from "@/lib/candidate-docs-utils";
 
 // Helper to mask NIK for display
 const maskNik = (nik?: string): string => {
@@ -176,37 +181,45 @@ const OrgExperienceView = ({ item }: { item: OrganizationalExperience }) => (
   </div>
 );
 
-const CertificationView = ({ item }: { item: Certification }) => (
-  <div className="text-sm flex justify-between items-start gap-2 py-2 border-b last:border-b-0">
-    <div>
-      <p className="font-semibold">{item.name}</p>
-      <p className="text-muted-foreground text-xs">
-        Penerbit: {item.organization}
-      </p>
-      <p className="text-muted-foreground text-xs">
-        Tanggal: {item.issueDate}{" "}
-        {item.expirationDate ? ` - ${item.expirationDate}` : ""}
-      </p>
-    </div>
-    {item.imageUrl && (
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8 flex-shrink-0"
-        asChild
-      >
-        <a
-          href={item.imageUrl}
-          target="_blank"
-          rel="noopener noreferrer"
+const CertificationView = ({ item }: { item: Certification }) => {
+  const { toast } = useToast();
+  return (
+    <div className="text-sm flex justify-between items-start gap-2 py-2 border-b last:border-b-0">
+      <div>
+        <p className="font-semibold">{item.name}</p>
+        <p className="text-muted-foreground text-xs">
+          Penerbit: {item.organization}
+        </p>
+        <p className="text-muted-foreground text-xs">
+          Tanggal: {item.issueDate}{" "}
+          {item.expirationDate ? ` - ${item.expirationDate}` : ""}
+        </p>
+      </div>
+      {item.imageUrl && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 flex-shrink-0"
+          onClick={async () => {
+            const fileId = extractFileIdFromUrl(item.imageUrl);
+            try {
+              await openSecureFile(fileId, item.name + ".pdf");
+            } catch (err: any) {
+              toast({
+                variant: "destructive",
+                title: "Gagal Membuka Sertifikat",
+                description: err.message,
+              });
+            }
+          }}
           title="Lihat Sertifikat"
         >
           <Eye className="h-4 w-4" />
-        </a>
-      </Button>
-    )}
-  </div>
-);
+        </Button>
+      )}
+    </div>
+  );
+};
 
 export function ProfilePreview({
   profile,
@@ -217,6 +230,7 @@ export function ProfilePreview({
 }) {
   const { userProfile } = useAuth();
   const firestore = useFirestore();
+  const { toast } = useToast();
 
   const applicationsQuery = useMemoFirebase(() => {
     if (!userProfile?.uid) return null;
@@ -500,7 +514,7 @@ export function ProfilePreview({
             </CardContent>
           </Card>
         </div>
-        <div className="lg:sticky lg:top-24 space-y-6">
+      <div className="lg:sticky lg:top-24 space-y-6">
           <Card>
             <CardHeader>
               <SectionTitle
@@ -586,11 +600,18 @@ export function ProfilePreview({
                   Dokumen Utama
                 </h4>
                 <div className="grid grid-cols-1 gap-2">
-                  <a
-                    href={profile.cvUrl || "#"}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-between p-2 rounded-md border hover:bg-muted transition-colors"
+                  <button
+                    onClick={async () => {
+                      if (!profile.cvUrl) return;
+                      const fileId = profile.cvFileId || extractFileIdFromUrl(profile.cvUrl);
+                      try {
+                        await openSecureFile(fileId, profile.cvFileName || "CV.pdf");
+                      } catch (err: any) {
+                        toast({ variant: "destructive", title: "Gagal Membuka CV", description: err.message });
+                      }
+                    }}
+                    disabled={!profile.cvUrl}
+                    className="flex items-center justify-between p-2 rounded-md border hover:bg-muted transition-colors w-full text-left disabled:opacity-50"
                   >
                     <span className="text-sm font-medium">
                       Curriculum Vitae (CV)
@@ -600,12 +621,19 @@ export function ProfilePreview({
                     ) : (
                       <X className="h-4 w-4 text-destructive" />
                     )}
-                  </a>
-                  <a
-                    href={profile.ijazahUrl || "#"}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-between p-2 rounded-md border hover:bg-muted transition-colors"
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!profile.ijazahUrl) return;
+                      const fileId = profile.ijazahFileId || extractFileIdFromUrl(profile.ijazahUrl);
+                      try {
+                        await openSecureFile(fileId, profile.ijazahFileName || "Ijazah.pdf");
+                      } catch (err: any) {
+                        toast({ variant: "destructive", title: "Gagal Membuka Ijazah", description: err.message });
+                      }
+                    }}
+                    disabled={!profile.ijazahUrl}
+                    className="flex items-center justify-between p-2 rounded-md border hover:bg-muted transition-colors w-full text-left disabled:opacity-50"
                   >
                     <span className="text-sm font-medium">Ijazah / SKL</span>
                     {profile.ijazahUrl ? (
@@ -613,7 +641,7 @@ export function ProfilePreview({
                     ) : (
                       <X className="h-4 w-4 text-destructive" />
                     )}
-                  </a>
+                  </button>
                 </div>
               </div>
               {profile.skills && profile.skills.length > 0 && (

@@ -46,6 +46,10 @@ import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  extractFileIdFromUrl,
+  openSecureFile,
+} from "@/lib/candidate-docs-utils";
 
 interface UploadedFile {
   url: string;
@@ -59,6 +63,30 @@ function SubmittedDocumentsView({
 }: {
   application: JobApplication;
 }) {
+  const [loadingDoc, setLoadingDoc] = useState<"cv" | "ijazah" | null>(null);
+
+  const handleViewDocument = async (docType: "cv" | "ijazah") => {
+    setLoadingDoc(docType);
+    try {
+      const fileId =
+        docType === "cv"
+          ? application.cvFileId || extractFileIdFromUrl(application.cvUrl)
+          : application.ijazahFileId ||
+            extractFileIdFromUrl(application.ijazahUrl);
+
+      const fileName =
+        docType === "cv"
+          ? application.cvFileName || "CV.pdf"
+          : application.ijazahFileName || "Ijazah.pdf";
+
+      await openSecureFile(fileId, fileName);
+    } catch (error) {
+      console.error(`Error opening ${docType} document:`, error);
+    } finally {
+      setLoadingDoc(null);
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -87,14 +115,19 @@ function SubmittedDocumentsView({
               >
                 {application.cvFileName}
               </p>
-              <Button asChild variant="outline" size="sm" className="mt-2">
-                <a
-                  href={application.cvUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Eye className="mr-2 h-4 w-4" /> Lihat File
-                </a>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2"
+                onClick={() => handleViewDocument("cv")}
+                disabled={loadingDoc === "cv"}
+              >
+                {loadingDoc === "cv" ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Eye className="mr-2 h-4 w-4" />
+                )}
+                Lihat File
               </Button>
             </div>
           )}
@@ -107,14 +140,19 @@ function SubmittedDocumentsView({
               >
                 {application.ijazahFileName}
               </p>
-              <Button asChild variant="outline" size="sm" className="mt-2">
-                <a
-                  href={application.ijazahUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Eye className="mr-2 h-4 w-4" /> Lihat File
-                </a>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2"
+                onClick={() => handleViewDocument("ijazah")}
+                disabled={loadingDoc === "ijazah"}
+              >
+                {loadingDoc === "ijazah" ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Eye className="mr-2 h-4 w-4" />
+                )}
+                Lihat File
               </Button>
             </div>
           )}
@@ -145,6 +183,7 @@ function DocumentUploadSlot({
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isPreviewing, setIsPreviewing] = useState(false);
 
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -225,10 +264,30 @@ function DocumentUploadSlot({
       <p className="text-sm text-muted-foreground">{fileDescription}</p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 items-center gap-4">
-        <Button asChild variant="outline" size="sm" disabled={!initialFile}>
-          <a href={initialFile?.url} target="_blank" rel="noopener noreferrer">
-            Pratinjau File
-          </a>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!initialFile || isPreviewing}
+          onClick={async () => {
+            if (!initialFile) return;
+            setIsPreviewing(true);
+            try {
+              const fileId =
+                initialFile.fileId || extractFileIdFromUrl(initialFile.url);
+              await openSecureFile(fileId, initialFile.name);
+            } catch (err) {
+              console.error("Preview error:", err);
+            } finally {
+              setIsPreviewing(false);
+            }
+          }}
+        >
+          {isPreviewing ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Eye className="mr-2 h-4 w-4" />
+          )}
+          Pratinjau File
         </Button>
         <div className="flex items-center gap-2">
           <Input

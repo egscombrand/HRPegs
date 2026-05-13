@@ -98,8 +98,6 @@ export async function openSecureFile(
     setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
   } catch (error: any) {
     console.error("openSecureFile error:", error);
-    if (showToast) {
-      throw error; // Caller will handle toast
-    }
+    throw error;
   }
 }

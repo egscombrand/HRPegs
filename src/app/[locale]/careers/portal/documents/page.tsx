@@ -54,6 +54,7 @@ import { Badge } from "@/components/ui/badge";
 interface UploadedFile {
   url: string;
   name: string;
+  fileId?: string;
 }
 
 // Read-only view for submitted documents
@@ -221,11 +222,15 @@ function DocumentUploadSlot({
         compress: false, // Already compressed above
       });
 
-      const downloadURL = result.webViewLink || result.downloadUrl || "";
+      const fileId = result.fileId || "";
+      const secureViewUrl = fileId
+        ? `/api/storage/view?fileId=${fileId}`
+        : result.webViewLink || result.downloadUrl || "";
 
       onUploadComplete(fileType, {
-        url: downloadURL,
+        url: secureViewUrl,
         name: file.name,
+        fileId: fileId,
       });
 
       setFile(null);
@@ -259,10 +264,26 @@ function DocumentUploadSlot({
       <p className="text-sm text-muted-foreground">{fileDescription}</p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 items-center gap-4">
-        <Button asChild variant="outline" size="sm" disabled={!initialFile}>
-          <a href={initialFile?.url} target="_blank" rel="noopener noreferrer">
-            Pratinjau File
-          </a>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!initialFile}
+          onClick={async () => {
+            if (!initialFile) return;
+            const fileId =
+              initialFile.fileId || extractFileIdFromUrl(initialFile.url);
+            try {
+              await openSecureFile(fileId, initialFile.name);
+            } catch (err: any) {
+              toast({
+                variant: "destructive",
+                title: "Gagal Membuka File",
+                description: err.message,
+              });
+            }
+          }}
+        >
+          Pratinjau File
         </Button>
         <div className="flex items-center gap-2">
           <Input
@@ -369,6 +390,8 @@ export default function DocumentsPage() {
     const updatePayload: any = {
       cvUrl: uploads.cv?.url,
       ijazahUrl: uploads.ijazah?.url,
+      cvFileId: uploads.cv?.fileId,
+      ijazahFileId: uploads.ijazah?.fileId,
       cvFileName: uploads.cv?.name,
       ijazahFileName: uploads.ijazah?.name,
       updatedAt: serverTimestamp(),

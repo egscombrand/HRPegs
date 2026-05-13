@@ -64,6 +64,7 @@ import {
   handleStorageError 
 } from "@/lib/storage-utils";
 import { useFirestore, useStorage } from "@/firebase";
+import { extractFileIdFromUrl, openSecureFile } from "@/lib/candidate-docs-utils";
 import { useAuth } from "@/providers/auth-provider";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { updateDocumentNonBlocking } from "@/firebase";
@@ -353,7 +354,12 @@ export function OfferEditor({
       : filePreview?.url;
 
     if (url) {
-      window.open(url, "_blank");
+      if (url.startsWith("blob:")) {
+        window.open(url, "_blank");
+      } else {
+        const fileId = extractFileIdFromUrl(url);
+        openSecureFile(fileId, filePreview?.name || "Offering.pdf");
+      }
     }
   };
 

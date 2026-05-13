@@ -89,8 +89,10 @@ import type { ScheduleInterviewData } from "@/components/recruitment/ScheduleInt
 import { ScheduleInterviewDialog } from "@/components/recruitment/ScheduleInterviewDialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { id as idLocale } from "date-fns/locale";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { 
+  extractFileIdFromUrl, 
+  openSecureFile 
+} from "@/lib/candidate-docs-utils";
 import {
   Dialog,
   DialogContent,
@@ -161,6 +163,42 @@ export default function ApplicationDetailPage() {
   const [negotiationResponseNote, setNegotiationResponseNote] = useState("");
   const [isSubmittingNegotiationResponse, setIsSubmittingNegotiationResponse] =
     useState(false);
+  const [loadingDoc, setLoadingDoc] = useState<"cv" | "ijazah" | null>(null);
+
+  const handleViewDocument = async (docType: "cv" | "ijazah") => {
+    if (!application) return;
+    setLoadingDoc(docType);
+    try {
+      const fileId =
+        docType === "cv"
+          ? application.cvFileId || extractFileIdFromUrl(application.cvUrl)
+          : application.ijazahFileId ||
+            extractFileIdFromUrl(application.ijazahUrl);
+
+      const fileName =
+        docType === "cv" ? application.cvFileName : application.ijazahFileName;
+
+      if (!fileId) {
+        toast({
+          variant: "destructive",
+          title: "Dokumen tidak tersedia",
+          description: "FileId tidak ditemukan untuk dokumen ini.",
+        });
+        return;
+      }
+
+      await openSecureFile(fileId, fileName);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Gagal membuka dokumen",
+        description:
+          error?.message || "Tidak dapat membuka dokumen. Silakan coba lagi.",
+      });
+    } finally {
+      setLoadingDoc(null);
+    }
+  };
 
   const handleNegotiationResponse = async () => {
     if (!application || !applicationRef || !userProfile) return;
@@ -1064,6 +1102,8 @@ export default function ApplicationDetailPage() {
                     application={application}
                     activeStep={activeProfileStep}
                     job={job}
+                    handleViewDocument={handleViewDocument}
+                    loadingDoc={loadingDoc}
                   />
                 </Card>
               </div>
@@ -1462,12 +1502,10 @@ export default function ApplicationDetailPage() {
                                   type="button"
                                   variant="outline"
                                   size="sm"
-                                  onClick={() =>
-                                    window.open(
-                                      activeOffering.documentUrl,
-                                      "_blank",
-                                    )
-                                  }
+                                  onClick={() => {
+                                    const fileId = extractFileIdFromUrl(activeOffering.documentUrl);
+                                    openSecureFile(fileId, activeOffering.documentName || "Offering.pdf");
+                                  }}
                                 >
                                   <Eye className="h-4 w-4 mr-1.5" />
                                   Preview
@@ -1523,12 +1561,10 @@ export default function ApplicationDetailPage() {
                                   type="button"
                                   variant="outline"
                                   size="sm"
-                                  onClick={() =>
-                                    window.open(
-                                      activeOffering.documentUrl,
-                                      "_blank",
-                                    )
-                                  }
+                                  onClick={() => {
+                                    const fileId = extractFileIdFromUrl(activeOffering.documentUrl);
+                                    openSecureFile(fileId, activeOffering.documentName || "Offering.pdf");
+                                  }}
                                 >
                                   <Eye className="h-4 w-4 mr-1.5" />
                                   Lihat Dokumen

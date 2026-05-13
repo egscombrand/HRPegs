@@ -60,6 +60,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { extractFileIdFromUrl, openSecureFile } from "@/lib/candidate-docs-utils";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -940,7 +941,8 @@ function ApplicationCard({
                       className="w-full sm:w-auto"
                       onClick={() => {
                         if (offerDocumentUrl) {
-                          window.open(offerDocumentUrl, "_blank");
+                          const fileId = extractFileIdFromUrl(offerDocumentUrl);
+                          openSecureFile(fileId, offerDocumentName || "Offering.pdf");
                         } else if (offerAdditionalNotes) {
                           generateOfferingPDF(
                             offerAdditionalNotes,
@@ -957,7 +959,8 @@ function ApplicationCard({
                       className="w-full sm:w-auto"
                       onClick={() => {
                         if (offerDocumentUrl) {
-                          window.open(offerDocumentUrl, "_blank");
+                          const fileId = extractFileIdFromUrl(offerDocumentUrl);
+                          openSecureFile(fileId, offerDocumentName || "Offering.pdf");
                         } else {
                           generateOfferingPDF(
                             offerAdditionalNotes,

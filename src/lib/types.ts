@@ -1362,8 +1362,12 @@ export type Profile = {
   // Document URLs
   cvUrl?: string;
   cvFileName?: string;
+  cvFileId?: string;
+  cvGoogleDriveWebViewLink?: string;
   ijazahUrl?: string;
   ijazahFileName?: string;
+  ijazahFileId?: string;
+  ijazahGoogleDriveWebViewLink?: string;
   otherDocumentUrls?: string[];
 
   // Wizard metadata

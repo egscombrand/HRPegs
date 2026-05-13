@@ -119,12 +119,17 @@ export function CandidateStepContent({
   application,
   activeStep,
   job,
+  handleViewDocument,
+  loadingDoc,
 }: {
   profile: Profile;
   application: JobApplication;
   activeStep: number;
   job: Job;
+  handleViewDocument: (docType: "cv" | "ijazah") => Promise<void>;
+  loadingDoc: "cv" | "ijazah" | null;
 }) {
+  const { toast } = useToast();
   const birthDateValue = React.useMemo(() => {
     const date = parseDateValue(profile.birthDate);
     return date ? format(date, "dd MMMM yyyy", { locale: idLocale }) : null;
@@ -458,15 +463,20 @@ export function CandidateStepContent({
                           variant="ghost"
                           size="icon"
                           className="h-12 w-12 rounded-full hover:bg-primary/10 hover:text-primary"
-                          asChild
+                          onClick={async () => {
+                            const fileId = extractFileIdFromUrl(cert.imageUrl);
+                            try {
+                              await openSecureFile(fileId, cert.name + ".pdf");
+                            } catch (err: any) {
+                              toast({
+                                variant: "destructive",
+                                title: "Gagal Membuka Sertifikat",
+                                description: err.message,
+                              });
+                            }
+                          }}
                         >
-                          <a
-                            href={cert.imageUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            <Eye className="h-5 w-5" />
-                          </a>
+                          <Eye className="h-5 w-5" />
                         </Button>
                       )}
                     </div>
@@ -830,6 +840,8 @@ export function CandidateStepView({
             application={application}
             activeStep={activeStep}
             job={job}
+            handleViewDocument={handleViewDocument}
+            loadingDoc={loadingDoc}
           />
         </div>
       </div>

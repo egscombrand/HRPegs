@@ -55,37 +55,45 @@ const VerificationToggle = ({
   </Button>
 );
 
-const CertificationView = ({ item }: { item: Certification }) => (
-  <div className="text-sm flex justify-between items-start gap-2 py-2 border-b last:border-b-0 border-slate-200 dark:border-border">
-    <div>
-      <p className="font-semibold text-foreground">{item.name}</p>
-      <p className="text-slate-700 dark:text-muted-foreground text-xs">
-        Penerbit: {item.organization}
-      </p>
-      <p className="text-slate-700 dark:text-muted-foreground text-xs">
-        Tanggal: {item.issueDate}{" "}
-        {item.expirationDate ? ` - ${item.expirationDate}` : ""}
-      </p>
-    </div>
-    {item.imageUrl && (
-      <Button
-        variant="outline"
-        size="icon"
-        className="h-8 w-8 flex-shrink-0"
-        asChild
-      >
-        <a
-          href={item.imageUrl}
-          target="_blank"
-          rel="noopener noreferrer"
+const CertificationView = ({ item }: { item: Certification }) => {
+  const { toast } = useToast();
+  return (
+    <div className="text-sm flex justify-between items-start gap-2 py-2 border-b last:border-b-0 border-slate-200 dark:border-border">
+      <div>
+        <p className="font-semibold text-foreground">{item.name}</p>
+        <p className="text-slate-700 dark:text-muted-foreground text-xs">
+          Penerbit: {item.organization}
+        </p>
+        <p className="text-slate-700 dark:text-muted-foreground text-xs">
+          Tanggal: {item.issueDate}{" "}
+          {item.expirationDate ? ` - ${item.expirationDate}` : ""}
+        </p>
+      </div>
+      {item.imageUrl && (
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-8 w-8 flex-shrink-0"
+          onClick={async () => {
+            const fileId = extractFileIdFromUrl(item.imageUrl);
+            try {
+              await openSecureFile(fileId, item.name + ".pdf");
+            } catch (err: any) {
+              toast({
+                variant: "destructive",
+                title: "Gagal Membuka Sertifikat",
+                description: err.message,
+              });
+            }
+          }}
           title="Lihat Sertifikat"
         >
           <Eye className="h-4 w-4" />
-        </a>
-      </Button>
-    )}
-  </div>
-);
+        </Button>
+      )}
+    </div>
+  );
+};
 
 export function CandidateDocumentsCard({
   application,
