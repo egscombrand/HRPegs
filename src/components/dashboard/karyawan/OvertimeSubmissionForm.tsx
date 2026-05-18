@@ -548,6 +548,21 @@ const OvertimeSubmissionDetailView = ({
                     value: overtimeTypeLabel,
                     icon: <Zap className="h-4 w-4 text-slate-500" />,
                   },
+                  ...(submission.approvedMinutesFinal !== undefined && submission.approvedMinutesFinal !== null ? [
+                    {
+                      label: "Durasi Final HRD",
+                      value: `${Math.floor(submission.approvedMinutesFinal / 60)} jam ${submission.approvedMinutesFinal % 60} menit`,
+                      icon: <CheckCircle className="h-4 w-4 text-emerald-400" />,
+                    },
+                    {
+                      label: "Status Proses Payroll",
+                      value: submission.payrollStatus === "paid" ? "Sudah Dibayarkan"
+                        : submission.payrollStatus === "processing" ? "Lembur sedang diproses payroll."
+                        : submission.payrollStatus === "excluded" ? "Tidak Masuk Payroll"
+                        : "Lembur sudah disetujui HRD dan menunggu proses payroll.",
+                      icon: <Zap className="h-4 w-4 text-emerald-400" />,
+                    }
+                  ] : []),
                 ].map((item) => (
                   <div
                     key={item.label}

@@ -407,6 +407,14 @@ service cloud.firestore {
       allow delete: if isSuperAdmin() || (isSubmissionOwner() && resource.data.status == 'draft');
     }
     
+    match /overtime_payroll_recaps/{recapId} {
+      allow read: if isSignedIn() && (resource.data.employeeId == request.auth.uid || isHrd() || isSuperAdmin());
+      allow list: if isSignedIn();
+      allow create: if isHrd() || isSuperAdmin();
+      allow update: if isHrd() || isSuperAdmin();
+      allow delete: if isSuperAdmin();
+    }
+    
      match /permission_requests/{requestId} {
       function isSubmissionOwner() {
         return request.auth.uid == resource.data.uid;
@@ -526,6 +534,52 @@ service cloud.firestore {
       allow get: if isHrd() || isSuperAdmin() || (isSignedIn() && evaluationId.split('_')[0] == request.auth.uid) || (isSignedIn() && isSupervisor(evaluationId.split('_')[0]));
       allow create, update: if isHrd() || isSuperAdmin() || (isSignedIn() && isSupervisor(request.resource.data.internUid));
       allow delete: if isSuperAdmin();
+    }
+
+    // --- Leave Management Rules ---
+    match /leave_requests/{requestId} {
+      allow get: if isSignedIn() && (
+        resource.data.employeeId == request.auth.uid || 
+        resource.data.managerId == request.auth.uid || 
+        resource.data.managerUid == request.auth.uid || 
+        resource.data.directManagerId == request.auth.uid || 
+        resource.data.directManagerUid == request.auth.uid || 
+        isHrd() || 
+        isSuperAdmin()
+      );
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.employeeId == request.auth.uid;
+      allow update: if isSignedIn() && (
+        (resource.data.employeeId == request.auth.uid && (
+          resource.data.status in ['pending_manager', 'pending_manager_review', 'revision_requested', 'revision_requested_by_manager', 'revision_requested_by_hrd'] ||
+          request.resource.data.status == 'cancelled'
+        )) ||
+        ((resource.data.managerId == request.auth.uid || 
+          resource.data.managerUid == request.auth.uid || 
+          resource.data.directManagerId == request.auth.uid || 
+          resource.data.directManagerUid == request.auth.uid) && 
+         resource.data.status in ['pending_manager', 'pending_manager_review']) ||
+        isHrd() ||
+        isSuperAdmin()
+      );
+      allow delete: if isSuperAdmin() || (resource.data.employeeId == request.auth.uid && resource.data.status in ['pending_manager', 'pending_manager_review']);
+    }
+
+    match /leave_balances/{balanceId} {
+      allow get: if isSignedIn() && (resource.data.employeeId == request.auth.uid || isHrd() || isSuperAdmin());
+      allow list: if isSignedIn();
+      allow write: if isHrd() || isSuperAdmin();
+    }
+
+    match /leave_balance_adjustments/{adjustmentId} {
+      allow get: if isSignedIn() && (resource.data.employeeId == request.auth.uid || isHrd() || isSuperAdmin());
+      allow list: if isSignedIn();
+      allow write: if isHrd() || isSuperAdmin();
+    }
+
+    match /employee_directory/{employeeId} {
+      allow get, list: if isSignedIn();
+      allow create, update, delete: if isHrd() || isSuperAdmin();
     }
   }
 }

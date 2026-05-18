@@ -154,42 +154,78 @@ function SyncRelationshipsButton({ users, brands }: { users: UserProfile[], bran
     const firestore = useFirestore();
     const { toast } = useToast();
     const [isSyncing, setIsSyncing] = useState(false);
+    const [syncResult, setSyncResult] = useState<{ updated: number, skipped: number, problems: string[] } | null>(null);
 
     const handleSync = async () => {
         setIsSyncing(true);
         try {
-            const divisionManagers = users.filter(u => u.structuralLevel === 'division_manager');
+            let updatedCount = 0;
+            let skippedCount = 0;
+            let problems: string[] = [];
+
+            // Read all divisions to act as master organization
+            const divisionsMaster = new Map<string, any>();
+            for (const brand of brands) {
+                const snap = await getDocs(query(collection(firestore, 'brands', brand.id!, 'divisions'), where('isActive', '==', true)));
+                for (const d of snap.docs) {
+                    divisionsMaster.set(`${brand.id}_${d.id}`, d.data());
+                }
+            }
+
+            // Iterate over all staff users
             const staffUsers = users.filter(u => u.role === 'karyawan' && u.structuralLevel !== 'management' && u.structuralLevel !== 'division_manager');
 
-            let updatedCount = 0;
-
             for (const staff of staffUsers) {
-                // Ensure we handle brandId as a string for matching
                 const staffBrandId = Array.isArray(staff.brandId) ? staff.brandId[0] : staff.brandId;
                 const staffDivisionId = staff.divisionId;
 
-                if (!staffBrandId || !staffDivisionId) continue;
+                if (!staffBrandId || !staffDivisionId) {
+                    skippedCount++;
+                    continue;
+                }
 
-                const manager = divisionManagers.find(dm => {
-                    const dmBrandId = Array.isArray(dm.brandId) ? dm.brandId[0] : dm.brandId;
-                    return dmBrandId === staffBrandId && dm.divisionId === staffDivisionId;
-                });
-                
-                if (manager) {
+                const masterDiv = divisionsMaster.get(`${staffBrandId}_${staffDivisionId}`);
+                if (!masterDiv) {
+                    skippedCount++;
+                    problems.push(`${staff.fullName} - Divisi tidak ditemukan di master data.`);
+                    continue;
+                }
+
+                if (!masterDiv.managerId) {
+                    skippedCount++;
+                    problems.push(`${staff.fullName} - Divisinya belum memiliki Manager Divisi aktif.`);
+                    continue;
+                }
+
+                if (masterDiv.managerId === staff.uid) {
+                    skippedCount++;
+                    problems.push(`${staff.fullName} - Terdaftar sebagai manager di master, tapi level akun staff.`);
+                    continue;
+                }
+
+                const isCurrentlyCorrect = 
+                    staff.directSupervisorUid === masterDiv.managerId &&
+                    (staff as any).directManagerId === masterDiv.managerId;
+
+                if (!isCurrentlyCorrect) {
                     const updateData = {
-                        structuralLevel: 'staff' as StructuralLevel,
-                        directSupervisorUid: manager.uid,
-                        directSupervisorName: manager.fullName,
+                        directSupervisorUid: masterDiv.managerId,
+                        directSupervisorName: masterDiv.managerName,
+                        directManagerId: masterDiv.managerId,
+                        directManagerName: masterDiv.managerName,
                         updatedAt: serverTimestamp()
                     };
 
                     await updateDoc(doc(firestore, 'users', staff.uid), updateData);
                     await setDoc(doc(firestore, 'employee_profiles', staff.uid), updateData, { merge: true });
                     updatedCount++;
+                } else {
+                    skippedCount++;
                 }
             }
 
-            toast({ title: "Selesai", description: `${updatedCount} staff telah disinkronkan dengan atasan mereka.` });
+            setSyncResult({ updated: updatedCount, skipped: skippedCount, problems });
+            toast({ title: "Selesai", description: "Sinkronisasi selesai diproses." });
         } catch (error: any) {
             toast({ variant: "destructive", title: "Gagal", description: error.message });
         } finally {
@@ -198,9 +234,47 @@ function SyncRelationshipsButton({ users, brands }: { users: UserProfile[], bran
     };
 
     return (
-        <Button variant="outline" size="sm" onClick={handleSync} disabled={isSyncing}>
-            {isSyncing ? "Menyinkronkan..." : "Sinkronisasi Atasan Staff"}
-        </Button>
+        <>
+            <Button variant="outline" size="sm" onClick={handleSync} disabled={isSyncing}>
+                {isSyncing ? "Menyinkronkan..." : "Sinkronisasi Atasan Staff"}
+            </Button>
+            <Dialog open={!!syncResult} onOpenChange={(open) => !open && setSyncResult(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Ringkasan Sinkronisasi</DialogTitle>
+                        <DialogDescription>
+                            Hasil sinkronisasi atasan langsung dari master Organisasi.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="grid grid-cols-2 gap-4 text-center">
+                            <div className="p-4 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
+                                <p className="text-3xl font-black text-emerald-500">{syncResult?.updated}</p>
+                                <p className="text-xs text-slate-400 mt-1 uppercase tracking-widest">Berhasil Update</p>
+                            </div>
+                            <div className="p-4 bg-slate-800 rounded-xl border border-slate-700">
+                                <p className="text-3xl font-black text-slate-300">{syncResult?.skipped}</p>
+                                <p className="text-xs text-slate-400 mt-1 uppercase tracking-widest">Dilewati / Benar</p>
+                            </div>
+                        </div>
+                        {syncResult?.problems && syncResult.problems.length > 0 && (
+                            <div className="space-y-2">
+                                <Label className="text-red-400 font-bold flex items-center gap-2">
+                                    <AlertCircle className="h-4 w-4" /> Daftar Bermasalah
+                                </Label>
+                                <ScrollArea className="h-32 border border-slate-800 rounded-xl bg-slate-900 p-3">
+                                    <ul className="list-disc pl-4 space-y-1">
+                                        {syncResult.problems.map((prob, i) => (
+                                            <li key={i} className="text-xs text-slate-400">{prob}</li>
+                                        ))}
+                                    </ul>
+                                </ScrollArea>
+                            </div>
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
+        </>
     );
 }
 
@@ -1034,19 +1108,59 @@ function DivisionManagerTab({ users, brands, managementUsers }: {
             
             if (!manager || !brand || !division) return;
 
+            const oldManager = users.find(u => 
+                u.structuralLevel === 'division_manager' && 
+                u.brandId === selectedBrand && 
+                u.divisionId === selectedDivision
+            );
+
+            // 1. Update Master Organization (Division Doc)
+            const divDocRef = doc(firestore, 'brands', selectedBrand, 'divisions', selectedDivision);
+            await setDoc(divDocRef, {
+                managerId: manager.uid,
+                managerName: manager.fullName,
+                managerEmployeeId: (manager as any).employeeId || "",
+                managerDirectSupervisorId: director?.uid || null,
+                managerDirectSupervisorName: director?.fullName || null,
+                managerDirectSupervisorTitle: director?.workRole || null,
+                brandId: selectedBrand,
+                divisionId: selectedDivision,
+                divisionName: division.name
+            }, { merge: true });
+
+            // 2. Clear old manager if different
+            if (oldManager && oldManager.uid !== selectedManagerUid) {
+                const oldResetData = {
+                    isDivisionManager: false,
+                    structuralLevel: 'staff',
+                    structuralPosition: 'staff',
+                    workRole: 'Staff',
+                    updatedAt: serverTimestamp()
+                };
+                await updateDoc(doc(firestore, 'users', oldManager.uid), oldResetData);
+                await setDoc(doc(firestore, 'employee_profiles', oldManager.uid), oldResetData, { merge: true });
+            }
+
+            // 3. Set new manager
             const updateData = {
                 structuralLevel: 'division_manager',
+                structuralPosition: 'division_manager',
+                isDivisionManager: true,
                 brandId: selectedBrand,
                 brandName: brand.name,
                 divisionId: selectedDivision,
                 divisionName: division.name,
                 workRole: `Manager Divisi ${division.name}`,
+                position: `Manager Divisi ${division.name}`,
                 directSupervisorUid: director?.uid || null,
                 directSupervisorName: director?.fullName || null,
+                directManagerId: director?.uid || null,
+                directManagerName: director?.fullName || null,
+                directManagerTitle: director?.workRole || null,
                 updatedAt: serverTimestamp()
             };
 
-            await updateDoc(doc(firestore, 'users', selectedManagerUid), updateData);
+            await updateDoc(doc(firestore, 'users', selectedManagerUid), updateData as any);
             await setDoc(doc(firestore, 'employee_profiles', selectedManagerUid), updateData, { merge: true });
 
             toast({ title: "Berhasil", description: `Manager Divisi ${division.name} telah ditetapkan.` });

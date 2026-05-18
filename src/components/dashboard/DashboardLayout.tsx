@@ -11,7 +11,7 @@ import { useFirestore, useDoc, useMemoFirebase, useCollection } from '@/firebase
 import { doc, collection, query, where, limit } from 'firebase/firestore';
 import type { NavigationSetting, UserRole, Job } from '@/lib/types';
 import { MENU_CONFIG, ALL_MENU_GROUPS } from '@/lib/menu-config';
-import { CheckSquare, FileHeart, Briefcase } from 'lucide-react';
+import { CheckSquare, FileHeart, Briefcase, CalendarOff } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { isActiveEmployeeEligibleForLeave, canUserReview } from '@/lib/auth-eligibility';
 
@@ -32,6 +32,13 @@ export function DashboardLayout({
 
   const { userProfile } = useAuth();
   const firestore = useFirestore();
+
+  // Fetch employee_profiles by uid — this is the primary source for hrdEmploymentInfo
+  const profileDocRef = useMemoFirebase(
+    () => (userProfile?.uid ? doc(firestore, 'employee_profiles', userProfile.uid) : null),
+    [userProfile?.uid, firestore]
+  );
+  const { data: employeeProfile } = useDoc<any>(profileDocRef);
 
   const roleKey = useMemo(() => {
     if (!userProfile) return null;
@@ -89,7 +96,9 @@ export function DashboardLayout({
   const menuConfig = useMemo(() => {
     if (!roleKey) return [];
     
-    const baseConfig = MENU_CONFIG[roleKey] || [];
+    // Fall back to 'karyawan' if roleKey is 'karyawan-something' (like 'karyawan-kontrak') and doesn't exist in MENU_CONFIG
+    const lookupKey = MENU_CONFIG[roleKey] ? roleKey : (roleKey.startsWith('karyawan-') ? 'karyawan' : roleKey);
+    const baseConfig = MENU_CONFIG[lookupKey] || [];
     let finalConfig = baseConfig.map(group => ({
       ...group,
       items: group.items.map(item => ({ ...item })),
@@ -108,6 +117,12 @@ export function DashboardLayout({
             label: 'Persetujuan Izin Tim',
             icon: createElement(FileHeart),
         };
+        const leaveApprovalMenu: MenuItem = {
+            key: 'manager.leave_approval',
+            href: '/admin/manager/persetujuan-cuti',
+            label: 'Persetujuan Cuti Tim',
+            icon: createElement(CalendarOff),
+        };
 
         let reviewGroup = finalConfig.find((g: MenuGroup) => g.title === 'Review');
         if (!reviewGroup) {
@@ -121,11 +136,14 @@ export function DashboardLayout({
         if (!reviewGroup.items.some((item: MenuItem) => item.key === permissionApprovalMenu.key)) {
             reviewGroup.items.push(permissionApprovalMenu);
         }
+        if (!reviewGroup.items.some((item: MenuItem) => item.key === leaveApprovalMenu.key)) {
+            reviewGroup.items.push(leaveApprovalMenu);
+        }
     }
     
     let currentConfig = manualMenuConfig || finalConfig;
 
-    const leaveStatus = isActiveEmployeeEligibleForLeave(userProfile);
+    const leaveStatus = isActiveEmployeeEligibleForLeave(userProfile, employeeProfile);
     const userCanReview = canUserReview(userProfile);
 
     currentConfig = currentConfig.map((group: MenuGroup) => ({
@@ -135,7 +153,7 @@ export function DashboardLayout({
               return leaveStatus.isEligible;
           }
           
-          const reviewKeys = ['review.reports', 'manager.overtime_approval', 'manager.permission_approval', 'hrd.permission_approval', 'hrd.overtime_approval'];
+          const reviewKeys = ['review.reports', 'manager.overtime_approval', 'manager.permission_approval', 'manager.leave_approval', 'hrd.permission_approval', 'hrd.overtime_approval', 'hrd.leave_approval'];
           if (reviewKeys.includes(item.key) && !userCanReview) {
               return false;
           }
@@ -158,6 +176,9 @@ export function DashboardLayout({
 
     if (!isLoadingSettings && navSettings?.visibleMenuItems) {
         const visibleKeys = new Set(navSettings.visibleMenuItems);
+        if (roleKey === 'super-admin' || roleKey === 'hrd') {
+            visibleKeys.add('overtime_payroll_recap');
+        }
         currentConfig = currentConfig.map(group => ({
             ...group,
             items: group.items.filter(item => visibleKeys.has(item.key))
@@ -179,7 +200,7 @@ export function DashboardLayout({
     }));
 
     return currentConfig;
-  }, [roleKey, userProfile, navSettings, isLoadingSettings, manualMenuConfig, isAssignmentLoading, hasAnyAssignment, pendingBankRequests]);
+  }, [roleKey, userProfile, employeeProfile, navSettings, isLoadingSettings, manualMenuConfig, isAssignmentLoading, hasAnyAssignment, pendingBankRequests]);
 
   return (
     <SidebarProvider>

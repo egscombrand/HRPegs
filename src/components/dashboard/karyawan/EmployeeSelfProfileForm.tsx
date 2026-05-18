@@ -982,10 +982,16 @@ function DocumentUploadCard({
       return;
     }
 
+    const newWindow = window.open("", "_blank");
+    if (newWindow) {
+      newWindow.document.title = "Memuat Dokumen...";
+    }
+
     try {
       const auth = getAuth();
       const currentUser = auth.currentUser;
       if (!currentUser) {
+        if (newWindow) newWindow.close();
         throw new Error("Autentikasi tidak ditemukan.");
       }
       const token = await currentUser.getIdToken();
@@ -995,19 +1001,16 @@ function DocumentUploadCard({
         },
       });
       if (!response.ok) {
+        if (newWindow) newWindow.close();
         throw new Error("Gagal mengambil dokumen.");
       }
       const blob = await response.blob();
       const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = objectUrl;
-      link.target = "_blank";
-      link.rel = "noreferrer noopener";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+      if (newWindow) {
+        newWindow.location.href = objectUrl;
+      }
     } catch (error: any) {
+      if (newWindow) newWindow.close();
       console.error("openSecureFile error:", error);
       toast({
         variant: "destructive",

@@ -834,7 +834,7 @@ export function PengajuanLemburClient() {
                           {s.reason || "Tidak ada ringkasan pekerjaan."}
                         </TableCell>
                         <TableCell className="px-3 py-3 align-top">
-                          <OvertimeStatusBadge status={status as any} />
+                          <OvertimeStatusBadge status={status as any} payrollStatus={s.payrollStatus} />
                         </TableCell>
                         <TableCell className="px-3 py-3 align-top text-right">
                           <Button

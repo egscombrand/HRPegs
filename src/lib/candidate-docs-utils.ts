@@ -16,6 +16,12 @@ export function extractFileIdFromUrl(url?: string | null): string | null {
     return apiMatch[1].trim();
   }
 
+  // Pattern 1b: /api/storage/view?field=FILEID
+  const fieldMatch = url.match(/field=([a-zA-Z0-9_-]+)/);
+  if (fieldMatch?.[1]) {
+    return fieldMatch[1].trim();
+  }
+
   // Pattern 2: drive.google.com/file/d/FILEID/view
   const driveMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)\//);
   if (driveMatch?.[1]) {

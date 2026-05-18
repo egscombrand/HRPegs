@@ -1,3 +1,48 @@
+import { extractFileIdFromUrl } from "./candidate-docs-utils";
+
+export function resolveMetadataFileId(fileObj: any): string | null {
+  if (!fileObj) return null;
+  if (typeof fileObj === "string") {
+    return extractFileIdFromUrl(fileObj);
+  }
+  if (typeof fileObj === "object") {
+    if (fileObj.fileId) return fileObj.fileId;
+    if (fileObj.id) return fileObj.id;
+    if (fileObj.viewUrl) return extractFileIdFromUrl(fileObj.viewUrl);
+    if (fileObj.directViewUrl) return extractFileIdFromUrl(fileObj.directViewUrl);
+    if (fileObj.url) return extractFileIdFromUrl(fileObj.url);
+  }
+  return null;
+}
+
+export function getEmployeeDocumentFileIds(profile: any) {
+  if (!profile) {
+    return {
+      profilePhotoFileId: null,
+      ktpPhotoFileId: null,
+      npwpFileId: null,
+      bpjsKesehatanFileId: null,
+      bpjsKetenagakerjaanFileId: null,
+      simFileId: null,
+      bankProofFileId: null,
+      kkFileId: null,
+      ijazahTerakhirFileId: null,
+    };
+  }
+
+  return {
+    profilePhotoFileId: resolveMetadataFileId(profile.dataDiriIdentitas?.profilePhotoFile) || resolveMetadataFileId(profile.dataDiriIdentitas?.profilePhotoUrl) || resolveMetadataFileId(profile.profilePhotoFile) || resolveMetadataFileId(profile.profilePhotoUrl),
+    ktpPhotoFileId: resolveMetadataFileId(profile.dataDiriIdentitas?.ktpPhotoFile) || resolveMetadataFileId(profile.dataDiriIdentitas?.ktpPhotoUrl) || resolveMetadataFileId(profile.ktpPhotoFile) || resolveMetadataFileId(profile.ktpPhotoUrl),
+    npwpFileId: resolveMetadataFileId(profile.dokumenAdministratif?.npwpFile) || resolveMetadataFileId(profile.dokumenAdministratif?.npwpPhotoUrl) || resolveMetadataFileId(profile.npwpFile) || resolveMetadataFileId(profile.npwpPhotoUrl),
+    bpjsKesehatanFileId: resolveMetadataFileId(profile.dokumenAdministratif?.bpjsKesehatanFile) || resolveMetadataFileId(profile.dokumenAdministratif?.bpjsKesehatanPhotoUrl) || resolveMetadataFileId(profile.bpjsKesehatanFile) || resolveMetadataFileId(profile.bpjsKesehatanPhotoUrl),
+    bpjsKetenagakerjaanFileId: resolveMetadataFileId(profile.dokumenAdministratif?.bpjsKetenagakerjaanFile) || resolveMetadataFileId(profile.dokumenAdministratif?.bpjsKetenagakerjaanPhotoUrl) || resolveMetadataFileId(profile.bpjsKetenagakerjaanFile) || resolveMetadataFileId(profile.bpjsKetenagakerjaanPhotoUrl),
+    simFileId: resolveMetadataFileId(profile.dokumenAdministratif?.simFile) || resolveMetadataFileId(profile.dokumenAdministratif?.simUrl) || resolveMetadataFileId(profile.simFile) || resolveMetadataFileId(profile.simUrl),
+    bankProofFileId: resolveMetadataFileId(profile.dataRekening?.bankProofFile) || resolveMetadataFileId(profile.dataRekening?.bankDocumentUrl) || resolveMetadataFileId(profile.dataRekening?.buktiRekeningUrl) || resolveMetadataFileId(profile.bankProofFile) || resolveMetadataFileId(profile.buktiRekeningUrl),
+    kkFileId: resolveMetadataFileId(profile.dataKeluarga?.kkFile) || resolveMetadataFileId(profile.dataKeluarga?.kkUrl) || resolveMetadataFileId(profile.kkFile) || resolveMetadataFileId(profile.kkUrl),
+    ijazahTerakhirFileId: resolveMetadataFileId(profile.pendidikanDanPengembangan?.ijazahTerakhirFile) || resolveMetadataFileId(profile.pendidikanDanPengembangan?.pendidikanTerakhir?.ijazahUrl) || resolveMetadataFileId(profile.ijazahTerakhirFile) || resolveMetadataFileId(profile.ijazahUrl),
+  };
+}
+
 /**
  * Robustly resolves document URLs from various potential paths in the employee profile.
  * Handles legacy fields, nested objects, and different naming conventions.

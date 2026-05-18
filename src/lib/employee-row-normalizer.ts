@@ -22,6 +22,8 @@ export interface NormalizedEmployeeRow {
   employeeId?: string;
   divisionId?: string;
   structuralPosition?: string;
+  isDivisionManager?: boolean;
+  fullName?: string;
   workRole?: string;
   employeeType?: string;
   employmentStatus?: string;
@@ -146,6 +148,10 @@ export function normalizeEmployeeRow(
   const structuralPosition = String(
     hrdInfo.structuralPosition ||
       employee?.structuralPosition ||
+      (profile as any)?.structuralPosition ||
+      (profile as any)?.structuralLevel ||
+      (user as any)?.structuralPosition ||
+      (user as any)?.structuralLevel ||
       employee?.position ||
       "",
   ).trim();
@@ -189,6 +195,8 @@ export function normalizeEmployeeRow(
     employeeId: employeeId || undefined,
     divisionId: divisionId || undefined,
     structuralPosition: structuralPosition || undefined,
+    isDivisionManager: hrdInfo.isDivisionManager || employee?.isDivisionManager || user?.isDivisionManager || false,
+    fullName: employee?.fullName || profile?.fullName || user?.fullName || undefined,
     workRole: workRole || undefined,
     employeeType: employeeType || undefined,
     employmentStatus: employmentStatus || undefined,

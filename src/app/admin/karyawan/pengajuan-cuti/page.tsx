@@ -11,21 +11,50 @@ import { AlertCircle, CalendarOff, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { LeaveSubmissionClient } from '@/components/dashboard/karyawan/LeaveSubmissionClient';
+import { useFirestore, useDoc, useMemoFirebase } from '@/firebase';
+import { doc } from 'firebase/firestore';
+import type { EmployeeProfile } from '@/lib/types';
 
 export default function PengajuanCutiPage() {
   const { userProfile, loading } = useAuth();
+  const firestore = useFirestore();
 
+  // Fetch employee_profiles — primary source for hrdEmploymentInfo
+  const profileDocRef = useMemoFirebase(
+    () => (userProfile?.uid ? doc(firestore, 'employee_profiles', userProfile.uid) : null),
+    [userProfile?.uid, firestore]
+  );
+  const { data: employeeProfile, isLoading: profileLoading } = useDoc<EmployeeProfile>(profileDocRef);
 
   const menuConfig = useMemo(() => {
     if (!userProfile) return [];
-    if (userProfile.employmentType === 'magang') return MENU_CONFIG['karyawan-magang'];
-    if (userProfile.employmentType === 'training') return MENU_CONFIG['karyawan-training'];
+    
+    const hrdInfo = (employeeProfile as any)?.hrdEmploymentInfo || {};
+    const empType = String(
+      hrdInfo.employeeType || 
+      hrdInfo.jenisKontrak || 
+      hrdInfo.contractType || 
+      hrdInfo.tipeKaryawan || 
+      employeeProfile?.employmentType || 
+      userProfile.employmentType || 
+      ""
+    ).toLowerCase();
+
+    if (empType.includes('magang') || empType.includes('intern')) {
+      return MENU_CONFIG['karyawan-magang'];
+    }
+    if (empType.includes('training') || empType.includes('probation')) {
+      return MENU_CONFIG['karyawan-training'];
+    }
     return MENU_CONFIG['karyawan'];
-  }, [userProfile]);
+  }, [userProfile, employeeProfile]);
 
-  const eligibility = useMemo(() => isActiveEmployeeEligibleForLeave(userProfile), [userProfile]);
+  const eligibility = useMemo(
+    () => isActiveEmployeeEligibleForLeave(userProfile, employeeProfile),
+    [userProfile, employeeProfile]
+  );
 
-  if (loading) {
+  if (loading || profileLoading) {
     return (
       <DashboardLayout pageTitle="Pengajuan Cuti" menuConfig={menuConfig}>
         <div className="flex items-center justify-center h-64 text-muted-foreground">Memuat data...</div>
@@ -49,19 +78,18 @@ export default function PengajuanCutiPage() {
                 <CardContent className="p-8 space-y-6">
                     <Alert variant="destructive" className="border-rose-200 bg-white dark:bg-slate-900">
                         <AlertCircle className="h-4 w-4" />
-                        <AlertTitle className="font-bold">Alasan Penolakan:</AlertTitle>
+                        <AlertTitle className="font-bold">Alasan:</AlertTitle>
                         <AlertDescription className="mt-2 text-sm leading-relaxed">
-                            {eligibility.reason}
+                            {eligibility.reason || "Anda belum memiliki hak cuti tahunan berdasarkan status kerja saat ini."}
                         </AlertDescription>
                     </Alert>
 
                     <div className="bg-slate-50 dark:bg-slate-900/50 p-6 rounded-xl border border-slate-100 dark:border-slate-800 space-y-4">
-                        <h4 className="font-semibold text-sm uppercase tracking-wider text-slate-500">Persyaratan Umum Cuti:</h4>
+                        <h4 className="font-semibold text-sm uppercase tracking-wider text-slate-500">Persyaratan Cuti:</h4>
                         <ul className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-medium">
-                            <li className="flex items-center gap-2"><div className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Karyawan Tetap / Aktif</li>
-                            <li className="flex items-center gap-2"><div className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Bukan Masa Probation</li>
-                            <li className="flex items-center gap-2"><div className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Masa Kerja &ge; 1 Tahun</li>
-                            <li className="flex items-center gap-2"><div className="h-1.5 w-1.5 rounded-full bg-slate-300" /> Dokumen Lengkap</li>
+                            <li className="flex items-center gap-2"><div className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Karyawan Tetap</li>
+                            <li className="flex items-center gap-2"><div className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Karyawan Kontrak &ge; 12 bulan</li>
+                            <li className="flex items-center gap-2"><div className="h-1.5 w-1.5 rounded-full bg-slate-300" /> Bukan Magang / Probation / Training</li>
                         </ul>
                     </div>
 

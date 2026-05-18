@@ -86,6 +86,8 @@ interface MergedEmployee {
   brandName?: string;
   employmentStatus?: string;
   employmentType?: string;
+  structuralPosition?: string;
+  isDivisionManager?: boolean;
   joinDate?: any;
   employeeProfile?: EmployeeProfile | null;
   hrdEmploymentInfo?: any;
@@ -450,65 +452,99 @@ export default function KaryawanDataPage() {
   const allMerged = useMemo<MergedEmployee[]>(() => {
     if (isLoading) return [];
 
+    const systemRoles = [
+      "super-admin", "system-admin", "admin-system",
+      "super_admin", "system_admin", "admin_system", "hrd",
+    ];
+
+    // Index users and employees by uid for fast lookup
+    const usersByUid = new Map<string, UserProfile>();
+    (users ?? []).forEach((u) => usersByUid.set(u.uid, u));
+
+    const employeesByUid = new Map<string, EmployeeMasterData>();
+    (employees ?? []).forEach((e) => employeesByUid.set(e.uid, e));
+
+    // Index profiles by uid AND by email (for legacy email-keyed docs)
     const profilesByUid = new Map<string, EmployeeProfile>();
     const profilesByEmail = new Map<string, EmployeeProfile>();
     (employeeProfiles ?? []).forEach((p) => {
-      if (p.uid) profilesByUid.set(p.uid, p);
+      const docUid = (p as any).uid || (p as any).id;
+      if (docUid) profilesByUid.set(docUid, p);
       if (p.email) profilesByEmail.set(p.email.toLowerCase(), p);
     });
 
-    const seen = new Set<string>();
+    const seenUids = new Set<string>();
     const result: MergedEmployee[] = [];
-    const systemRoles = [
-      "super-admin",
-      "system-admin",
-      "admin-system",
-      "super_admin",
-      "system_admin",
-      "admin_system",
-    ];
 
-    const getProfile = (uid: string, email?: string) => {
-      return (
-        profilesByUid.get(uid) ??
-        (email ? profilesByEmail.get(email.toLowerCase()) : undefined) ??
-        null
-      );
-    };
+    // ── PASS 1: Iterate employee_profiles (primary source of truth) ──────────
+    (employeeProfiles ?? []).forEach((profile) => {
+      const uid = (profile as any).uid || (profile as any).id;
+      if (!uid) return; // skip malformed docs
+      if (seenUids.has(uid)) return; // deduplicate
+      seenUids.add(uid);
 
-    (employees ?? []).forEach((emp) => {
-      const user = users?.find((u) => u.uid === emp.uid);
-      if (user && user.role && systemRoles.includes(user.role)) return;
+      const user = usersByUid.get(uid);
+      const emp = employeesByUid.get(uid);
 
-      const profile = getProfile(emp.uid, emp.email);
-      seen.add(emp.uid);
+      // Exclude system accounts
+      if (user?.role && systemRoles.includes(user.role)) return;
 
-      const normalized = normalizeEmployeeRow(emp, profile, user, brands || []);
+      // Resolve display name — never show blank
+      const resolvedName =
+        emp?.fullName ||
+        profile?.fullName ||
+        (profile as any)?.employeeName ||
+        (profile as any)?.name ||
+        (profile as any)?.displayName ||
+        (profile?.dataDiriIdentitas as any)?.namaLengkap ||
+        (profile?.dataDiriIdentitas as any)?.namaPanggilan ||
+        user?.fullName ||
+        (user as any)?.displayName ||
+        emp?.email ||
+        profile?.email ||
+        user?.email ||
+        "";
 
-      const employmentStatus = emp.employmentStatus || profile?.hrdEmploymentInfo?.statusKerja || "";
+      // Log missing names for recovery audit
+      if (!resolvedName) {
+        console.warn(`[DataKaryawan] uid=${uid} — nama tidak ditemukan di semua sumber`);
+      }
+
       const hrdEmploymentInfo = profile?.hrdEmploymentInfo || {};
-      
+      const normalized = normalizeEmployeeRow(emp ?? {}, profile, user ?? {}, brands || []);
+
+      const employmentStatus = emp?.employmentStatus || hrdEmploymentInfo?.statusKerja || "";
       const mappedType = getMappedEmployeeType({
         employmentStatus,
         employmentType: normalized.tipeKaryawan,
         hrdEmploymentInfo,
       });
 
+      // Read structuralPosition from dedicated field, never conflate with employmentType
+      const structuralPosition =
+        (profile as any)?.structuralPosition ||
+        (profile as any)?.structuralLevel ||
+        hrdEmploymentInfo?.structuralPosition ||
+        (emp as any)?.structuralPosition ||
+        (user as any)?.structuralPosition ||
+        normalized.structuralPosition ||
+        "staff";
+
+      const isDivisionManager =
+        structuralPosition === "division_manager" ||
+        profile?.isDivisionManager ||
+        (user as any)?.isDivisionManager ||
+        false;
+
       result.push({
-        uid: emp.uid,
-        fullName:
-          emp.fullName ||
-          profile?.fullName ||
-          profile?.dataDiriIdentitas?.fullName ||
-          "",
-        email: emp.email || profile?.email || "",
+        uid,
+        fullName: resolvedName,
+        email: emp?.email || profile?.email || user?.email || "",
         employeeNumber:
           hrdEmploymentInfo?.employeeId ||
           (emp as any)?.employeeId ||
-          (emp as any)?.employeeCode ||
           (emp as any)?.nomorIndukKaryawan ||
           profile?.employeeNumber ||
-          (emp as any)?.employeeNumber ||
           undefined,
         positionTitle: normalized.jabatan,
         division: normalized.divisi,
@@ -516,73 +552,72 @@ export default function KaryawanDataPage() {
         brandName: normalized.brandName,
         employmentStatus,
         employmentType: normalized.tipeKaryawan,
-        joinDate: emp.joinDate ?? emp.startDate,
+        structuralPosition,
+        isDivisionManager,
+        joinDate: emp?.joinDate ?? emp?.startDate,
         employeeProfile: profile,
         hrdEmploymentInfo,
-        hasProfile: !!profile,
+        hasProfile: true,
         operationalStatus: normalized.statusKerja,
-        operationalStatusLabel: getOperationalStatusLabel(
-          normalized.statusKerja,
-        ),
+        operationalStatusLabel: getOperationalStatusLabel(normalized.statusKerja),
         mappedType,
         mappedTypeLabel: getMappedEmployeeTypeLabel(mappedType),
         needsHrdAttention: normalized.needsHrdAttention,
-        pendingBankRequest: pendingBankRequests?.find(
-          (r) => r.employeeUid === emp.uid,
-        ),
+        pendingBankRequest: pendingBankRequests?.find((r) => r.employeeUid === uid),
       });
     });
 
+    // ── PASS 2: users with role 'karyawan' that have NO profile yet ──────────
+    // Only show these if they don't already appear via profile
     (users ?? []).forEach((u) => {
-      if (seen.has(u.uid)) return;
+      if (seenUids.has(u.uid)) return;
       if (u.role && systemRoles.includes(u.role)) return;
       if (u.role === "kandidat") return;
+      // Only include users that explicitly have a karyawan role or have employment data
+      if (u.role !== "karyawan" && !(u as any).employmentType && !(u as any).structuralLevel) return;
 
-      const profile = getProfile(u.uid, u.email);
-      seen.add(u.uid);
+      seenUids.add(u.uid);
 
-      const normalized = normalizeEmployeeRow(u, profile, u, brands || []);
+      const emp = employeesByUid.get(u.uid);
+      const profile = null; // confirmed: no profile for this uid
+      const hrdEmploymentInfo = {};
+      const normalized = normalizeEmployeeRow(emp ?? u, profile, u, brands || []);
 
-      const employmentStatus = profile?.hrdEmploymentInfo?.statusKerja || "";
-      const hrdEmploymentInfo = profile?.hrdEmploymentInfo || {};
-      
+      const employmentStatus = (u as any).employmentStatus || "";
       const mappedType = getMappedEmployeeType({
         employmentStatus,
         employmentType: normalized.tipeKaryawan,
         hrdEmploymentInfo,
       });
 
+      const structuralPosition =
+        (u as any).structuralPosition ||
+        (u as any).structuralLevel ||
+        normalized.structuralPosition ||
+        "staff";
+
       result.push({
         uid: u.uid,
-        fullName: u.fullName || profile?.fullName || "",
+        fullName: u.fullName || (u as any)?.displayName || u.email || "",
         email: u.email || "",
-        employeeNumber: 
-          hrdEmploymentInfo?.employeeId ||
-          (u as any)?.employeeId ||
-          (u as any)?.employeeCode ||
-          (u as any)?.nomorIndukKaryawan ||
-          profile?.employeeNumber ||
-          (u as any)?.employeeNumber ||
-          undefined,
+        employeeNumber: (u as any)?.employeeId || (u as any)?.nomorIndukKaryawan || undefined,
         positionTitle: normalized.jabatan,
         division: normalized.divisi,
         brandId: normalized.brandId,
         brandName: normalized.brandName,
         employmentStatus,
         employmentType: normalized.tipeKaryawan,
-        employeeProfile: profile,
+        structuralPosition,
+        isDivisionManager: structuralPosition === "division_manager" || (u as any)?.isDivisionManager || false,
+        employeeProfile: null,
         hrdEmploymentInfo,
-        hasProfile: !!profile,
+        hasProfile: false,
         operationalStatus: normalized.statusKerja,
-        operationalStatusLabel: getOperationalStatusLabel(
-          normalized.statusKerja,
-        ),
+        operationalStatusLabel: getOperationalStatusLabel(normalized.statusKerja),
         mappedType,
         mappedTypeLabel: getMappedEmployeeTypeLabel(mappedType),
-        needsHrdAttention: normalized.needsHrdAttention,
-        pendingBankRequest: pendingBankRequests?.find(
-          (r) => r.employeeUid === u.uid,
-        ),
+        needsHrdAttention: true,
+        pendingBankRequest: pendingBankRequests?.find((r) => r.employeeUid === u.uid),
       });
     });
 
@@ -1256,7 +1291,7 @@ export default function KaryawanDataPage() {
                                       <TableCell className="px-6 py-6 align-middle">
                                         <div className="flex flex-col gap-1">
                                           <span className="text-base font-bold text-white group-hover:text-emerald-400 transition-colors">
-                                            {emp.fullName}
+                                            {emp.fullName || emp.email || "Nama belum tersedia"}
                                           </span>
                                           <span className="text-sm text-slate-400 font-medium">
                                             {emp.email}
@@ -1264,13 +1299,22 @@ export default function KaryawanDataPage() {
                                         </div>
                                       </TableCell>
                                       <TableCell className="py-6 align-middle">
-                                        <div className="flex flex-col gap-1">
+                                        <div className="flex flex-col gap-1 items-start">
                                           <span className="text-sm font-semibold text-slate-200">
                                             {emp.brandName}
                                           </span>
                                           <span className="text-xs text-slate-500 font-medium">
                                             {emp.division}
                                           </span>
+                                          {(emp.isDivisionManager || emp.structuralPosition === "division_manager") ? (
+                                            <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[10px] mt-1 h-5 px-1.5 uppercase font-bold tracking-widest">Manager Divisi</Badge>
+                                          ) : emp.structuralPosition === "supervisor" ? (
+                                            <Badge className="bg-indigo-500/10 text-indigo-400 border-indigo-500/20 text-[10px] mt-1 h-5 px-1.5 uppercase font-bold tracking-widest">Supervisor</Badge>
+                                          ) : emp.structuralPosition === "management" ? (
+                                            <Badge className="bg-purple-500/10 text-purple-400 border-purple-500/20 text-[10px] mt-1 h-5 px-1.5 uppercase font-bold tracking-widest">Direksi/Manajemen</Badge>
+                                          ) : (
+                                            <Badge className="bg-slate-500/10 text-slate-400 border-slate-500/20 text-[10px] mt-1 h-5 px-1.5 uppercase font-bold tracking-widest">Staff</Badge>
+                                          )}
                                         </div>
                                       </TableCell>
                                       <TableCell className="py-6 align-middle">

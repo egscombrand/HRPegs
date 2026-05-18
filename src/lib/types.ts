@@ -285,6 +285,7 @@ export type EmployeeProfile = {
   uid: string;
   photoUrl?: string;
   photoPath?: string;
+  isDivisionManager?: boolean;
   profilePhoto?: {
     storageProvider?: string;
     fileId?: string;
@@ -591,6 +592,8 @@ export type HrdEmploymentInfo = {
   workLocation?: string;
   structureEffectiveDate?: string;
   structureChangeReason?: string;
+  directManagerOverrideReason?: string;
+  isOverrideActive?: boolean;
 
   // New contract fields
   contractCycleStatus?: string;
@@ -1784,6 +1787,9 @@ export const OVERTIME_SUBMISSION_STATUSES = [
   "pending_hrd",
   "rejected_hrd",
   "revision_hrd",
+  "approved_hrd",
+  "rejected_by_hrd",
+  "revision_requested_by_hrd",
   "approved",
 ] as const;
 export type OvertimeSubmissionStatus =
@@ -1846,6 +1852,18 @@ export type OvertimeSubmission = {
   hrdReviewerUid?: string | null;
   hrdNotes?: string | null;
   hrdDecisionAt?: Timestamp | null;
+  approvedMinutesFinal?: number | null;
+  payrollStatus?: "pending_payroll" | "processing" | "paid" | "excluded" | null;
+  payrollStatusUpdatedAt?: Timestamp | null;
+  payrollStatusUpdatedBy?: string | null;
+  payrollStatusUpdatedByName?: string | null;
+  payrollNotes?: string | null;
+  paidAt?: Timestamp | null;
+  paidBy?: string | null;
+  paidByName?: string | null;
+  processedAt?: Timestamp | null;
+  processedBy?: string | null;
+  processedByName?: string | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 };
@@ -1941,8 +1959,10 @@ export type PermissionRequest = {
 export function isFinalStatus(status: string): boolean {
   return [
     "approved",
+    "approved_hrd",
     "rejected_manager",
     "rejected_hrd",
+    "rejected_by_hrd",
     "verified_manager",
     "closed",
   ].includes(status);
@@ -2002,3 +2022,104 @@ export type OfferingTemplate = {
   htmlContent?: string;
   referencePdfUrl?: string;
 };
+
+// --- LEAVE MANAGEMENT TYPES ---
+export type LeaveRequestStatus =
+  | "pending_manager"
+  | "pending_manager_review"
+  | "revision_requested"
+  | "revision_requested_by_manager"
+  | "rejected_by_manager"
+  | "pending_hrd"
+  | "pending_hrd_review"
+  | "revision_requested_by_hrd"
+  | "rejected_by_hrd"
+  | "approved"
+  | "active_leave"
+  | "completed"
+  | "cancelled";
+
+export type LeaveRequest = {
+  id?: string;
+  employeeId: string;
+  employeeName: string;
+  brandId: string;
+  brandName: string;
+  divisionId: string;
+  divisionName: string;
+  employmentType: string;
+  contractDurationMonths: number;
+  leaveType: "tahunan" | "besar" | "menikah" | "melahirkan";
+  startDate: Timestamp;
+  endDate: Timestamp;
+  durationDays: number;
+  reason: string;
+  leaveAddress: string;
+  handoverEmployeeId: string;
+  handoverEmployeeName: string;
+  handoverEmployeePosition: string;
+  handoverNotes?: string;
+  attachmentUrl?: string;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  status: LeaveRequestStatus;
+  
+  // Manager Review
+  managerId: string;
+  managerUid?: string;
+  directManagerId?: string;
+  directManagerUid?: string;
+  managerName: string;
+  managerNotes?: string;
+  managerReviewedAt?: Timestamp;
+
+  // HRD Review
+  hrdId?: string;
+  hrdName?: string;
+  hrdNotes?: string;
+  hrdReviewedAt?: Timestamp;
+
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+
+  // Rich time tracking metadata (Asia/Jakarta)
+  submittedAtStr?: string;
+  submissionDay?: string;
+  submissionDate?: string;
+  submissionTime?: string;
+  startDateStr?: string;
+  startDay?: string;
+  startDateFormatted?: string;
+  endDateStr?: string;
+  endDay?: string;
+  endDateFormatted?: string;
+  durationDaysStr?: string;
+  timezone?: string;
+};
+
+export type LeaveBalance = {
+  id?: string;
+  employeeId: string;
+  employeeName: string;
+  employmentType: string;
+  contractDurationMonths: number;
+  initialQuota: number;
+  currentBalance: number;
+  allocatedLeave: number;
+  pendingLeave: number;
+  updatedAt: Timestamp;
+};
+
+export type LeaveBalanceAdjustment = {
+  id?: string;
+  employeeId: string;
+  employeeName: string;
+  previousBalance: number;
+  newBalance: number;
+  adjustmentValue: number;
+  reason: string;
+  adjustedBy: string;
+  adjustedByName: string;
+  createdAt: Timestamp;
+};
+

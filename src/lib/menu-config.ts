@@ -2,7 +2,7 @@
 import { createElement, type ReactNode } from 'react';
 import { 
     LayoutDashboard, Users, Briefcase, User, Calendar, DollarSign, Settings, ShieldCheck, Database, History, 
-    Contact, UserPlus, FolderKanban, CalendarOff, UserMinus, KanbanSquare, CheckSquare, BarChart, ClipboardCheck, Award, Search, FileText, FileUp, Video, BrainCircuit, Timer, MapPin, BookUser, FileHeart, FileClock, GraduationCap, PenSquare, Globe, Wallet, Wrench
+    Contact, UserPlus, FolderKanban, CalendarOff, UserMinus, KanbanSquare, CheckSquare, BarChart, ClipboardCheck, Award, Search, FileText, FileUp, Video, BrainCircuit, Timer, MapPin, BookUser, FileHeart, FileClock, GraduationCap, PenSquare, Globe, Wallet, Wrench, CalendarClock
 } from 'lucide-react';
 import type { UserRole } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
@@ -46,8 +46,10 @@ const EMPLOYEE_MONITORING_ITEMS: MenuGroup = {
         { key: 'monitoring.interns', href: '/admin/hrd/employee-data/intern', label: 'Profil Magang', icon: createElement(BookUser) },
         { key: 'monitoring.attendance', href: '/admin/hrd/monitoring/absen', label: 'Monitoring Absen', icon: createElement(FileClock) },
         { key: 'hrd.overtime_approval', href: '/admin/hrd/persetujuan-lembur', label: 'Persetujuan Lembur', icon: createElement(Timer) },
+        { key: 'overtime_payroll_recap', href: '/admin/overtime-payroll-recap', label: 'Rekap Lembur Payroll', icon: createElement(CalendarClock) },
         { key: 'hrd.permission_approval', href: '/admin/hrd/persetujuan-izin', label: 'Persetujuan Izin', icon: createElement(FileHeart) },
         { key: 'monitoring.field_duty', href: '/admin/hrd/monitoring/dinas', label: 'Dinas (Tracking)', icon: createElement(MapPin) },
+        { key: 'hrd.leave_approval', href: '/admin/hrd/persetujuan-cuti', label: 'Persetujuan Cuti', icon: createElement(CalendarOff) },
         { key: 'monitoring.leave', href: '/admin/hrd/monitoring/cuti', label: 'Cuti', icon: createElement(CalendarOff) },
         { key: 'monitoring.training', href: '/admin/hrd/monitoring/pelatihan', label: 'Pengembangan SDM', icon: createElement(GraduationCap) },
         { key: 'monitoring.settings', href: '/admin/hrd/monitoring/settings', label: 'Pengaturan Absensi', icon: createElement(Settings) },
@@ -60,6 +62,7 @@ const REVIEW_ITEMS: MenuGroup = {
         { key: 'review.reports', href: '/admin/review/laporan-magang', label: 'Review Laporan Magang', icon: createElement(PenSquare) },
         { key: 'manager.overtime_approval', href: '/admin/manager/persetujuan-lembur', label: 'Persetujuan Lembur Tim', icon: createElement(CheckSquare) },
         { key: 'manager.permission_approval', href: '/admin/manager/persetujuan-izin', label: 'Persetujuan Izin Tim', icon: createElement(FileHeart) },
+        { key: 'manager.leave_approval', href: '/admin/manager/persetujuan-cuti', label: 'Persetujuan Cuti Tim', icon: createElement(CalendarOff) },
     ]
 };
 

@@ -30,7 +30,7 @@ interface AttendanceRecord {
   tapOut: string;
   tapInId: string | null;
   tapOutId: string | null;
-  status: 'Sedang Bekerja' | 'Selesai' | 'Belum Tap In';
+  status: 'Sedang Bekerja' | 'Selesai' | 'Belum Tap In' | 'Cuti Tahunan';
   mode: 'onsite' | 'offsite' | '-';
   photoUrl?: string | null;
   address: string;
@@ -90,7 +90,16 @@ export function AttendanceMonitoringClient() {
     }, [firestore, date]);
     const { data: attendanceEvents, isLoading: isLoadingEvents, mutate: mutateEvents } = useCollection<AttendanceEvent>(eventsQuery);
 
-    const isLoading = isLoadingConfig || isLoadingUsers || isLoadingBrands || isLoadingEvents;
+    // Query active/approved leaves
+    const leavesQuery = useMemoFirebase(() => {
+        return query(
+            collection(firestore, 'leave_requests'),
+            where('status', 'in', ['approved', 'active_leave'])
+        );
+    }, [firestore]);
+    const { data: leaveRequests, isLoading: isLoadingLeaves } = useCollection<any>(leavesQuery);
+
+    const isLoading = isLoadingConfig || isLoadingUsers || isLoadingBrands || isLoadingEvents || isLoadingLeaves;
     
     // --- Data Processing ---
     const { tableData, summaryData } = useMemo(() => {
@@ -112,7 +121,7 @@ export function AttendanceMonitoringClient() {
                 return user.brandId === brandFilter;
             });
 
-        const summary = { hadir: 0, offsite: 0, anomali: 0, terlambat: 0, belumTapIn: 0 };
+        const summary = { hadir: 0, offsite: 0, anomali: 0, terlambat: 0, belumTapIn: 0, cuti: 0 };
         
         const processedData = relevantUsers.map(user => {
             const userEvents = attendanceEvents.filter(e => (e.uid === user.uid || e.userId === user.uid));
@@ -122,9 +131,22 @@ export function AttendanceMonitoringClient() {
             const tapInTimestamp = tapIn ? getTimestamp(tapIn) : null;
             const tapOutTimestamp = tapOut ? getTimestamp(tapOut) : null;
 
-            let status: AttendanceRecord['status'] = 'Belum Tap In';
+            // Check if user is on approved leave today
+            const isOnLeaveToday = leaveRequests?.some(req => {
+                if (req.employeeId !== user.uid) return false;
+                if (!date) return false;
+                
+                const selectedDateTime = startOfDay(date).getTime();
+                const reqStart = startOfDay(req.startDate.toDate()).getTime();
+                const reqEnd = endOfDay(req.endDate.toDate()).getTime();
+                
+                return selectedDateTime >= reqStart && selectedDateTime <= reqEnd;
+            });
+
+            let status: 'Sedang Bekerja' | 'Selesai' | 'Belum Tap In' | 'Cuti Tahunan' = 'Belum Tap In';
             if (tapIn && !tapOut) status = 'Sedang Bekerja';
             else if (tapIn && tapOut) status = 'Selesai';
+            else if (isOnLeaveToday) status = 'Cuti Tahunan';
             
             let lateMinutes: number | null = null;
             let earlyLeaveMinutes: number | null = null;
@@ -159,6 +181,10 @@ export function AttendanceMonitoringClient() {
                 }
             }
 
+            if (status === 'Cuti Tahunan') {
+                summary.cuti++;
+            }
+
             return {
                 id: user.uid,
                 name: user.fullName,
@@ -178,12 +204,13 @@ export function AttendanceMonitoringClient() {
             };
         });
         
-        summary.belumTapIn = relevantUsers.length - summary.hadir;
+        summary.belumTapIn = relevantUsers.length - summary.hadir - summary.cuti;
 
         const filteredTableData = processedData.filter(row => {
             const statusMatch = statusFilter === 'all' ||
                 (statusFilter === 'present' && (row.status === 'Sedang Bekerja' || row.status === 'Selesai')) ||
                 (statusFilter === 'absent' && row.status === 'Belum Tap In') ||
+                (statusFilter === 'leave' && row.status === 'Cuti Tahunan') ||
                 (statusFilter === 'late' && row.lateMinutes !== null) ||
                 (statusFilter === 'offsite' && row.mode === 'offsite');
             return statusMatch;
@@ -195,11 +222,11 @@ export function AttendanceMonitoringClient() {
                 { title: "Hadir", value: summary.hadir },
                 { title: "Belum Tap In", value: summary.belumTapIn },
                 { title: "Offsite", value: summary.offsite },
-                { title: "Anomali", value: summary.anomali },
+                { title: "Cuti Tahunan", value: summary.cuti },
                 { title: "Terlambat", value: summary.terlambat },
             ]
         };
-    }, [users, attendanceEvents, sites, brands, brandFilter, statusFilter, date]);
+    }, [users, attendanceEvents, sites, brands, brandFilter, statusFilter, date, leaveRequests]);
     
     const handleCancelClick = (row: AttendanceRecord) => {
         setEventsToDelete({ tapInId: row.tapInId, tapOutId: row.tapOutId, userName: row.name });
@@ -261,6 +288,7 @@ export function AttendanceMonitoringClient() {
                         <SelectItem value="all">Semua Status</SelectItem>
                         <SelectItem value="present">Hadir</SelectItem>
                         <SelectItem value="absent">Belum Tap In</SelectItem>
+                        <SelectItem value="leave">Cuti Tahunan</SelectItem>
                         <SelectItem value="late">Terlambat</SelectItem>
                         <SelectItem value="offsite">Offsite</SelectItem>
                         <SelectItem value="anomaly">Anomali</SelectItem>
@@ -320,7 +348,7 @@ export function AttendanceMonitoringClient() {
                                         <TableCell>{row.tapIn}</TableCell>
                                         <TableCell>{row.tapOut}</TableCell>
                                         <TableCell>
-                                            <Badge variant={row.status === 'Belum Tap In' ? 'secondary' : 'default'}>
+                                            <Badge variant={row.status === 'Belum Tap In' ? 'secondary' : (row.status === 'Cuti Tahunan' ? 'outline' : 'default')} className={row.status === 'Cuti Tahunan' ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-600 font-bold' : ''}>
                                                 {row.status}
                                             </Badge>
                                         </TableCell>

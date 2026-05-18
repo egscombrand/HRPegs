@@ -38,6 +38,8 @@ import { format } from "date-fns";
 import { parseDateValue } from "@/lib/utils";
 import { calculateProfileCompleteness } from "@/lib/employee-completeness";
 import { SecureDriveImage } from "@/components/SecureDriveImage";
+import { useToast } from "@/hooks/use-toast";
+import { openSecureFile, extractFileIdFromUrl } from "@/lib/candidate-docs-utils";
 
 const SectionTitle = ({
   children,
@@ -106,6 +108,8 @@ const FileStatus = ({
   pending?: boolean;
   notOwned?: boolean;
 }) => {
+  const { toast } = useToast();
+
   if (notOwned) {
     return (
       <div className="flex items-center justify-between py-3 border-b border-slate-800/40 last:border-0">
@@ -122,10 +126,32 @@ const FileStatus = ({
     );
   }
 
+  const fileId = extractFileIdFromUrl(url);
+
+  const handleOpenSecure = async () => {
+    try {
+      if (fileId) {
+        await openSecureFile(fileId);
+      } else {
+        toast({
+          title: "File tidak dapat dibuka",
+          description: "File ID tidak ditemukan untuk dokumen ini.",
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Gagal membuka dokumen",
+        description: err.message || "Terjadi kesalahan.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="flex items-center justify-between py-3 border-b border-slate-800/40 last:border-0 group">
       <div className="flex items-center gap-3">
-        {url ? (
+        {fileId ? (
           <div className="h-8 w-8 rounded-lg bg-slate-800/50 flex items-center justify-center border border-slate-700 shrink-0 text-slate-500">
             <FileText className="h-4 w-4" />
           </div>
@@ -135,7 +161,7 @@ const FileStatus = ({
         </span>
       </div>
       <div className="flex items-center gap-2">
-        {url ? (
+        {fileId ? (
           <>
             <Badge
               variant="outline"
@@ -147,7 +173,7 @@ const FileStatus = ({
               variant="ghost"
               size="sm"
               className="h-7 px-2 text-[10px] text-primary hover:bg-primary/10 font-bold"
-              onClick={() => url && window.open(url, "_blank")}
+              onClick={handleOpenSecure}
             >
               <Eye className="mr-1 h-3 w-3" /> Lihat Dokumen
             </Button>

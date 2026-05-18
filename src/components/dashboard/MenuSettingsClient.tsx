@@ -54,7 +54,24 @@ export function MenuSettingsClient() {
     rolesToDisplay.forEach(role => {
       const savedSetting = initialSettings?.find(s => s.id === role.id);
       if (savedSetting) {
-        newSettings[role.id] = savedSetting.visibleMenuItems;
+        let items = [...savedSetting.visibleMenuItems];
+        // Ensure overtime_payroll_recap defaults
+        if ((role.id === 'super-admin' || role.id === 'hrd') && !items.includes('overtime_payroll_recap')) {
+          items.push('overtime_payroll_recap');
+        }
+        // Ensure new leave management menu keys default
+        if (role.id === 'super-admin') {
+          if (!items.includes('hrd.leave_approval')) items.push('hrd.leave_approval');
+          if (!items.includes('manager.leave_approval')) items.push('manager.leave_approval');
+          if (!items.includes('employee.leave')) items.push('employee.leave');
+        } else if (role.id === 'hrd') {
+          if (!items.includes('hrd.leave_approval')) items.push('hrd.leave_approval');
+        } else if (role.id === 'manager') {
+          if (!items.includes('manager.leave_approval')) items.push('manager.leave_approval');
+        } else if (role.id === 'karyawan') {
+          if (!items.includes('employee.leave')) items.push('employee.leave');
+        }
+        newSettings[role.id] = items;
       } else {
         // Default to all menus defined for that specific role/sub-role in MENU_CONFIG
         const defaultMenus = MENU_CONFIG[role.id] || [];

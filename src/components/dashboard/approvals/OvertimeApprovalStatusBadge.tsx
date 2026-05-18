@@ -4,7 +4,6 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { type OvertimeSubmissionStatus } from "@/lib/types";
 
-// Define a more detailed status configuration
 const statusConfig: Record<
   OvertimeSubmissionStatus,
   {
@@ -52,21 +51,68 @@ const statusConfig: Record<
     className: "bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-200",
   },
   rejected_hrd: {
-    managerLabel: "Ditolak",
-    hrdLabel: "Ditolak",
-    className: "bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-200",
+    managerLabel: "Ditolak HRD",
+    hrdLabel: "Ditolak HRD",
+    className: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 border border-red-500/20",
   },
   revision_hrd: {
     managerLabel: "Revisi dari HRD",
     hrdLabel: "Revisi Diminta",
     className:
-      "bg-amber-100 text-amber-800 dark:bg-amber-800 dark:text-amber-200",
+      "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-500/20",
+  },
+  approved_hrd: {
+    managerLabel: "Disetujui HRD",
+    hrdLabel: "Disetujui HRD (Final)",
+    className:
+      "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-500/20",
+  },
+  rejected_by_hrd: {
+    managerLabel: "Ditolak HRD",
+    hrdLabel: "Ditolak HRD",
+    className: "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-500/20",
+  },
+  revision_requested_by_hrd: {
+    managerLabel: "Revisi dari HRD",
+    hrdLabel: "Revisi Diminta",
+    className:
+      "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-500/20",
   },
   approved: {
     managerLabel: "Disetujui HRD",
     hrdLabel: "Disetujui HRD",
     className:
-      "bg-green-200 text-green-900 dark:bg-green-900 dark:text-green-200",
+      "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300 border border-green-500/20",
+  },
+};
+
+const payrollStatusConfig: Record<
+  string,
+  {
+    managerLabel: string;
+    hrdLabel: string;
+    className: string;
+  }
+> = {
+  pending_payroll: {
+    managerLabel: "Masuk Payroll",
+    hrdLabel: "Menunggu Payroll",
+    className: "bg-blue-500/10 border-blue-500/20 text-blue-400 font-bold",
+  },
+  processing: {
+    managerLabel: "Sedang Diproses Payroll",
+    hrdLabel: "Sedang Diproses",
+    className: "bg-amber-500/10 border-amber-500/20 text-amber-400 font-bold",
+  },
+  paid: {
+    managerLabel: "Sudah Dibayarkan",
+    hrdLabel: "Lunas (Paid)",
+    className: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 font-bold",
+  },
+  excluded: {
+    managerLabel: "Tidak Masuk Payroll",
+    hrdLabel: "Tidak Masuk Payroll",
+    className: "bg-red-500/10 border-red-500/20 text-red-400 font-bold",
   },
 };
 
@@ -74,6 +120,7 @@ interface OvertimeApprovalStatusBadgeProps {
   status: OvertimeSubmissionStatus;
   mode: "manager" | "hrd";
   divisionName?: string;
+  payrollStatus?: "pending_payroll" | "processing" | "paid" | "excluded" | null;
   className?: string;
 }
 
@@ -81,8 +128,28 @@ export function OvertimeApprovalStatusBadge({
   status,
   mode,
   divisionName,
+  payrollStatus,
   className,
 }: OvertimeApprovalStatusBadgeProps) {
+  // If approved and payrollStatus is set, show payroll-specific status badge
+  if ((status === "approved" || status === "approved_hrd") && payrollStatus) {
+    const config = payrollStatusConfig[payrollStatus];
+    if (config) {
+      const label = mode === "manager" ? config.managerLabel : config.hrdLabel;
+      return (
+        <Badge
+          className={cn(
+            "border font-medium",
+            config.className,
+            className
+          )}
+        >
+          {label}
+        </Badge>
+      );
+    }
+  }
+
   const config = statusConfig[status] || statusConfig.draft;
   const label = (() => {
     if (status === "pending_supervisor" && mode === "hrd") {
@@ -97,9 +164,9 @@ export function OvertimeApprovalStatusBadge({
   return (
     <Badge
       className={cn(
-        "border-transparent font-medium",
+        "border font-medium",
         config.className,
-        className,
+        className
       )}
     >
       {label}

@@ -30,7 +30,9 @@ import type {
   Brand,
   HrdEmploymentInfo,
   VerificationStatusGroup,
+  OvertimeSubmission,
 } from "@/lib/types";
+import { OvertimeStatusBadge } from "@/components/dashboard/karyawan/OvertimeStatusBadge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -97,9 +99,10 @@ import {
   getEducationDocumentUrl,
   getCertificationDocumentUrl,
 } from "@/lib/employee-documents";
+import { openSecureFile, extractFileIdFromUrl } from "@/lib/candidate-docs-utils";
 import { normalizeEmployeeRow } from "@/lib/employee-row-normalizer";
 import { getHrdEmployeeStruktur } from "@/lib/employee-hrd-profile";
-
+import { cn } from "@/lib/utils";
 import {
   Card,
   CardContent,
@@ -138,6 +141,7 @@ import {
   addMonths,
   addDays,
 } from "date-fns";
+import { id as idLocale } from "date-fns/locale";
 
 const TIPE_KARYAWAN_OPTIONS = ["Magang", "Probation", "Kontrak", "Tetap"];
 
@@ -217,6 +221,29 @@ const DocumentPreviewCard = ({
 }) => {
   const [imageError, setImageError] = React.useState(false);
   const isImage = false; // Disabled preview as per new UX rules
+  const { toast } = useToast();
+
+  const fileId = extractFileIdFromUrl(url);
+
+  const handleOpenSecure = async () => {
+    try {
+      if (fileId) {
+        await openSecureFile(fileId);
+      } else {
+        toast({
+          title: "File tidak dapat dibuka",
+          description: "File ID tidak ditemukan untuk dokumen ini.",
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Gagal membuka dokumen",
+        description: err.message || "Terjadi kesalahan.",
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <Card className="group border-slate-800 bg-slate-950/40 backdrop-blur-xl hover:border-slate-700 transition-all duration-300">
@@ -249,11 +276,11 @@ const DocumentPreviewCard = ({
         )}
       </CardHeader>
       <CardContent className="pt-6">
-        {url ? (
+        {fileId ? (
           <div className="space-y-4">
             <div
               className="aspect-video rounded-xl border border-slate-800 bg-slate-900/50 flex flex-col items-center justify-center text-slate-500 cursor-pointer hover:bg-slate-800/50 transition-colors text-center p-4 group"
-              onClick={() => window.open(url, "_blank")}
+              onClick={handleOpenSecure}
             >
               <FileText className="h-8 w-8 mb-2 opacity-40 group-hover:scale-110 transition-transform duration-500" />
               <span className="text-[10px] uppercase tracking-widest font-bold">
@@ -264,28 +291,12 @@ const DocumentPreviewCard = ({
               <Button
                 variant="outline"
                 size="sm"
-                className="flex-1 rounded-xl border-slate-800 bg-slate-900/30 text-[10px] text-slate-400 hover:text-white hover:bg-slate-800 h-9"
-                onClick={() => window.open(url, "_blank")}
+                className="w-full rounded-xl border-slate-800 bg-slate-900/30 text-[10px] text-slate-400 hover:text-white hover:bg-slate-800 h-9"
+                onClick={handleOpenSecure}
               >
                 <Eye className="h-3.5 w-3.5 mr-2" />
                 Lihat Dokumen
               </Button>
-              <a
-                href={url}
-                download={label}
-                target="_blank"
-                rel="noreferrer"
-                className="flex-1"
-              >
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full rounded-xl border-slate-800 bg-slate-900/30 text-[10px] text-slate-400 hover:text-white hover:bg-slate-800 h-9"
-                >
-                  <Download className="h-3.5 w-3.5 mr-2" />
-                  Download
-                </Button>
-              </a>
             </div>
           </div>
         ) : (
@@ -446,11 +457,36 @@ export default function EmployeeDetailPage({
   const firestore = useFirestore();
   const { toast } = useToast();
   const router = useRouter();
+
+  const handleOpenSecureUrl = async (url?: string | null) => {
+    try {
+      const fileId = extractFileIdFromUrl(url);
+      if (fileId) {
+        await openSecureFile(fileId);
+      } else {
+        toast({
+          title: "File tidak dapat dibuka",
+          description: "File ID tidak ditemukan untuk dokumen ini.",
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Gagal membuka dokumen",
+        description: err.message || "Terjadi kesalahan.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const [isSaving, setIsSaving] = useState(false);
   const [editingSection, setEditingSection] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("ringkasan");
   const [divisions, setDivisions] = useState<any[]>([]);
   const [managers, setManagers] = useState<any[]>([]);
+  const [warningNoManager, setWarningNoManager] = useState(false);
+  const [isOverrideActive, setIsOverrideActive] = useState(false);
+  const [allPossibleSupervisors, setAllPossibleSupervisors] = useState<any[]>([]);
 
   const resolvedParams = React.use(params);
   const employeeId = resolvedParams.id;
@@ -506,6 +542,27 @@ export default function EmployeeDetailPage({
   }, [firestore, employeeId]);
 
   const { data: historyData } = useCollection(historyQuery);
+
+  // Overtime query
+  const overtimeQuery = useMemoFirebase(() => {
+    if (!employeeId) return null;
+    return query(
+      collection(firestore, "overtime_submissions"),
+      where("employeeUid", "==", employeeId)
+    );
+  }, [firestore, employeeId]);
+
+  const { data: overtimeDataRaw } = useCollection<OvertimeSubmission>(overtimeQuery);
+
+  // Client-side sort by overtimeDate desc
+  const overtimeData = useMemo(() => {
+    if (!overtimeDataRaw) return [];
+    return [...overtimeDataRaw].sort((a, b) => {
+      const dateA = a.overtimeDate ? (typeof a.overtimeDate === "object" && typeof (a.overtimeDate as any).toDate === "function" ? (a.overtimeDate as any).toDate().getTime() : new Date(a.overtimeDate as any).getTime()) : 0;
+      const dateB = b.overtimeDate ? (typeof b.overtimeDate === "object" && typeof (b.overtimeDate as any).toDate === "function" ? (b.overtimeDate as any).toDate().getTime() : new Date(b.overtimeDate as any).getTime()) : 0;
+      return dateB - dateA;
+    });
+  }, [overtimeDataRaw]);
 
   const isLoading =
     userLoading || empLoading || profileLoading || brandsLoading;
@@ -766,66 +823,66 @@ export default function EmployeeDetailPage({
   // Watch values outside to stabilize useEffect dependencies
   const watchBrandIdForManagers = form.watch("brandId");
   const watchDivisionIdForManagers = form.watch("divisionId");
+  const watchStructuralPositionForManagers = form.watch("structuralPosition");
 
   // Load managers when brand and division change
   useEffect(() => {
     const brandId = watchBrandIdForManagers;
     const divisionId = watchDivisionIdForManagers;
+    const isDM = watchStructuralPositionForManagers === "division_manager" || normalizedData?.structuralPosition === "division_manager";
 
     if (!brandId || !divisionId) {
       setManagers([]);
+      setWarningNoManager(false);
       return;
     }
 
-    // Load managers (users with role that are division managers for this brand/division)
     const loadManagers = async () => {
       try {
         const selectedDivision = divisions.find((d) => d.id === divisionId);
-        const divisionName = selectedDivision?.name || "";
+        if (!selectedDivision) {
+          setWarningNoManager(true);
+          setManagers([]);
+          return;
+        }
 
-        // Query users who are marked as Division Managers
-        const managersQuery = query(
-          collection(firestore, "users"),
-          where("isDivisionManager", "==", true),
-        );
+        const sp = watchStructuralPositionForManagers;
+        if (sp === "management") {
+            setManagers([]);
+            setWarningNoManager(false);
+            if (!isOverrideActive) form.setValue("directSupervisorUid", "");
+            return;
+        }
 
-        const managersSnap = await getDocs(managersQuery);
-        const allManagers = managersSnap.docs.map((doc) => ({
-          uid: doc.id,
-          ...doc.data(),
-        })) as any[];
-
-        // Filter in memory for precise brand & division matching
-        const filteredManagers = allManagers.filter((u) => {
-          // Brand match
-          const brandMatch =
-            u.brandId === brandId || u.managedBrandId === brandId;
-          if (!brandMatch) return false;
-
-          // Division match (by ID or Name fallback)
-          const idMatch =
-            u.divisionId === divisionId || u.managedDivisionId === divisionId;
-          const nameMatch =
-            u.managedDivision?.toLowerCase() === divisionName.toLowerCase() ||
-            u.divisionName?.toLowerCase() === divisionName.toLowerCase();
-
-          return idMatch || nameMatch;
-        });
-
-        setManagers(filteredManagers);
-
-        // Auto-select if only one manager found
-        if (filteredManagers.length === 1) {
-          form.setValue("directSupervisorUid", filteredManagers[0].uid);
+        let mgrQuery;
+        if (sp === "division_manager") {
+            mgrQuery = query(collection(firestore, "users"), where("structuralLevel", "==", "management"));
+        } else if (sp === "supervisor") {
+            mgrQuery = query(collection(firestore, "users"), where("structuralPosition", "==", "division_manager"), where("divisionId", "==", divisionId));
         } else {
-          // If the current supervisor is not in the new list, clear it
-          const currentSupervisor = form.getValues("directSupervisorUid");
-          if (
-            currentSupervisor &&
-            !filteredManagers.find((m) => m.uid === currentSupervisor)
-          ) {
-            form.setValue("directSupervisorUid", "");
-          }
+            mgrQuery = query(collection(firestore, "users"), where("structuralPosition", "in", ["supervisor", "division_manager"]), where("divisionId", "==", divisionId));
+        }
+
+        const snap = await getDocs(mgrQuery);
+        const dirs = snap.docs.map(doc => ({ uid: doc.id, ...doc.data() })) as any[];
+        const filteredDirs = dirs.filter(d => d.uid !== employeeId);
+        
+        setManagers(filteredDirs);
+
+        if (filteredDirs.length === 0) {
+            setWarningNoManager(true);
+            if (!isOverrideActive) {
+                const currentSupervisor = form.getValues("directSupervisorUid");
+                if (currentSupervisor === employeeId) form.setValue("directSupervisorUid", "");
+            }
+        } else {
+            setWarningNoManager(false);
+            if (!isOverrideActive) {
+               const currentVal = form.getValues("directSupervisorUid");
+               if (!filteredDirs.find(d => d.uid === currentVal)) {
+                   form.setValue("directSupervisorUid", filteredDirs[0].uid);
+               }
+            }
         }
       } catch (error) {
         console.error("Error loading managers:", error);
@@ -837,10 +894,32 @@ export default function EmployeeDetailPage({
   }, [
     watchBrandIdForManagers,
     watchDivisionIdForManagers,
+    watchStructuralPositionForManagers,
+    isOverrideActive,
     firestore,
     form,
     divisions,
+    employeeId,
+    normalizedData
   ]);
+
+  // Load all possible supervisors for override
+  useEffect(() => {
+    if (!isOverrideActive) return;
+    const loadAllSupervisors = async () => {
+      try {
+        const q = query(collection(firestore, "users"), where("isActive", "!=", false));
+        const snap = await getDocs(q);
+        const filtered = snap.docs
+          .map(doc => ({ uid: doc.id, ...doc.data() }))
+          .filter((u: any) => u.uid !== employeeId);
+        setAllPossibleSupervisors(filtered);
+      } catch (err) {
+        console.error("Error loading all supervisors:", err);
+      }
+    };
+    loadAllSupervisors();
+  }, [isOverrideActive, firestore, employeeId]);
 
   // Auto-calculate contract duration or end date
   const watchKontrakMulai = form.watch("kontrakMulai");
@@ -918,11 +997,51 @@ export default function EmployeeDetailPage({
     additionalHistory?: any,
   ) => {
     if (!firebaseUser || !userProfile || !employeeId) return;
+
+    if (editingSection === "struktur") {
+      const isSavingAsManager = values.structuralPosition === "division_manager";
+      const wasManager = normalizedData?.structuralPosition === "division_manager" || normalizedData?.isDivisionManager === true;
+      
+      if (isSavingAsManager) {
+        const selectedDiv = divisions?.find(d => d.id === values.divisionId);
+        if (selectedDiv && selectedDiv.managerId && selectedDiv.managerId !== employeeId) {
+          const confirmReplace = window.confirm(`Divisi ini sudah memiliki Manager Divisi (${selectedDiv.managerName}). Apakah ingin mengganti manager divisi?`);
+          if (!confirmReplace) {
+            return;
+          }
+        }
+      } else if (wasManager && values.structuralPosition !== "division_manager") {
+        const confirmRemove = window.confirm("Karyawan ini sebelumnya tercatat sebagai Manager Divisi. Jika dilanjutkan, status Manager Divisi di Organisasi Perusahaan akan dilepas. Lanjutkan?");
+        if (!confirmRemove) {
+          return;
+        }
+      }
+    }
+
+    if (values.directSupervisorUid === employeeId) {
+      toast({
+        variant: "destructive",
+        title: "Atasan Tidak Valid",
+        description: "Atasan langsung tidak boleh mengarah ke diri sendiri.",
+      });
+      return;
+    }
+
+    if (isOverrideActive && !values.directManagerOverrideReason?.trim() && editingSection === "struktur") {
+      toast({
+        variant: "destructive",
+        title: "Alasan Override Wajib Diisi",
+        description: "Mohon isi alasan override atasan langsung.",
+      });
+      return;
+    }
+
     setIsSaving(true);
     try {
       const b = brands?.find((b) => b.id === values.brandId);
       const d = divisions?.find((div) => div.id === values.divisionId);
-      const s = managers?.find((m) => m.uid === values.directSupervisorUid);
+      const possibleMgrs = isOverrideActive ? allPossibleSupervisors : managers;
+      const s = possibleMgrs?.find((m) => m.uid === values.directSupervisorUid);
 
       const updatedValues = {
         ...values,
@@ -1194,6 +1313,107 @@ export default function EmployeeDetailPage({
         { merge: true },
       );
 
+      // Sync root profile — ONLY structural fields, never touch identity fields
+      const isDM = updatedValues.structuralPosition === 'division_manager';
+      
+      // Helper: remove undefined/null/empty-string values to prevent Firestore overwrite
+      const sanitizePayload = (obj: Record<string, any>) => {
+        return Object.fromEntries(
+          Object.entries(obj).filter(([_, v]) => v !== undefined && v !== null && v !== "")
+        );
+      };
+
+      // Build a structural-only payload — NEVER includes identity fields
+      const structuralPayload = sanitizePayload({
+        brandId: updatedValues.brandId,
+        brandName: updatedValues.brandName || undefined,
+        divisionId: updatedValues.divisionId,
+        divisionName: updatedValues.divisionName || undefined,
+        structuralPosition: updatedValues.structuralPosition,
+        structuralLevel: updatedValues.structuralPosition || undefined,
+        position: updatedValues.workRole || undefined,
+        workRole: updatedValues.workRole || undefined,
+        directManagerId: updatedValues.directSupervisorUid || undefined,
+        directManagerName: updatedValues.directSupervisorName || undefined,
+        directSupervisorUid: updatedValues.directSupervisorUid || undefined,
+        directSupervisorName: updatedValues.directSupervisorName || undefined,
+        isDivisionManager: isDM,
+        directManagerOverrideReason: isOverrideActive ? ((updatedValues as any).directManagerOverrideReason || undefined) : undefined,
+        isOverrideActive: isOverrideActive,
+        structureUpdatedAt: serverTimestamp(),
+        structureUpdatedBy: userProfile?.uid || undefined,
+      });
+      
+      // Use merge:true to guarantee identity fields are NEVER overwritten
+      await setDoc(profileRef, structuralPayload, { merge: true });
+      const userRef = doc(firestore, "users", employeeId);
+      await setDoc(userRef, structuralPayload, { merge: true });
+
+      if (isDM && updatedValues.brandId && updatedValues.divisionId) {
+        const selectedDiv = divisions?.find(d => d.id === updatedValues.divisionId);
+        if (selectedDiv && selectedDiv.managerId && selectedDiv.managerId !== employeeId) {
+          const oldResetData = {
+              isDivisionManager: false,
+              structuralLevel: 'staff',
+              structuralPosition: 'staff',
+              updatedAt: serverTimestamp()
+          };
+          await updateDoc(doc(firestore, 'users', selectedDiv.managerId), oldResetData);
+          await setDoc(doc(firestore, 'employee_profiles', selectedDiv.managerId), oldResetData, { merge: true });
+        }
+
+        const divDocRef = doc(firestore, 'brands', updatedValues.brandId, 'divisions', updatedValues.divisionId);
+        await setDoc(divDocRef, {
+          managerId: employeeId,
+          managerName: normalizedData?.fullName || "",
+          managerEmployeeId: updatedValues.employeeId || "",
+          managerDirectSupervisorId: updatedValues.directSupervisorUid || null,
+          managerDirectSupervisorName: updatedValues.directSupervisorName || null,
+          brandId: updatedValues.brandId,
+          divisionId: updatedValues.divisionId,
+          divisionName: updatedValues.divisionName
+        }, { merge: true });
+        const otherManagersQuery = query(
+          collection(firestore, 'users'),
+          where('structuralLevel', '==', 'division_manager'),
+          where('brandId', '==', updatedValues.brandId),
+          where('divisionId', '==', updatedValues.divisionId)
+        );
+        const snap = await getDocs(otherManagersQuery);
+        for (const docObj of snap.docs) {
+          if (docObj.id !== employeeId) {
+            const resetData = {
+              isDivisionManager: false,
+              structuralLevel: 'staff',
+              structuralPosition: 'Staff',
+              workRole: 'Staff',
+              updatedAt: serverTimestamp()
+            };
+            await setDoc(doc(firestore, 'users', docObj.id), resetData, { merge: true });
+            await setDoc(doc(firestore, 'employee_profiles', docObj.id), resetData, { merge: true });
+          }
+        }
+      } else if (!isDM && (normalizedData?.structuralPosition === 'division_manager' || normalizedData?.isDivisionManager)) {
+        if (normalizedData?.brandId && normalizedData?.divisionId) {
+          const oldDivRef = doc(firestore, 'brands', normalizedData.brandId, 'divisions', normalizedData.divisionId);
+          await setDoc(oldDivRef, {
+            managerId: null,
+            managerName: null,
+            managerEmployeeId: null,
+            managerDirectSupervisorId: null,
+            managerDirectSupervisorName: null,
+            managerDirectSupervisorTitle: null
+          }, { merge: true });
+        }
+      }
+      if (normalizedData?.structuralPosition === 'division_manager' && 
+          (normalizedData.brandId !== updatedValues.brandId || normalizedData.divisionId !== updatedValues.divisionId)) {
+        if (normalizedData.brandId && normalizedData.divisionId) {
+          const oldDivDocRef = doc(firestore, 'brands', normalizedData.brandId, 'divisions', normalizedData.divisionId);
+          await setDoc(oldDivDocRef, { managerId: "", managerName: "", managerEmployeeId: "" }, { merge: true });
+        }
+      }
+
       // Save history
       if (changes.length > 0) {
         const historyCol = collection(
@@ -1299,15 +1519,27 @@ export default function EmployeeDetailPage({
     );
   }
 
-  // Derive display name/email
+  // Derive display name/email — comprehensive fallback to survive identity field loss
   const fullName =
     empDoc?.fullName ||
-    profileDoc?.dataDiriIdentitas?.fullName ||
+    (empDoc as any)?.employeeName ||
+    (empDoc as any)?.name ||
+    profileDoc?.fullName ||
+    (profileDoc as any)?.employeeName ||
+    (profileDoc as any)?.name ||
+    (profileDoc as any)?.displayName ||
+    (profileDoc?.dataDiriIdentitas as any)?.namaLengkap ||
+    (profileDoc?.dataDiriIdentitas as any)?.namaPanggilan ||
+    (profileDoc?.dataDiriIdentitas as any)?.fullName ||
     userDoc?.fullName ||
-    "Karyawan Tidak Dikenal";
+    (userDoc as any)?.displayName ||
+    (userDoc as any)?.name ||
+    "Nama belum tersedia";
   const email =
     empDoc?.email ||
-    profileDoc?.dataDiriIdentitas?.personalEmail ||
+    profileDoc?.email ||
+    (profileDoc?.dataDiriIdentitas as any)?.personalEmail ||
+    (profileDoc?.dataDiriIdentitas as any)?.email ||
     userDoc?.email ||
     "";
   const completeness = calculateProfileCompleteness(profileDoc ?? null);
@@ -1446,6 +1678,7 @@ export default function EmployeeDetailPage({
     { id: "pendidikan", label: "Pendidikan", icon: GraduationCap },
     { id: "dokumen", label: "Dokumen", icon: FileText },
     { id: "hrd", label: "Kepegawaian HRD", icon: ShieldCheck },
+    { id: "lembur", label: "Riwayat Lembur", icon: ClipboardList },
     { id: "riwayat", label: "Riwayat", icon: History },
   ];
 
@@ -2205,11 +2438,8 @@ export default function EmployeeDetailPage({
                                 size="sm"
                                 className="w-full rounded-xl border-slate-800 bg-slate-900/50"
                                 onClick={() =>
-                                  window.open(
-                                    getEducationDocumentUrl(edu)!,
-                                    "_blank",
-                                  )
-                                }
+                                   handleOpenSecureUrl(getEducationDocumentUrl(edu))
+                                 }
                               >
                                 <Eye className="h-3 w-3 mr-2" /> Lihat Bukti
                                 Ijazah
@@ -2273,11 +2503,8 @@ export default function EmployeeDetailPage({
                                 size="sm"
                                 className="w-full rounded-xl border-slate-800 bg-slate-900/50"
                                 onClick={() =>
-                                  window.open(
-                                    getCertificationDocumentUrl(cert)!,
-                                    "_blank",
-                                  )
-                                }
+                                   handleOpenSecureUrl(getCertificationDocumentUrl(cert))
+                                 }
                               >
                                 <Eye className="h-3 w-3 mr-2" /> Lihat
                                 Sertifikat
@@ -2933,43 +3160,36 @@ export default function EmployeeDetailPage({
                                   control={form.control}
                                   name="brandId"
                                   render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                                        Brand / Perusahaan
-                                      </FormLabel>
-                                      <Select
-                                        onValueChange={(value) => {
-                                          field.onChange(value);
-                                          // Reset division and supervisor when brand changes
-                                          form.setValue("divisionId", "");
-                                          form.setValue(
-                                            "directSupervisorUid",
-                                            "",
-                                          );
-                                        }}
-                                        value={field.value}
-                                      >
-                                        <FormControl>
-                                          <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
-                                            <SelectValue placeholder="Pilih Brand" />
-                                          </SelectTrigger>
-                                        </FormControl>
-                                        <SelectContent className="bg-slate-900 border-slate-800">
-                                          {brands?.map((b) => (
-                                            <SelectItem
-                                              key={b.id!}
-                                              value={b.id!}
-                                            >
-                                              {b.name}
-                                            </SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
-                                      <p className="text-xs text-slate-500 mt-1">
-                                        Pilih perusahaan/brand tempat karyawan
-                                        ditempatkan.
-                                      </p>
-                                    </FormItem>
+                                      <FormItem>
+                                        <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                          Brand / Perusahaan
+                                        </FormLabel>
+                                        <Select
+                                          onValueChange={(value) => {
+                                            field.onChange(value);
+                                            // Reset division and supervisor when brand changes
+                                            form.setValue("divisionId", "");
+                                            form.setValue("directSupervisorUid", "");
+                                          }}
+                                          value={field.value}
+                                        >
+                                          <FormControl>
+                                            <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
+                                              <SelectValue placeholder="Pilih Brand" />
+                                            </SelectTrigger>
+                                          </FormControl>
+                                          <SelectContent className="bg-slate-900 border-slate-800">
+                                            {brands?.map((b) => (
+                                              <SelectItem key={b.id!} value={b.id!}>
+                                                {b.name}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                        <p className="text-xs text-slate-500 mt-1">
+                                          Pilih perusahaan/brand tempat karyawan ditempatkan.
+                                        </p>
+                                      </FormItem>
                                   )}
                                 />
 
@@ -2978,47 +3198,40 @@ export default function EmployeeDetailPage({
                                   control={form.control}
                                   name="divisionId"
                                   render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                                        Divisi
-                                      </FormLabel>
-                                      <Select
-                                        onValueChange={(value) => {
-                                          field.onChange(value);
-                                          // Reset supervisor when division changes
-                                          form.setValue(
-                                            "directSupervisorUid",
-                                            "",
-                                          );
-                                        }}
-                                        value={field.value}
-                                        disabled={!form.watch("brandId")}
-                                      >
-                                        <FormControl>
-                                          <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
-                                            <SelectValue placeholder="Pilih Divisi" />
-                                          </SelectTrigger>
-                                        </FormControl>
-                                        <SelectContent className="bg-slate-900 border-slate-800">
-                                          {divisions.map((d) => (
-                                            <SelectItem key={d.id} value={d.id}>
-                                              {d.name}
-                                            </SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
-                                      <p className="text-xs text-slate-500 mt-1">
-                                        Divisi akan menentukan struktur tim dan
-                                        atasan langsung karyawan.
-                                      </p>
-                                      {divisions.length === 0 && (
-                                        <p className="text-xs text-amber-600 mt-2">
-                                          ⚠️ Belum ada divisi untuk brand ini.
-                                          Tambahkan terlebih dahulu di Master
-                                          Data.
+                                      <FormItem>
+                                        <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                          Divisi
+                                        </FormLabel>
+                                        <Select
+                                          onValueChange={(value) => {
+                                            field.onChange(value);
+                                            form.setValue("directSupervisorUid", "");
+                                          }}
+                                          value={field.value}
+                                          disabled={!form.watch("brandId")}
+                                        >
+                                          <FormControl>
+                                            <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
+                                              <SelectValue placeholder="Pilih Divisi" />
+                                            </SelectTrigger>
+                                          </FormControl>
+                                          <SelectContent className="bg-slate-900 border-slate-800">
+                                            {divisions.map((d) => (
+                                              <SelectItem key={d.id} value={d.id}>
+                                                {d.name}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                        <p className="text-xs text-slate-500 mt-1">
+                                          Divisi akan menentukan struktur tim dan atasan langsung karyawan.
                                         </p>
-                                      )}
-                                    </FormItem>
+                                        {divisions.length === 0 && (
+                                          <p className="text-xs text-amber-600 mt-2">
+                                            ⚠️ Belum ada divisi untuk brand ini.
+                                          </p>
+                                        )}
+                                      </FormItem>
                                   )}
                                 />
 
@@ -3027,34 +3240,35 @@ export default function EmployeeDetailPage({
                                   control={form.control}
                                   name="structuralPosition"
                                   render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                                        Jabatan Struktural
-                                      </FormLabel>
-                                      <Select
-                                        onValueChange={field.onChange}
-                                        value={field.value}
-                                      >
-                                        <FormControl>
-                                          <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
-                                            <SelectValue placeholder="Pilih Jabatan Struktural" />
-                                          </SelectTrigger>
-                                        </FormControl>
-                                        <SelectContent className="bg-slate-900 border-slate-800">
-                                          <SelectItem value="staff">
-                                            Staff
-                                          </SelectItem>
-                                          <SelectItem value="division_manager">
-                                            Manager Divisi
-                                          </SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                      <p className="text-xs text-slate-500 mt-1">
-                                        Jabatan struktural digunakan untuk
-                                        membedakan level tanggung jawab
-                                        karyawan.
-                                      </p>
-                                    </FormItem>
+                                      <FormItem>
+                                        <div className="flex items-center gap-2">
+                                          <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                            Jabatan Struktural
+                                          </FormLabel>
+                                        </div>
+                                        <Select
+                                          onValueChange={(val) => {
+                                            field.onChange(val);
+                                            form.setValue("directSupervisorUid", "");
+                                          }}
+                                          value={field.value}
+                                        >
+                                          <FormControl>
+                                            <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
+                                              <SelectValue placeholder="Pilih Jabatan Struktural" />
+                                            </SelectTrigger>
+                                          </FormControl>
+                                          <SelectContent className="bg-slate-900 border-slate-800">
+                                            <SelectItem value="staff">Staff</SelectItem>
+                                            <SelectItem value="supervisor">Supervisor</SelectItem>
+                                            <SelectItem value="division_manager">Manager Divisi</SelectItem>
+                                            <SelectItem value="management">Direktur/Manajemen</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                        <p className="text-xs text-slate-500 mt-1">
+                                          Jabatan struktural digunakan untuk membedakan level tanggung jawab dan memfilter daftar atasan.
+                                        </p>
+                                      </FormItem>
                                   )}
                                 />
 
@@ -3087,49 +3301,95 @@ export default function EmployeeDetailPage({
                                   control={form.control}
                                   name="directSupervisorUid"
                                   render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                                        Atasan Langsung
-                                      </FormLabel>
-                                      <Select
-                                        onValueChange={field.onChange}
-                                        value={field.value}
-                                        disabled={
-                                          !form.watch("brandId") ||
-                                          !form.watch("divisionId")
-                                        }
-                                      >
-                                        <FormControl>
-                                          <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
-                                            <SelectValue placeholder="Pilih Atasan Langsung" />
-                                          </SelectTrigger>
-                                        </FormControl>
-                                        <SelectContent className="bg-slate-900 border-slate-800">
-                                          {managers.map((m) => (
-                                            <SelectItem
-                                              key={m.uid}
-                                              value={m.uid}
-                                            >
-                                              {m.fullName}
-                                            </SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
-                                      <p className="text-xs text-slate-500 mt-1">
-                                        Atasan langsung diambil dari Manager
-                                        Divisi sesuai brand dan divisi karyawan.
-                                      </p>
-                                      {managers.length === 0 &&
-                                        form.watch("divisionId") && (
-                                          <p className="text-xs text-amber-600 mt-2">
-                                            ⚠️ Belum ada Manager Divisi untuk
-                                            divisi ini. Silakan tetapkan melalui
-                                            User Management.
-                                          </p>
+                                      <FormItem>
+                                        <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                          Atasan Langsung
+                                        </FormLabel>
+                                        <Select
+                                          onValueChange={field.onChange}
+                                          value={field.value}
+                                          disabled={
+                                            (!form.watch("brandId") || !form.watch("divisionId")) && form.watch("structuralPosition") !== "management"
+                                          }
+                                        >
+                                          <FormControl>
+                                            <SelectTrigger className="bg-slate-900/50 border-slate-800 h-12 rounded-xl">
+                                              <SelectValue placeholder={form.watch("structuralPosition") === "management" ? "Tidak Wajib untuk Level Manajemen" : "Pilih Atasan Langsung"} />
+                                            </SelectTrigger>
+                                          </FormControl>
+                                          <SelectContent className="bg-slate-900 border-slate-800 max-h-56">
+                                            {(isOverrideActive ? allPossibleSupervisors : managers).map((m) => (
+                                              <SelectItem
+                                                key={m.uid}
+                                                value={m.uid}
+                                              >
+                                                {m.fullName}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                        
+                                        <p className="text-xs text-slate-500 mt-1">
+                                          {isOverrideActive 
+                                            ? "Pilih atasan langsung dari seluruh karyawan aktif (mode override)."
+                                            : "Atasan otomatis disesuaikan berdasarkan Jabatan Struktural yang dipilih."}
+                                        </p>
+
+                                        {warningNoManager && form.watch("divisionId") && form.watch("structuralPosition") !== "management" && (
+                                          <div className="flex items-center gap-2 mt-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-medium">
+                                            <span className="text-lg">⚠️</span>
+                                            <span>Belum ada atasan dengan level yang sesuai. Silakan atur dulu karyawan level Direktur/Manajemen atau Manager Divisi.</span>
+                                          </div>
                                         )}
-                                    </FormItem>
+
+                                        {form.watch("brandId") && form.watch("divisionId") && (
+                                          <div className="flex items-center space-x-2 py-3 mt-2 border-t border-slate-800/50">
+                                            <input
+                                              type="checkbox"
+                                              id="override-manager"
+                                              checked={isOverrideActive}
+                                              onChange={(e) => {
+                                                setIsOverrideActive(e.target.checked);
+                                                if (!e.target.checked) {
+                                                  form.setValue("directManagerOverrideReason", "");
+                                                  if (managers.length > 0) {
+                                                    form.setValue("directSupervisorUid", managers[0].uid);
+                                                  } else {
+                                                    form.setValue("directSupervisorUid", "");
+                                                  }
+                                                }
+                                              }}
+                                              className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-slate-900 cursor-pointer"
+                                            />
+                                            <label htmlFor="override-manager" className="text-xs font-bold uppercase tracking-widest text-slate-400 cursor-pointer">
+                                              Override Atasan Langsung (Di luar Master Organisasi)
+                                            </label>
+                                          </div>
+                                        )}
+                                      </FormItem>
                                   )}
                                 />
+
+                                {isOverrideActive && (
+                                  <FormField
+                                    control={form.control}
+                                    name="directManagerOverrideReason"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                          Alasan Override Atasan Langsung <span className="text-red-500">*</span>
+                                        </FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            {...field}
+                                            placeholder="Wajib diisi: Alasan atasan berbeda dari master struktur..."
+                                            className="bg-slate-900/50 border-slate-800 h-12 rounded-xl focus:border-amber-500/50"
+                                          />
+                                        </FormControl>
+                                      </FormItem>
+                                    )}
+                                  />
+                                )}
 
                                 {/* Sistem Kerja */}
                                 <FormField
@@ -4389,6 +4649,121 @@ export default function EmployeeDetailPage({
                     </Form>
                   </DialogContent>
                 </Dialog>
+              </TabsContent>
+
+              <TabsContent value="lembur">
+                <Card className="border-slate-800 bg-slate-950/40 rounded-[2rem] shadow-2xl backdrop-blur-xl">
+                  <CardHeader className="border-b border-slate-800/50 p-6 flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle className="text-lg font-bold text-white flex items-center gap-2">
+                        <ClipboardList className="h-5 w-5 text-emerald-400" />
+                        Riwayat Pengajuan Lembur
+                      </CardTitle>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Berikut adalah daftar pengajuan lembur karyawan ini beserta durasi payroll dan statusnya.
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="bg-emerald-500/10 border-emerald-500/20 text-emerald-400">
+                      Total: {overtimeData?.length || 0} Lembur
+                    </Badge>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {overtimeData && overtimeData.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader className="bg-slate-900/50">
+                            <TableRow className="border-slate-800/50 hover:bg-slate-900/50">
+                              <TableHead className="text-[10px] uppercase font-black text-slate-400 h-12 px-6">
+                                Tanggal
+                              </TableHead>
+                              <TableHead className="text-[10px] uppercase font-black text-slate-400 h-12">
+                                Jam Kerja
+                              </TableHead>
+                              <TableHead className="text-[10px] uppercase font-black text-slate-400 h-12">
+                                Durasi Diajukan
+                              </TableHead>
+                              <TableHead className="text-[10px] uppercase font-black text-slate-400 h-12 text-emerald-400">
+                                Durasi Final Payroll
+                              </TableHead>
+                              <TableHead className="text-[10px] uppercase font-black text-slate-400 h-12">
+                                Lokasi
+                              </TableHead>
+                              <TableHead className="text-[10px] uppercase font-black text-slate-400 h-12">
+                                Status
+                              </TableHead>
+                              <TableHead className="text-[10px] uppercase font-black text-slate-400 h-12 px-6">
+                                Catatan HRD
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {overtimeData.map((ov: any, index: number) => {
+                              const ovDate = ov.overtimeDate
+                                ? (typeof ov.overtimeDate === "object" && typeof ov.overtimeDate.toDate === "function" 
+                                    ? ov.overtimeDate.toDate() 
+                                    : new Date(ov.overtimeDate))
+                                : null;
+                              
+                              const hoursSubmitted = Math.floor((ov.totalDurationMinutes || 0) / 60);
+                              const minsSubmitted = (ov.totalDurationMinutes || 0) % 60;
+                              const submittedLabel = hoursSubmitted > 0 
+                                ? `${hoursSubmitted} jam ${minsSubmitted} menit` 
+                                : `${minsSubmitted} menit`;
+
+                              const finalMinutes = ov.approvedMinutesFinal !== undefined && ov.approvedMinutesFinal !== null
+                                ? ov.approvedMinutesFinal 
+                                : null;
+                              
+                              const finalLabel = finalMinutes !== null
+                                ? (Math.floor(finalMinutes / 60) > 0 
+                                    ? `${Math.floor(finalMinutes / 60)} jam ${finalMinutes % 60} menit` 
+                                    : `${finalMinutes % 60} menit`)
+                                : "-";
+
+                              return (
+                                <TableRow
+                                  key={ov.id || index}
+                                  className="border-slate-800/50 hover:bg-slate-900/20 transition-colors"
+                                >
+                                  <TableCell className="px-6 font-medium text-slate-200 text-sm">
+                                    {ovDate ? format(ovDate, "eeee, dd MMMM yyyy", { locale: idLocale }) : "-"}
+                                  </TableCell>
+                                  <TableCell className="text-slate-300 text-sm font-semibold">
+                                    {ov.startTime || "-"} - {ov.endTime || "-"}
+                                  </TableCell>
+                                  <TableCell className="text-slate-400 text-sm">
+                                    {submittedLabel}
+                                  </TableCell>
+                                  <TableCell className="text-emerald-400 text-sm font-bold">
+                                    {finalLabel}
+                                  </TableCell>
+                                  <TableCell className="text-slate-300 text-sm capitalize">
+                                    {ov.location === "kantor" ? "💻 Kantor (WFO)" 
+                                      : ov.location === "remote" ? "🏡 Remote (WFH)" 
+                                      : ov.location === "site" ? "🚗 Dinas" 
+                                      : ov.location || "-"}
+                                  </TableCell>
+                                  <TableCell>
+                                    <OvertimeStatusBadge status={ov.status} payrollStatus={ov.payrollStatus} />
+                                  </TableCell>
+                                  <TableCell className="px-6 text-xs text-slate-400 italic max-w-[200px] truncate" title={ov.hrdNotes || ""}>
+                                    {ov.hrdNotes ? `"${ov.hrdNotes}"` : "-"}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center p-12 text-center">
+                        <ClipboardList className="h-12 w-12 text-slate-600 mb-3 animate-pulse" />
+                        <p className="text-slate-400 font-medium text-sm">Belum Ada Riwayat Lembur</p>
+                        <p className="text-slate-500 text-xs mt-1">Karyawan ini belum memiliki riwayat atau pengajuan lembur yang tercatat.</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               </TabsContent>
 
               <TabsContent value="riwayat">
