@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useCollection, useFirestore, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
-import { collection, query, doc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { collection, query, doc, serverTimestamp, writeBatch, updateDoc } from 'firebase/firestore';
 import { useAuth } from '@/providers/auth-provider';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -13,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { sendLeaveNotification } from '@/lib/leave-notifications';
 import { type LeaveRequest, type LeaveBalance, type LeaveBalanceAdjustment } from '@/lib/types';
@@ -61,20 +62,16 @@ export default function HrdLeaveApprovalPage() {
   const [actionType, setActionType] = useState<'approve' | 'reject' | 'revise' | null>(null);
   const [notes, setNotes] = useState('');
   
-  const [isAdjustmentOpen, setIsAdjustmentOpen] = useState(false);
-  const [adjustmentValue, setAdjustmentValue] = useState<number>(0);
-  const [adjustmentReason, setAdjustmentReason] = useState('');
-
   const [isSaving, setIsSaving] = useState(false);
 
-  // Calendar State
-  const [calendarMonth, setCalendarMonth] = useState<number>(new Date().getMonth());
-  const [calendarYear, setCalendarYear] = useState<number>(new Date().getFullYear());
-  
-  // Base rate assumption for Cashout Estimates (can be configured)
-  const [ratePerDay, setRatePerDay] = useState<number>(100000);
+  // Calendar State completely removed
 
   // Interactive filter state
+  const [isCashoutOpen, setIsCashoutOpen] = useState(false);
+  const [cashoutDays, setCashoutDays] = useState<number>(0);
+  const [cashoutAmount, setCashoutAmount] = useState<number>(0);
+  const [cashoutReason, setCashoutReason] = useState('Pencairan Nilai Cuti ke Payroll');
+  
   const [showFilters, setShowFilters] = useState(false);
   const [filterBrand, setFilterBrand] = useState('all');
   const [filterDivision, setFilterDivision] = useState('all');
@@ -119,42 +116,36 @@ export default function HrdLeaveApprovalPage() {
   }, [firestore]);
   const { data: adjustments, isLoading: isLoadingAdjustments, mutate: mutateAdjustments } = useCollection<LeaveBalanceAdjustment>(adjustmentsQuery);
 
+  // 5. Fetch master brands and divisions
+  const brandsQuery = useMemoFirebase(() => collection(firestore, 'brands'), [firestore]);
+  const { data: masterBrands } = useCollection<any>(brandsQuery);
+
+  const divisionsQuery = useMemoFirebase(() => {
+    if (filterBrand === 'all') return null;
+    return collection(firestore, 'brands', filterBrand, 'divisions');
+  }, [firestore, filterBrand]);
+  const { data: masterDivisions } = useCollection<any>(divisionsQuery);
+
   // Filter unique dropdown options dynamically
   const brandOptions = useMemo(() => {
-    const set = new Set<string>();
-    if (employeeProfiles) {
-      employeeProfiles.forEach(p => {
-        const bName = p.hrdEmploymentInfo?.brandName || p.hrdEmploymentInfo?.brand || p.brandName;
-        if (bName) set.add(bName);
+    const map = new Map<string, {id: string, name: string}>();
+    if (masterBrands) {
+      masterBrands.forEach(b => {
+        if (b.name) map.set(b.id, { id: b.id, name: b.name });
       });
     }
-    if (requests) {
-      requests.forEach(r => {
-        if (r.brandName) set.add(r.brandName);
-      });
-    }
-    return Array.from(set).sort();
-  }, [employeeProfiles, requests]);
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [masterBrands]);
 
   const divisionOptions = useMemo(() => {
-    const set = new Set<string>();
-    if (employeeProfiles) {
-      employeeProfiles.forEach(p => {
-        const bName = p.hrdEmploymentInfo?.brandName || p.hrdEmploymentInfo?.brand || p.brandName;
-        if (filterBrand !== 'all' && bName !== filterBrand) return;
-        
-        const dName = p.hrdEmploymentInfo?.divisionName || p.hrdEmploymentInfo?.division || p.divisionName;
-        if (dName) set.add(dName);
+    const map = new Map<string, {id: string, name: string, brandId: string}>();
+    if (masterDivisions && filterBrand !== 'all') {
+      masterDivisions.forEach(d => {
+        if (d.name) map.set(d.id, { id: d.id, name: d.name, brandId: filterBrand });
       });
     }
-    if (requests) {
-      requests.forEach(r => {
-        if (filterBrand !== 'all' && r.brandName !== filterBrand) return;
-        if (r.divisionName) set.add(r.divisionName);
-      });
-    }
-    return Array.from(set).sort();
-  }, [employeeProfiles, requests, filterBrand]);
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [masterDivisions, filterBrand]);
 
   const managerOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -234,13 +225,17 @@ export default function HrdLeaveApprovalPage() {
         const reasonMatch = r.reason?.toLowerCase().includes(queryStr);
         if (!nameMatch && !reasonMatch) return false;
       }
+      const profile = employeeProfilesMap.get(r.employeeId);
       // 2. Brand
       if (filterBrand !== 'all') {
-        if (r.brandName !== filterBrand) return false;
+        const bBrandId = r.brandId || profile?.hrdEmploymentInfo?.brandId || profile?.brandId || '';
+        if (bBrandId !== filterBrand) return false;
       }
       // 3. Division
       if (filterDivision !== 'all') {
-        if (r.divisionName !== filterDivision) return false;
+        const fDivId = filterDivision.split('__')[1] || filterDivision;
+        const bDivId = r.divisionId || profile?.hrdEmploymentInfo?.divisionId || profile?.divisionId || '';
+        if (bDivId !== fDivId) return false;
       }
       // 4. Leave Type
       if (filterLeaveType !== 'all') {
@@ -288,39 +283,46 @@ export default function HrdLeaveApprovalPage() {
     });
   }, [filteredRequests]);
 
-  // Tab 3 List: Employee Quota balances filtered
+  // Tab 3 List: Employee Quota balances filtered (Sourced from Employee Profiles to show uninitialized ones)
   const filteredBalances = useMemo(() => {
-    if (!balances) return [];
-    return balances.filter(b => {
-      // 1. Search text
-      if (filterSearch) {
-        if (!b.employeeName?.toLowerCase().includes(filterSearch.toLowerCase())) return false;
-      }
-      const profile = employeeProfilesMap.get(b.employeeId);
-      const bBrand = (b as any).brandName || profile?.hrdEmploymentInfo?.brandName || profile?.hrdEmploymentInfo?.brand || '';
-      const bDivision = (b as any).divisionName || profile?.hrdEmploymentInfo?.divisionName || profile?.hrdEmploymentInfo?.division || '';
-      const bEmploymentType = b.employmentType || profile?.hrdEmploymentInfo?.employeeType || '';
-      const contractMonths = b.contractDurationMonths || profile?.hrdEmploymentInfo?.contractDurationMonths || 0;
+    if (!employeeProfiles) return [];
+    
+    const balanceMap = new Map<string, any>();
+    if (balances) balances.forEach(b => balanceMap.set(b.employeeId, b));
+
+    const eligible = employeeProfiles.filter(p => {
+      const bEmploymentType = p.hrdEmploymentInfo?.employeeType || '';
+      const contractMonths = p.hrdEmploymentInfo?.contractDurationMonths || 0;
       
-      // Only show Tetap and Kontrak >= 12 months
       const isTetap = bEmploymentType.toLowerCase().includes('tetap');
       const isEligibleKontrak = bEmploymentType.toLowerCase().includes('kontrak') && contractMonths >= 12;
       
-      if (!isTetap && !isEligibleKontrak) {
-        return false;
+      if (!isTetap && !isEligibleKontrak) return false;
+
+      // 1. Search text
+      if (filterSearch) {
+        if (!p.fullName?.toLowerCase().includes(filterSearch.toLowerCase())) return false;
       }
 
       // 2. Brand
       if (filterBrand !== 'all') {
-        if (bBrand !== filterBrand) return false;
+        const bBrandId = p.hrdEmploymentInfo?.brandId || p.brandId || '';
+        if (bBrandId !== filterBrand) return false;
       }
       // 3. Division
       if (filterDivision !== 'all') {
-        if (bDivision !== filterDivision) return false;
+        const fDivId = filterDivision.split('__')[1] || filterDivision;
+        const bDivId = p.hrdEmploymentInfo?.divisionId || p.divisionId || '';
+        if (bDivId !== fDivId) return false;
       }
       return true;
     });
-  }, [balances, filterSearch, filterBrand, filterDivision, employeeProfilesMap]);
+
+    return eligible.map(p => {
+      const bal = balanceMap.get(p.uid || p.id);
+      return { profile: p, balance: bal || null };
+    });
+  }, [employeeProfiles, balances, filterSearch, filterBrand, filterDivision]);
 
   // Tab 4 List: Audit Mutasi Saldo Cuti ledger logs filtered
   const sortedAdjustmentsFiltered = useMemo(() => {
@@ -328,12 +330,14 @@ export default function HrdLeaveApprovalPage() {
     
     const processed = adjustments.map(a => {
       const profile = employeeProfilesMap.get(a.employeeId);
-      const bBrand = (a as any).brandName || profile?.hrdEmploymentInfo?.brandName || profile?.hrdEmploymentInfo?.brand || '';
-      const bDivision = (a as any).divisionName || profile?.hrdEmploymentInfo?.divisionName || profile?.hrdEmploymentInfo?.division || '';
+      const bBrandId = (a as any).brandId || profile?.hrdEmploymentInfo?.brandId || profile?.brandId || '';
+      const bDivisionId = (a as any).divisionId || profile?.hrdEmploymentInfo?.divisionId || profile?.divisionId || '';
       return {
         ...a,
-        brandName: bBrand,
-        divisionName: bDivision
+        brandId: bBrandId,
+        divisionId: bDivisionId,
+        brandName: (a as any).brandName || profile?.hrdEmploymentInfo?.brandName || profile?.brandName || '-',
+        divisionName: (a as any).divisionName || profile?.hrdEmploymentInfo?.divisionName || profile?.divisionName || '-'
       };
     });
 
@@ -347,11 +351,12 @@ export default function HrdLeaveApprovalPage() {
       }
       // 2. Brand
       if (filterBrand !== 'all') {
-        if (a.brandName !== filterBrand) return false;
+        if (a.brandId !== filterBrand) return false;
       }
       // 3. Division
       if (filterDivision !== 'all') {
-        if (a.divisionName !== filterDivision) return false;
+        const fDivId = filterDivision.split('__')[1] || filterDivision;
+        if (a.divisionId !== fDivId) return false;
       }
       // 4. Month/Year filter
       if (filterMonth !== 'all' || filterYear !== 'all') {
@@ -513,58 +518,107 @@ export default function HrdLeaveApprovalPage() {
     }
   };
 
-  // Balance manual adjustment workflow (strictly for special overrides)
-  const handleOpenAdjustment = (bal: LeaveBalance) => {
-    setSelectedBalance(bal);
-    setAdjustmentValue(0);
-    setAdjustmentReason('');
-    setIsAdjustmentOpen(true);
+
+
+  const handleInitializeBalance = async (profile: any) => {
+    if (!firestore || !userProfile) return;
+    setIsSaving(true);
+    try {
+      const balanceRef = doc(firestore, 'leave_balances', profile.uid || profile.id);
+      const bBrandId = profile.hrdEmploymentInfo?.brandId || profile.brandId || '';
+      const bBrandName = profile.hrdEmploymentInfo?.brandName || profile.brandName || '';
+      const bDivId = profile.hrdEmploymentInfo?.divisionId || profile.divisionId || '';
+      const bDivName = profile.hrdEmploymentInfo?.divisionName || profile.divisionName || '';
+      
+      const newBal = {
+        employeeId: profile.uid || profile.id,
+        employeeName: profile.fullName || '',
+        brandId: bBrandId,
+        brandName: bBrandName,
+        divisionId: bDivId,
+        divisionName: bDivName,
+        employmentType: profile.hrdEmploymentInfo?.employeeType || '',
+        contractDurationMonths: profile.hrdEmploymentInfo?.contractDurationMonths || 0,
+        initialQuota: 12, // Default
+        allocatedLeave: 0,
+        pendingLeave: 0,
+        currentBalance: 12,
+        annualAllowance: 12,
+        usedDays: 0,
+        pendingDays: 0,
+        remainingDays: 12,
+        cashoutRatePerDay: 0,
+        updatedAt: serverTimestamp(),
+      };
+      
+      const batch = writeBatch(firestore);
+      batch.set(balanceRef, newBal);
+      
+      const adjRef = doc(collection(firestore, 'leave_balance_adjustments'));
+      batch.set(adjRef, {
+        employeeId: newBal.employeeId,
+        employeeName: newBal.employeeName,
+        brandId: newBal.brandId,
+        brandName: newBal.brandName,
+        divisionId: newBal.divisionId,
+        divisionName: newBal.divisionName,
+        previousBalance: 0,
+        newBalance: 12,
+        adjustmentValue: 12,
+        reason: 'Inisialisasi kuota cuti tahunan awal',
+        type: 'inisialisasi_kuota',
+        adjustedBy: userProfile.uid,
+        adjustedByName: userProfile.fullName,
+        createdAt: serverTimestamp()
+      });
+      
+      await batch.commit();
+      toast({ title: "Saldo Diinisialisasi", description: `Saldo cuti ${profile.fullName} berhasil dibuat.` });
+      mutateBalances();
+      mutateAdjustments();
+    } catch(e:any) {
+      toast({ variant: 'destructive', title: "Gagal Inisialisasi", description: e.message });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleConfirmAdjustment = async () => {
+  const handleOpenCashout = (bal: any, profile: any) => {
+    setSelectedBalance(bal);
+    setCashoutDays(0);
+    setCashoutAmount(0);
+    setCashoutReason('');
+    setIsCashoutOpen(true);
+  };
+
+  const handleConfirmCashout = async () => {
     if (!selectedBalance || !userProfile || !firestore) return;
-
-    if (adjustmentValue === 0) {
-      toast({ variant: 'destructive', title: "Validasi Gagal", description: "Nilai penyesuaian tidak boleh nol." });
+    if (cashoutDays <= 0) {
+      toast({ variant: 'destructive', title: "Validasi Gagal", description: "Jumlah hari untuk dicashout harus lebih dari 0." });
       return;
     }
-
-    if (adjustmentReason.trim().length < 5) {
-      toast({ variant: 'destructive', title: "Validasi Gagal", description: "Alasan penyesuaian wajib diisi (minimal 5 karakter)." });
+    if (cashoutAmount <= 0) {
+      toast({ variant: 'destructive', title: "Validasi Gagal", description: "Nominal cashout harus lebih dari 0." });
       return;
     }
-
+    const prevRemaining = (selectedBalance as any).remainingDays || selectedBalance.currentBalance || 0;
+    if (cashoutDays > prevRemaining) {
+      toast({ variant: 'destructive', title: "Validasi Gagal", description: "Hari yang dicashout melebihi sisa saldo saat ini." });
+      return;
+    }
     setIsSaving(true);
     try {
       const balanceRef = doc(firestore, 'leave_balances', selectedBalance.employeeId);
-      const prevBalVal = selectedBalance.currentBalance || 0;
-      const prevRemaining = (selectedBalance as any).remainingDays || 0;
-      const newBalVal = prevBalVal + adjustmentValue;
-      const newRemaining = prevRemaining + adjustmentValue;
-
-      if (newBalVal < 0) {
-        toast({ variant: 'destructive', title: "Validasi Gagal", description: "Saldo akhir tidak boleh kurang dari 0." });
-        setIsSaving(false);
-        return;
-      }
-
-      const prevAllowance = selectedBalance.initialQuota || 0;
-      const prevAnnual = (selectedBalance as any).annualAllowance || 0;
-      const newAllowance = prevAllowance + (adjustmentValue > 0 ? adjustmentValue : 0);
-      const newAnnual = prevAnnual + (adjustmentValue > 0 ? adjustmentValue : 0);
+      const newRemaining = prevRemaining - cashoutDays;
 
       const batch = writeBatch(firestore);
 
-      // Update currentBalance and initialQuota (both sets of fields for safety)
       batch.update(balanceRef, {
-        currentBalance: newBalVal,
+        currentBalance: newRemaining,
         remainingDays: newRemaining,
-        initialQuota: newAllowance,
-        annualAllowance: newAnnual,
         updatedAt: serverTimestamp()
       } as any);
 
-      // Write adjustment history log
       const adjRef = doc(collection(firestore, 'leave_balance_adjustments'));
       batch.set(adjRef, {
         employeeId: selectedBalance.employeeId,
@@ -573,11 +627,12 @@ export default function HrdLeaveApprovalPage() {
         brandName: (selectedBalance as any).brandName || '',
         divisionId: (selectedBalance as any).divisionId || '',
         divisionName: (selectedBalance as any).divisionName || '',
-        previousBalance: prevBalVal,
-        newBalance: newBalVal,
-        adjustmentValue: adjustmentValue,
-        reason: adjustmentReason,
-        type: 'penyesuaian_manual',
+        previousBalance: prevRemaining,
+        newBalance: newRemaining,
+        adjustmentValue: -cashoutDays,
+        cashoutAmount: cashoutAmount,
+        reason: cashoutReason,
+        type: 'cashout_cuti',
         adjustedBy: userProfile.uid,
         adjustedByName: userProfile.fullName,
         createdAt: serverTimestamp()
@@ -585,28 +640,12 @@ export default function HrdLeaveApprovalPage() {
 
       await batch.commit();
 
-      // Trigger standard status update notification to the employee
-      const notificationRef = doc(collection(firestore, "users", selectedBalance.employeeId, "notifications"));
-      await setDocumentNonBlocking(notificationRef, {
-        userId: selectedBalance.employeeId,
-        type: "bank_change_request", // uses safe supported enum
-        module: "employee",
-        title: "Penyesuaian Saldo Cuti",
-        message: `Saldo cuti tahunan Anda telah disesuaikan oleh HRD menjadi ${newBalVal} Hari. Keterangan: ${adjustmentReason}`,
-        targetType: "user",
-        targetId: selectedBalance.employeeId,
-        actionUrl: "/admin/karyawan/pengajuan-cuti",
-        createdBy: userProfile.uid,
-        isRead: false,
-        createdAt: serverTimestamp()
-      }, { merge: true });
-
-      toast({ title: "Saldo Berhasil Disesuaikan", description: `Saldo cuti ${selectedBalance.employeeName} kini bernilai ${newBalVal} hari.` });
-      setIsAdjustmentOpen(false);
+      toast({ title: "Cashout Berhasil", description: `Saldo cuti ${selectedBalance.employeeName} dikurangi ${cashoutDays} hari sejumlah Rp ${cashoutAmount.toLocaleString('id-ID')}.` });
+      setIsCashoutOpen(false);
       mutateBalances();
       mutateAdjustments();
     } catch (e: any) {
-      toast({ variant: 'destructive', title: "Gagal Menyesuaikan Saldo", description: e.message });
+      toast({ variant: 'destructive', title: "Gagal", description: e.message });
     } finally {
       setIsSaving(false);
     }
@@ -652,93 +691,7 @@ export default function HrdLeaveApprovalPage() {
     }
   };
 
-  // Calendar render helpers
-  const handlePrevMonth = () => {
-    if (calendarMonth === 0) {
-      setCalendarMonth(11);
-      setCalendarYear(calendarYear - 1);
-    } else {
-      setCalendarMonth(calendarMonth - 1);
-    }
-  };
 
-  const handleNextMonth = () => {
-    if (calendarMonth === 11) {
-      setCalendarMonth(0);
-      setCalendarYear(calendarYear + 1);
-    } else {
-      setCalendarMonth(calendarMonth + 1);
-    }
-  };
-
-  // Custom calendar matrix computation (Standard premium month calendar)
-  const calendarCells = useMemo(() => {
-    const daysInMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate();
-    const firstDay = new Date(calendarYear, calendarMonth, 1).getDay();
-
-    const cells: Date[] = [];
-    // Previous month padding
-    const prevMonth = calendarMonth === 0 ? 11 : calendarMonth - 1;
-    const prevYear = calendarMonth === 0 ? calendarYear - 1 : calendarYear;
-    const daysInPrevMonth = new Date(prevYear, prevMonth + 1, 0).getDate();
-
-    for (let i = firstDay - 1; i >= 0; i--) {
-      cells.push(new Date(prevYear, prevMonth, daysInPrevMonth - i));
-    }
-    // Current month days
-    for (let i = 1; i <= daysInMonth; i++) {
-      cells.push(new Date(calendarYear, calendarMonth, i));
-    }
-    // Next month padding to reach full standard grid of 42 cells
-    const nextMonth = calendarMonth === 11 ? 0 : calendarMonth + 1;
-    const nextYear = calendarMonth === 11 ? calendarYear + 1 : calendarYear;
-    const remainingCells = 42 - cells.length;
-    for (let i = 1; i <= remainingCells; i++) {
-      cells.push(new Date(nextYear, nextMonth, i));
-    }
-    return cells;
-  }, [calendarMonth, calendarYear]);
-
-  const getActiveRequestsForDate = (date: Date) => {
-    if (!requests) return [];
-    const target = new Date(date);
-    target.setHours(0, 0, 0, 0);
-
-    return requests.filter(r => {
-      if (!['approved', 'approved_by_hrd', 'active_leave', 'completed'].includes(r.status)) return false;
-      try {
-        const start = r.startDate.toDate();
-        start.setHours(0, 0, 0, 0);
-        const end = r.endDate.toDate();
-        end.setHours(23, 59, 59, 999);
-        return target >= start && target <= end;
-      } catch {
-        return false;
-      }
-    });
-  };
-
-  // List of active/approved leaves during this exact month
-  const activeLeavesThisMonthList = useMemo(() => {
-    if (!requests) return [];
-    return requests.filter(r => {
-      if (!['approved', 'approved_by_hrd', 'active_leave', 'completed'].includes(r.status)) return false;
-      try {
-        const start = r.startDate.toDate();
-        return start.getMonth() === calendarMonth && start.getFullYear() === calendarYear;
-      } catch {
-        return false;
-      }
-    }).sort((a, b) => a.startDate.toDate().getTime() - b.startDate.toDate().getTime());
-  }, [requests, calendarMonth, calendarYear]);
-
-  const getMonthName = (monthIdx: number) => {
-    const months = [
-      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
-    ];
-    return months[monthIdx];
-  };
 
   if (isLoadingRequests || isLoadingBalances || isLoadingAdjustments) {
     return (
@@ -799,7 +752,7 @@ export default function HrdLeaveApprovalPage() {
                   <UserCheck className="h-5 w-5" />
                 </div>
               </div>
-              <div className="mt-3 text-[10px] text-indigo-500 font-black tracking-wider uppercase bg-indigo-500/5 py-1 px-2 rounded w-fit">Antrean Validasi</div>
+              <div className="mt-3 text-[10px] text-indigo-500 font-black tracking-wider uppercase bg-indigo-500/5 py-1 px-2 rounded w-fit">Menunggu Keputusan</div>
             </CardContent>
           </Card>
 
@@ -814,7 +767,7 @@ export default function HrdLeaveApprovalPage() {
                   <CheckCircle2 className="h-5 w-5" />
                 </div>
               </div>
-              <div className="mt-3 text-[10px] text-emerald-600 font-black tracking-wider uppercase bg-emerald-500/5 py-1 px-2 rounded w-fit">Periode Aktif</div>
+              <div className="mt-3 text-[10px] text-emerald-600 font-black tracking-wider uppercase bg-emerald-500/5 py-1 px-2 rounded w-fit">Direncanakan & Berjalan</div>
             </CardContent>
           </Card>
 
@@ -829,7 +782,7 @@ export default function HrdLeaveApprovalPage() {
                   <Sparkles className="h-5 w-5" />
                 </div>
               </div>
-              <div className="mt-3 text-[10px] text-blue-600 font-black tracking-wider uppercase bg-blue-500/5 py-1 px-2 rounded w-fit">Realisasi Lapangan</div>
+              <div className="mt-3 text-[10px] text-blue-600 font-black tracking-wider uppercase bg-blue-500/5 py-1 px-2 rounded w-fit">Sedang Menjalani Cuti</div>
             </CardContent>
           </Card>
 
@@ -847,7 +800,7 @@ export default function HrdLeaveApprovalPage() {
                   <FileClock className="h-5 w-5" />
                 </div>
               </div>
-              <div className="mt-3 text-[10px] text-violet-600 font-black tracking-wider uppercase bg-violet-500/5 py-1 px-2 rounded w-fit">Kumulatif HRP</div>
+              <div className="mt-3 text-[10px] text-violet-600 font-black tracking-wider uppercase bg-violet-500/5 py-1 px-2 rounded w-fit">Total Keseluruhan Cuti</div>
             </CardContent>
           </Card>
 
@@ -862,7 +815,7 @@ export default function HrdLeaveApprovalPage() {
                   <AlertTriangle className="h-5 w-5" />
                 </div>
               </div>
-              <div className="mt-3 text-[10px] text-amber-600 font-black tracking-wider uppercase bg-amber-500/5 py-1 px-2 rounded w-fit">Peringatan Kuota</div>
+              <div className="mt-3 text-[10px] text-amber-600 font-black tracking-wider uppercase bg-amber-500/5 py-1 px-2 rounded w-fit">Butuh Perhatian</div>
             </CardContent>
           </Card>
 
@@ -884,12 +837,15 @@ export default function HrdLeaveApprovalPage() {
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Filter Brand</label>
                   <select
                     value={filterBrand}
-                    onChange={e => setFilterBrand(e.target.value)}
+                    onChange={e => {
+                      setFilterBrand(e.target.value);
+                      setFilterDivision('all');
+                    }}
                     className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs font-bold text-slate-700 focus:border-indigo-500 focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white"
                   >
                     <option value="all">Semua Brand (Default)</option>
                     {brandOptions.map(b => (
-                      <option key={b} value={b}>{b}</option>
+                      <option key={b.id} value={b.id}>{b.name}</option>
                     ))}
                   </select>
                 </div>
@@ -900,11 +856,12 @@ export default function HrdLeaveApprovalPage() {
                   <select
                     value={filterDivision}
                     onChange={e => setFilterDivision(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs font-bold text-slate-700 focus:border-indigo-500 focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white"
+                    disabled={filterBrand === 'all'}
+                    className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs font-bold text-slate-700 focus:border-indigo-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-800 dark:bg-slate-950 dark:text-white"
                   >
-                    <option value="all">Semua Divisi</option>
+                    <option value="all">{filterBrand === 'all' ? 'Pilih brand terlebih dahulu' : (divisionOptions.length === 0 ? 'Brand ini belum memiliki divisi' : 'Semua Divisi')}</option>
                     {divisionOptions.map(d => (
-                      <option key={d} value={d}>{d}</option>
+                      <option key={`${d.brandId}-${d.id}`} value={`${d.brandId}__${d.id}`}>{d.name}</option>
                     ))}
                   </select>
                 </div>
@@ -1036,17 +993,14 @@ export default function HrdLeaveApprovalPage() {
 
         {/* WORKSPACE TABS SECTION */}
         <Tabs defaultValue="pending" className="w-full">
-          <TabsList className="grid w-full grid-cols-5 rounded-2xl bg-slate-100 dark:bg-slate-950 p-1 mb-6 h-12 shadow-sm border border-slate-200/40">
+          <TabsList className="grid w-full grid-cols-4 rounded-2xl bg-slate-100 dark:bg-slate-950 p-1 mb-6 h-12 shadow-sm border border-slate-200/40">
             <TabsTrigger value="pending" className="rounded-xl font-bold text-xs gap-1.5 transition-all py-2">
               Persetujuan Cuti HRD
               <Badge className="bg-indigo-600 text-white font-black text-[9px] rounded-full px-1.5 py-0.5">{activeRequestsFiltered.length}</Badge>
             </TabsTrigger>
             <TabsTrigger value="history" className="rounded-xl font-bold text-xs transition-all py-2">Semua Pengajuan Cuti</TabsTrigger>
-            <TabsTrigger value="balances" className="rounded-xl font-bold text-xs transition-all py-2">Saldo Cuti Karyawan</TabsTrigger>
+            <TabsTrigger value="balances" className="rounded-xl font-bold text-xs transition-all py-2">Saldo & Hak Cuti</TabsTrigger>
             <TabsTrigger value="adjustments" className="rounded-xl font-bold text-xs transition-all py-2">Mutasi Saldo Cuti</TabsTrigger>
-            <TabsTrigger value="calendar" className="rounded-xl font-bold text-xs transition-all py-2 gap-1.5">
-              Kalender Cuti <Badge className="bg-blue-600 text-white font-black text-[9px] rounded-full px-1.5 py-0.5">{activeLeavesThisMonthList.length}</Badge>
-            </TabsTrigger>
           </TabsList>
 
           {/* TAB 1: PERSETUJUAN CUTI HRD (Pending Queue) */}
@@ -1237,21 +1191,28 @@ export default function HrdLeaveApprovalPage() {
                         <TableHead className="py-4 font-bold text-slate-800 dark:text-slate-200">Cuti Disetujui</TableHead>
                         <TableHead className="py-4 font-bold text-slate-800 dark:text-slate-200">Dalam Approval</TableHead>
                         <TableHead className="py-4 font-bold text-slate-800 dark:text-slate-200">Sisa Saldo</TableHead>
-                        <TableHead className="py-4 font-bold text-slate-800 dark:text-slate-200">Estimasi Cashout</TableHead>
                         <TableHead className="text-right pr-8 py-4 font-bold text-slate-800 dark:text-slate-200">Aksi</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredBalances.length > 0 ? filteredBalances.map(b => {
-                        const profile = employeeProfilesMap.get(b.employeeId);
-                        const bBrand = (b as any).brandName || profile?.hrdEmploymentInfo?.brandName || profile?.hrdEmploymentInfo?.brand || '-';
-                        const bDivision = (b as any).divisionName || profile?.hrdEmploymentInfo?.divisionName || profile?.hrdEmploymentInfo?.division || '-';
-                        const lowBal = b.currentBalance <= 2;
+                      {filteredBalances.length > 0 ? filteredBalances.map(item => {
+                        const { profile, balance: b } = item as { profile: any, balance: any };
+                        const bBrand = b?.brandName || profile?.hrdEmploymentInfo?.brandName || profile?.brandName || '-';
+                        const bDivision = b?.divisionName || profile?.hrdEmploymentInfo?.divisionName || profile?.divisionName || '-';
+                        const employeeName = profile?.fullName || profile?.name || profile?.displayName || profile?.personalData?.fullName || profile?.dataDiriIdentitas?.namaLengkap || profile?.email || b?.employeeName || 'Nama belum tersedia';
+                        
+                        const initQuota = b ? (b.initialQuota !== undefined ? b.initialQuota : (b as any).annualAllowance || 0) : 0;
+                        const usedLeave = b ? (b.allocatedLeave !== undefined ? b.allocatedLeave : (b as any).usedDays || 0) : 0;
+                        const pendLeave = b ? (b.pendingLeave !== undefined ? b.pendingLeave : (b as any).pendingDays || 0) : 0;
+                        const currBal = b ? (b.currentBalance !== undefined ? b.currentBalance : (b as any).remainingDays || 0) : 0;
+                        const lowBal = currBal <= 2;
+
+                        const empCashoutRate = b?.cashoutRatePerDay || profile?.hrdEmploymentInfo?.cashoutRatePerDay || 0;
                         
                         return (
-                          <TableRow key={b.employeeId} className="hover:bg-slate-50/30 dark:hover:bg-slate-900/10 transition-colors border-b border-slate-100 dark:border-slate-800/80">
+                          <TableRow key={profile.uid || profile.id} className="hover:bg-slate-50/30 dark:hover:bg-slate-900/10 transition-colors border-b border-slate-100 dark:border-slate-800/80">
                             <TableCell className="pl-8 py-5">
-                              <span className="text-slate-800 dark:text-white font-black text-sm block">{b.employeeName}</span>
+                              <span className="text-slate-800 dark:text-white font-black text-sm block">{employeeName}</span>
                             </TableCell>
                             <TableCell className="py-5 font-bold text-slate-500 text-xs uppercase tracking-wider">
                               <div className="flex flex-col">
@@ -1260,35 +1221,44 @@ export default function HrdLeaveApprovalPage() {
                               </div>
                             </TableCell>
                             <TableCell className="py-5 text-xs font-black uppercase tracking-widest text-slate-400">
-                              {b.employmentType || profile?.hrdEmploymentInfo?.employeeType || '-'}
+                              {b?.employmentType || profile?.hrdEmploymentInfo?.employeeType || '-'}
                             </TableCell>
                             <TableCell className="py-5 font-bold text-slate-600 text-sm">
-                              {b.initialQuota !== undefined ? b.initialQuota : (b as any).annualAllowance} Hari
+                              {b ? `${initQuota} Hari` : '-'}
                             </TableCell>
                             <TableCell className="py-5 font-bold text-emerald-600 text-sm">
-                              {b.allocatedLeave !== undefined ? b.allocatedLeave : (b as any).usedDays} Hari
+                              {b ? `${usedLeave} Hari` : '-'}
                             </TableCell>
                             <TableCell className="py-5 font-bold text-amber-500 text-sm">
-                              {b.pendingLeave !== undefined ? b.pendingLeave : (b as any).pendingDays} Hari
+                              {b ? `${pendLeave} Hari` : '-'}
                             </TableCell>
                             <TableCell className="py-5 py-5 font-black text-sm">
-                              <span className={lowBal ? 'text-red-500 animate-pulse' : 'text-indigo-600 dark:text-indigo-400'}>
-                                {b.currentBalance !== undefined ? b.currentBalance : (b as any).remainingDays} Hari
-                              </span>
-                            </TableCell>
-                            <TableCell className="py-5 text-xs font-black text-emerald-600">
-                              Rp {((b.currentBalance !== undefined ? b.currentBalance : ((b as any).remainingDays ?? 0)) * ratePerDay).toLocaleString('id-ID')}
+                              {b ? (
+                                <span className={lowBal ? 'text-red-500 animate-pulse' : 'text-indigo-600 dark:text-indigo-400'}>
+                                  {currBal} Hari
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-bold text-amber-500 bg-amber-50 px-2 py-1 rounded border border-amber-200">Belum Inisialisasi</span>
+                              )}
                             </TableCell>
                             <TableCell className="text-right pr-8 py-5">
-                              <Button size="sm" variant="ghost" onClick={() => handleOpenAdjustment(b)} className="rounded-xl hover:bg-indigo-50 hover:text-indigo-600 font-bold text-xs gap-1">
-                                <Settings className="h-3.5 w-3.5" /> Sesuaikan Saldo
-                              </Button>
+                              <div className="flex items-center justify-end gap-2">
+                                {b ? (
+                                  <Button size="sm" variant="outline" onClick={() => handleOpenCashout(b, profile)} className="rounded-xl font-bold text-[10px] text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 border-emerald-200">
+                                    Proses Cashout
+                                  </Button>
+                                ) : (
+                                  <Button size="sm" variant="outline" onClick={() => handleInitializeBalance(profile)} className="rounded-xl border-amber-200 text-amber-600 font-bold text-[10px] hover:bg-amber-50">
+                                    Inisialisasi Saldo
+                                  </Button>
+                                )}
+                              </div>
                             </TableCell>
                           </TableRow>
                         );
                       }) : (
                         <TableRow>
-                          <TableCell colSpan={9} className="h-28 text-center text-slate-400">
+                          <TableCell colSpan={8} className="h-28 text-center text-slate-400">
                             Belum ada rekap saldo cuti karyawan yang sesuai kriteria.
                           </TableCell>
                         </TableRow>
@@ -1302,238 +1272,92 @@ export default function HrdLeaveApprovalPage() {
 
           {/* TAB 4: MUTASI SALDO CUTI (Audit logs ledger) */}
           <TabsContent value="adjustments" className="space-y-6 focus:outline-none">
-            <Card className="border-slate-100 dark:border-slate-800 shadow-md rounded-2xl overflow-hidden">
-              <CardHeader className="border-b pb-4 bg-slate-50/50 dark:bg-slate-900/50">
-                <CardTitle className="text-sm font-black uppercase tracking-wider text-slate-500">Ledger Log Audit Mutasi Saldo Cuti</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto w-full">
-                  <Table className="w-full min-w-[1100px]">
-                    <TableHeader className="bg-slate-50/20 dark:bg-slate-900/10">
-                      <TableRow>
-                        <TableHead className="pl-8 py-4 font-bold text-slate-800 dark:text-slate-200">Tanggal & Jam</TableHead>
-                        <TableHead className="py-4 font-bold text-slate-800 dark:text-slate-200">Karyawan</TableHead>
-                        <TableHead className="py-4 font-bold text-slate-800 dark:text-slate-200">Brand / Divisi</TableHead>
-                        <TableHead className="py-4 font-bold text-slate-800 dark:text-slate-200">Jenis Mutasi</TableHead>
-                        <TableHead className="py-4 font-bold text-slate-800 dark:text-slate-200">Perubahan</TableHead>
-                        <TableHead className="py-4 font-bold text-slate-800 dark:text-slate-200">Saldo (Awal → Baru)</TableHead>
-                        <TableHead className="py-4 font-bold text-slate-800 dark:text-slate-200">Alasan Perubahan</TableHead>
-                        <TableHead className="text-right pr-8 py-4 font-bold text-slate-800 dark:text-slate-200">Operator</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {sortedAdjustmentsFiltered.length > 0 ? sortedAdjustmentsFiltered.map(a => {
-                        const profile = employeeProfilesMap.get(a.employeeId);
-                        const bBrand = a.brandName || profile?.hrdEmploymentInfo?.brandName || profile?.hrdEmploymentInfo?.brand || '-';
-                        const bDivision = a.divisionName || profile?.hrdEmploymentInfo?.divisionName || profile?.hrdEmploymentInfo?.division || '-';
-                        
-                        // Parse mutation type for nice badges
-                        const isPositive = a.adjustmentValue > 0;
-                        const isCuti = a.reason?.toLowerCase().includes('cuti') && a.reason?.toLowerCase().includes('setujui');
-                        const isInit = a.reason?.toLowerCase().includes('inisialisasi') || a.adjustedBy === 'system';
-                        
-                        let mutationBadge = 'Koreksi Saldo';
-                        let mutationColor = 'bg-blue-500/10 border-blue-500/20 text-blue-600';
-                        if (isCuti) {
-                          mutationBadge = 'Pengurangan Cuti';
-                          mutationColor = 'bg-rose-500/10 border-rose-500/20 text-rose-600';
-                        } else if (isInit) {
-                          mutationBadge = 'Inisialisasi Kuota';
-                          mutationColor = 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600';
-                        }
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {sortedAdjustmentsFiltered.length > 0 ? sortedAdjustmentsFiltered.map(a => {
+                const profile = employeeProfilesMap.get(a.employeeId);
+                const bBrand = a.brandName || profile?.hrdEmploymentInfo?.brandName || profile?.hrdEmploymentInfo?.brand || '-';
+                const bDivision = a.divisionName || profile?.hrdEmploymentInfo?.divisionName || profile?.hrdEmploymentInfo?.division || '-';
+                
+                const isPositive = a.adjustmentValue > 0;
+                let mutationBadge = a.type === 'cashout_cuti' ? 'Cashout Cuti' : 'Pengurangan Cuti';
+                let mutationColor = 'bg-blue-500/10 border-blue-500/20 text-blue-600';
+                
+                if (a.reason?.toLowerCase().includes('cuti') && a.reason?.toLowerCase().includes('setujui')) {
+                  mutationBadge = 'Cuti Disetujui HRD';
+                  mutationColor = 'bg-rose-500/10 border-rose-500/20 text-rose-600';
+                } else if (a.reason?.toLowerCase().includes('inisialisasi') || a.adjustedBy === 'system' || a.type === 'inisialisasi_kuota') {
+                  mutationBadge = 'Jatah Cuti Tahunan Dibuat Otomatis';
+                  mutationColor = 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600';
+                } else if (a.type === 'cashout_cuti') {
+                  mutationBadge = 'Pencairan Sisa Cuti Ke Payroll';
+                  mutationColor = 'bg-amber-500/10 border-amber-500/20 text-amber-600';
+                }
 
-                        return (
-                          <TableRow key={a.id} className="hover:bg-slate-50/30 dark:hover:bg-slate-900/10 transition-colors border-b border-slate-100 dark:border-slate-800/80">
-                            <TableCell className="pl-8 py-5 text-xs font-semibold text-slate-500">
-                              {a.createdAt ? format(a.createdAt.toDate(), 'dd MMM yyyy HH:mm', { locale: idLocale }) : '-'}
-                            </TableCell>
-                            <TableCell className="py-5 font-black text-slate-800 dark:text-white text-sm">
-                              {a.employeeName}
-                            </TableCell>
-                            <TableCell className="py-5 font-bold text-slate-400 text-xs uppercase tracking-wider">
-                              <div className="flex flex-col">
-                                <span>{bBrand}</span>
-                                <span className="text-[10px] font-semibold">{bDivision}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="py-5">
-                              <Badge variant="outline" className={`font-black text-[9px] rounded-full uppercase ${mutationColor}`}>
-                                {mutationBadge}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="py-5 font-black text-sm">
-                              <span className={isPositive ? 'text-emerald-600' : 'text-red-500'}>
-                                {isPositive ? `+${a.adjustmentValue}` : a.adjustmentValue} Hari
-                              </span>
-                            </TableCell>
-                            <TableCell className="py-5 font-bold text-slate-500 text-xs">
-                              {a.previousBalance} → {a.newBalance} Hari
-                            </TableCell>
-                            <TableCell className="py-5 text-xs font-medium text-slate-600 dark:text-slate-300 max-w-[240px] truncate" title={a.reason}>
-                              {a.reason}
-                            </TableCell>
-                            <TableCell className="text-right pr-8 py-5 font-bold text-slate-500 text-xs">
-                              {a.adjustedByName || 'System'}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      }) : (
-                        <TableRow>
-                          <TableCell colSpan={8} className="h-28 text-center text-slate-400">
-                            Belum ada catatan mutasi saldo cuti yang sesuai kriteria.
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* TAB 5: KALENDER CUTI (Visual Month schedule view) */}
-          <TabsContent value="calendar" className="space-y-6 focus:outline-none">
-            <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-              
-              {/* Calendar Visual Grid (3/4 width) */}
-              <Card className="xl:col-span-3 border-slate-100 dark:border-slate-800 shadow-md rounded-2xl overflow-hidden bg-white">
-                <CardHeader className="border-b bg-slate-50/50 dark:bg-slate-900/50 py-4 px-6 flex flex-row items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-5 w-5 text-indigo-600" />
-                    <div>
-                      <CardTitle className="text-sm font-black uppercase tracking-wider text-slate-700">Jadwal Kehadiran & Kalender Cuti</CardTitle>
-                      <CardDescription className="text-xs font-semibold mt-0.5">Visibilitas jadwal cuti aktif staf Environesia.</CardDescription>
-                    </div>
-                  </div>
-                  
-                  {/* Calendar Navigators */}
-                  <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="icon" onClick={handlePrevMonth} className="h-9 w-9 rounded-xl hover:bg-slate-100">
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <span className="text-xs font-black uppercase text-indigo-600 px-3 tracking-widest min-w-[120px] text-center">
-                      {getMonthName(calendarMonth)} {calendarYear}
-                    </span>
-                    <Button variant="ghost" size="icon" onClick={handleNextMonth} className="h-9 w-9 rounded-xl hover:bg-slate-100">
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-4">
-                  
-                  {/* Grid week names */}
-                  <div className="grid grid-cols-7 gap-1 text-center font-black text-[10px] text-slate-400 uppercase tracking-widest mb-2 border-b pb-2">
-                    <div>Minggu</div>
-                    <div>Senin</div>
-                    <div>Selasa</div>
-                    <div>Rabu</div>
-                    <div>Kamis</div>
-                    <div>Jumat</div>
-                    <div>Sabtu</div>
-                  </div>
-
-                  {/* 42 grid cells */}
-                  <div className="grid grid-cols-7 gap-1.5 h-[520px]">
-                    {calendarCells.map((cellDate, idx) => {
-                      const activeOnDay = getActiveRequestsForDate(cellDate);
-                      const isCurrMonth = cellDate.getMonth() === calendarMonth;
+                return (
+                  <Card key={a.id} className="border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-indigo-100 dark:hover:border-indigo-900 transition-all rounded-2xl overflow-hidden group">
+                    <CardHeader className="p-4 pb-0 bg-slate-50/50 dark:bg-slate-900/30 flex flex-row items-center justify-between border-b border-slate-50 dark:border-slate-800">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">
+                          {a.createdAt ? format(a.createdAt.toDate(), 'dd MMM yyyy HH:mm', { locale: idLocale }) : '-'}
+                        </span>
+                        <h3 className="font-black text-slate-800 dark:text-white text-sm line-clamp-1">{a.employeeName}</h3>
+                      </div>
+                      <Badge variant="outline" className={`font-black text-[9px] rounded-full uppercase ml-2 flex-shrink-0 ${mutationColor}`}>
+                        {mutationBadge}
+                      </Badge>
+                    </CardHeader>
+                    <CardContent className="p-4 pt-4 space-y-4">
                       
-                      const today = new Date();
-                      const isTodayVal = cellDate.getDate() === today.getDate() && cellDate.getMonth() === today.getMonth() && cellDate.getFullYear() === today.getFullYear();
-                      
-                      return (
-                        <div
-                          key={idx}
-                          className={`p-1.5 rounded-xl border flex flex-col justify-between transition-all group/cell relative ${
-                            isCurrMonth
-                              ? 'bg-white border-slate-100 hover:border-indigo-200' 
-                              : 'bg-slate-50/50 border-slate-50 text-slate-300 pointer-events-none'
-                          } ${isTodayVal ? 'ring-2 ring-indigo-600 ring-offset-1 border-indigo-200' : ''}`}
-                        >
-                          {/* Cell Date Header */}
-                          <div className="flex justify-between items-center mb-1">
-                            <span className={`text-xs font-bold ${isTodayVal ? 'text-indigo-600 font-black' : (isCurrMonth ? 'text-slate-700' : 'text-slate-300')}`}>
-                              {cellDate.getDate()}
+                      <div className="flex items-start justify-between">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Brand & Divisi</span>
+                          <span className="font-bold text-slate-700 dark:text-slate-300 text-xs">{bBrand}</span>
+                          <span className="text-[10px] text-slate-500 font-semibold">{bDivision}</span>
+                        </div>
+                        
+                        <div className="flex flex-col items-end text-right">
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Perubahan</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-400 text-xs line-through">{a.previousBalance}</span>
+                            <span className="text-slate-300">→</span>
+                            <span className="font-black text-slate-800 dark:text-white text-sm">{a.newBalance}</span>
+                            <span className={`font-black text-xs ml-1 px-1.5 py-0.5 rounded ${isPositive ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+                              {isPositive ? `+${a.adjustmentValue}` : a.adjustmentValue}
                             </span>
-                            {isTodayVal && (
-                              <span className="h-1.5 w-1.5 rounded-full bg-indigo-600" />
-                            )}
                           </div>
-
-                          {/* List of leaves */}
-                          <div className="flex-1 overflow-y-auto space-y-1 pr-0.5 custom-scrollbar max-h-[60px]">
-                            {activeOnDay.slice(0, 3).map(r => (
-                              <div
-                                key={r.id}
-                                onClick={() => handleViewDetails(r)}
-                                className="cursor-pointer border-l-2 border-indigo-500 bg-indigo-50/60 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400 text-[9px] py-0.5 px-1 rounded font-black max-w-full truncate hover:bg-indigo-100 transition-colors"
-                                title={`${r.employeeName}: Cuti ${r.leaveType}`}
-                              >
-                                {r.employeeName}
-                              </div>
-                            ))}
-                            {activeOnDay.length > 3 && (
-                              <div className="text-[8px] text-slate-400 font-bold text-center">
-                                +{activeOnDay.length - 3} Cuti Lagi
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                </CardContent>
-              </Card>
-
-              {/* Sidebar: Month Leaves list (1/4 width) */}
-              <Card className="xl:col-span-1 border-slate-100 dark:border-slate-800 shadow-md rounded-2xl overflow-hidden bg-slate-50/40">
-                <CardHeader className="border-b bg-slate-50/50 dark:bg-slate-900/50 py-4 px-6">
-                  <CardTitle className="text-sm font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                    <Clock className="h-4 w-4 text-indigo-600" />
-                    Cuti Aktif Bulan Ini
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-4 h-[530px] overflow-y-auto space-y-3">
-                  {activeLeavesThisMonthList.length > 0 ? activeLeavesThisMonthList.map(r => {
-                    const profile = employeeProfilesMap.get(r.employeeId);
-                    const bBrand = r.brandName || profile?.hrdEmploymentInfo?.brandName || profile?.hrdEmploymentInfo?.brand || '-';
-                    const bDivision = r.divisionName || profile?.hrdEmploymentInfo?.divisionName || profile?.hrdEmploymentInfo?.division || '-';
-                    
-                    return (
-                      <div
-                        key={r.id}
-                        onClick={() => handleViewDetails(r)}
-                        className="p-3 bg-white border border-slate-100 rounded-xl hover:border-indigo-100 hover:shadow-sm transition-all cursor-pointer space-y-2 group"
-                      >
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <p className="font-black text-slate-800 text-xs group-hover:text-indigo-600 transition-colors">{r.employeeName}</p>
-                            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">{bBrand} — {bDivision}</p>
-                          </div>
-                          <Badge variant="outline" className={`px-2 py-0.5 rounded-full text-[8px] font-black border uppercase tracking-wider ${getStatusBadgeClass(r.status)}`}>
-                            Cuti {r.leaveType === 'tahunan' ? 'Tahunan' : r.leaveType}
-                          </Badge>
-                        </div>
-                        
-                        <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-50 font-bold">
-                          <span>{format(r.startDate.toDate(), 'dd MMM')} - {format(r.endDate.toDate(), 'dd MMM yyyy')}</span>
-                          <span className="text-indigo-600">{r.durationDays} Hari</span>
                         </div>
                       </div>
-                    );
-                  }) : (
-                    <div className="h-full flex flex-col items-center justify-center text-center text-slate-400 py-20">
-                      <CalendarOff className="h-8 w-8 mb-2 opacity-30 text-slate-500" />
-                      <p className="text-xs font-bold">Tidak ada pengajuan cuti</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">pada bulan {getMonthName(calendarMonth)} {calendarYear}.</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
 
+                      <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Catatan / Alasan</span>
+                        <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 leading-snug line-clamp-2" title={a.reason}>
+                          {a.reason}
+                        </p>
+                      </div>
+                      
+                      {a.type === 'cashout_cuti' && a.cashoutAmount && (
+                         <div className="bg-amber-50/50 border border-amber-100 rounded-lg p-2.5 flex justify-between items-center mt-2">
+                           <span className="text-[10px] font-black text-amber-600 uppercase tracking-wider">Nilai Pencairan</span>
+                           <span className="text-xs font-black text-amber-700">Rp {a.cashoutAmount.toLocaleString('id-ID')}</span>
+                         </div>
+                      )}
+
+                      <div className="flex justify-between items-center pt-2">
+                        <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Dilakukan Oleh</span>
+                        <span className="text-[10px] font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded-md">{a.adjustedByName ? `${a.adjustedByName}` : 'Sistem'}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              }) : (
+                <div className="col-span-full h-40 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+                  <p className="text-slate-500 font-bold text-sm">Belum ada catatan mutasi saldo yang terdaftar.</p>
+                </div>
+              )}
             </div>
           </TabsContent>
+
+
         </Tabs>
       </div>
 
@@ -1812,59 +1636,51 @@ export default function HrdLeaveApprovalPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Manual Balance Adjustment Dialog */}
-      <Dialog open={isAdjustmentOpen} onOpenChange={setIsAdjustmentOpen}>
+      {/* Cashout Modal */}
+      <Dialog open={isCashoutOpen} onOpenChange={setIsCashoutOpen}>
         <DialogContent className="max-w-md rounded-2xl bg-white dark:bg-slate-900 border-none shadow-2xl my-auto top-[50%] translate-y-[-50%]">
           <DialogHeader>
-            <DialogTitle className="text-lg font-black text-slate-900 dark:text-white">Sesuaikan Saldo Cuti Karyawan</DialogTitle>
+            <DialogTitle className="text-lg font-black text-slate-900 dark:text-white">Proses Cashout Cuti Tahunan</DialogTitle>
             <DialogDescription className="text-xs font-semibold text-slate-500 mt-1">
-              Atur penambahan atau pengurangan saldo cuti tahunan milik {selectedBalance?.employeeName}.
+              Uangkan sisa cuti {selectedBalance?.employeeName} ke dalam nominal pencairan ke payroll.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
-            <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-xl grid grid-cols-2 gap-4 text-center">
-              <div>
-                <p className="text-[10px] font-black text-slate-400 uppercase">Saldo Saat Ini</p>
-                <p className="text-xl font-black text-slate-800 dark:text-white">{selectedBalance?.currentBalance} Hari</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-black text-slate-400 uppercase">Saldo Baru</p>
-                <p className="text-xl font-black text-indigo-600 dark:text-indigo-400">
-                  {selectedBalance ? selectedBalance.currentBalance + Number(adjustmentValue) : 0} Hari
-                </p>
-              </div>
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl space-y-2 border border-slate-100 dark:border-slate-800">
+               <div className="flex justify-between items-center text-sm">
+                 <span className="font-semibold text-slate-500">Sisa Cuti Tersedia</span>
+                 <span className="font-black text-indigo-600">{selectedBalance ? ((selectedBalance as any).remainingDays || selectedBalance.currentBalance || 0) : 0} Hari</span>
+               </div>
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-black text-slate-500 uppercase">Nilai Penyesuaian (Hari)*</label>
-              <Input
-                type="number"
-                placeholder="Masukkan nilai (+3 atau -2)..."
-                value={adjustmentValue}
-                onChange={e => setAdjustmentValue(Number(e.target.value))}
-                className="rounded-xl"
-              />
-              <span className="text-[10px] text-slate-400 font-bold block mt-1">Gunakan angka positif untuk menambah saldo, atau negatif untuk memotong saldo.</span>
+              <Label className="text-xs font-bold text-slate-500">Jumlah Hari Diuangkan</Label>
+              <Input type="number" min={0} value={cashoutDays} onChange={e => setCashoutDays(Number(e.target.value))} className="h-12 bg-slate-50 border-slate-200 font-bold" />
+            </div>
+            
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-slate-500">Total Nominal Cashout (Rp)</Label>
+              <Input type="number" min={0} value={cashoutAmount} onChange={e => setCashoutAmount(Number(e.target.value))} placeholder="Contoh: 200000" className="h-12 border-emerald-200 focus:border-emerald-500 font-bold" />
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-black text-slate-500 uppercase">Alasan Penyesuaian Kuota*</label>
+              <label className="text-xs font-black text-slate-500 uppercase">Catatan Pencairan (Opsional)</label>
               <Textarea
-                rows={3}
-                placeholder="Masukkan alasan penyesuaian saldo secara rinci..."
-                value={adjustmentReason}
-                onChange={e => setAdjustmentReason(e.target.value)}
+                rows={2}
+                placeholder="Catatan HRD..."
+                value={cashoutReason}
+                onChange={e => setCashoutReason(e.target.value)}
                 className="rounded-xl"
               />
             </div>
           </div>
 
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setIsAdjustmentOpen(false)} className="rounded-xl font-bold">Batal</Button>
-            <Button onClick={handleConfirmAdjustment} disabled={isSaving} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl px-5">
+            <Button variant="ghost" onClick={() => setIsCashoutOpen(false)} className="rounded-xl font-bold">Batal</Button>
+            <Button onClick={handleConfirmCashout} disabled={isSaving || cashoutDays <= 0 || cashoutAmount <= 0} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl px-5">
               {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-              Simpan Penyesuaian
+              Proses Cashout
             </Button>
           </DialogFooter>
         </DialogContent>

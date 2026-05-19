@@ -2102,12 +2102,15 @@ export type LeaveBalance = {
   id?: string;
   employeeId: string;
   employeeName: string;
+  brandName?: string;
+  divisionName?: string;
   employmentType: string;
   contractDurationMonths: number;
   initialQuota: number;
   currentBalance: number;
   allocatedLeave: number;
   pendingLeave: number;
+  cashoutRatePerDay?: number;
   updatedAt: Timestamp;
 };
 
@@ -2115,10 +2118,14 @@ export type LeaveBalanceAdjustment = {
   id?: string;
   employeeId: string;
   employeeName: string;
+  brandName?: string;
+  divisionName?: string;
   previousBalance: number;
   newBalance: number;
   adjustmentValue: number;
   reason: string;
+  type?: string;
+  cashoutAmount?: number;
   adjustedBy: string;
   adjustedByName: string;
   createdAt: Timestamp;
