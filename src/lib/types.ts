@@ -2030,8 +2030,10 @@ export type LeaveRequestStatus =
   | "revision_requested"
   | "revision_requested_by_manager"
   | "rejected_by_manager"
+  | "rejected_by_director"
   | "pending_hrd"
   | "pending_hrd_review"
+  | "revision_requested_by_director"
   | "revision_requested_by_hrd"
   | "rejected_by_hrd"
   | "approved"
@@ -2064,7 +2066,7 @@ export type LeaveRequest = {
   emergencyContactName: string;
   emergencyContactPhone: string;
   status: LeaveRequestStatus;
-  
+
   // Manager Review
   managerId: string;
   managerUid?: string;
@@ -2073,6 +2075,21 @@ export type LeaveRequest = {
   managerName: string;
   managerNotes?: string;
   managerReviewedAt?: Timestamp;
+
+  // Approval routing and hierarchy helpers
+  approvalTargetUid?: string;
+  approvalLevel?: string;
+  directSupervisorUid?: string;
+
+  // Director Review (for manager division approvals)
+  directorReviewedAt?: Timestamp;
+  directorReviewedBy?: string;
+  directorReviewedByName?: string;
+  directorDecision?: "approved" | "rejected" | "revision_requested";
+  directorNotes?: string;
+
+  // Requester structural info
+  requesterStructuralPosition?: string;
 
   // HRD Review
   hrdId?: string;
@@ -2130,4 +2147,3 @@ export type LeaveBalanceAdjustment = {
   adjustedByName: string;
   createdAt: Timestamp;
 };
-

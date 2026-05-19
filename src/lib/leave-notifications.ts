@@ -4,16 +4,19 @@ import { id as idLocale } from "date-fns/locale";
 import { sendNotification, sendHrdNotification } from "./notifications";
 
 export type LeaveNotificationType =
-  | "staff_submission"      // Staff submits, manager gets notified, staff gets submission success
-  | "manager_approval"      // Manager approves, staff gets approval info, HRD gets pending final review
-  | "manager_rejection"     // Manager rejects, staff gets rejection info
-  | "manager_revision"      // Manager asks for revision, staff gets revision info
-  | "hrd_approval"          // HRD approves, staff gets final approval, manager gets final approval
-  | "hrd_rejection"         // HRD rejects, staff gets final rejection, manager gets final rejection
-  | "hrd_revision"          // HRD asks for revision, staff gets revision info, manager gets revision info
-  | "leave_start"           // Leave starts, staff gets active leave info
-  | "leave_end"             // Leave ends, staff gets completion info
-  | "handover_assignment";  // Handover person gets designated
+  | "staff_submission" // Staff submits, manager gets notified, staff gets submission success
+  | "manager_approval" // Manager approves, staff gets approval info, HRD gets pending final review
+  | "manager_rejection" // Manager rejects, staff gets rejection info
+  | "manager_revision" // Manager asks for revision, staff gets revision info
+  | "director_approval" // Director approves, staff gets approval info, HRD gets pending final review
+  | "director_rejection" // Director rejects, staff gets rejection info
+  | "director_revision" // Director asks for revision, staff gets revision info
+  | "hrd_approval" // HRD approves, staff gets final approval, manager gets final approval
+  | "hrd_rejection" // HRD rejects, staff gets final rejection, manager gets final rejection
+  | "hrd_revision" // HRD asks for revision, staff gets revision info, manager gets revision info
+  | "leave_start" // Leave starts, staff gets active leave info
+  | "leave_end" // Leave ends, staff gets completion info
+  | "handover_assignment"; // Handover person gets designated
 
 export interface LeaveNotificationParams {
   employeeId: string;
@@ -31,7 +34,10 @@ export interface LeaveNotificationParams {
 
 function formatDateString(dateVal: any): string {
   try {
-    const d = dateVal && typeof dateVal.toDate === "function" ? dateVal.toDate() : new Date(dateVal);
+    const d =
+      dateVal && typeof dateVal.toDate === "function"
+        ? dateVal.toDate()
+        : new Date(dateVal);
     return format(d, "dd MMM yyyy", { locale: idLocale });
   } catch {
     return String(dateVal);
@@ -41,7 +47,7 @@ function formatDateString(dateVal: any): string {
 export async function sendLeaveNotification(
   firestore: Firestore,
   type: LeaveNotificationType,
-  params: LeaveNotificationParams
+  params: LeaveNotificationParams,
 ) {
   const startStr = formatDateString(params.startDate);
   const endStr = formatDateString(params.endDate);
@@ -54,11 +60,12 @@ export async function sendLeaveNotification(
         type: "status_update",
         module: "employee",
         title: "Pengajuan Cuti Dikirim",
-        message: "Pengajuan cuti Anda berhasil dikirim dan menunggu review Manager.",
+        message:
+          "Pengajuan cuti Anda berhasil dikirim dan menunggu review Manager.",
         targetType: "user",
         targetId: params.requestId,
         actionUrl: "/admin/karyawan/pengajuan-cuti",
-        createdBy: "system"
+        createdBy: "system",
       });
 
       // 2. Manager gets review pending alert
@@ -71,7 +78,7 @@ export async function sendLeaveNotification(
         targetType: "user",
         targetId: params.requestId,
         actionUrl: "/admin/manager/persetujuan-cuti",
-        createdBy: "system"
+        createdBy: "system",
       });
 
       // 3. Handover colleague gets alert
@@ -85,7 +92,7 @@ export async function sendLeaveNotification(
           targetType: "user",
           targetId: params.requestId,
           actionUrl: "/admin/karyawan/pengajuan-cuti",
-          createdBy: "system"
+          createdBy: "system",
         });
       }
       break;
@@ -97,11 +104,12 @@ export async function sendLeaveNotification(
         type: "status_update",
         module: "employee",
         title: "Disetujui Manager",
-        message: "Pengajuan cuti Anda telah disetujui Manager dan menunggu review HRD.",
+        message:
+          "Pengajuan cuti Anda telah disetujui Manager dan menunggu review HRD.",
         targetType: "user",
         targetId: params.requestId,
         actionUrl: "/admin/karyawan/pengajuan-cuti",
-        createdBy: "system"
+        createdBy: "system",
       });
 
       // 2. HRD gets final review notification
@@ -112,7 +120,7 @@ export async function sendLeaveNotification(
         message: `Pengajuan cuti ${params.employeeName} telah disetujui Manager dan menunggu review HRD.`,
         targetType: "employee",
         targetId: params.requestId,
-        actionUrl: "/admin/hrd/persetujuan-cuti"
+        actionUrl: "/admin/hrd/persetujuan-cuti",
       });
       break;
 
@@ -127,7 +135,7 @@ export async function sendLeaveNotification(
         targetType: "user",
         targetId: params.requestId,
         actionUrl: "/admin/karyawan/pengajuan-cuti",
-        createdBy: "system"
+        createdBy: "system",
       });
       break;
 
@@ -142,7 +150,60 @@ export async function sendLeaveNotification(
         targetType: "user",
         targetId: params.requestId,
         actionUrl: "/admin/karyawan/pengajuan-cuti",
-        createdBy: "system"
+        createdBy: "system",
+      });
+      break;
+
+    case "director_approval":
+      await sendNotification(firestore, {
+        userId: params.employeeId,
+        type: "status_update",
+        module: "employee",
+        title: "Disetujui Direktur",
+        message:
+          "Pengajuan cuti Anda telah disetujui Direktur dan menunggu review HRD.",
+        targetType: "user",
+        targetId: params.requestId,
+        actionUrl: "/admin/karyawan/pengajuan-cuti",
+        createdBy: "system",
+      });
+
+      await sendHrdNotification(firestore, {
+        type: "status_update",
+        module: "employee",
+        title: "Persetujuan Cuti HRD",
+        message: `Pengajuan cuti ${params.employeeName} telah disetujui Direktur dan menunggu review HRD.`,
+        targetType: "employee",
+        targetId: params.requestId,
+        actionUrl: "/admin/hrd/persetujuan-cuti",
+      });
+      break;
+
+    case "director_rejection":
+      await sendNotification(firestore, {
+        userId: params.employeeId,
+        type: "status_update",
+        module: "employee",
+        title: "Pengajuan Cuti Ditolak Direktur",
+        message: `Pengajuan cuti Anda ditolak Direktur. Alasan: ${params.reason || "-"}`,
+        targetType: "user",
+        targetId: params.requestId,
+        actionUrl: "/admin/karyawan/pengajuan-cuti",
+        createdBy: "system",
+      });
+      break;
+
+    case "director_revision":
+      await sendNotification(firestore, {
+        userId: params.employeeId,
+        type: "status_update",
+        module: "employee",
+        title: "Revisi Cuti dari Direktur",
+        message: `Pengajuan cuti Anda membutuhkan revisi dari Direktur. Catatan: ${params.notes || "-"}`,
+        targetType: "user",
+        targetId: params.requestId,
+        actionUrl: "/admin/karyawan/pengajuan-cuti",
+        createdBy: "system",
       });
       break;
 
@@ -157,7 +218,7 @@ export async function sendLeaveNotification(
         targetType: "user",
         targetId: params.requestId,
         actionUrl: "/admin/karyawan/pengajuan-cuti",
-        createdBy: "system"
+        createdBy: "system",
       });
 
       // 2. Manager gets notification
@@ -170,7 +231,7 @@ export async function sendLeaveNotification(
         targetType: "user",
         targetId: params.requestId,
         actionUrl: "/admin/manager/persetujuan-cuti",
-        createdBy: "system"
+        createdBy: "system",
       });
       break;
 
@@ -185,7 +246,7 @@ export async function sendLeaveNotification(
         targetType: "user",
         targetId: params.requestId,
         actionUrl: "/admin/karyawan/pengajuan-cuti",
-        createdBy: "system"
+        createdBy: "system",
       });
 
       // 2. Manager gets alert
@@ -198,7 +259,7 @@ export async function sendLeaveNotification(
         targetType: "user",
         targetId: params.requestId,
         actionUrl: "/admin/manager/persetujuan-cuti",
-        createdBy: "system"
+        createdBy: "system",
       });
       break;
 
@@ -213,7 +274,7 @@ export async function sendLeaveNotification(
         targetType: "user",
         targetId: params.requestId,
         actionUrl: "/admin/karyawan/pengajuan-cuti",
-        createdBy: "system"
+        createdBy: "system",
       });
 
       // 2. Manager gets alert
@@ -226,7 +287,7 @@ export async function sendLeaveNotification(
         targetType: "user",
         targetId: params.requestId,
         actionUrl: "/admin/manager/persetujuan-cuti",
-        createdBy: "system"
+        createdBy: "system",
       });
       break;
 
@@ -240,7 +301,7 @@ export async function sendLeaveNotification(
         targetType: "user",
         targetId: params.requestId,
         actionUrl: "/admin/karyawan/pengajuan-cuti",
-        createdBy: "system"
+        createdBy: "system",
       });
       break;
 
@@ -254,7 +315,7 @@ export async function sendLeaveNotification(
         targetType: "user",
         targetId: params.requestId,
         actionUrl: "/admin/karyawan/pengajuan-cuti",
-        createdBy: "system"
+        createdBy: "system",
       });
       break;
   }

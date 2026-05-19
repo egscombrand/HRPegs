@@ -51,7 +51,12 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
-import { useFirestore, setDocumentNonBlocking } from "@/firebase";
+import {
+  useFirestore,
+  useDoc,
+  useMemoFirebase,
+  setDocumentNonBlocking,
+} from "@/firebase";
 import { sendNotification } from "@/lib/notifications";
 import {
   doc,
@@ -66,6 +71,10 @@ import type {
   EmployeeProfile,
   Brand,
 } from "@/lib/types";
+import {
+  resolveApprovalTarget,
+  type DivisionMasterOrganization,
+} from "@/lib/approval-flow";
 import { GoogleDatePicker } from "@/components/ui/google-date-picker";
 import { format, differenceInMinutes, set, addDays } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
@@ -548,21 +557,30 @@ const OvertimeSubmissionDetailView = ({
                     value: overtimeTypeLabel,
                     icon: <Zap className="h-4 w-4 text-slate-500" />,
                   },
-                  ...(submission.approvedMinutesFinal !== undefined && submission.approvedMinutesFinal !== null ? [
-                    {
-                      label: "Durasi Final HRD",
-                      value: `${Math.floor(submission.approvedMinutesFinal / 60)} jam ${submission.approvedMinutesFinal % 60} menit`,
-                      icon: <CheckCircle className="h-4 w-4 text-emerald-400" />,
-                    },
-                    {
-                      label: "Status Proses Payroll",
-                      value: submission.payrollStatus === "paid" ? "Sudah Dibayarkan"
-                        : submission.payrollStatus === "processing" ? "Lembur sedang diproses payroll."
-                        : submission.payrollStatus === "excluded" ? "Tidak Masuk Payroll"
-                        : "Lembur sudah disetujui HRD dan menunggu proses payroll.",
-                      icon: <Zap className="h-4 w-4 text-emerald-400" />,
-                    }
-                  ] : []),
+                  ...(submission.approvedMinutesFinal !== undefined &&
+                  submission.approvedMinutesFinal !== null
+                    ? [
+                        {
+                          label: "Durasi Final HRD",
+                          value: `${Math.floor(submission.approvedMinutesFinal / 60)} jam ${submission.approvedMinutesFinal % 60} menit`,
+                          icon: (
+                            <CheckCircle className="h-4 w-4 text-emerald-400" />
+                          ),
+                        },
+                        {
+                          label: "Status Proses Payroll",
+                          value:
+                            submission.payrollStatus === "paid"
+                              ? "Sudah Dibayarkan"
+                              : submission.payrollStatus === "processing"
+                                ? "Lembur sedang diproses payroll."
+                                : submission.payrollStatus === "excluded"
+                                  ? "Tidak Masuk Payroll"
+                                  : "Lembur sudah disetujui HRD dan menunggu proses payroll.",
+                          icon: <Zap className="h-4 w-4 text-emerald-400" />,
+                        },
+                      ]
+                    : []),
                 ].map((item) => (
                   <div
                     key={item.label}
@@ -783,6 +801,34 @@ export function OvertimeSubmissionForm({
   const { userProfile } = useAuth();
   const firestore = useFirestore();
   const { toast } = useToast();
+
+  const staffBrandId = useMemo(() => {
+    if (!employeeProfile?.brandId) return "";
+    return Array.isArray(employeeProfile.brandId)
+      ? employeeProfile.brandId[0]
+      : employeeProfile.brandId;
+  }, [employeeProfile?.brandId]);
+
+  const staffDivisionId = useMemo(() => {
+    return (
+      employeeProfile?.division ||
+      employeeProfile?.hrdEmploymentInfo?.divisionId ||
+      employeeProfile?.hrdEmploymentInfo?.divisionName ||
+      ""
+    );
+  }, [
+    employeeProfile?.division,
+    employeeProfile?.hrdEmploymentInfo?.divisionId,
+    employeeProfile?.hrdEmploymentInfo?.divisionName,
+  ]);
+
+  const divisionDocRef = useMemoFirebase(() => {
+    if (!firestore || !staffBrandId || !staffDivisionId) return null;
+    return doc(firestore, "brands", staffBrandId, "divisions", staffDivisionId);
+  }, [firestore, staffBrandId, staffDivisionId]);
+
+  const { data: divisionMaster } =
+    useDoc<DivisionMasterOrganization>(divisionDocRef);
   const mode = submission ? (formMode === "view" ? "View" : "Edit") : "Buat";
 
   const form = useForm<FormValues>({
@@ -907,38 +953,28 @@ export function OvertimeSubmissionForm({
     };
   }, [userProfile, employeeProfile, brands]);
 
+  const approvalTarget = useMemo(
+    () => resolveApprovalTarget(employeeProfile, userProfile, divisionMaster),
+    [employeeProfile, userProfile, divisionMaster],
+  );
+
   const approvalFlow = useMemo(() => {
-    const hrd = employeeProfile?.hrdEmploymentInfo;
-    const directSupervisorUid = hrd?.directSupervisorUid;
-
-    // Jika HRD sudah punya direktur supervisor, alur: Atasan Langsung → HRD
-    if (directSupervisorUid) {
+    if (!approvalTarget.approvalTargetUid) {
       return {
-        flowText: "Atasan Langsung → HRD",
-        hasValidFlow: true,
-        supervisorName: hrd?.directSupervisorName || "Atasan Langsung",
-        supervisorUid: directSupervisorUid,
-      };
-    }
-
-    // Fallback ke logika lama jika belum ada data HRD
-    if (userProfile?.isDivisionManager) {
-      return {
-        flowText: "Langsung ke HRD",
-        hasValidFlow: true,
-        supervisorName: "Tim HRD",
+        flowText: approvalTarget.reason || "Atasan langsung belum ditentukan.",
+        hasValidFlow: false,
+        supervisorName: approvalTarget.approvalTargetName || "Belum Ditentukan",
         supervisorUid: null,
       };
     }
 
-    // Jika tidak ada supervisor data, warning
     return {
-      flowText: "Atasan langsung belum ditentukan di data kepegawaian HRD",
-      hasValidFlow: false,
-      supervisorName: "Belum Ditentukan",
-      supervisorUid: null,
+      flowText: "Atasan Langsung → HRD",
+      hasValidFlow: true,
+      supervisorName: approvalTarget.approvalTargetName || "Atasan Langsung",
+      supervisorUid: approvalTarget.approvalTargetUid,
     };
-  }, [userProfile, employeeProfile]);
+  }, [approvalTarget]);
   const totalDuration = useMemo(() => {
     if (!startTimeStr || !endTimeStr) return 0;
     try {
@@ -1124,6 +1160,16 @@ export function OvertimeSubmissionForm({
         workRole: hrd?.workRole || displayInfo.positionTitle,
 
         // Supervisor info
+        managerId: approvalFlow.supervisorUid,
+        managerUid: approvalFlow.supervisorUid,
+        directManagerId: approvalFlow.supervisorUid,
+        directManagerUid: approvalFlow.supervisorUid,
+        managerName: approvalFlow.supervisorName,
+        approvalLevel: approvalTarget.approvalLevel,
+        requesterStructuralPosition:
+          employeeProfile?.hrdEmploymentInfo?.structuralPosition ||
+          userProfile?.structuralLevel ||
+          "staff",
         directSupervisorUid: approvalFlow.supervisorUid,
         directSupervisorName: approvalFlow.supervisorName,
 
@@ -1184,7 +1230,10 @@ export function OvertimeSubmissionForm({
             createdBy: userProfile.uid,
             meta: {
               submissionId: docRef.id,
-              employeeUid: userProfile.uid || (submission as any)?.employeeUid || (submission as any)?.uid,
+              employeeUid:
+                userProfile.uid ||
+                (submission as any)?.employeeUid ||
+                (submission as any)?.uid,
             },
           });
         }

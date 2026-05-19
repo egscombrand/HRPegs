@@ -544,6 +544,9 @@ service cloud.firestore {
         resource.data.managerUid == request.auth.uid || 
         resource.data.directManagerId == request.auth.uid || 
         resource.data.directManagerUid == request.auth.uid || 
+        resource.data.get('approvalTargetUid', '') == request.auth.uid ||
+        resource.data.get('directSupervisorUid', '') == request.auth.uid ||
+        resource.data.get('currentApproverUid', '') == request.auth.uid ||
         isHrd() || 
         isSuperAdmin()
       );
@@ -551,18 +554,26 @@ service cloud.firestore {
       allow create: if isSignedIn() && request.resource.data.employeeId == request.auth.uid;
       allow update: if isSignedIn() && (
         (resource.data.employeeId == request.auth.uid && (
-          resource.data.status in ['pending_manager', 'pending_manager_review', 'revision_requested', 'revision_requested_by_manager', 'revision_requested_by_hrd'] ||
+          resource.data.status in ['pending_manager', 'pending_manager_review', 'pending_director', 'pending_director_review', 'revision_requested', 'revision_requested_by_manager', 'revision_requested_by_hrd'] ||
           request.resource.data.status == 'cancelled'
         )) ||
         ((resource.data.managerId == request.auth.uid || 
           resource.data.managerUid == request.auth.uid || 
           resource.data.directManagerId == request.auth.uid || 
-          resource.data.directManagerUid == request.auth.uid) && 
-         resource.data.status in ['pending_manager', 'pending_manager_review']) ||
+          resource.data.directManagerUid == request.auth.uid ||
+          resource.data.get('approvalTargetUid', '') == request.auth.uid ||
+          resource.data.get('directSupervisorUid', '') == request.auth.uid ||
+          resource.data.get('currentApproverUid', '') == request.auth.uid) && (
+            resource.data.status in ['pending_manager', 'pending_manager_review', 'pending_director', 'pending_director_review', 'pending_supervisor', 'menunggu_approval_atasan'] ||
+            resource.data.status.startsWith('pending_')
+         )) ||
         isHrd() ||
         isSuperAdmin()
       );
-      allow delete: if isSuperAdmin() || (resource.data.employeeId == request.auth.uid && resource.data.status in ['pending_manager', 'pending_manager_review']);
+      allow delete: if isSuperAdmin() || (resource.data.employeeId == request.auth.uid && (
+        resource.data.status in ['pending_manager', 'pending_manager_review', 'pending_director', 'pending_director_review'] ||
+        resource.data.status.startsWith('pending_')
+      ));
     }
 
     match /leave_balances/{balanceId} {
