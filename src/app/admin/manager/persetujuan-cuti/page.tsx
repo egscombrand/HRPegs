@@ -258,7 +258,8 @@ export default function ManagerLeaveApprovalPage() {
 
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
-      case 'approved': return 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600';
+      case 'approved':
+      case 'approved_by_hrd': return 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600';
       case 'active_leave': return 'bg-blue-500/10 border-blue-500/20 text-blue-600';
       case 'completed': return 'bg-slate-500/10 border-slate-500/20 text-slate-600';
       case 'cancelled': return 'bg-gray-500/10 border-gray-500/20 text-gray-500';
@@ -284,7 +285,8 @@ export default function ManagerLeaveApprovalPage() {
       case 'pending_hrd_review': return 'Menunggu Verifikasi HRD';
       case 'revision_requested_by_hrd': return 'Perlu Revisi (HRD)';
       case 'rejected_by_hrd': return 'Ditolak HRD';
-      case 'approved': return 'Disetujui HRD';
+      case 'approved':
+      case 'approved_by_hrd': return 'Disetujui HRD';
       case 'active_leave': return 'Cuti Aktif';
       case 'completed': return 'Cuti Selesai';
       case 'cancelled': return 'Dibatalkan';
@@ -722,7 +724,7 @@ export default function ManagerLeaveApprovalPage() {
                     {selectedRequest && ['pending_hrd', 'pending_hrd_review'].includes(selectedRequest.status) && 'Menunggu Verifikasi HRD'}
                     {selectedRequest && selectedRequest.status === 'rejected_by_hrd' && `Ditolak HRD: "${selectedRequest.hrdNotes}"`}
                     {selectedRequest && selectedRequest.status === 'revision_requested_by_hrd' && `Perlu Revisi: "${selectedRequest.hrdNotes}"`}
-                    {selectedRequest && ['approved', 'active_leave', 'completed'].includes(selectedRequest.status) && 'Disetujui HRD'}
+                    {selectedRequest && ['approved', 'approved_by_hrd', 'active_leave', 'completed'].includes(selectedRequest.status) && 'Disetujui HRD'}
                   </div>
                 </div>
               </div>

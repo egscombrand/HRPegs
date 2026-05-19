@@ -1,6 +1,7 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { add, addDays } from "date-fns";
+import { add, addDays, format } from "date-fns";
+import { id as idLocale } from 'date-fns/locale';
 import type { JobApplication } from "./types";
 
 export function cn(...inputs: ClassValue[]) {
@@ -105,4 +106,18 @@ export function generateUniqueCode(length = 8): string {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return result;
+}
+
+/**
+ * Standardizes Indonesian date and time formatting across the application.
+ * Escapes the literal 'pukul' to prevent unescaped latin alphabet character errors.
+ */
+export function formatIndonesianDateTime(date: Date | null | undefined | string | number): string {
+  if (!date) return '-';
+  try {
+    const parsedDate = typeof date === 'string' || typeof date === 'number' ? new Date(date) : date;
+    return format(parsedDate, "EEEE, dd MMMM yyyy 'pukul' HH:mm", { locale: idLocale });
+  } catch (error) {
+    return '-';
+  }
 }

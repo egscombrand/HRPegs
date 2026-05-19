@@ -467,6 +467,18 @@ export function LeaveSubmissionClient() {
       return;
     }
 
+    const hrdInfo = employeeProfile?.hrdEmploymentInfo || {};
+    const managerUidVal = hrdInfo.directSupervisorUid || employeeProfile?.managerUid || employeeProfile?.supervisorUid || '';
+
+    if (!managerUidVal) {
+      toast({
+        variant: 'destructive',
+        title: "Atasan Belum Diatur",
+        description: "Atasan langsung belum diatur. Hubungi HRD."
+      });
+      return;
+    }
+
     setIsSaving(true);
     let attachmentUrl = '';
     try {
@@ -490,7 +502,6 @@ export function LeaveSubmissionClient() {
         attachmentUrl = values.attachment;
       }
 
-      const hrdInfo = employeeProfile?.hrdEmploymentInfo || {};
       const submissionDateVal = new Date();
 
       const formattedSubmissionTime = format(submissionDateVal, "EEEE, dd MMMM yyyy 'pukul' HH:mm", { locale: idLocale });
@@ -616,7 +627,8 @@ export function LeaveSubmissionClient() {
 
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
-      case 'approved': return 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600';
+      case 'approved':
+      case 'approved_by_hrd': return 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600';
       case 'active_leave': return 'bg-blue-500/10 border-blue-500/20 text-blue-600';
       case 'completed': return 'bg-slate-500/10 border-slate-500/20 text-slate-600';
       case 'cancelled': return 'bg-gray-500/10 border-gray-500/20 text-gray-500';
@@ -642,7 +654,8 @@ export function LeaveSubmissionClient() {
       case 'pending_hrd_review': return 'Menunggu Verifikasi HRD';
       case 'revision_requested_by_hrd': return 'Perlu Revisi';
       case 'rejected_by_hrd': return 'Ditolak';
-      case 'approved': return 'Disetujui HRD';
+      case 'approved':
+      case 'approved_by_hrd': return 'Disetujui HRD';
       case 'active_leave': return 'Cuti Aktif';
       case 'completed': return 'Cuti Selesai';
       case 'cancelled': return 'Dibatalkan';
@@ -1194,7 +1207,7 @@ export function LeaveSubmissionClient() {
               <div>
                 <p className="text-xs font-bold text-slate-400 uppercase">Waktu Pengajuan</p>
                 <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 mt-1">
-                  {selectedRequest?.submittedAtStr || (selectedRequest?.createdAt ? format(selectedRequest.createdAt.toDate(), 'EEEE, dd MMMM yyyy pukul HH:mm', { locale: idLocale }) : '-')}
+                  {selectedRequest?.submittedAtStr || (selectedRequest?.createdAt ? format(selectedRequest.createdAt.toDate(), "EEEE, dd MMMM yyyy 'pukul' HH:mm", { locale: idLocale }) : '-')}
                 </p>
               </div>
             </div>
@@ -1249,8 +1262,8 @@ export function LeaveSubmissionClient() {
                   <div className="text-xs font-bold text-slate-800 dark:text-white">Persetujuan Atasan ({selectedRequest?.managerName || 'Atasan Langsung'})</div>
                   <div className="text-[10px] text-slate-500 font-medium mt-0.5">
                     {['pending_manager', 'pending_manager_review'].includes(selectedRequest?.status || '') && 'Menunggu Persetujuan Atasan'}
-                    {selectedRequest?.status === 'rejected_by_manager' && `Ditolak Atasan: "${selectedRequest.managerNotes}"`}
-                    {['revision_requested', 'revision_requested_by_manager'].includes(selectedRequest?.status || '') && `Perlu Revisi: "${selectedRequest.managerNotes}"`}
+                    {selectedRequest?.status === 'rejected_by_manager' && `Ditolak Atasan: "${selectedRequest?.managerNotes}"`}
+                    {['revision_requested', 'revision_requested_by_manager'].includes(selectedRequest?.status || '') && `Perlu Revisi: "${selectedRequest?.managerNotes}"`}
                     {selectedRequest?.status === 'cancelled' && 'Pengajuan Dibatalkan'}
                     {!['pending_manager', 'pending_manager_review', 'rejected_by_manager', 'revision_requested', 'revision_requested_by_manager', 'cancelled'].includes(selectedRequest?.status || '') && 'Disetujui Atasan'}
                   </div>
@@ -1271,9 +1284,9 @@ export function LeaveSubmissionClient() {
                   <div className="text-[10px] text-slate-500 font-medium mt-0.5">
                     {['pending_manager', 'pending_manager_review', 'rejected_by_manager', 'revision_requested', 'revision_requested_by_manager', 'cancelled'].includes(selectedRequest?.status || '') && 'Menunggu persetujuan atasan'}
                     {['pending_hrd', 'pending_hrd_review'].includes(selectedRequest?.status || '') && 'Menunggu Verifikasi HRD'}
-                    {selectedRequest?.status === 'rejected_by_hrd' && `Ditolak HRD: "${selectedRequest.hrdNotes}"`}
-                    {selectedRequest?.status === 'revision_requested_by_hrd' && `Perlu Revisi: "${selectedRequest.hrdNotes}"`}
-                    {['approved', 'active_leave', 'completed'].includes(selectedRequest?.status || '') && 'Disetujui HRD'}
+                    {selectedRequest?.status === 'rejected_by_hrd' && `Ditolak HRD: "${selectedRequest?.hrdNotes}"`}
+                    {selectedRequest?.status === 'revision_requested_by_hrd' && `Perlu Revisi: "${selectedRequest?.hrdNotes}"`}
+                    {['approved', 'approved_by_hrd', 'active_leave', 'completed'].includes(selectedRequest?.status || '') && 'Disetujui HRD'}
                   </div>
                 </div>
 
@@ -1282,16 +1295,16 @@ export function LeaveSubmissionClient() {
                   <div className={`absolute -left-[20px] top-1 h-[12px] w-[12px] rounded-full ring-4 ring-white dark:ring-slate-900 ${
                     ['active_leave', 'completed'].includes(selectedRequest?.status || '')
                       ? 'bg-emerald-500'
-                      : (selectedRequest?.status === 'approved'
+                      : (['approved', 'approved_by_hrd'].includes(selectedRequest?.status || '')
                         ? 'bg-indigo-500 animate-pulse'
                         : 'bg-slate-300')
                   }`} />
                   <div className="text-xs font-bold text-slate-800 dark:text-white">Status Realisasi Cuti</div>
                   <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">
-                    {selectedRequest?.status === 'approved' && 'Menunggu Tanggal Mulai Cuti'}
+                    {['approved', 'approved_by_hrd'].includes(selectedRequest?.status || '') && 'Menunggu Tanggal Mulai Cuti'}
                     {selectedRequest?.status === 'active_leave' && 'Cuti Aktif (Sedang Berlangsung)'}
                     {selectedRequest?.status === 'completed' && 'Cuti Selesai'}
-                    {!['approved', 'active_leave', 'completed'].includes(selectedRequest?.status || '') && 'Belum Aktif'}
+                    {!['approved', 'approved_by_hrd', 'active_leave', 'completed'].includes(selectedRequest?.status || '') && 'Belum Aktif'}
                   </div>
                 </div>
               </div>

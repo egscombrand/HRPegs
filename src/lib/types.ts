@@ -2035,6 +2035,7 @@ export type LeaveRequestStatus =
   | "revision_requested_by_hrd"
   | "rejected_by_hrd"
   | "approved"
+  | "approved_by_hrd"
   | "active_leave"
   | "completed"
   | "cancelled";
