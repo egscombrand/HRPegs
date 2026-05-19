@@ -14,7 +14,7 @@ import {
 } from "@/firebase";
 import { doc, collection, query, where } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
-import { LogOut, ArrowLeft, Leaf, Bell } from "lucide-react";
+import { LogOut, ArrowLeft, Leaf, Bell, ChevronDown } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -74,6 +74,10 @@ function UserNav() {
     router.push("/careers");
   };
 
+  const handleAccountSettings = () => {
+    router.push("/careers/portal/account-settings");
+  };
+
   const getInitials = (name: string = "") => {
     return name
       .split(" ")
@@ -86,23 +90,38 @@ function UserNav() {
 
   if (!userProfile) return null;
 
+  const roleLabel = userProfile.role.replace(/-/g, " ");
+
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-10 rounded-full px-2 sm:px-3 text-left"
+        >
           <Avatar className="h-9 w-9">
             <AvatarFallback>{getInitials(userProfile.fullName)}</AvatarFallback>
           </Avatar>
+
+          <div className="hidden flex-col items-start gap-0 overflow-hidden text-sm text-foreground sm:flex">
+            <span className="truncate font-medium">{userProfile.fullName}</span>
+            <span className="truncate text-xs text-muted-foreground capitalize">
+              {roleLabel}
+            </span>
+          </div>
+
+          <ChevronDown className="hidden h-4 w-4 text-muted-foreground sm:inline-flex" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-56" align="end" forceMount>
+      <DropdownMenuContent className="w-64" align="end" forceMount>
         <DropdownMenuLabel className="font-normal">
-          <div className="flex flex-col space-y-1">
+          <div className="space-y-1">
             <p className="text-sm font-medium leading-none">
               {userProfile.fullName}
             </p>
-            <p className="text-xs leading-none text-muted-foreground">
-              {userProfile.email}
+            <p className="truncate text-xs leading-none text-muted-foreground/80 capitalize">
+              {roleLabel}
             </p>
           </div>
         </DropdownMenuLabel>
@@ -111,11 +130,22 @@ function UserNav() {
           onSelect={(e) => {
             e.preventDefault();
             setOpen(false);
+            handleAccountSettings();
+          }}
+        >
+          Pengaturan Akun
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          className="text-destructive"
+          onSelect={(e) => {
+            e.preventDefault();
+            setOpen(false);
             queueMicrotask(handleLogout);
           }}
         >
           <LogOut className="mr-2 h-4 w-4" />
-          <span>Logout</span>
+          <span>Keluar</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

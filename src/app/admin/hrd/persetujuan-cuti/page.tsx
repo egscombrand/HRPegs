@@ -2,7 +2,8 @@
 
 import { useState, useMemo } from 'react';
 import { useCollection, useFirestore, useMemoFirebase, setDocumentNonBlocking } from '@/firebase';
-import { collection, query, doc, serverTimestamp, writeBatch, updateDoc } from 'firebase/firestore';
+import { collection, query, doc, serverTimestamp, writeBatch, updateDoc, getDoc } from 'firebase/firestore';
+import { resolveApprovalTarget } from '@/lib/approval-flow';
 import { useAuth } from '@/providers/auth-provider';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -81,6 +82,7 @@ export default function HrdLeaveApprovalPage() {
   const [filterManager, setFilterManager] = useState('all');
   const [filterMonth, setFilterMonth] = useState('all');
   const [filterYear, setFilterYear] = useState('all');
+  const [filterRequesterType, setFilterRequesterType] = useState('all');
   
   const [filterAdjustmentType, setFilterAdjustmentType] = useState('all');
   const [filterAdjustmentChange, setFilterAdjustmentChange] = useState('all');
@@ -198,11 +200,6 @@ export default function HrdLeaveApprovalPage() {
   }, [requests]);
 
   // Compute 5 indicators dynamically
-  const pendingHrdCount = useMemo(() => {
-    if (!requests) return 0;
-    return requests.filter(r => r.status === 'pending_hrd' || r.status === 'pending_hrd_review').length;
-  }, [requests]);
-
   const approvedThisMonthCount = useMemo(() => {
     if (!requests) return 0;
     const now = new Date();
@@ -251,6 +248,121 @@ export default function HrdLeaveApprovalPage() {
       return remaining <= 2;
     });
   }, [balances]);
+
+  const isManagerRequest = (req: LeaveRequest) => {
+    const level = String(
+      (req as any).requesterStructuralPosition || 
+      (req as any).structuralLevel || 
+      req.requesterStructuralPosition || 
+      ""
+    ).toLowerCase();
+    
+    const role = String((req as any).role || "").toLowerCase();
+    const jobTitle = String((req as any).jobTitle || "").toLowerCase();
+    const positionTitle = String((req as any).positionTitle || "").toLowerCase();
+
+    return level.includes("manager") ||
+           role.includes("manager") ||
+           jobTitle.includes("manager") ||
+           positionTitle.includes("manager") ||
+           (req as any).approvalFlowType === "manager_to_director_to_hrd";
+  };
+
+  const isStaffRequest = (req: LeaveRequest) => {
+    return !isManagerRequest(req);
+  };
+
+  const getRequesterPositionLabel = (req: LeaveRequest) => {
+    const level = (req as any).requesterStructuralPosition || 
+                  (req as any).structuralLevel || 
+                  req.requesterStructuralPosition || 
+                  "Staff";
+    return level;
+  };
+
+  const getApprovalFlowBadge = (req: LeaveRequest) => {
+    const isMgr = isManagerRequest(req);
+    if (isMgr) {
+      return (
+        <Badge variant="outline" className="bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 font-medium text-[10px] rounded-md px-1.5 py-0.5">
+          Manager Divisi → Direktur → HRD
+        </Badge>
+      );
+    } else {
+      return (
+        <Badge variant="outline" className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-medium text-[10px] rounded-md px-1.5 py-0.5">
+          Staff → Manager Divisi → HRD
+        </Badge>
+      );
+    }
+  };
+
+  const getSupervisorStatusLabel = (req: LeaveRequest) => {
+    const status = req.status;
+    const isMgr = isManagerRequest(req);
+    
+    // Check Director/Management decisions for managers
+    if (isMgr) {
+      if (req.directorDecision === 'approved') return 'Disetujui Direktur/Manajemen';
+      if (req.directorDecision === 'rejected') return 'Ditolak Direktur';
+      if (req.directorDecision === 'revision_requested') return 'Revisi Diminta Direktur';
+      if (status === 'rejected_by_director') return 'Ditolak Direktur';
+      if (status === 'revision_requested_by_director') return 'Revisi Diminta Direktur';
+    }
+
+    // Manager decisions
+    if ((req as any).managerDecision === 'approved') return 'Disetujui Manager Divisi';
+    if ((req as any).managerDecision === 'rejected') return 'Ditolak Atasan';
+    if ((req as any).managerDecision === 'revision_requested') return 'Revisi Diminta Atasan';
+    if (status === 'rejected_by_manager') return 'Ditolak Atasan';
+    if (status === 'revision_requested_by_manager') return 'Revisi Diminta Atasan';
+
+    // Fallback based on status string
+    if (status.includes('director') && status.includes('reject')) return 'Ditolak Direktur';
+    if (status.includes('manager') && status.includes('reject')) return 'Ditolak Atasan';
+    if (status.includes('director') && status.includes('revision')) return 'Revisi Diminta Direktur';
+    if (status.includes('manager') && status.includes('revision')) return 'Revisi Diminta Atasan';
+
+    // Pending state representations
+    if (isMgr) {
+      if (['pending_director', 'pending_director_review', 'waiting_director_approval'].includes(status)) {
+        return 'Menunggu Persetujuan Direktur';
+      }
+    } else {
+      if (['pending_manager', 'pending_manager_review', 'waiting_manager_approval', 'menunggu_approval_atasan'].includes(status)) {
+        return 'Menunggu Persetujuan Manager';
+      }
+    }
+
+    return 'Belum Diproses';
+  };
+
+  const getSupervisorStatusBadgeClass = (req: LeaveRequest) => {
+    const label = getSupervisorStatusLabel(req);
+    if (label.includes('Disetujui')) return 'bg-emerald-550/10 border-emerald-500/20 text-emerald-400';
+    if (label.includes('Ditolak')) return 'bg-red-500/10 border-red-500/20 text-red-400';
+    if (label.includes('Revisi')) return 'bg-amber-500/10 border-amber-500/20 text-amber-400';
+    if (label.includes('Menunggu')) return 'bg-blue-500/10 border border-blue-500/20 text-blue-400';
+    return 'bg-slate-700/10 border border-slate-750 text-slate-400';
+  };
+
+  const getHrdStatusLabel = (req: LeaveRequest) => {
+    const status = req.status;
+    if (['approved', 'approved_by_hrd', 'active_leave', 'completed'].includes(status)) return 'Disetujui HRD';
+    if (status === 'rejected_by_hrd') return 'Ditolak HRD';
+    if (status === 'revision_requested_by_hrd') return 'Revisi Diminta HRD';
+    if (status === 'pending_hrd' || status === 'pending_hrd_review') return 'Menunggu Tindakan HRD';
+    return 'Menunggu Atasan';
+  };
+
+  const getHrdStatusBadgeClass = (req: LeaveRequest) => {
+    const label = getHrdStatusLabel(req);
+    if (label === 'Disetujui HRD') return 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400';
+    if (label === 'Ditolak HRD') return 'bg-red-500/10 border-red-500/20 text-red-400';
+    if (label === 'Revisi Diminta HRD') return 'bg-amber-500/10 border-amber-500/20 text-amber-400';
+    if (label === 'Menunggu Tindakan HRD') return 'bg-blue-550/10 border border-blue-550/20 text-blue-400';
+    return 'bg-slate-700/10 border border-slate-750 text-slate-400';
+  };
 
   // General leaves requests filtered by interactive filters
   const filteredRequests = useMemo(() => {
@@ -303,23 +415,57 @@ export default function HrdLeaveApprovalPage() {
           return false;
         }
       }
+      // 8. Requester Type filter
+      if (filterRequesterType !== 'all') {
+        const isMgr = isManagerRequest(r);
+        if (filterRequesterType === 'manager' && !isMgr) return false;
+        if (filterRequesterType === 'staff' && isMgr) return false;
+      }
       return true;
     });
-  }, [requests, filterSearch, filterBrand, filterDivision, filterLeaveType, filterStatus, filterManager, filterMonth, filterYear]);
+  }, [requests, filterSearch, filterBrand, filterDivision, filterLeaveType, filterStatus, filterManager, filterMonth, filterYear, filterRequesterType, employeeProfilesMap]);
 
-  // Tab 1 List: Active Pending HRD Reviews
-  const activeRequestsFiltered = useMemo(() => {
-    return filteredRequests.filter(r => r.status === 'pending_hrd' || r.status === 'pending_hrd_review');
+  // Tab 1 List: Need HRD Action
+  const needHrdActionList = useMemo(() => {
+    return filteredRequests.filter(r => 
+      ['pending_hrd', 'pending_hrd_review', 'menunggu_approval_hrd', 'approved_by_director', 'approved_by_manager'].includes(r.status)
+    ).sort((a, b) => {
+      const aTime = a.updatedAt?.toMillis ? a.updatedAt.toMillis() : 0;
+      const bTime = b.updatedAt?.toMillis ? b.updatedAt.toMillis() : 0;
+      return bTime - aTime;
+    });
   }, [filteredRequests]);
 
-  // Tab 2 List: All Leaves requests history
-  const historyRequestsFiltered = useMemo(() => {
+  // Tab 2 List: Division Managers
+  const managerRequestsList = useMemo(() => {
+    return filteredRequests.filter(isManagerRequest).sort((a, b) => {
+      const aTime = a.updatedAt?.toMillis ? a.updatedAt.toMillis() : 0;
+      const bTime = b.updatedAt?.toMillis ? b.updatedAt.toMillis() : 0;
+      return bTime - aTime;
+    });
+  }, [filteredRequests]);
+
+  // Tab 3 List: Staff members
+  const staffRequestsList = useMemo(() => {
+    return filteredRequests.filter(isStaffRequest).sort((a, b) => {
+      const aTime = a.updatedAt?.toMillis ? a.updatedAt.toMillis() : 0;
+      const bTime = b.updatedAt?.toMillis ? b.updatedAt.toMillis() : 0;
+      return bTime - aTime;
+    });
+  }, [filteredRequests]);
+
+  // Tab 4 List: All Requests
+  const allRequestsList = useMemo(() => {
     return [...filteredRequests].sort((a, b) => {
       const aTime = a.updatedAt?.toMillis ? a.updatedAt.toMillis() : 0;
       const bTime = b.updatedAt?.toMillis ? b.updatedAt.toMillis() : 0;
       return bTime - aTime;
     });
   }, [filteredRequests]);
+
+  const pendingHrdCount = useMemo(() => {
+    return needHrdActionList.length;
+  }, [needHrdActionList]);
 
   // Tab 3 List: Employee Quota balances filtered (Sourced from Employee Profiles to show uninitialized ones)
   const filteredBalances = useMemo(() => {
@@ -431,6 +577,82 @@ export default function HrdLeaveApprovalPage() {
     if (!balances || !selectedRequest) return null;
     return balances.find(b => b.employeeId === selectedRequest.employeeId) || null;
   }, [balances, selectedRequest]);
+
+  const [isMigrating, setIsMigrating] = useState(false);
+
+  const handleMigrateLegacyRequest = async (req: LeaveRequest) => {
+    if (!firestore || !userProfile) return;
+    setIsMigrating(true);
+    try {
+      const employeeProfile = employeeProfilesMap.get(req.employeeId || (req as any).employeeUid);
+      const employeeUser = usersMap.get(req.employeeId || (req as any).employeeUid);
+      
+      let divisionMaster: any = null;
+      const brandId = req.brandId || employeeProfile?.hrdEmploymentInfo?.brandId || employeeProfile?.brandId;
+      const divisionId = req.divisionId || employeeProfile?.hrdEmploymentInfo?.divisionId || employeeProfile?.divisionId;
+
+      if (brandId && divisionId) {
+        const divRef = doc(firestore, 'brands', brandId, 'divisions', divisionId);
+        const divSnap = await getDoc(divRef);
+        if (divSnap.exists()) {
+          divisionMaster = divSnap.data();
+        }
+      }
+
+      const approvalTarget = resolveApprovalTarget(
+        employeeProfile as any,
+        employeeUser as any,
+        divisionMaster
+      );
+
+      if (!approvalTarget.approvalTargetUid) {
+        throw new Error("Atasan/Direktur untuk divisi ini belum diatur di struktur organisasi.");
+      }
+
+      const directorUid = approvalTarget.approvalTargetUid;
+      const directorName = approvalTarget.approvalTargetName || "Direktur/Manajemen";
+
+      const reqRef = doc(firestore, 'leave_requests', req.id!);
+      await updateDoc(reqRef, {
+        approvalFlowType: "manager_to_director_to_hrd",
+        currentApprovalStep: "director",
+        currentApproverUid: directorUid,
+        currentApproverName: directorName,
+        approvalTargetUid: directorUid,
+        directorUid: directorUid,
+        directorId: directorUid,
+        directorName: directorName,
+        updatedAt: serverTimestamp()
+      });
+
+      toast({
+        title: "Migrasi Berhasil",
+        description: `Field approver Direktur (${directorName}) berhasil ditambahkan ke dokumen.`
+      });
+
+      setSelectedRequest({
+        ...req,
+        approvalFlowType: "manager_to_director_to_hrd",
+        currentApprovalStep: "director",
+        currentApproverUid: directorUid,
+        currentApproverName: directorName,
+        approvalTargetUid: directorUid,
+        directorUid: directorUid,
+        directorId: directorUid,
+        directorName: directorName,
+      } as any);
+
+      mutateRequests();
+    } catch (e: any) {
+      toast({
+        variant: 'destructive',
+        title: "Gagal Migrasi",
+        description: e.message
+      });
+    } finally {
+      setIsMigrating(false);
+    }
+  };
 
   // Action handlers
   const handleViewDetails = (req: LeaveRequest) => {
@@ -741,6 +963,127 @@ export default function HrdLeaveApprovalPage() {
     }
   };
 
+  const renderRequestsTable = (list: LeaveRequest[], emptyMessage: string) => {
+    return (
+      <Card className="border-slate-100 dark:border-slate-800 shadow-md rounded-2xl overflow-hidden">
+        <CardContent className="p-0">
+          <div className="overflow-x-auto w-full">
+            <Table className="w-full min-w-[1200px]">
+              <TableHeader className="bg-slate-50/20 dark:bg-slate-900/10">
+                <TableRow>
+                  <TableHead className="pl-6 py-4 font-bold text-slate-850 dark:text-slate-200">Karyawan</TableHead>
+                  <TableHead className="py-4 font-bold text-slate-850 dark:text-slate-200">Jabatan/Level</TableHead>
+                  <TableHead className="py-4 font-bold text-slate-850 dark:text-slate-200">Brand / Divisi</TableHead>
+                  <TableHead className="py-4 font-bold text-slate-850 dark:text-slate-200">Alur Approval</TableHead>
+                  <TableHead className="py-4 font-bold text-slate-850 dark:text-slate-200">Jenis Cuti</TableHead>
+                  <TableHead className="py-4 font-bold text-slate-850 dark:text-slate-200">Periode Cuti</TableHead>
+                  <TableHead className="py-4 font-bold text-slate-850 dark:text-slate-200">Durasi</TableHead>
+                  <TableHead className="py-4 font-bold text-slate-850 dark:text-slate-200">Status Atasan</TableHead>
+                  <TableHead className="py-4 font-bold text-slate-850 dark:text-slate-200">Status HRD</TableHead>
+                  <TableHead className="text-right pr-6 py-4 font-bold text-slate-850 dark:text-slate-200">Aksi</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {list.length > 0 ? (
+                  list.map(r => {
+                    const profile = employeeProfilesMap.get(r.employeeId);
+                    const rBrand = r.brandName || profile?.hrdEmploymentInfo?.brandName || profile?.hrdEmploymentInfo?.brand || '-';
+                    const rDivision = r.divisionName || profile?.hrdEmploymentInfo?.divisionName || profile?.hrdEmploymentInfo?.division || '-';
+                    const jobTitle = getRequesterPositionLabel(r);
+                    const canAction = r.status === 'pending_hrd' || r.status === 'pending_hrd_review';
+
+                    return (
+                      <TableRow key={r.id} className="hover:bg-slate-50/30 dark:hover:bg-slate-900/10 transition-colors border-b border-slate-100 dark:border-slate-800/80">
+                        <TableCell className="pl-6 py-5">
+                          <span className="text-slate-850 dark:text-white font-black text-sm block">{r.employeeName}</span>
+                        </TableCell>
+                        <TableCell className="py-5 font-semibold text-slate-500 text-xs capitalize">
+                          {jobTitle}
+                        </TableCell>
+                        <TableCell className="py-5 font-bold text-slate-500 text-xs uppercase tracking-wider">
+                          <div className="flex flex-col">
+                            <span>{rBrand}</span>
+                            <span className="text-[10px] text-slate-400 font-semibold">{rDivision}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-5">
+                          {getApprovalFlowBadge(r)}
+                        </TableCell>
+                        <TableCell className="py-5 text-xs font-bold text-indigo-500 capitalize">
+                          Cuti {r.leaveType === 'tahunan' ? 'Tahunan' : r.leaveType === 'besar' ? 'Besar' : r.leaveType === 'menikah' ? 'Menikah' : r.leaveType === 'melahirkan' ? 'Melahirkan' : 'Tahunan'}
+                        </TableCell>
+                        <TableCell className="py-5 text-xs text-slate-500 font-semibold">
+                          {format(r.startDate.toDate(), 'dd MMM yyyy', { locale: idLocale })} - {format(r.endDate.toDate(), 'dd MMM yyyy', { locale: idLocale })}
+                        </TableCell>
+                        <TableCell className="py-5 font-black text-slate-700 dark:text-slate-200 text-sm">
+                          {r.durationDays} Hari
+                        </TableCell>
+                        <TableCell className="py-5">
+                          <Badge variant="outline" className={`px-2 py-0.5 rounded-full text-[9px] font-black border uppercase tracking-wider ${getSupervisorStatusBadgeClass(r)}`}>
+                            {getSupervisorStatusLabel(r)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="py-5">
+                          <Badge variant="outline" className={`px-2 py-0.5 rounded-full text-[9px] font-black border uppercase tracking-wider ${getHrdStatusBadgeClass(r)}`}>
+                            {getHrdStatusLabel(r)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right pr-6 py-5">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Button variant="ghost" size="sm" onClick={() => handleViewDetails(r)} className="rounded-xl hover:bg-slate-100 font-bold text-xs gap-1">
+                              <Eye className="h-3.5 w-3.5" /> Detail
+                            </Button>
+                            {canAction && (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleOpenAction('approve', r)}
+                                  className="rounded-xl border-emerald-500/20 hover:bg-emerald-950/20 text-emerald-600 font-bold text-xs"
+                                >
+                                  Setujui
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleOpenAction('reject', r)}
+                                  className="rounded-xl border-red-500/20 hover:bg-red-950/20 text-red-600 font-bold text-xs"
+                                >
+                                  Tolak
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleOpenAction('revise', r)}
+                                  className="rounded-xl border-amber-500/20 hover:bg-amber-950/20 text-amber-600 font-bold text-xs"
+                                >
+                                  Revisi
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                ) : (
+                  <TableRow className="hover:bg-transparent">
+                    <TableCell colSpan={10} className="h-44 text-center text-slate-500">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <CheckCircle2 className="h-10 w-10 text-slate-400 opacity-40" />
+                        <p className="text-sm font-bold">{emptyMessage}</p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
 
 
   if (isLoadingRequests || isLoadingBalances || isLoadingAdjustments) {
@@ -948,6 +1291,20 @@ export default function HrdLeaveApprovalPage() {
                   </select>
                 </div>
 
+                {/* 4b. Requester Type Filter */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Tipe Pengaju</label>
+                  <select
+                    value={filterRequesterType}
+                    onChange={e => setFilterRequesterType(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs font-bold text-slate-700 focus:border-indigo-500 focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white"
+                  >
+                    <option value="all">Semua Tipe</option>
+                    <option value="staff">Staff/Karyawan</option>
+                    <option value="manager">Manager Divisi</option>
+                  </select>
+                </div>
+
                 {/* 5. Search Text Input */}
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Pencarian Nama Karyawan</label>
@@ -1027,6 +1384,7 @@ export default function HrdLeaveApprovalPage() {
                     setFilterDivision('all');
                     setFilterLeaveType('all');
                     setFilterStatus('all');
+                    setFilterRequesterType('all');
                     setFilterSearch('');
                     setFilterManager('all');
                     setFilterMonth('all');
@@ -1040,187 +1398,56 @@ export default function HrdLeaveApprovalPage() {
             </CardContent>
           </Card>
         )}
-
-        {/* WORKSPACE TABS SECTION */}
+          {/* WORKSPACE TABS SECTION */}
         <Tabs defaultValue="pending" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 rounded-2xl bg-slate-100 dark:bg-slate-950 p-1 mb-6 h-12 shadow-sm border border-slate-200/40">
+          <TabsList className="grid w-full grid-cols-6 rounded-2xl bg-slate-100 dark:bg-slate-950 p-1 mb-6 h-12 shadow-sm border border-slate-200/40">
             <TabsTrigger value="pending" className="rounded-xl font-bold text-xs gap-1.5 transition-all py-2">
-              Persetujuan Cuti HRD
-              <Badge className="bg-indigo-600 text-white font-black text-[9px] rounded-full px-1.5 py-0.5">{activeRequestsFiltered.length}</Badge>
+              Butuh Tindakan HRD
+              <Badge className="bg-indigo-600 text-white font-black text-[9px] rounded-full px-1.5 py-0.5">{needHrdActionList.length}</Badge>
             </TabsTrigger>
-            <TabsTrigger value="history" className="rounded-xl font-bold text-xs transition-all py-2">Semua Pengajuan Cuti</TabsTrigger>
+            <TabsTrigger value="manager" className="rounded-xl font-bold text-xs gap-1.5 transition-all py-2">
+              Manager Divisi
+              <Badge className="bg-slate-500 text-white font-black text-[9px] rounded-full px-1.5 py-0.5">{managerRequestsList.length}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="staff" className="rounded-xl font-bold text-xs gap-1.5 transition-all py-2">
+              Staff
+              <Badge className="bg-slate-500 text-white font-black text-[9px] rounded-full px-1.5 py-0.5">{staffRequestsList.length}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="history" className="rounded-xl font-bold text-xs transition-all py-2">Semua Pengajuan</TabsTrigger>
             <TabsTrigger value="balances" className="rounded-xl font-bold text-xs transition-all py-2">Saldo & Hak Cuti</TabsTrigger>
             <TabsTrigger value="adjustments" className="rounded-xl font-bold text-xs transition-all py-2">Mutasi Saldo Cuti</TabsTrigger>
           </TabsList>
 
-          {/* TAB 1: PERSETUJUAN CUTI HRD (Pending Queue) */}
+          {/* TAB 1: BUTUH TINDAKAN HRD */}
           <TabsContent value="pending" className="space-y-6 focus:outline-none">
-            <Card className="border-slate-100 dark:border-slate-800 shadow-md rounded-2xl overflow-hidden">
-              <CardHeader className="border-b pb-4 bg-slate-50/50 dark:bg-slate-900/50 flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="text-sm font-black uppercase tracking-wider text-indigo-600 flex items-center gap-2">
-                    Menunggu Verifikasi & Final Approval HRD
-                  </CardTitle>
-                  <CardDescription className="text-xs font-semibold text-slate-400 mt-1">Staf berikut telah disetujui atasan divisi masing-masing dan menunggu persetujuan HRD.</CardDescription>
-                </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto w-full">
-                  <Table className="w-full min-w-[1100px]">
-                    <TableHeader className="bg-slate-50/20 dark:bg-slate-900/10">
-                      <TableRow>
-                        <TableHead className="pl-8 py-4 font-bold text-slate-800 dark:text-slate-200">Karyawan</TableHead>
-                        <TableHead className="py-4 font-bold text-slate-800 dark:text-slate-200">Brand / Divisi</TableHead>
-                        <TableHead className="py-4 font-bold text-slate-800 dark:text-slate-200">Jenis Cuti</TableHead>
-                        <TableHead className="py-4 font-bold text-slate-800 dark:text-slate-200">Periode Cuti</TableHead>
-                        <TableHead className="py-4 font-bold text-slate-800 dark:text-slate-200">Durasi</TableHead>
-                        <TableHead className="py-4 font-bold text-slate-800 dark:text-slate-200">Status Atasan</TableHead>
-                        <TableHead className="text-right pr-8 py-4 font-bold text-slate-800 dark:text-slate-200">Aksi</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {activeRequestsFiltered.length > 0 ? activeRequestsFiltered.map(r => {
-                        const profile = employeeProfilesMap.get(r.employeeId);
-                        const rBrand = r.brandName || profile?.hrdEmploymentInfo?.brandName || profile?.hrdEmploymentInfo?.brand || '-';
-                        const rDivision = r.divisionName || profile?.hrdEmploymentInfo?.divisionName || profile?.hrdEmploymentInfo?.division || '-';
-                        
-                        return (
-                          <TableRow key={r.id} className="hover:bg-slate-50/30 dark:hover:bg-slate-900/10 transition-colors border-b border-slate-100 dark:border-slate-800/80">
-                            <TableCell className="pl-8 py-5">
-                              <span className="text-slate-800 dark:text-white font-black text-sm block">{r.employeeName}</span>
-                            </TableCell>
-                            <TableCell className="py-5 font-bold text-slate-500 text-xs uppercase tracking-wider">
-                              <div className="flex flex-col">
-                                <span>{rBrand}</span>
-                                <span className="text-[10px] text-slate-400 font-semibold">{rDivision}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="py-5 text-xs font-bold text-indigo-500 capitalize">
-                              Cuti {r.leaveType === 'tahunan' ? 'Tahunan' : r.leaveType === 'besar' ? 'Besar' : r.leaveType === 'menikah' ? 'Menikah' : r.leaveType === 'melahirkan' ? 'Melahirkan' : 'Tahunan'}
-                            </TableCell>
-                            <TableCell className="py-5 text-xs text-slate-500 font-semibold">
-                              {format(r.startDate.toDate(), 'dd MMM yyyy', { locale: idLocale })} - {format(r.endDate.toDate(), 'dd MMM yyyy', { locale: idLocale })}
-                            </TableCell>
-                            <TableCell className="py-5 font-black text-slate-700 dark:text-slate-200 text-sm">
-                              {r.durationDays} Hari Kerja
-                            </TableCell>
-                            <TableCell className="py-5 text-xs text-emerald-600 font-black">
-                              <div className="flex flex-col gap-0.5">
-                                <div className="flex items-center gap-1">
-                                  <UserCheck className="h-3.5 w-3.5" /> Disetujui {r.managerName || '-'}
-                                </div>
-                                {r.managerReviewedAt && (
-                                  <span className="text-[9px] text-slate-400 font-semibold ml-4">
-                                    {format(r.managerReviewedAt.toDate(), "EEEE, dd MMMM yyyy 'pukul' HH:mm", { locale: idLocale })}
-                                  </span>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-right pr-8 py-5">
-                              <div className="flex items-center justify-end gap-1.5">
-                                <Button variant="ghost" size="sm" onClick={() => handleViewDetails(r)} className="rounded-xl hover:bg-slate-100 font-bold text-xs gap-1">
-                                  <Eye className="h-3.5 w-3.5" /> Tinjau
-                                </Button>
-                                <Button variant="outline" size="sm" onClick={() => handleOpenAction('approve', r)} className="rounded-xl border-emerald-500/20 hover:bg-emerald-50 text-emerald-600 font-bold text-xs">
-                                  Setujui
-                                </Button>
-                                <Button variant="outline" size="sm" onClick={() => handleOpenAction('reject', r)} className="rounded-xl border-red-500/20 hover:bg-red-50 text-red-600 font-bold text-xs">
-                                  Tolak
-                                </Button>
-                                <Button variant="outline" size="sm" onClick={() => handleOpenAction('revise', r)} className="rounded-xl border-amber-500/20 hover:bg-amber-50 text-amber-600 font-bold text-xs">
-                                  Revisi
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      }) : (
-                        <TableRow>
-                          <TableCell colSpan={7} className="h-44 text-center text-slate-400">
-                            <div className="flex flex-col items-center justify-center gap-2">
-                              <CheckCircle2 className="h-10 w-10 text-emerald-500 opacity-60" />
-                              <p className="text-sm font-bold">Luar Biasa! Semua antrean approval cuti HRD telah bersih.</p>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
+            {renderRequestsTable(
+              needHrdActionList,
+              "Luar Biasa! Semua antrean approval cuti HRD telah bersih."
+            )}
           </TabsContent>
 
-          {/* TAB 2: SEMUA PENGAJUAN CUTI (Leaves request history) */}
+          {/* TAB 2: MANAGER DIVISI */}
+          <TabsContent value="manager" className="space-y-6 focus:outline-none">
+            {renderRequestsTable(
+              managerRequestsList,
+              "Tidak ada pengajuan cuti Manager Divisi."
+            )}
+          </TabsContent>
+
+          {/* TAB 3: STAFF */}
+          <TabsContent value="staff" className="space-y-6 focus:outline-none">
+            {renderRequestsTable(
+              staffRequestsList,
+              "Tidak ada pengajuan cuti Staff/Karyawan."
+            )}
+          </TabsContent>
+
+          {/* TAB 4: ALL REQUESTS */}
           <TabsContent value="history" className="space-y-6 focus:outline-none">
-            <Card className="border-slate-100 dark:border-slate-800 shadow-md rounded-2xl overflow-hidden">
-              <CardHeader className="border-b pb-4 bg-slate-50/50 dark:bg-slate-900/50">
-                <CardTitle className="text-sm font-black uppercase tracking-wider text-slate-500">Seluruh Riwayat Keputusan Cuti Karyawan</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto w-full">
-                  <Table className="w-full min-w-[1100px]">
-                    <TableHeader className="bg-slate-50/20 dark:bg-slate-900/10">
-                      <TableRow>
-                        <TableHead className="pl-8 py-4 font-bold text-slate-800 dark:text-slate-200">Karyawan</TableHead>
-                        <TableHead className="py-4 font-bold text-slate-800 dark:text-slate-200">Brand / Divisi</TableHead>
-                        <TableHead className="py-4 font-bold text-slate-800 dark:text-slate-200">Jenis Cuti</TableHead>
-                        <TableHead className="py-4 font-bold text-slate-800 dark:text-slate-200">Periode Cuti</TableHead>
-                        <TableHead className="py-4 font-bold text-slate-800 dark:text-slate-200">Durasi</TableHead>
-                        <TableHead className="py-4 font-bold text-slate-800 dark:text-slate-200">Status</TableHead>
-                        <TableHead className="text-right pr-8 py-4 font-bold text-slate-800 dark:text-slate-200">Aksi</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {historyRequestsFiltered.length > 0 ? historyRequestsFiltered.map(r => {
-                        const profile = employeeProfilesMap.get(r.employeeId);
-                        const rBrand = r.brandName || profile?.hrdEmploymentInfo?.brandName || profile?.hrdEmploymentInfo?.brand || '-';
-                        const rDivision = r.divisionName || profile?.hrdEmploymentInfo?.divisionName || profile?.hrdEmploymentInfo?.division || '-';
-                        
-                        return (
-                          <TableRow key={r.id} className="hover:bg-slate-50/30 dark:hover:bg-slate-900/10 transition-colors border-b border-slate-100 dark:border-slate-800/80">
-                            <TableCell className="pl-8 py-5">
-                              <span className="text-slate-800 dark:text-white font-black text-sm block">{r.employeeName}</span>
-                            </TableCell>
-                            <TableCell className="py-5 font-bold text-slate-500 text-xs uppercase tracking-wider">
-                              <div className="flex flex-col">
-                                <span>{rBrand}</span>
-                                <span className="text-[10px] text-slate-400 font-semibold">{rDivision}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="py-5 text-xs font-bold text-indigo-500 capitalize">
-                              Cuti {r.leaveType === 'tahunan' ? 'Tahunan' : r.leaveType === 'besar' ? 'Besar' : r.leaveType === 'menikah' ? 'Menikah' : r.leaveType === 'melahirkan' ? 'Melahirkan' : 'Tahunan'}
-                            </TableCell>
-                            <TableCell className="py-5 text-xs text-slate-500 font-semibold">
-                              {format(r.startDate.toDate(), 'dd MMM yyyy', { locale: idLocale })} - {format(r.endDate.toDate(), 'dd MMM yyyy', { locale: idLocale })}
-                            </TableCell>
-                            <TableCell className="py-5 font-black text-slate-700 dark:text-slate-200 text-sm">
-                              {r.durationDays} Hari Kerja
-                            </TableCell>
-                            <TableCell className="py-5">
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black border uppercase tracking-wider ${getStatusBadgeClass(r.status)}`}>
-                                {getStatusLabel(r.status)}
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-right pr-8 py-5">
-                              <Button variant="ghost" size="sm" onClick={() => handleViewDetails(r)} className="rounded-xl hover:bg-slate-100 font-bold text-xs gap-1">
-                                <Eye className="h-3.5 w-3.5" /> Detail
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      }) : (
-                        <TableRow>
-                          <TableCell colSpan={7} className="h-28 text-center text-slate-400">
-                            Belum ada riwayat pengajuan cuti yang terdaftar.
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
+            {renderRequestsTable(
+              allRequestsList,
+              "Belum ada riwayat pengajuan cuti yang terdaftar."
+            )}
           </TabsContent>
 
           {/* TAB 3: SALDO CUTI KARYAWAN (Employee Balances) */}
@@ -1476,6 +1703,44 @@ export default function HrdLeaveApprovalPage() {
           {/* Internal Scroll Content Area */}
           <div className="p-6 space-y-6 overflow-y-auto flex-1 max-h-[calc(85vh-140px)]">
             
+            {/* Legacy Migration Alert for HRD */}
+            {selectedRequest && (() => {
+              const requesterStructuralLevel = String(
+                selectedRequest.requesterStructuralPosition ||
+                (selectedRequest as any).structuralLevel ||
+                ""
+              ).toLowerCase();
+
+              const reqAny = selectedRequest as any;
+              const isDivisionManager = requesterStructuralLevel.includes("manager");
+              const isMissingApprover =
+                !reqAny.currentApproverUid &&
+                !reqAny.approvalTargetUid &&
+                !reqAny.directorUid &&
+                !reqAny.directorId &&
+                !reqAny.directSupervisorUid;
+
+              if (isDivisionManager && isMissingApprover) {
+                return (
+                  <div className="p-4 bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30 rounded-xl space-y-3">
+                    <p className="text-xs font-bold text-rose-800 dark:text-rose-400 flex items-center gap-1.5">
+                      ⚠️ Pengajuan cuti Division Manager ini belum memiliki field approver Direktur (Data Legacy).
+                    </p>
+                    <Button 
+                      size="sm" 
+                      onClick={() => handleMigrateLegacyRequest(selectedRequest)} 
+                      disabled={isMigrating}
+                      className="bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs gap-1"
+                    >
+                      {isMigrating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                      Migrasikan Data Approver
+                    </Button>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
             {/* 1. Ringkasan Cuti */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="p-4 bg-slate-50 dark:bg-slate-800/30 rounded-xl border border-slate-100 dark:border-slate-800 space-y-1">

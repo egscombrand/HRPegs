@@ -8,7 +8,9 @@ import {
   doc,
   serverTimestamp,
   updateDoc,
+  getDoc,
 } from "firebase/firestore";
+import { resolveApprovalTarget } from "@/lib/approval-flow";
 import { useAuth } from "@/providers/auth-provider";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -179,9 +181,38 @@ export default function ManagerLeaveApprovalPage() {
   ]);
 
   const isPendingStatus = (status: string) =>
-    pendingStatuses.has(status) || status.includes("pending");
+    pendingStatuses.has(status);
+
+  const isActionEnabledForRole = (req: LeaveRequest) => {
+    const status = req.status;
+    const requesterStructuralLevel = String(
+      (req as any).requesterStructuralPosition ||
+      (req as any).structuralLevel ||
+      ""
+    ).toLowerCase();
+
+    const isDivisionManager = requesterStructuralLevel.includes("manager");
+
+    if (isDivisionManager) {
+      return [
+        "pending_director",
+        "pending_director_review",
+        "waiting_director_approval"
+      ].includes(status);
+    } else {
+      return [
+        "pending_manager",
+        "pending_manager_review",
+        "waiting_manager_approval",
+        "menunggu_approval_atasan",
+        "pending_supervisor"
+      ].includes(status);
+    }
+  };
 
   const isPendingForCurrentApprover = (req: LeaveRequest, userUid: string) => {
+    if (!isActionEnabledForRole(req)) return false;
+
     const managerId = req.managerId;
     const managerUid = (req as any).managerUid;
     const directManagerId = req.directManagerId;
@@ -201,8 +232,7 @@ export default function ManagerLeaveApprovalPage() {
       .filter(Boolean)
       .map(String);
 
-    const isPending = isPendingStatus(req.status);
-    return isPending && approverIds.includes(userUid);
+    return approverIds.includes(userUid);
   };
 
   const getLevelBadgeClass = (level: string) => {
@@ -668,6 +698,28 @@ export default function ManagerLeaveApprovalPage() {
       return;
     }
 
+    if (req.status === "pending_hrd" || req.status === "pending_hrd_review") {
+      toast({
+        variant: "destructive",
+        title: "Sudah Diproses",
+        description: isDirectorMode
+          ? "Pengajuan ini sudah diteruskan ke HRD dan tidak bisa diproses lagi oleh Direktur."
+          : "Pengajuan ini sudah diteruskan ke HRD dan tidak bisa diproses lagi oleh Manager.",
+      });
+      return;
+    }
+
+    if (!isActionEnabledForRole(req)) {
+      toast({
+        variant: "destructive",
+        title: "Aksi Tidak Diizinkan",
+        description: isDirectorMode
+          ? "Pengajuan ini sudah diteruskan ke HRD dan tidak bisa diproses lagi oleh Direktur."
+          : "Pengajuan ini tidak berada dalam status pending yang dapat Anda proses.",
+      });
+      return;
+    }
+
     setSelectedRequest(req);
     setActionType(type);
     setNotes("");
@@ -677,7 +729,6 @@ export default function ManagerLeaveApprovalPage() {
   const handleConfirmAction = async () => {
     if (!selectedRequest || !actionType || !userProfile || !firestore) return;
 
-    const isDirector = isDirectorMode;
     const currentUser = userProfile;
     const req = selectedRequest as any;
 
@@ -692,36 +743,62 @@ export default function ManagerLeaveApprovalPage() {
       return;
     }
 
-    // Role check for director / management
-    const userRoleStr = [
-      currentUser.structuralLevel,
-      (currentUser as any).position,
-      currentUser.positionTitle,
-      currentUser.jobTitle,
-      currentUser.workRole,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
-    
-    const hasDirectorRole = /direktur|director|manajemen|management/.test(userRoleStr) || currentUser.structuralLevel === "management";
+    // Role check / structural level of the requester
+    const requesterStructuralLevel = String(
+      req.requesterStructuralPosition ||
+      req.structuralLevel ||
+      ""
+    ).toLowerCase();
 
-    // 2. Supervisor check validation
-    const approverUids = [
-      req.currentApproverUid,
-      req.approvalTargetUid,
-      req.directorUid,
-      req.directorId,
-      req.directSupervisorUid,
-      req.directManagerUid,
-      req.directManagerId,
-      req.managerUid,
-      req.managerId,
+    const isDivisionManagerRequest =
+      requesterStructuralLevel.includes("manager") ||
+      req.approvalFlowType === "manager_to_director_to_hrd" ||
+      req.approvalLevel === "manager_to_director";
+
+    const currentApproverUid = req.currentApproverUid || null;
+    const approvalTargetUid = req.approvalTargetUid || null;
+    const directorUid = req.directorUid || null;
+    const directorId = req.directorId || null;
+    const directorName = req.directorName || "";
+    const directSupervisorUid = req.directSupervisorUid || null;
+
+    // 1 & 2. Block legacy/incomplete requests from being approved directly
+    const isLegacyRequestMissingApprover =
+      isDivisionManagerRequest &&
+      !currentApproverUid &&
+      !approvalTargetUid &&
+      !directorUid &&
+      !directorId &&
+      !directSupervisorUid;
+
+    if (isLegacyRequestMissingApprover) {
+      toast({
+        variant: "destructive",
+        title: "Migrasi Diperlukan",
+        description: "Pengajuan lama ini belum memiliki approver Direktur. HRD/Super Admin perlu memigrasi data approver terlebih dahulu.",
+      });
+      return;
+    }
+
+    // 2. Strict UID validation (do not allow role bypass!)
+    const allowedUids = [
+      currentApproverUid,
+      approvalTargetUid,
+      directorUid,
+      directorId,
+      directSupervisorUid,
+      // For staff requests, include directManagerUid / directManagerId / managerId / managerUid
+      ...(!isDivisionManagerRequest ? [
+        req.directManagerUid,
+        req.directManagerId,
+        req.managerUid,
+        req.managerId,
+      ] : [])
     ]
       .filter(Boolean)
       .map(String);
 
-    const isAssigned = approverUids.includes(currentUser.uid) || hasDirectorRole;
+    const isAssigned = allowedUids.includes(currentUser.uid);
 
     if (!isAssigned) {
       toast({
@@ -746,35 +823,43 @@ export default function ManagerLeaveApprovalPage() {
 
     setIsSaving(true);
     try {
+      if (!isActionEnabledForRole(selectedRequest)) {
+        toast({
+          variant: "destructive",
+          title: "Gagal Memproses",
+          description: isDirectorMode
+            ? "Pengajuan ini sudah diteruskan ke HRD dan tidak bisa diproses lagi oleh Direktur."
+            : "Pengajuan ini tidak berada dalam status pending yang dapat Anda proses.",
+        });
+        setIsActionOpen(false);
+        setIsDetailOpen(false);
+        return;
+      }
+
       let payload: any = {};
       let notificationType: any = "manager_approval";
 
-      const displayNameOrEmail = currentUser.fullName || currentUser.email || "Direktur/Manajemen";
+      const displayNameOrEmail = (currentUser as any).displayName || currentUser.email || currentUser.fullName || "Direktur/Manajemen";
 
-      if (isDirector || hasDirectorRole) {
+      if (isDivisionManagerRequest) {
         if (actionType === "approve") {
           payload = {
             status: "pending_hrd",
             directorDecision: "approved",
             directorReviewedAt: serverTimestamp(),
             directorReviewedBy: currentUser.uid,
-            directorReviewedByName: displayNameOrEmail,
+            directorReviewedByName: (currentUser as any).displayName || currentUser.email,
             directorNotes: notes || "",
             currentApprovalStep: "hrd",
             currentApproverUid: null,
             approvalTargetUid: null,
             updatedAt: serverTimestamp(),
             
-            // Fallback / migration fields
-            directorUid: currentUser.uid,
-            directorId: currentUser.uid,
-            directSupervisorUid: currentUser.uid,
-
             // Compatibility manager fields
             managerDecision: "approved",
             managerReviewedAt: serverTimestamp(),
             managerReviewedBy: currentUser.uid,
-            managerReviewedByName: displayNameOrEmail,
+            managerReviewedByName: (currentUser as any).displayName || currentUser.email,
           };
           notificationType = "director_approval";
         } else if (actionType === "reject") {
@@ -783,14 +868,16 @@ export default function ManagerLeaveApprovalPage() {
             directorDecision: "rejected",
             directorReviewedAt: serverTimestamp(),
             directorReviewedBy: currentUser.uid,
-            directorReviewedByName: displayNameOrEmail,
+            directorReviewedByName: (currentUser as any).displayName || currentUser.email,
             directorNotes: notes,
             updatedAt: serverTimestamp(),
 
-            // Fallback / migration fields
-            directorUid: currentUser.uid,
-            directorId: currentUser.uid,
-            directSupervisorUid: currentUser.uid,
+            // Compatibility manager fields
+            managerDecision: "rejected",
+            managerReviewedAt: serverTimestamp(),
+            managerReviewedBy: currentUser.uid,
+            managerReviewedByName: (currentUser as any).displayName || currentUser.email,
+            managerNotes: notes,
           };
           notificationType = "director_rejection";
         } else if (actionType === "revise") {
@@ -799,14 +886,16 @@ export default function ManagerLeaveApprovalPage() {
             directorDecision: "revision_requested",
             directorReviewedAt: serverTimestamp(),
             directorReviewedBy: currentUser.uid,
-            directorReviewedByName: displayNameOrEmail,
+            directorReviewedByName: (currentUser as any).displayName || currentUser.email,
             directorNotes: notes,
             updatedAt: serverTimestamp(),
 
-            // Fallback / migration fields
-            directorUid: currentUser.uid,
-            directorId: currentUser.uid,
-            directSupervisorUid: currentUser.uid,
+            // Compatibility manager fields
+            managerDecision: "revision_requested",
+            managerReviewedAt: serverTimestamp(),
+            managerReviewedBy: currentUser.uid,
+            managerReviewedByName: (currentUser as any).displayName || currentUser.email,
+            managerNotes: notes,
           };
           notificationType = "director_revision";
         }
@@ -848,19 +937,20 @@ export default function ManagerLeaveApprovalPage() {
         }
       }
 
-      // Debug log before update
+      // 7. Debug log before update
       console.log("APPROVE DIRECTOR LEAVE", {
         requestId: selectedRequest.id,
         currentUserUid: currentUser.uid,
-        currentUserRole: currentUser.structuralLevel || "",
+        currentUserRole: currentUser.role || "",
         employeeUid: (selectedRequest as any).employeeUid || selectedRequest.employeeId,
         statusBefore: selectedRequest.status,
         approvalFlowType: req.approvalFlowType || "",
         currentApprovalStep: req.currentApprovalStep || "",
-        currentApproverUid: req.currentApproverUid || "",
-        approvalTargetUid: req.approvalTargetUid || "",
-        directorUid: req.directorUid || req.directorId || "",
-        directManagerUid: req.directManagerUid || "",
+        currentApproverUid: currentApproverUid || "",
+        approvalTargetUid: approvalTargetUid || "",
+        directorUid: directorUid || "",
+        directorId: directorId || "",
+        directSupervisorUid: directSupervisorUid || "",
         payload
       });
 
@@ -897,11 +987,20 @@ export default function ManagerLeaveApprovalPage() {
             : `Pengajuan cuti ${selectedRequest.employeeName} berhasil diproses.`,
       });
 
+      // Update state locally first for immediate responsiveness
+      setSelectedRequest({
+        ...selectedRequest,
+        status: payload.status || "pending_hrd",
+        currentApprovalStep: payload.currentApprovalStep || "hrd",
+        currentApproverUid: payload.currentApproverUid !== undefined ? payload.currentApproverUid : null,
+        approvalTargetUid: payload.approvalTargetUid !== undefined ? payload.approvalTargetUid : null,
+      } as any);
+
       setIsActionOpen(false);
       setIsDetailOpen(false);
       mutateRequests();
     } catch (e: any) {
-      console.error("Error matching manager update leave request:", e);
+      console.error("Error matching director approval update leave request:", e);
       toast({
         variant: "destructive",
         title: "Gagal Memproses",
@@ -1391,6 +1490,7 @@ export default function ManagerLeaveApprovalPage() {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleOpenAction("approve", r)}
+                                disabled={isSaving || !isActionEnabledForRole(r)}
                                 className="rounded-xl border-emerald-500/20 hover:bg-emerald-950/20 text-emerald-400 font-bold text-xs"
                               >
                                 Setujui
@@ -1399,6 +1499,7 @@ export default function ManagerLeaveApprovalPage() {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleOpenAction("reject", r)}
+                                disabled={isSaving || !isActionEnabledForRole(r)}
                                 className="rounded-xl border-red-500/20 hover:bg-red-950/20 text-red-400 font-bold text-xs"
                               >
                                 Tolak
@@ -1407,6 +1508,7 @@ export default function ManagerLeaveApprovalPage() {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleOpenAction("revise", r)}
+                                disabled={isSaving || !isActionEnabledForRole(r)}
                                 className="rounded-xl border-amber-500/20 hover:bg-amber-950/20 text-amber-400 font-bold text-xs"
                               >
                                 Revisi
@@ -1528,6 +1630,7 @@ export default function ManagerLeaveApprovalPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => handleOpenAction("approve", r)}
+                            disabled={isSaving || !isActionEnabledForRole(r)}
                             className="rounded-xl border-emerald-500/20 text-emerald-400 hover:bg-emerald-950/20 font-bold text-xs"
                           >
                             Setujui
@@ -1536,6 +1639,7 @@ export default function ManagerLeaveApprovalPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => handleOpenAction("reject", r)}
+                            disabled={isSaving || !isActionEnabledForRole(r)}
                             className="rounded-xl border-red-500/20 text-red-400 hover:bg-red-950/20 font-bold text-xs"
                           >
                             Tolak

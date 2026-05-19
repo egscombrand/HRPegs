@@ -10,7 +10,7 @@ import {
 } from "@/firebase";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Search, Bell } from "lucide-react";
+import { Search, Bell, ChevronDown } from "lucide-react";
 import { ThemeToggle } from "../ui/ThemeToggle";
 import { Input } from "../ui/input";
 import { SidebarTrigger } from "../ui/sidebar";
@@ -19,9 +19,34 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { NotificationPanel } from "./NotificationPanel";
 import { collection, query, where } from "firebase/firestore";
 import type { Notification } from "@/lib/types";
+
+function getDisplayName(
+  userProfile: NonNullable<ReturnType<typeof useAuth>["userProfile"]>,
+) {
+  if (userProfile.fullName?.trim()) return userProfile.fullName;
+  if (userProfile.email?.includes("@")) return userProfile.email.split("@")[0];
+  return "User";
+}
+
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0].toUpperCase())
+    .join("");
+}
 
 function UserNav() {
   const { userProfile } = useAuth();
@@ -33,17 +58,72 @@ function UserNav() {
     router.push("/");
   };
 
+  const handleAccountSettings = () => {
+    router.push("/admin/karyawan/account-settings");
+  };
+
   if (!userProfile) return null;
 
+  const displayName = getDisplayName(userProfile);
+  const roleLabel = userProfile.role?.replace(/-/g, " ") ?? "User";
+  const initials = getInitials(displayName);
+
   return (
-    <div className="flex items-center gap-4 text-sm text-slate-200">
-      <span className="truncate max-w-[180px] hidden sm:inline">
-        {userProfile.email}
-      </span>
-      <Button variant="outline" size="sm" onClick={handleLogout}>
-        Log out
-      </Button>
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-10 min-w-[160px] gap-2 rounded-full px-3 text-left"
+        >
+          <Avatar className="h-9 w-9">
+            {userProfile.photoUrl ? (
+              <AvatarImage src={userProfile.photoUrl} alt={displayName} />
+            ) : (
+              <AvatarFallback>{initials || "U"}</AvatarFallback>
+            )}
+          </Avatar>
+
+          <div className="hidden shrink-0 flex-col items-start gap-0 overflow-hidden text-sm text-slate-800 dark:text-slate-100 sm:flex">
+            <span className="truncate font-medium">{displayName}</span>
+            <span className="truncate text-xs text-slate-500 dark:text-slate-400 capitalize">
+              {roleLabel}
+            </span>
+          </div>
+
+          <ChevronDown className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="w-72 bg-background p-0" align="end">
+        <div className="px-4 py-4">
+          <div className="flex items-center gap-3">
+            <Avatar className="h-11 w-11">
+              {userProfile.photoUrl ? (
+                <AvatarImage src={userProfile.photoUrl} alt={displayName} />
+              ) : (
+                <AvatarFallback>{initials || "U"}</AvatarFallback>
+              )}
+            </Avatar>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {displayName}
+              </p>
+              <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                {roleLabel}
+              </p>
+            </div>
+          </div>
+        </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={handleAccountSettings}>
+          Pengaturan Akun
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem className="text-destructive" onSelect={handleLogout}>
+          Keluar
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
