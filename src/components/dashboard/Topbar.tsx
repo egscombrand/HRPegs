@@ -7,6 +7,7 @@ import {
   useCollection,
   useFirestore,
   useMemoFirebase,
+  useDoc,
 } from "@/firebase";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -28,14 +29,57 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { NotificationPanel } from "./NotificationPanel";
-import { collection, query, where } from "firebase/firestore";
+import { collection, query, where, doc } from "firebase/firestore";
 import type { Notification } from "@/lib/types";
 
 function getDisplayName(
   userProfile: NonNullable<ReturnType<typeof useAuth>["userProfile"]>,
+  employeeProfile?: any,
 ) {
-  if (userProfile.fullName?.trim()) return userProfile.fullName;
+  const name =
+    userProfile.fullName ||
+    employeeProfile?.fullName ||
+    (userProfile as any).displayName ||
+    employeeProfile?.displayName;
+  if (name?.trim()) return name.trim();
   if (userProfile.email?.includes("@")) return userProfile.email.split("@")[0];
+  return "User";
+}
+
+function getRoleLabel(
+  userProfile: NonNullable<ReturnType<typeof useAuth>["userProfile"]>,
+  employeeProfile?: any,
+) {
+  const fields = [
+    (userProfile as any).position,
+    employeeProfile?.position,
+    userProfile.jobTitle,
+    employeeProfile?.jobTitle,
+    (userProfile as any).jabatan,
+    employeeProfile?.jabatan,
+    (userProfile as any).structuralPositionLabel,
+    employeeProfile?.structuralPositionLabel,
+    (userProfile as any).workRole,
+    employeeProfile?.workRole,
+    (userProfile as any).title,
+    employeeProfile?.title,
+    (userProfile as any).roleDisplayName,
+    employeeProfile?.roleDisplayName,
+    userProfile.positionTitle,
+    employeeProfile?.positionTitle,
+  ];
+
+  for (const field of fields) {
+    if (typeof field === "string" && field.trim()) {
+      return field.trim();
+    }
+  }
+
+  // Fallback to role backend
+  if (userProfile.role) {
+    return userProfile.role.replace(/-/g, " ");
+  }
+
   return "User";
 }
 
@@ -52,6 +96,13 @@ function UserNav() {
   const { userProfile } = useAuth();
   const auth = useFirebaseAuth();
   const router = useRouter();
+  const firestore = useFirestore();
+
+  const profileDocRef = useMemoFirebase(
+    () => (userProfile?.uid ? doc(firestore, "employee_profiles", userProfile.uid) : null),
+    [userProfile?.uid, firestore]
+  );
+  const { data: employeeProfile } = useDoc<any>(profileDocRef);
 
   const handleLogout = async () => {
     await auth.signOut();
@@ -64,8 +115,8 @@ function UserNav() {
 
   if (!userProfile) return null;
 
-  const displayName = getDisplayName(userProfile);
-  const roleLabel = userProfile.role?.replace(/-/g, " ") ?? "User";
+  const displayName = getDisplayName(userProfile, employeeProfile);
+  const roleLabel = getRoleLabel(userProfile, employeeProfile);
   const initials = getInitials(displayName);
 
   return (
@@ -111,6 +162,11 @@ function UserNav() {
               <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
                 {roleLabel}
               </p>
+              {userProfile.role && roleLabel.toLowerCase() !== userProfile.role.toLowerCase() && (
+                <p className="mt-1 text-[10px] text-slate-400 capitalize">
+                  Role: {userProfile.role.replace(/-/g, " ")}
+                </p>
+              )}
             </div>
           </div>
         </div>

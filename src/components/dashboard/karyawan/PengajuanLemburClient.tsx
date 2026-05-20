@@ -104,8 +104,7 @@ const getTimelineSteps = (
   submission: OvertimeSubmission,
 ) => {
   const coordinatorDisplay =
-    (submission as any).overtimeCoordinatorName ||
-    "pengawas/koordinator";
+    (submission as any).overtimeCoordinatorName || "pengawas/koordinator";
   const supervisorDisplay =
     (submission as any).directSupervisorName ||
     supervisorName ||
@@ -201,9 +200,14 @@ const getTimelineSteps = (
               status === "pending_manager" ||
               status === "pending_approval"
             ? "completed"
-            : status === "approved" || status === "approved_hrd" || status === "revision_hrd" || status === "rejected_hrd"
+            : status === "approved" ||
+                status === "approved_hrd" ||
+                status === "revision_hrd" ||
+                status === "rejected_hrd"
               ? "completed"
-              : status === "rejected_manager" || (status === "rejected" && !(submission as any).rejected_by_coordinator)
+              : status === "rejected_manager" ||
+                  (status === "rejected" &&
+                    !(submission as any).rejected_by_coordinator)
                 ? "rejected"
                 : status === "cancelled"
                   ? "cancelled"
@@ -217,9 +221,14 @@ const getTimelineSteps = (
               status === "pending_manager" ||
               status === "pending_approval"
             ? "Selesai"
-            : status === "approved" || status === "approved_hrd" || status === "revision_hrd" || status === "rejected_hrd"
+            : status === "approved" ||
+                status === "approved_hrd" ||
+                status === "revision_hrd" ||
+                status === "rejected_hrd"
               ? "Selesai"
-              : status === "rejected_manager" || (status === "rejected" && !(submission as any).rejected_by_coordinator)
+              : status === "rejected_manager" ||
+                  (status === "rejected" &&
+                    !(submission as any).rejected_by_coordinator)
                 ? "Ditolak"
                 : status === "cancelled"
                   ? "Dibatalkan"
@@ -237,7 +246,9 @@ const getTimelineSteps = (
               status === "revision_hrd" ||
               status === "rejected_hrd"
             ? "Atasan telah menyetujui pengajuan."
-            : status === "rejected_manager" || (status === "rejected" && !(submission as any).rejected_by_coordinator)
+            : status === "rejected_manager" ||
+                (status === "rejected" &&
+                  !(submission as any).rejected_by_coordinator)
               ? rejectionReason
                 ? `Ditolak: ${rejectionReason}`
                 : "Pengajuan ditolak oleh manager."
@@ -293,13 +304,20 @@ const getTimelineSteps = (
     state:
       status === "approved" || status === "approved_hrd"
         ? "completed"
-        : status === "rejected" || status === "rejected_coordinator" || status === "rejected_manager" || status === "rejected_hrd" || status === "cancelled"
+        : status === "rejected" ||
+            status === "rejected_coordinator" ||
+            status === "rejected_manager" ||
+            status === "rejected_hrd" ||
+            status === "cancelled"
           ? "pending"
           : "pending",
     statusLabel:
       status === "approved" || status === "approved_hrd"
         ? "Selesai"
-        : status === "rejected" || status === "rejected_coordinator" || status === "rejected_manager" || status === "rejected_hrd"
+        : status === "rejected" ||
+            status === "rejected_coordinator" ||
+            status === "rejected_manager" ||
+            status === "rejected_hrd"
           ? "Tidak Selesai"
           : status === "cancelled"
             ? "Dibatalkan"
@@ -307,7 +325,10 @@ const getTimelineSteps = (
     description:
       status === "approved" || status === "approved_hrd"
         ? "Pengajuan lembur telah disetujui."
-        : status === "rejected" || status === "rejected_coordinator" || status === "rejected_manager" || status === "rejected_hrd"
+        : status === "rejected" ||
+            status === "rejected_coordinator" ||
+            status === "rejected_manager" ||
+            status === "rejected_hrd"
           ? "Pengajuan tidak selesai karena ditolak."
           : status === "cancelled"
             ? "Pengajuan dibatalkan sebelum proses selesai."
@@ -372,7 +393,11 @@ const getStatusMeta = (status: string) => {
     };
   }
 
-  if (status === "revision_coordinator" || status === "revision_manager" || status === "revision_hrd") {
+  if (
+    status === "revision_coordinator" ||
+    status === "revision_manager" ||
+    status === "revision_hrd"
+  ) {
     return {
       waitingFor: "Anda",
       nextStep: "Revisi pengajuan sesuai catatan yang diterima.",
@@ -539,7 +564,7 @@ const LatestSubmissionCard = ({
           Timeline Status
         </div>
         <div className="flex flex-col gap-3 md:flex-row md:items-start">
-            {getTimelineSteps(status, supervisorDisplay, submission).map(
+          {getTimelineSteps(status, supervisorDisplay, submission).map(
             (step, index) => {
               const isLast = index === 4;
               const stateStyles = {
@@ -625,6 +650,26 @@ export function PengajuanLemburClient() {
   const firestore = useFirestore();
   const { toast } = useToast();
 
+  const normalizedUserRole = userProfile?.role?.toLowerCase() || "";
+  const normalizedStructuralLevel = (
+    userProfile?.structuralLevel || ""
+  ).toLowerCase();
+  const blockedOvertimeRoles = new Set([
+    "manager",
+    "manager divisi",
+    "hrd",
+    "super-admin",
+    "management",
+    "manajemen",
+    "director",
+    "direktur",
+  ]);
+  const blockedOvertimeLevels = new Set(["management", "division_manager"]);
+  const canSubmitOvertime =
+    !!userProfile &&
+    !blockedOvertimeRoles.has(normalizedUserRole) &&
+    !blockedOvertimeLevels.has(normalizedStructuralLevel);
+
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedSubmission, setSelectedSubmission] =
     useState<OvertimeSubmission | null>(null);
@@ -670,7 +715,10 @@ export function PengajuanLemburClient() {
       ),
     );
 
-  const employeeProfile = employeeProfileDoc || employeesDoc || (userProfile as unknown as EmployeeProfile);
+  const employeeProfile =
+    employeeProfileDoc ||
+    employeesDoc ||
+    (userProfile as unknown as EmployeeProfile);
   const isLoadingProfile = isLoadingProfileDoc || isLoadingEmployeesDoc;
 
   const { data: brands, isLoading: isLoadingBrands } = useCollection<Brand>(
@@ -732,6 +780,7 @@ export function PengajuanLemburClient() {
   }, [submissions]);
 
   const handleCreate = () => {
+    if (!canSubmitOvertime) return;
     setSelectedSubmission(null);
     setFormMode("edit");
     setIsFormOpen(true);
@@ -832,7 +881,15 @@ export function PengajuanLemburClient() {
               Buat dan lacak status pengajuan lembur Anda.
             </p>
           </div>
-          <Button onClick={handleCreate}>
+          <Button
+            onClick={handleCreate}
+            disabled={!canSubmitOvertime}
+            title={
+              !canSubmitOvertime
+                ? "Hanya staff/karyawan operasional dapat mengajukan lembur."
+                : undefined
+            }
+          >
             <PlusCircle className="mr-2 h-4 w-4" /> Buat Pengajuan
           </Button>
         </div>
@@ -930,7 +987,10 @@ export function PengajuanLemburClient() {
                           {s.reason || "Tidak ada ringkasan pekerjaan."}
                         </TableCell>
                         <TableCell className="px-3 py-3 align-top">
-                          <OvertimeStatusBadge status={status as any} payrollStatus={s.payrollStatus} />
+                          <OvertimeStatusBadge
+                            status={status as any}
+                            payrollStatus={s.payrollStatus}
+                          />
                         </TableCell>
                         <TableCell className="px-3 py-3 align-top text-right">
                           <Button

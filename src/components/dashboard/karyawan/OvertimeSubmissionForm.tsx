@@ -64,6 +64,7 @@ import {
   Timestamp,
   collection,
   query,
+  where,
 } from "firebase/firestore";
 import { OvertimeStatusBadge } from "./OvertimeStatusBadge";
 import type {
@@ -120,9 +121,7 @@ const submissionSchema = z
     overtimeCoordinatorUid: z
       .string({ required_error: "Koordinator/Pengawas lembur harus dipilih." })
       .min(1, "Koordinator/Pengawas lembur harus dipilih."),
-    overtimeInstructionNote: z
-      .string({ required_error: "Uraian instruksi lembur harus diisi." })
-      .min(10, { message: "Uraian instruksi lembur harus diisi (minimal 10 karakter)." }),
+    overtimeInstructionNote: z.string().optional().default(""),
     employeeNotes: z.string().optional(),
     attachments: z.array(z.string()).optional().default([]),
   })
@@ -278,10 +277,26 @@ const OvertimeSubmissionDetailView = ({
       (submission as any)?.cancelledAt ||
       submission.updatedAt,
   );
+  const coordinatorName =
+    (submission as any).overtimeCoordinatorName ||
+    (submission as any).overtimeCoordinatorDisplayName ||
+    "Koordinator/Pengawas";
+  const coordinatorPosition =
+    (submission as any).overtimeCoordinatorPosition ||
+    (submission as any).overtimeCoordinatorRole ||
+    "Pengawas/Koordinator";
   const managerName =
+    (submission as any).managerName ||
     (submission as any).directSupervisorName ||
     (submission as any).supervisorName ||
     "Manager Divisi";
+  const managerDivisionName =
+    (submission as any).managerDivisionName || submission.divisionName || "-";
+  const managerUid =
+    submission.managerUid || (submission as any).directSupervisorUid || null;
+  const coordinatorUid = submission.overtimeCoordinatorUid || null;
+  const isCoordinatorSameAsManager =
+    !!coordinatorUid && !!managerUid && coordinatorUid === managerUid;
   const taskList = submission.tasks || (submission as any).taskDetails || [];
   const totalEstimated = taskList.reduce(
     (sum: number, task: any) => sum + (task.estimatedMinutes || 0),
@@ -335,7 +350,29 @@ const OvertimeSubmissionDetailView = ({
   };
 
   const getStageStatus = (stage: string) => {
+    if (stage === "coordinator") {
+      if (currentStatus === "pending_coordinator") {
+        return "Menunggu";
+      }
+      if (
+        currentStatus === "rejected" ||
+        currentStatus === "rejected_coordinator"
+      ) {
+        return "Ditolak";
+      }
+      if (
+        currentStatus === "needs_revision" ||
+        currentStatus === "revision_coordinator"
+      ) {
+        return "Revisi Diminta";
+      }
+      return submittedAt ? "Selesai" : "Menunggu";
+    }
+
     if (stage === "manager") {
+      if (currentStatus === "pending_coordinator") {
+        return "Menunggu";
+      }
       if (currentStatus === "pending_supervisor") {
         return supervisorViewedAt ? "Sedang Berjalan" : "Menunggu";
       }
@@ -403,24 +440,55 @@ const OvertimeSubmissionDetailView = ({
       icon: <CheckCircle className="h-4 w-4" />,
     },
     {
-      title: "Review Manager Divisi",
-      state: getStageStatus("manager"),
-      date: managerReviewAt,
-      detail: managerName,
+      title: isCoordinatorSameAsManager
+        ? "Review Koordinator & Manager Divisi"
+        : "Review Koordinator",
+      state: getStageStatus("coordinator"),
+      date: parseSafeDate(
+        (submission as any)?.coordinatorViewedAt ||
+          (submission as any)?.coordinatorApprovedAt,
+      ),
+      detail: coordinatorName,
       description:
-        currentStatus === "pending_supervisor"
-          ? supervisorViewedAt
-            ? "Manager divisi sudah membaca pengajuan dan sedang meninjaunya."
-            : "Manager divisi belum membaca pengajuan."
-          : currentStatus === "needs_revision" ||
-              currentStatus === "revision_manager"
-            ? "Manager meminta revisi pengajuan."
-            : currentStatus === "rejected" ||
-                currentStatus === "rejected_manager"
-              ? "Manager menolak pengajuan."
-              : "Manager divisi telah menyetujui pengajuan.",
+        currentStatus === "pending_coordinator"
+          ? "Koordinator belum meninjau pengajuan."
+          : currentStatus === "pending_supervisor" ||
+              currentStatus === "pending_hrd"
+            ? "Koordinator telah menyetujui pengajuan."
+            : currentStatus === "needs_revision" ||
+                currentStatus === "revision_coordinator"
+              ? "Koordinator meminta revisi pengajuan."
+              : currentStatus === "rejected" ||
+                  currentStatus === "rejected_coordinator"
+                ? "Koordinator menolak pengajuan."
+                : "Koordinator telah menyetujui pengajuan.",
       icon: <UserCheck className="h-4 w-4" />,
     },
+    ...(!isCoordinatorSameAsManager
+      ? [
+          {
+            title: "Review Manager Divisi",
+            state: getStageStatus("manager"),
+            date: managerReviewAt,
+            detail: managerName,
+            description:
+              currentStatus === "pending_coordinator"
+                ? "Manager divisi menunggu keputusan koordinator."
+                : currentStatus === "pending_supervisor"
+                  ? supervisorViewedAt
+                    ? "Manager divisi sudah membaca pengajuan dan sedang meninjaunya."
+                    : "Manager divisi belum membaca pengajuan."
+                  : currentStatus === "needs_revision" ||
+                      currentStatus === "revision_manager"
+                    ? "Manager meminta revisi pengajuan."
+                    : currentStatus === "rejected" ||
+                        currentStatus === "rejected_manager"
+                      ? "Manager menolak pengajuan."
+                      : "Manager divisi telah menyetujui pengajuan.",
+            icon: <UserCheck className="h-4 w-4" />,
+          },
+        ]
+      : []),
     {
       title: "Review HRD",
       state: getStageStatus("hrd"),
@@ -617,21 +685,38 @@ const OvertimeSubmissionDetailView = ({
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400">
                     <UserCheck className="h-4 w-4" />
+                    <p className="text-sm font-medium">Koordinator/Pengawas</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      {coordinatorName}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {coordinatorPosition}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400">
+                    <UserCheck className="h-4 w-4" />
                     <p className="text-sm font-medium">Manager Divisi</p>
                   </div>
-                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    {managerName}
-                  </p>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      {managerName}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {managerDivisionName}
+                    </p>
+                  </div>
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400">
                     <Mail className="h-4 w-4" />
-                    <p className="text-sm font-medium">
-                      Setelah disetujui manager
-                    </p>
+                    <p className="text-sm font-medium">HRD</p>
                   </div>
                   <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    Diteruskan ke HRD
+                    Final approval
                   </p>
                 </div>
               </div>
@@ -809,36 +894,85 @@ export function OvertimeSubmissionForm({
   const firestore = useFirestore();
   const { toast } = useToast();
 
+  const normalizedUserRole = userProfile?.role?.toLowerCase() || "";
+  const normalizedStructuralLevel = (
+    userProfile?.structuralLevel || ""
+  ).toLowerCase();
+  const blockedOvertimeRoles = new Set([
+    "manager",
+    "manager divisi",
+    "hrd",
+    "super-admin",
+    "management",
+    "manajemen",
+    "director",
+    "direktur",
+  ]);
+  const blockedOvertimeLevels = new Set(["management", "division_manager"]);
+  const canSubmitOvertime =
+    !!userProfile &&
+    !blockedOvertimeRoles.has(normalizedUserRole) &&
+    !blockedOvertimeLevels.has(normalizedStructuralLevel);
+
   const staffBrandId = useMemo(() => {
-    if (!employeeProfile?.brandId) return "";
-    return Array.isArray(employeeProfile.brandId)
-      ? employeeProfile.brandId[0]
-      : employeeProfile.brandId;
-  }, [employeeProfile?.brandId]);
+    // Try employeeProfile first, then userProfile
+    const brandId = employeeProfile?.brandId || userProfile?.brandId;
+    if (!brandId) return "";
+    return Array.isArray(brandId) ? brandId[0] : brandId;
+  }, [employeeProfile?.brandId, userProfile?.brandId]);
 
   const staffDivisionId = useMemo(() => {
+    const hrd = employeeProfile?.hrdEmploymentInfo;
     return (
+      hrd?.divisionName ||
+      hrd?.divisionId ||
       employeeProfile?.division ||
-      employeeProfile?.hrdEmploymentInfo?.divisionId ||
-      employeeProfile?.hrdEmploymentInfo?.divisionName ||
+      (userProfile as any)?.managedDivision ||
+      (userProfile as any)?.division ||
       ""
     );
   }, [
+    employeeProfile?.hrdEmploymentInfo,
     employeeProfile?.division,
-    employeeProfile?.hrdEmploymentInfo?.divisionId,
-    employeeProfile?.hrdEmploymentInfo?.divisionName,
+    (userProfile as any)?.managedDivision,
+    (userProfile as any)?.division,
   ]);
 
+  const staffBrandName = useMemo(() => {
+    const hrd = employeeProfile?.hrdEmploymentInfo;
+    return (
+      hrd?.brandName ||
+      (employeeProfile as any)?.brandName ||
+      brands.find((b) => b.id === staffBrandId)?.name ||
+      ""
+    );
+  }, [employeeProfile, staffBrandId, brands]);
+
+  // Fetch division master document — try query by name, also try by doc ID
   const divisionNameQuery = useMemoFirebase(() => {
     if (!firestore || !staffBrandId || !staffDivisionId) return null;
     return query(
       collection(firestore, "brands", staffBrandId, "divisions"),
-      where("name", "==", staffDivisionId)
+      where("name", "==", staffDivisionId),
     );
   }, [firestore, staffBrandId, staffDivisionId]);
 
-  const { data: divisionsResult } = useCollection<DivisionMasterOrganization>(divisionNameQuery);
-  const divisionMaster = useMemo(() => divisionsResult?.[0] || null, [divisionsResult]);
+  const { data: divisionsResult } =
+    useCollection<DivisionMasterOrganization>(divisionNameQuery);
+
+  // Also try fetching by document ID (in case the doc ID IS the division name)
+  const divisionDocRef = useMemoFirebase(() => {
+    if (!firestore || !staffBrandId || !staffDivisionId) return null;
+    return doc(firestore, "brands", staffBrandId, "divisions", staffDivisionId);
+  }, [firestore, staffBrandId, staffDivisionId]);
+
+  const { data: divisionDocById } =
+    useDoc<DivisionMasterOrganization>(divisionDocRef);
+
+  const divisionMaster = useMemo(() => {
+    // Prefer result from name query, fallback to doc-by-ID
+    return divisionsResult?.[0] || divisionDocById || null;
+  }, [divisionsResult, divisionDocById]);
 
   const coordinatorsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -853,16 +987,28 @@ export function OvertimeSubmissionForm({
       const role = u.role;
       const level = u.structuralLevel;
       // Exclude super-admin
-      const isEligibleRole = role === "manager" || role === "direktur" || role === "management" || role === "director";
-      const isEligibleLevel = level === "management" || level === "division_manager" || level === "coordinator" || level === "supervisor" || level === "mandor";
+      const isEligibleRole =
+        role === "manager" ||
+        role === "direktur" ||
+        role === "management" ||
+        role === "director";
+      const isEligibleLevel =
+        level === "management" ||
+        level === "division_manager" ||
+        level === "coordinator" ||
+        level === "supervisor" ||
+        level === "mandor";
       return (isEligibleRole || isEligibleLevel) && u.uid !== userProfile?.uid;
     });
   }, [allUsers, userProfile?.uid]);
 
   const mode = submission ? (formMode === "view" ? "View" : "Edit") : "Buat";
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(submissionSchema),
+    mode: "onTouched",
+    reValidateMode: "onChange",
     defaultValues: {
       tasks: [{ description: "", estimatedMinutes: 60 }],
       attachments: [],
@@ -983,63 +1129,162 @@ export function OvertimeSubmissionForm({
     };
   }, [userProfile, employeeProfile, brands]);
 
-  const resolvedManager = useMemo(() => {
-    if (!allUsers || !staffBrandId || !staffDivisionId) return null;
-    const manager = allUsers.find((u) => 
-      (u.isDivisionManager || u.role === "manager") &&
-      (u.managedBrandId === staffBrandId || (Array.isArray(u.brandId) ? u.brandId.includes(staffBrandId) : u.brandId === staffBrandId)) &&
-      (u.managedDivision === staffDivisionId || u.managedDivisionName === staffDivisionId || u.division === staffDivisionId)
-    );
-    if (manager) {
-      return {
-        resolvedManagerUid: manager.uid,
-        resolvedManagerName: manager.fullName || manager.displayName || "",
-        resolvedManagerEmail: manager.email || "",
-        resolvedManagerDivisionName: manager.managedDivision || manager.division || staffDivisionId,
-        resolvedManagerBrandName: manager.managedBrandName || "",
-      };
-    }
-    return null;
-  }, [allUsers, staffBrandId, staffDivisionId]);
-
   const selectedCoordinatorUid = form.watch("overtimeCoordinatorUid");
   const selectedCoordinator = useMemo(() => {
     if (!allUsers || !selectedCoordinatorUid) return null;
-    return allUsers.find(u => u.uid === selectedCoordinatorUid);
+    return allUsers.find((u) => u.uid === selectedCoordinatorUid);
   }, [allUsers, selectedCoordinatorUid]);
 
+  const coordinatorPosition =
+    selectedCoordinator?.positionTitle ||
+    selectedCoordinator?.structuralLevel ||
+    selectedCoordinator?.role ||
+    "-";
+
+  // === RESOLVED DIVISION MANAGER ===
+  // Primary: from master organization Firestore doc (brands/{brandId}/divisions)
+  // Fallback: from users list where isDivisionManager + brand/division match
+  const resolvedDivisionManager = useMemo(() => {
+    const employeeBrandId = staffBrandId;
+    const employeeBrandName = staffBrandName;
+    const employeeDivisionId = staffDivisionId;
+    const employeeDivisionName = staffDivisionId; // same value used as name
+
+    // Priority 1: Master Organization document from Firestore
+    const divDocData = divisionMaster as any;
+    const divMgrUid =
+      divDocData?.managerId ||
+      divDocData?.managerUid ||
+      divDocData?.supervisorUid ||
+      divDocData?.directSupervisorUid ||
+      null;
+    const divMgrName =
+      divDocData?.managerName ||
+      divDocData?.supervisorName ||
+      divDocData?.directSupervisorName ||
+      null;
+
+    // Priority 2: Lookup from users collection by brand/division match
+    let fallbackUser: any = null;
+    if (!divMgrUid && allUsers && employeeDivisionId) {
+      fallbackUser = allUsers.find((u) => {
+        // Match brand: if employeeBrandId is known, require match; otherwise skip brand check
+        const brandMatch =
+          !employeeBrandId ||
+          u.managedBrandId === employeeBrandId ||
+          (Array.isArray(u.brandId)
+            ? u.brandId.includes(employeeBrandId)
+            : u.brandId === employeeBrandId);
+
+        const divisionMatch =
+          u.managedDivision === employeeDivisionId ||
+          u.managedDivisionName === employeeDivisionId ||
+          u.division === employeeDivisionId ||
+          u.divisionId === employeeDivisionId ||
+          u.managedDivisionId === employeeDivisionId;
+
+        const isManager =
+          u.isDivisionManager === true ||
+          u.structuralLevel === "division_manager" ||
+          u.role === "manager" ||
+          (u.positionTitle || "").toLowerCase().includes("manager divisi");
+
+        return isManager && divisionMatch && brandMatch;
+      });
+    }
+
+    // Priority 3: Fallback from employee profile
+    const profileManagerUid =
+      (employeeProfile as any)?.directSupervisorUid ||
+      employeeProfile?.supervisorUid ||
+      (employeeProfile as any)?.managerUid ||
+      null;
+    const profileManagerName =
+      (employeeProfile as any)?.directSupervisorName ||
+      employeeProfile?.supervisorName ||
+      (employeeProfile as any)?.managerName ||
+      null;
+
+    const finalUid =
+      divMgrUid || fallbackUser?.uid || profileManagerUid || null;
+    const finalName =
+      divMgrName ||
+      (fallbackUser
+        ? fallbackUser.fullName || fallbackUser.displayName
+        : null) ||
+      profileManagerName ||
+      null;
+    const finalDivision =
+      fallbackUser?.managedDivision ||
+      fallbackUser?.division ||
+      employeeDivisionId;
+    const finalBrandName = fallbackUser?.managedBrandName || employeeBrandName;
+
+    console.log("RESOLVE MANAGER DIVISI LEMBUR", {
+      employeeBrandId,
+      employeeBrandName,
+      employeeDivisionId,
+      employeeDivisionName,
+      selectedCoordinator: selectedCoordinator
+        ? { uid: selectedCoordinator.uid, name: selectedCoordinator.fullName }
+        : null,
+      divisionDocData: divDocData,
+      resolvedDivisionManagerUid: finalUid,
+      resolvedDivisionManagerName: finalName,
+      fallbackUsersMatched: fallbackUser
+        ? { uid: fallbackUser.uid, name: fallbackUser.fullName }
+        : null,
+    });
+
+    if (!finalUid) return null;
+
+    return {
+      uid: finalUid,
+      name: finalName || "Manager Divisi",
+      divisionName: finalDivision,
+      brandName: finalBrandName,
+    };
+  }, [
+    divisionMaster,
+    allUsers,
+    staffBrandId,
+    staffBrandName,
+    staffDivisionId,
+    employeeProfile,
+    selectedCoordinator,
+  ]);
+
   const approvalFlow = useMemo(() => {
-    let finalManagerUid = resolvedManager?.resolvedManagerUid;
-    let finalManagerName = resolvedManager?.resolvedManagerName;
+    const mgr = resolvedDivisionManager;
 
-    if (!finalManagerUid && selectedCoordinator) {
-       if (selectedCoordinator.role === 'manager' || selectedCoordinator.structuralLevel === 'division_manager' || selectedCoordinator.isDivisionManager) {
-           finalManagerUid = selectedCoordinator.uid;
-           finalManagerName = selectedCoordinator.fullName || selectedCoordinator.displayName || "Tanpa Nama";
-       }
-    }
-
-    if (!finalManagerUid) {
-      finalManagerUid = (employeeProfile as any)?.directSupervisorUid || employeeProfile?.supervisorUid || employeeProfile?.managerUid || null;
-      finalManagerName = (employeeProfile as any)?.directSupervisorName || employeeProfile?.supervisorName || employeeProfile?.managerName || null;
-    }
-
-    if (!finalManagerUid) {
+    if (!mgr?.uid) {
       return {
-        flowText: "Manager Divisi belum ditentukan. Hubungi HRD.",
         hasValidFlow: false,
-        supervisorName: "Belum Ditentukan",
-        supervisorUid: null,
+        managerUid: null as string | null,
+        managerName: "Belum Ditentukan",
+        isCoordinatorSameAsManager: false,
+        approvalFlowType: "staff_to_coordinator_to_manager_to_hrd" as string,
+        initialStatus: "pending_coordinator" as string,
       };
     }
 
+    const isSame = !!selectedCoordinator && selectedCoordinator.uid === mgr.uid;
+
     return {
-      flowText: `Pengawas/Koordinator → ${finalManagerName} → HRD`,
       hasValidFlow: true,
-      supervisorName: finalManagerName,
-      supervisorUid: finalManagerUid,
+      managerUid: mgr.uid,
+      managerName: mgr.name,
+      isCoordinatorSameAsManager: isSame,
+      approvalFlowType: isSame
+        ? "staff_to_manager_to_hrd"
+        : "staff_to_coordinator_to_manager_to_hrd",
+      initialStatus: isSame ? "pending_supervisor" : "pending_coordinator",
     };
-  }, [resolvedManager, selectedCoordinator, employeeProfile]);
+  }, [resolvedDivisionManager, selectedCoordinator]);
+
+  // Keep legacy supervisorName for old code references that use it
+  const legacySupervisorName = approvalFlow.managerName;
+
   const totalDuration = useMemo(() => {
     if (!startTimeStr || !endTimeStr) return 0;
     try {
@@ -1085,6 +1330,100 @@ export function OvertimeSubmissionForm({
     };
   }, [tasksEstimate, totalDuration, remainingDuration]);
 
+  const overtimeCoordinatorUid = watch("overtimeCoordinatorUid");
+  const overtimeType = watch("overtimeType");
+  const location = watch("location");
+  const reasonValue = watch("reason");
+  const dateValue = watch("date");
+  const startTime = watch("startTime");
+  const endTime = watch("endTime");
+
+  const isDateValid =
+    dateValue instanceof Date && !Number.isNaN(dateValue.getTime());
+  const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+  const isTimeRangeValid =
+    timeRegex.test(startTime || "") &&
+    timeRegex.test(endTime || "") &&
+    (() => {
+      const [startH, startM] = (startTime || "").split(":").map(Number);
+      const [endH, endM] = (endTime || "").split(":").map(Number);
+      return endH * 60 + endM > startH * 60 + startM;
+    })();
+
+  const hasTaskDescriptions =
+    Array.isArray(tasks) &&
+    tasks.some((task) => task?.description?.trim().length > 0);
+
+  const validationReasons = useMemo(() => {
+    const reasons: string[] = [];
+
+    if (!overtimeCoordinatorUid) {
+      reasons.push("Pengawas/Koordinator belum dipilih");
+    }
+    if (!approvalFlow.hasValidFlow) {
+      reasons.push("Manager Divisi belum ditemukan");
+    }
+    if (!overtimeType) {
+      reasons.push("Tipe lembur belum dipilih");
+    }
+    if (!location) {
+      reasons.push("Lokasi kerja belum dipilih");
+    }
+    if (!Array.isArray(tasks) || tasks.length === 0 || !hasTaskDescriptions) {
+      reasons.push("Rincian pekerjaan belum diisi");
+    }
+    if (!reasonValue?.trim()) {
+      reasons.push("Alasan lembur wajib diisi");
+    }
+    if (!isDateValid || !isTimeRangeValid) {
+      reasons.push("Tanggal/jam lembur belum valid");
+    }
+    if (durationValidation.status === "error") {
+      reasons.push("Total estimasi tugas melebihi durasi lembur.");
+    }
+
+    return reasons;
+  }, [
+    approvalFlow.hasValidFlow,
+    dateValue,
+    durationValidation.status,
+    hasTaskDescriptions,
+    isDateValid,
+    isTimeRangeValid,
+    location,
+    overtimeCoordinatorUid,
+    overtimeType,
+    reasonValue,
+    tasks,
+  ]);
+
+  const isApprovalFlowInvalid = submitAttempted && !approvalFlow.hasValidFlow;
+  const isSubmitDisabled = isSaving || uploadingAttachments;
+
+  const handleInvalidSubmit = () => {
+    setSubmitAttempted(true);
+    const reasons = [...validationReasons];
+
+    if (
+      !approvalFlow.hasValidFlow &&
+      !reasons.includes("Manager Divisi belum ditemukan")
+    ) {
+      reasons.unshift("Manager Divisi belum ditemukan");
+    }
+
+    toast({
+      variant: "destructive",
+      title: "Pengajuan belum bisa dikirim",
+      description: (
+        <div className="space-y-1 text-sm">
+          {reasons.map((reason) => (
+            <p key={reason}>- {reason}</p>
+          ))}
+        </div>
+      ),
+    });
+  };
+
   useEffect(() => {
     if (open) {
       if (submission) {
@@ -1107,8 +1446,10 @@ export function OvertimeSubmissionForm({
           location: submission.location,
           employeeNotes: submission.employeeNotes || "",
           attachments: submission.attachments || [],
-          overtimeCoordinatorUid: (submission as any).overtimeCoordinatorUid || "",
-          overtimeInstructionNote: (submission as any).overtimeInstructionNote || "",
+          overtimeCoordinatorUid:
+            (submission as any).overtimeCoordinatorUid || "",
+          overtimeInstructionNote:
+            (submission as any).overtimeInstructionNote || "",
         });
         // Reset attachments state for edit mode
         setAttachments([]);
@@ -1188,13 +1529,22 @@ export function OvertimeSubmissionForm({
       return;
     }
 
-    // Check if supervisor data is available
     if (!approvalFlow.hasValidFlow) {
+      setSubmitAttempted(true);
       toast({
         variant: "destructive",
-        title: "Data Atasan Belum Tersedia",
-        description:
-          "Atasan langsung belum ditentukan di data kepegawaian HRD. Harap hubungi HRD untuk melengkapi data Anda.",
+        title: "Pengajuan belum bisa dikirim",
+        description: "Manager Divisi belum ditemukan.",
+      });
+      return;
+    }
+
+    if (durationValidation.status === "error") {
+      setSubmitAttempted(true);
+      toast({
+        variant: "destructive",
+        title: "Pengajuan belum bisa dikirim",
+        description: "Total estimasi tugas melebihi durasi lembur.",
       });
       return;
     }
@@ -1216,11 +1566,11 @@ export function OvertimeSubmissionForm({
         employeeDivisionId: staffDivisionId,
         employeeDivisionName: displayInfo.division,
         selectedCoordinator,
-        resolvedManagerUid: resolvedManager?.resolvedManagerUid,
-        resolvedManagerName: resolvedManager?.resolvedManagerName,
-        resolvedManagerDivisionName: resolvedManager?.resolvedManagerDivisionName,
+        resolvedManagerUid: resolvedDivisionManager?.uid,
+        resolvedManagerName: resolvedDivisionManager?.name,
+        resolvedManagerDivisionName: resolvedDivisionManager?.divisionName,
         employeeProfileManagerUid: employeeProfile?.managerUid,
-        employeeProfileManagerName: employeeProfile?.managerName
+        employeeProfileManagerName: employeeProfile?.managerName,
       });
 
       const payload: any = {
@@ -1241,17 +1591,26 @@ export function OvertimeSubmissionForm({
         workRole: hrd?.workRole || displayInfo.positionTitle,
 
         // Supervisor info
-        directSupervisorUid: approvalFlow.supervisorUid,
-        directSupervisorName: approvalFlow.supervisorName,
-        managerUid: approvalFlow.supervisorUid,
-        managerName: approvalFlow.supervisorName,
-        managerDivisionName: resolvedManager?.resolvedManagerDivisionName || displayInfo.division,
-        overtimeCoordinatorUid: selectedCoordinator?.uid || values.overtimeCoordinatorUid,
-        overtimeCoordinatorName: selectedCoordinator?.fullName || "",
-        overtimeCoordinatorPosition: selectedCoordinator?.positionTitle || selectedCoordinator?.structuralLevel || selectedCoordinator?.role || "",
+        directSupervisorUid: approvalFlow.managerUid,
+        directSupervisorName: approvalFlow.managerName,
+        managerUid: approvalFlow.managerUid,
+        managerName: approvalFlow.managerName,
+        managerDivisionName:
+          resolvedDivisionManager?.divisionName || displayInfo.division,
+        overtimeCoordinatorUid:
+          selectedCoordinator?.uid || values.overtimeCoordinatorUid || null,
+        overtimeCoordinatorName:
+          selectedCoordinator?.fullName ||
+          selectedCoordinator?.displayName ||
+          "",
+        overtimeCoordinatorPosition:
+          selectedCoordinator?.positionTitle ||
+          selectedCoordinator?.structuralLevel ||
+          selectedCoordinator?.role ||
+          "",
         overtimeInstructionNote: values.overtimeInstructionNote,
 
-        approvalLevel: approvalTarget.approvalLevel,
+        approvalLevel: "coordinator",
         requesterStructuralPosition:
           employeeProfile?.hrdEmploymentInfo?.structuralPosition ||
           userProfile?.structuralLevel ||
@@ -1288,10 +1647,12 @@ export function OvertimeSubmissionForm({
         attachments: [...(values.attachments || []), ...attachmentUrls],
 
         // Approval flow
-        approvalFlowType: "staff_to_coordinator_to_manager_to_hrd",
-        approvalFlow: approvalFlow.flowText,
-        approvalStatus: "pending_coordinator",
-        status: "pending_coordinator",
+        approvalFlowType: approvalFlow.approvalFlowType,
+        approvalFlow: approvalFlow.isCoordinatorSameAsManager
+          ? `${approvalFlow.managerName} → HRD`
+          : `${selectedCoordinator?.fullName || "Koordinator"} → ${approvalFlow.managerName} → HRD`,
+        approvalStatus: approvalFlow.initialStatus,
+        status: approvalFlow.initialStatus,
         submittedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
@@ -1303,9 +1664,12 @@ export function OvertimeSubmissionForm({
       await setDocumentNonBlocking(docRef, payload, { merge: true });
 
       try {
-        if (approvalFlow.supervisorUid) {
+        const notificationRecipientUid =
+          selectedCoordinator?.uid || approvalFlow.managerUid;
+
+        if (notificationRecipientUid) {
           await sendNotification(firestore, {
-            userId: approvalFlow.supervisorUid,
+            userId: notificationRecipientUid,
             type: "status_update",
             module: "employee",
             title: "Pengajuan Lembur Baru Menunggu Persetujuan",
@@ -1357,6 +1721,38 @@ export function OvertimeSubmissionForm({
     currentStatus === "needs_revision" ||
     (currentStatus === "pending_supervisor" && !supervisorViewedAt);
   const isReadOnly = isViewMode || !canEditSubmission;
+
+  if (!canSubmitOvertime && formMode === "edit") {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="w-[90vw] max-w-[800px] max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader className="shrink-0 border-b px-6 py-5">
+            <DialogTitle>Pengajuan Lembur Tidak Tersedia</DialogTitle>
+            <DialogDescription>
+              Pengajuan lembur hanya tersedia untuk staff/karyawan operasional.
+              Akun dengan jabatan manajerial atau HRD hanya dapat memproses
+              persetujuan lembur.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto px-6 py-8">
+            <div className="rounded-3xl border border-border bg-muted p-6">
+              <p className="text-lg font-semibold">Akses Ditolak</p>
+              <p className="mt-3 text-sm text-muted-foreground">
+                Anda tidak memiliki izin untuk membuat atau mengedit pengajuan
+                lembur. Silakan gunakan fitur persetujuan jika Anda berada di
+                posisi manajerial atau HRD.
+              </p>
+            </div>
+          </div>
+          <div className="shrink-0 border-t px-6 py-4 bg-background flex justify-end">
+            <Button variant="ghost" onClick={() => onOpenChange(false)}>
+              Tutup
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   const viewOvertimeDate = parseSafeDate(
     (submission as any)?.overtimeDate ?? submission?.date,
@@ -1508,65 +1904,333 @@ export function OvertimeSubmissionForm({
         </DialogHeader>
         <div className="flex-1 overflow-y-auto px-6 py-6 pb-10">
           <Form {...form}>
-            <form id="overtime-form" onSubmit={form.handleSubmit(handleSubmit)} className="space-y-8">
-              {!approvalFlow.hasValidFlow && !isReadOnly && (
-              <Alert variant="destructive">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertTitle>Data Atasan Belum Tersedia</AlertTitle>
-                <AlertDescription>
-                  Atasan langsung belum ditentukan di data kepegawaian HRD.
-                  Pengajuan lembur tidak dapat dikirim sampai data Anda
-                  dilengkapi oleh HRD.
-                </AlertDescription>
-              </Alert>
-            )}
+            <form
+              id="overtime-form"
+              onSubmit={form.handleSubmit(handleSubmit, handleInvalidSubmit)}
+              className="space-y-8"
+            >
+              {isApprovalFlowInvalid && !isReadOnly && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Data Atasan Belum Tersedia</AlertTitle>
+                  <AlertDescription>
+                    Manager Divisi untuk divisi{" "}
+                    <strong>{displayInfo.division}</strong> belum ditentukan.
+                    Hubungi HRD atau pilih koordinator yang sesuai.
+                  </AlertDescription>
+                </Alert>
+              )}
 
-            <section className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-              <Card className="p-5 space-y-4">
-                <p className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
-                  Profil Anda
-                </p>
-                <InfoRow label="Nama" value={displayInfo.fullName} />
-                <InfoRow
-                  label="Tipe Karyawan"
-                  value={displayInfo.employmentStatus}
-                />
-                <InfoRow label="Brand" value={displayInfo.brandName} />
-                <InfoRow
-                  label="Jabatan / Bagian"
-                  value={displayInfo.positionTitle}
-                />
-              </Card>
-              <Card className="p-5 space-y-4">
-                <p className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
-                  Pengawas/Koordinator
-                </p>
+              <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <Card className="p-5 space-y-4">
+                  <p className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
+                    Profil Anda
+                  </p>
+                  <InfoRow label="Nama" value={displayInfo.fullName} />
+                  <InfoRow
+                    label="Tipe Karyawan"
+                    value={displayInfo.employmentStatus}
+                  />
+                  <InfoRow label="Brand" value={displayInfo.brandName} />
+                  <InfoRow
+                    label="Jabatan / Bagian"
+                    value={displayInfo.positionTitle}
+                  />
+                </Card>
+                <Card className="p-5 space-y-4">
+                  <p className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
+                    Pengawas/Koordinator
+                  </p>
+                  <FormField
+                    control={form.control}
+                    name="overtimeCoordinatorUid"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value}
+                          disabled={isReadOnly}
+                        >
+                          <FormControl>
+                            <SelectTrigger
+                              className={`w-full ${
+                                submitAttempted && !overtimeCoordinatorUid
+                                  ? "border-destructive ring-1 ring-destructive"
+                                  : ""
+                              }`}
+                            >
+                              <SelectValue placeholder="Pilih Pengawas/Koordinator" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {eligibleCoordinators.map((c) => {
+                              const position =
+                                c.positionTitle ||
+                                c.workRole ||
+                                c.structuralLevel ||
+                                (c.role === "manager"
+                                  ? "Manager Divisi"
+                                  : c.role === "management"
+                                    ? "Direktur/Manajemen"
+                                    : c.role);
+                              const divisionLabel =
+                                c.division ||
+                                c.managedDivision ||
+                                c.divisionName ||
+                                "";
+                              const displayLabel = divisionLabel
+                                ? `${position} ${divisionLabel}`
+                                : position;
+                              return (
+                                <SelectItem key={c.uid} value={c.uid}>
+                                  {c.fullName || "Tanpa Nama"} &mdash;{" "}
+                                  {displayLabel}
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </Card>
+                <Card className="p-5 space-y-3 flex flex-col items-center justify-center">
+                  <p className="text-sm font-semibold text-muted-foreground">
+                    Total Estimasi Durasi
+                  </p>
+                  <p className="text-5xl font-bold">
+                    {totalDuration > 0 ? `${totalDuration}` : "-"}
+                  </p>
+                  <p className="text-sm font-semibold text-muted-foreground">
+                    menit
+                  </p>
+                </Card>
+              </section>
+
+              <section>
+                <Card className="p-5 space-y-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <p className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
+                      Alur Persetujuan
+                    </p>
+                    <p
+                      className={`text-sm font-semibold ${approvalFlow.hasValidFlow ? "text-emerald-600" : "text-amber-600"}`}
+                    >
+                      {approvalFlow.hasValidFlow ? "Lengkap" : "Belum lengkap"}
+                    </p>
+                  </div>
+
+                  <div className="relative pl-8 space-y-4">
+                    <div className="absolute left-2 top-5 bottom-5 w-px bg-border/70" />
+                    {approvalFlow.isCoordinatorSameAsManager ? (
+                      <div className="relative z-10 rounded-2xl border border-border bg-background/80 p-4">
+                        <div className="flex items-center gap-3">
+                          <span className="inline-flex h-2.5 w-2.5 rounded-full bg-primary" />
+                          <p className="text-sm font-semibold">
+                            Pengawas/Koordinator & Manager Divisi
+                          </p>
+                        </div>
+                        <div className="space-y-1 pl-6 pt-3">
+                          <p
+                            title={approvalFlow.managerName}
+                            className="text-sm font-semibold leading-snug line-clamp-2"
+                          >
+                            {approvalFlow.managerName}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Divisi:{" "}
+                            {resolvedDivisionManager?.divisionName ||
+                              displayInfo.division}
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="relative z-10 rounded-2xl border border-border bg-background/80 p-4">
+                          <div className="flex items-center gap-3">
+                            <span className="inline-flex h-2.5 w-2.5 rounded-full bg-primary" />
+                            <p className="text-sm font-semibold">
+                              Pengawas/Koordinator
+                            </p>
+                          </div>
+                          <div className="space-y-1 pl-6 pt-3">
+                            <p
+                              title={
+                                selectedCoordinator?.fullName || "Belum dipilih"
+                              }
+                              className="text-sm font-semibold leading-snug line-clamp-2"
+                            >
+                              {selectedCoordinator?.fullName || "Belum dipilih"}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Jabatan:{" "}
+                              {selectedCoordinator ? coordinatorPosition : "-"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="relative z-10 rounded-2xl border border-border bg-background/80 p-4">
+                          <div className="flex items-center gap-3">
+                            <span className="inline-flex h-2.5 w-2.5 rounded-full bg-primary" />
+                            <p className="text-sm font-semibold">
+                              Manager Divisi
+                            </p>
+                          </div>
+                          <div className="space-y-1 pl-6 pt-3">
+                            <p
+                              title={approvalFlow.managerName}
+                              className="text-sm font-semibold leading-snug line-clamp-2"
+                            >
+                              {approvalFlow.managerName}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Divisi:{" "}
+                              {resolvedDivisionManager?.divisionName ||
+                                displayInfo.division}
+                            </p>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                    <div className="relative z-10 rounded-2xl border border-border bg-background/80 p-4">
+                      <div className="flex items-center gap-3">
+                        <span className="inline-flex h-2.5 w-2.5 rounded-full bg-primary" />
+                        <p className="text-sm font-semibold">HRD</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground pl-6 pt-3">
+                        Final approval
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="border-t pt-2">
+                    <p className="text-sm font-semibold">Alur</p>
+                    <p className="text-sm text-muted-foreground">
+                      {approvalFlow.isCoordinatorSameAsManager
+                        ? "Koordinator & Manager Divisi → HRD"
+                        : "Koordinator → Manager Divisi → HRD"}
+                    </p>
+                  </div>
+
+                  {isApprovalFlowInvalid && (
+                    <div className="rounded-lg border border-destructive/60 bg-destructive/10 p-3 text-sm text-destructive-foreground">
+                      Manager Divisi belum ditemukan. Pilih koordinator yang
+                      valid atau lengkapi data divisi Anda.
+                    </div>
+                  )}
+                </Card>
+              </section>
+
+              {submission && currentStatus !== "draft" && (
+                <section>
+                  <h3 className="text-lg font-semibold border-b pb-2 mb-4">
+                    Jejak Persetujuan
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <ReviewCard
+                      title="Review Manajer Divisi"
+                      decisionAt={submission.managerDecisionAt}
+                      notes={submission.managerNotes}
+                    />
+                    <ReviewCard
+                      title="Review HRD"
+                      decisionAt={submission.hrdDecisionAt}
+                      notes={submission.hrdNotes}
+                    />
+                  </div>
+                </section>
+              )}
+
+              <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                 <FormField
                   control={form.control}
-                  name="overtimeCoordinatorUid"
+                  name="date"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                      <FormLabel>Tanggal Lembur</FormLabel>
+                      <FormControl>
+                        <GoogleDatePicker
+                          value={field.value}
+                          onChange={field.onChange}
+                          disabled={isReadOnly}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="startTime"
                   render={({ field }) => (
                     <FormItem>
+                      <FormLabel>Jam Mulai</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="time"
+                          {...field}
+                          readOnly={isReadOnly}
+                          className={`${
+                            submitAttempted && !isTimeRangeValid
+                              ? "border-destructive ring-1 ring-destructive"
+                              : ""
+                          }`}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="endTime"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Jam Selesai</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="time"
+                          {...field}
+                          readOnly={isReadOnly}
+                          className={`${
+                            submitAttempted && !isTimeRangeValid
+                              ? "border-destructive ring-1 ring-destructive"
+                              : ""
+                          }`}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </section>
+              <section className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <FormField
+                  control={form.control}
+                  name="overtimeType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tipe Lembur</FormLabel>
                       <Select
                         onValueChange={field.onChange}
                         value={field.value}
                         disabled={isReadOnly}
                       >
                         <FormControl>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Pilih Pengawas/Koordinator" />
+                          <SelectTrigger
+                            className={`${
+                              submitAttempted && !overtimeType
+                                ? "border-destructive ring-1 ring-destructive"
+                                : ""
+                            }`}
+                          >
+                            <SelectValue placeholder="Pilih tipe" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {eligibleCoordinators.map((c) => {
-                            const position = c.positionTitle || c.workRole || c.structuralLevel || (c.role === "manager" ? "Manager Divisi" : c.role === "management" ? "Direktur/Manajemen" : c.role);
-                            const divisionLabel = c.division || c.managedDivision || c.divisionName || "";
-                            const displayLabel = divisionLabel ? `${position} ${divisionLabel}` : position;
-                            return (
-                              <SelectItem key={c.uid} value={c.uid}>
-                                {c.fullName || "Tanpa Nama"} &mdash; {displayLabel}
-                              </SelectItem>
-                            );
-                          })}
+                          <SelectItem value="hari_kerja">Hari Kerja</SelectItem>
+                          <SelectItem value="hari_libur">Hari Libur</SelectItem>
+                          <SelectItem value="urgent">Urgent</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -1575,468 +2239,329 @@ export function OvertimeSubmissionForm({
                 />
                 <FormField
                   control={form.control}
-                  name="overtimeInstructionNote"
+                  name="location"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-xs">Uraian Instruksi Lembur</FormLabel>
+                      <FormLabel>Lokasi Kerja</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                        disabled={isReadOnly}
+                      >
+                        <FormControl>
+                          <SelectTrigger
+                            className={`${
+                              submitAttempted && !location
+                                ? "border-destructive ring-1 ring-destructive"
+                                : ""
+                            }`}
+                          >
+                            <SelectValue placeholder="Pilih lokasi" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="kantor">Kantor</SelectItem>
+                          <SelectItem value="remote">Remote</SelectItem>
+                          <SelectItem value="site">
+                            Site/Lokasi Klien
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </section>
+
+              <section className="md:col-span-2 lg:col-span-3 space-y-6">
+                <div className="space-y-3">
+                  <FormLabel className="text-base">Rincian Pekerjaan</FormLabel>
+
+                  {/* Summary Card */}
+                  <Card className="p-4 bg-muted/50 border-0">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-muted-foreground uppercase">
+                          Total Durasi Lembur
+                        </p>
+                        <p className="text-2xl font-bold">{totalDuration}</p>
+                        <p className="text-xs text-muted-foreground">menit</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-muted-foreground uppercase">
+                          Total Estimasi Tugas
+                        </p>
+                        <p className="text-2xl font-bold">{tasksEstimate}</p>
+                        <p className="text-xs text-muted-foreground">menit</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-muted-foreground uppercase">
+                          Sisa Durasi
+                        </p>
+                        <p
+                          className={`text-2xl font-bold ${
+                            remainingDuration === 0
+                              ? "text-green-600"
+                              : remainingDuration > 0
+                                ? "text-amber-600"
+                                : "text-red-600"
+                          }`}
+                        >
+                          {remainingDuration}
+                        </p>
+                        <p className="text-xs text-muted-foreground">menit</p>
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Validation Status */}
+                  {durationValidation.message && (
+                    <Alert
+                      variant={
+                        durationValidation.status === "error"
+                          ? "destructive"
+                          : "default"
+                      }
+                      className={
+                        durationValidation.status === "warning"
+                          ? "border border-amber-500/40 bg-amber-500/10"
+                          : durationValidation.status === "valid"
+                            ? "border border-green-500/40 bg-green-500/10"
+                            : ""
+                      }
+                    >
+                      {durationValidation.status === "error" && (
+                        <AlertTriangle className="h-4 w-4" />
+                      )}
+                      {durationValidation.status === "valid" && (
+                        <UserCheck className="h-4 w-4 text-green-300" />
+                      )}
+                      {durationValidation.status === "warning" && (
+                        <AlertTriangle className="h-4 w-4 text-amber-300" />
+                      )}
+                      <AlertTitle
+                        className={
+                          durationValidation.status === "warning"
+                            ? "text-amber-300"
+                            : durationValidation.status === "valid"
+                              ? "text-green-300"
+                              : ""
+                        }
+                      >
+                        {durationValidation.status === "error"
+                          ? "Estimasi Melebihi Durasi"
+                          : durationValidation.status === "valid"
+                            ? "Estimasi Sesuai"
+                            : "Estimasi Belum Lengkap"}
+                      </AlertTitle>
+                      <AlertDescription
+                        className={
+                          durationValidation.status === "error"
+                            ? ""
+                            : "text-slate-200"
+                        }
+                      >
+                        {durationValidation.message}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+
+                {/* Tasks List */}
+                <div className="space-y-3">
+                  {fields.map((field, index) => (
+                    <Card key={field.id} className="p-4 relative">
+                      {!isReadOnly && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute top-2 right-2 text-destructive hover:bg-destructive/10"
+                          onClick={() => remove(index)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <div className="space-y-4 pr-8">
+                        <FormField
+                          control={form.control}
+                          name={`tasks.${index}.description`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Uraian Tugas</FormLabel>
+                              <FormControl>
+                                <Textarea
+                                  rows={2}
+                                  placeholder="Deskripsikan pekerjaan yang akan dilakukan..."
+                                  {...field}
+                                  readOnly={isReadOnly}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name={`tasks.${index}.estimatedMinutes`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Estimasi Durasi (menit)</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  placeholder="Berapa menit untuk menyelesaikan tugas ini?"
+                                  {...field}
+                                  readOnly={isReadOnly}
+                                  value={field.value ?? ""}
+                                  onChange={(e) =>
+                                    field.onChange(
+                                      e.target.value === ""
+                                        ? null
+                                        : Number(e.target.value),
+                                    )
+                                  }
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+
+                {!isReadOnly && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      append({
+                        description: "",
+                        estimatedMinutes: 60,
+                      })
+                    }
+                  >
+                    <PlusCircle className="mr-2 h-4 w-4" /> Tambah Tugas
+                  </Button>
+                )}
+              </section>
+
+              <section>
+                <FormField
+                  control={form.control}
+                  name="reason"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Alasan Lembur</FormLabel>
                       <FormControl>
-                        <Input placeholder="Instruksi lembur dari pengawas" {...field} readOnly={isReadOnly} />
+                        <Textarea
+                          rows={3}
+                          placeholder="Jelaskan kenapa pekerjaan ini perlu dilemburkan..."
+                          {...field}
+                          readOnly={isReadOnly}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Alasan lembur digunakan untuk membantu atasan menilai
+                        pengajuan.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </section>
+              <section>
+                <FormField
+                  control={form.control}
+                  name="employeeNotes"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Catatan (Opsional)</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          rows={2}
+                          placeholder="Catatan tambahan jika ada..."
+                          {...field}
+                          readOnly={isReadOnly}
+                          value={field.value ?? ""}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-              </Card>
-              <Card className="p-5 space-y-4">
-                <p className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
-                  Alur Persetujuan
-                </p>
-                <InfoRow
-                  label="Manager Divisi"
-                  value={approvalFlow.supervisorName}
-                />
-                <InfoRow label="Divisi" value={displayInfo.division} />
-                <div className="flex justify-between items-start gap-4 pt-2 border-t mt-2">
-                  <p className="text-sm font-semibold text-muted-foreground">
-                    Alur
-                  </p>
-                  <p
-                    className={`text-sm font-semibold text-right leading-tight ${!approvalFlow.hasValidFlow ? "text-amber-600" : ""}`}
-                  >
-                    Pengawas/Koordinator → {approvalFlow.supervisorName || "Manager Divisi Belum Ditentukan"} → HRD
-                </p>
-                </div>
-              </Card>
-              <Card className="p-5 space-y-3 flex flex-col items-center justify-center">
-                <p className="text-sm font-semibold text-muted-foreground">
-                  Total Estimasi Durasi
-                </p>
-                <p className="text-5xl font-bold">
-                  {totalDuration > 0 ? `${totalDuration}` : "-"}
-                </p>
-                <p className="text-sm font-semibold text-muted-foreground">
-                  menit
-                </p>
-              </Card>
-            </section>
-
-            {submission && currentStatus !== "draft" && (
-              <section>
-                <h3 className="text-lg font-semibold border-b pb-2 mb-4">
-                  Jejak Persetujuan
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <ReviewCard
-                    title="Review Manajer Divisi"
-                    decisionAt={submission.managerDecisionAt}
-                    notes={submission.managerNotes}
-                  />
-                  <ReviewCard
-                    title="Review HRD"
-                    decisionAt={submission.hrdDecisionAt}
-                    notes={submission.hrdNotes}
-                  />
-                </div>
               </section>
-            )}
 
-            <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              <FormField
-                    control={form.control}
-                    name="date"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-col">
-                        <FormLabel>Tanggal Lembur</FormLabel>
-                        <FormControl>
-                          <GoogleDatePicker
-                            value={field.value}
-                            onChange={field.onChange}
-                            disabled={isReadOnly}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="startTime"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Jam Mulai</FormLabel>
-                        <FormControl>
-                          <Input type="time" {...field} readOnly={isReadOnly} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="endTime"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Jam Selesai</FormLabel>
-                        <FormControl>
-                          <Input type="time" {...field} readOnly={isReadOnly} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </section>
-                <section className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <FormField
-                    control={form.control}
-                    name="overtimeType"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Tipe Lembur</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          value={field.value}
-                          disabled={isReadOnly}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Pilih tipe" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="hari_kerja">
-                              Hari Kerja
-                            </SelectItem>
-                            <SelectItem value="hari_libur">
-                              Hari Libur
-                            </SelectItem>
-                            <SelectItem value="urgent">Urgent</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="location"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Lokasi Kerja</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          value={field.value}
-                          disabled={isReadOnly}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Pilih lokasi" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="kantor">Kantor</SelectItem>
-                            <SelectItem value="remote">Remote</SelectItem>
-                            <SelectItem value="site">
-                              Site/Lokasi Klien
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </section>
-
-                <section className="md:col-span-2 lg:col-span-3 space-y-6">
-                  <div className="space-y-3">
-                    <FormLabel className="text-base">
-                      Rincian Pekerjaan
-                    </FormLabel>
-
-                    {/* Summary Card */}
-                    <Card className="p-4 bg-muted/50 border-0">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase">
-                            Total Durasi Lembur
-                          </p>
-                          <p className="text-2xl font-bold">{totalDuration}</p>
-                          <p className="text-xs text-muted-foreground">menit</p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase">
-                            Total Estimasi Tugas
-                          </p>
-                          <p className="text-2xl font-bold">{tasksEstimate}</p>
-                          <p className="text-xs text-muted-foreground">menit</p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase">
-                            Sisa Durasi
-                          </p>
-                          <p
-                            className={`text-2xl font-bold ${
-                              remainingDuration === 0
-                                ? "text-green-600"
-                                : remainingDuration > 0
-                                  ? "text-amber-600"
-                                  : "text-red-600"
-                            }`}
-                          >
-                            {remainingDuration}
-                          </p>
-                          <p className="text-xs text-muted-foreground">menit</p>
-                        </div>
-                      </div>
-                    </Card>
-
-                    {/* Validation Status */}
-                    {durationValidation.message && (
-                      <Alert
-                        variant={
-                          durationValidation.status === "error"
-                            ? "destructive"
-                            : "default"
-                        }
-                        className={
-                          durationValidation.status === "warning"
-                            ? "border border-amber-500/40 bg-amber-500/10"
-                            : durationValidation.status === "valid"
-                              ? "border border-green-500/40 bg-green-500/10"
-                              : ""
-                        }
+              {!isReadOnly && (
+                <section className="space-y-4">
+                  <FormLabel>Lampiran Pendukung (Opsional)</FormLabel>
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-4">
+                      <Input
+                        type="file"
+                        accept="image/*,.pdf"
+                        multiple
+                        onChange={handleFileSelect}
+                        className="flex-1"
+                        disabled={uploadingAttachments}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={uploadingAttachments}
                       >
-                        {durationValidation.status === "error" && (
-                          <AlertTriangle className="h-4 w-4" />
-                        )}
-                        {durationValidation.status === "valid" && (
-                          <UserCheck className="h-4 w-4 text-green-300" />
-                        )}
-                        {durationValidation.status === "warning" && (
-                          <AlertTriangle className="h-4 w-4 text-amber-300" />
-                        )}
-                        <AlertTitle
-                          className={
-                            durationValidation.status === "warning"
-                              ? "text-amber-300"
-                              : durationValidation.status === "valid"
-                                ? "text-green-300"
-                                : ""
-                          }
-                        >
-                          {durationValidation.status === "error"
-                            ? "Estimasi Melebihi Durasi"
-                            : durationValidation.status === "valid"
-                              ? "Estimasi Sesuai"
-                              : "Estimasi Belum Lengkap"}
-                        </AlertTitle>
-                        <AlertDescription
-                          className={
-                            durationValidation.status === "error"
-                              ? ""
-                              : "text-slate-200"
-                          }
-                        >
-                          {durationValidation.message}
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                  </div>
-
-                  {/* Tasks List */}
-                  <div className="space-y-3">
-                    {fields.map((field, index) => (
-                      <Card key={field.id} className="p-4 relative">
-                        {!isReadOnly && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="absolute top-2 right-2 text-destructive hover:bg-destructive/10"
-                            onClick={() => remove(index)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                        <div className="space-y-4 pr-8">
-                          <FormField
-                            control={form.control}
-                            name={`tasks.${index}.description`}
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Uraian Tugas</FormLabel>
-                                <FormControl>
-                                  <Textarea
-                                    rows={2}
-                                    placeholder="Deskripsikan pekerjaan yang akan dilakukan..."
-                                    {...field}
-                                    readOnly={isReadOnly}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={form.control}
-                            name={`tasks.${index}.estimatedMinutes`}
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Estimasi Durasi (menit)</FormLabel>
-                                <FormControl>
-                                  <Input
-                                    type="number"
-                                    placeholder="Berapa menit untuk menyelesaikan tugas ini?"
-                                    {...field}
-                                    readOnly={isReadOnly}
-                                    value={field.value ?? ""}
-                                    onChange={(e) =>
-                                      field.onChange(
-                                        e.target.value === ""
-                                          ? null
-                                          : Number(e.target.value),
-                                      )
-                                    }
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-
-                  {!isReadOnly && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        append({
-                          description: "",
-                          estimatedMinutes: 60,
-                        })
-                      }
-                    >
-                      <PlusCircle className="mr-2 h-4 w-4" /> Tambah Tugas
-                    </Button>
-                  )}
-                </section>
-
-                <section>
-                  <FormField
-                    control={form.control}
-                    name="reason"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Alasan Lembur</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            rows={3}
-                            placeholder="Jelaskan kenapa pekerjaan ini perlu dilemburkan..."
-                            {...field}
-                            readOnly={isReadOnly}
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          Alasan lembur digunakan untuk membantu atasan menilai
-                          pengajuan.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </section>
-                <section>
-                  <FormField
-                    control={form.control}
-                    name="employeeNotes"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Catatan (Opsional)</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            rows={2}
-                            placeholder="Catatan tambahan jika ada..."
-                            {...field}
-                            readOnly={isReadOnly}
-                            value={field.value ?? ""}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </section>
-
-                {!isReadOnly && (
-                  <section className="space-y-4">
-                    <FormLabel>Lampiran Pendukung (Opsional)</FormLabel>
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-4">
-                        <Input
-                          type="file"
-                          accept="image/*,.pdf"
-                          multiple
-                          onChange={handleFileSelect}
-                          className="flex-1"
-                          disabled={uploadingAttachments}
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={uploadingAttachments}
-                        >
-                          <Upload className="mr-2 h-4 w-4" />
-                          Pilih File
-                        </Button>
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        Upload foto, screenshot, atau dokumen pendukung (PNG,
-                        JPG, JPEG, PDF, maksimal 5MB per file)
-                      </p>
-
-                      {attachments.length > 0 && (
-                        <div className="space-y-2">
-                          <p className="text-sm font-medium">
-                            File yang akan diupload:
-                          </p>
-                          {attachments.map((file, index) => (
-                            <div
-                              key={index}
-                              className="flex items-center gap-2 p-2 bg-muted rounded-md"
-                            >
-                              {file.type.startsWith("image/") ? (
-                                <Image className="h-4 w-4 text-muted-foreground" />
-                              ) : (
-                                <FileText className="h-4 w-4 text-muted-foreground" />
-                              )}
-                              <span className="text-sm flex-1 truncate">
-                                {file.name}
-                              </span>
-                              <span className="text-xs text-muted-foreground">
-                                {(file.size / 1024 / 1024).toFixed(1)}MB
-                              </span>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => removeAttachment(index)}
-                                className="h-6 w-6 p-0 text-destructive hover:bg-destructive/10"
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                        <Upload className="mr-2 h-4 w-4" />
+                        Pilih File
+                      </Button>
                     </div>
-                  </section>
-                )}
-              </form>
-            </Form>
+                    <p className="text-sm text-muted-foreground">
+                      Upload foto, screenshot, atau dokumen pendukung (PNG, JPG,
+                      JPEG, PDF, maksimal 5MB per file)
+                    </p>
+
+                    {attachments.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">
+                          File yang akan diupload:
+                        </p>
+                        {attachments.map((file, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center gap-2 p-2 bg-muted rounded-md"
+                          >
+                            {file.type.startsWith("image/") ? (
+                              <Image className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <FileText className="h-4 w-4 text-muted-foreground" />
+                            )}
+                            <span className="text-sm flex-1 truncate">
+                              {file.name}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {(file.size / 1024 / 1024).toFixed(1)}MB
+                            </span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeAttachment(index)}
+                              className="h-6 w-6 p-0 text-destructive hover:bg-destructive/10"
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )}
+            </form>
+          </Form>
         </div>
         <div className="shrink-0 border-t px-6 py-4 flex justify-end gap-3 bg-background">
           {!isReadOnly && (
@@ -2061,7 +2586,9 @@ export function OvertimeSubmissionForm({
                 </span>
                 , dengan alur persetujuan{" "}
                 <span className="font-semibold text-foreground">
-                  Pengawas/Koordinator → {approvalFlow.supervisorName || "Manager Divisi Belum Ditentukan"} → HRD
+                  {approvalFlow.isCoordinatorSameAsManager
+                    ? "Koordinator & Manager Divisi → HRD"
+                    : "Koordinator → Manager Divisi → HRD"}
                 </span>
                 .
               </div>
@@ -2074,15 +2601,7 @@ export function OvertimeSubmissionForm({
             <Button
               type="submit"
               form="overtime-form"
-              disabled={
-                isSaving ||
-                !approvalFlow.hasValidFlow ||
-                !form.watch("overtimeCoordinatorUid") ||
-                !staffBrandId ||
-                !staffDivisionId ||
-                uploadingAttachments ||
-                durationValidation.status === "error"
-              }
+              disabled={isSubmitDisabled}
             >
               {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               <Send className="mr-2 h-4 w-4" />

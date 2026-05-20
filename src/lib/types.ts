@@ -1852,6 +1852,12 @@ export type OvertimeSubmission = {
   coordinatorApprovedBy?: string | null;
   coordinatorApprovedByName?: string | null;
   coordinatorNotes?: string | null;
+  coordinatorApprovedByProxy?: boolean;
+  coordinatorProxyApprovedBy?: string;
+  coordinatorProxyApprovedByName?: string;
+  coordinatorProxyNote?: string;
+  coordinatorProxyMethod?: string;
+
 
   directSupervisorUid?: string;
   directSupervisorName?: string;

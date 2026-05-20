@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, Fragment } from "react";
 import { useCollection, useFirestore, useMemoFirebase } from "@/firebase";
-import { collection, query, where, orderBy } from "firebase/firestore";
+import { collection, query, where, or, orderBy } from "firebase/firestore";
 import type { OvertimeSubmission, UserProfile, Brand } from "@/lib/types";
 import { useAuth } from "@/providers/auth-provider";
 import { useRouter, usePathname, useSearchParams } from "@/navigation";
@@ -56,17 +56,17 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
 
   const [statusFilter, setStatusFilter] = useState<
     OvertimeSubmission["status"] | "all"
-  >(mode === "manager" ? "pending_supervisor" : "all");
+  >(mode === "manager" ? "pending_coordinator" : "all");
   const [activeTab, setActiveTab] = useState<
     | "pending_hrd"
     | "pending_supervisor"
+    | "pending_coordinator"
     | "approved"
     | "rejected"
     | "rekap_payroll"
     | "all"
-    | "perlu_diproses"
     | "riwayat_saya"
-  >(mode === "hrd" ? "pending_hrd" : "perlu_diproses");
+  >(mode === "hrd" ? "pending_hrd" : "pending_coordinator");
   const [brandFilter, setBrandFilter] = useState("all");
   const [divisionFilter, setDivisionFilter] = useState("all");
   const [managerFilter, setManagerFilter] = useState("all");
@@ -79,8 +79,9 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
   >("recent");
   const [selectedSubmission, setSelectedSubmission] =
     useState<OvertimeSubmission | null>(null);
-  const [expandedEmployeeId, setExpandedEmployeeId] =
-    useState<string | null>(null);
+  const [expandedEmployeeId, setExpandedEmployeeId] = useState<string | null>(
+    null,
+  );
 
   const parseSafeDate = (value: any): Date | null => {
     if (!value) return null;
@@ -98,7 +99,12 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
   const normalizeQueryValue = (value: string | null) =>
     value ? value.replace(/-/g, "_") : null;
 
-  const managerTabs = ["perlu_diproses", "riwayat_saya", "all"] as const;
+  const managerTabs = [
+    "pending_coordinator",
+    "pending_supervisor",
+    "riwayat_saya",
+    "all",
+  ] as const;
   const hrdTabs = [
     "pending_hrd",
     "pending_supervisor",
@@ -220,6 +226,8 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
         if (storedTab && managerTabs.includes(storedTab as any)) {
           setActiveTab(storedTab as any);
           updateUrlParam("status", storedTab.replace(/_/g, "-"));
+        } else {
+          setActiveTab("pending_coordinator");
         }
       }
     }
@@ -309,7 +317,11 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
     if (mode === "manager") {
       return query(
         collection(firestore, "overtime_submissions"),
-        where("directSupervisorUid", "==", userProfile.uid),
+        or(
+          where("directSupervisorUid", "==", userProfile.uid),
+          where("managerUid", "==", userProfile.uid),
+          where("overtimeCoordinatorUid", "==", userProfile.uid),
+        ),
         orderBy("submittedAt", "desc"),
       );
     }
@@ -376,18 +388,16 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
   const activeTabStatuses = useMemo(() => {
     if (mode === "manager") {
       switch (activeTab) {
-        case "perlu_diproses":
+        case "pending_coordinator":
+          return ["pending_coordinator"];
+        case "pending_supervisor":
           return ["pending_supervisor"];
         case "riwayat_saya":
-          return [
-            "pending_hrd",
-            "approved",
-            "approved_hrd",
-            "revision_manager",
-            "rejected_manager",
-            "revision_hrd",
-            "rejected_hrd",
-          ];
+          return OVERTIME_SUBMISSION_STATUSES.filter(
+            (status) =>
+              status !== "pending_coordinator" &&
+              status !== "pending_supervisor",
+          );
         case "all":
         default:
           return OVERTIME_SUBMISSION_STATUSES;
@@ -434,6 +444,27 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
             ? true
             : activeTabStatuses.includes(effectiveStatus as any);
       if (!activeTabMatch) return false;
+
+      // Role-specific filtering in manager mode
+      if (mode === "manager") {
+        if (activeTab === "pending_coordinator") {
+          if (s.overtimeCoordinatorUid !== userProfile.uid) return false;
+        } else if (activeTab === "pending_supervisor") {
+          if (
+            s.directSupervisorUid !== userProfile.uid &&
+            s.managerUid !== userProfile.uid
+          )
+            return false;
+        } else if (activeTab === "riwayat_saya") {
+          const hasDecision =
+            s.coordinatorDecisionBy === userProfile.uid ||
+            (s as any).coordinatorApprovedBy === userProfile.uid ||
+            s.supervisorApprovedBy === userProfile.uid ||
+            s.rejectedBy === userProfile.uid ||
+            s.revisionRequestedBy === userProfile.uid;
+          if (!hasDecision) return false;
+        }
+      }
 
       // Status filter (only for HRD if set)
       if (
@@ -526,25 +557,29 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
 
   const payrollRecapGrouped = useMemo(() => {
     if (activeTab !== "rekap_payroll") return [];
-    
-    const groups: Record<string, {
-      employeeUid: string;
-      employeeName: string;
-      divisionName: string;
-      brandName: string;
-      count: number;
-      totalMinutes: number;
-      items: OvertimeSubmission[];
-    }> = {};
+
+    const groups: Record<
+      string,
+      {
+        employeeUid: string;
+        employeeName: string;
+        divisionName: string;
+        brandName: string;
+        count: number;
+        totalMinutes: number;
+        items: OvertimeSubmission[];
+      }
+    > = {};
 
     filteredSubmissions.forEach((s) => {
       const empId = s.employeeUid || s.uid || "unknown";
       const name = s.employeeName || s.fullName || "Karyawan";
       const div = s.divisionName || s.division || "-";
       const brand = s.brandName || "-";
-      const approvedMinutes = s.approvedMinutesFinal !== undefined && s.approvedMinutesFinal !== null
-        ? s.approvedMinutesFinal
-        : (s.totalDurationMinutes || 0);
+      const approvedMinutes =
+        s.approvedMinutesFinal !== undefined && s.approvedMinutesFinal !== null
+          ? s.approvedMinutesFinal
+          : s.totalDurationMinutes || 0;
 
       if (!groups[empId]) {
         groups[empId] = {
@@ -562,7 +597,9 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
       groups[empId].items.push(s);
     });
 
-    return Object.values(groups).sort((a, b) => a.employeeName.localeCompare(b.employeeName));
+    return Object.values(groups).sort((a, b) =>
+      a.employeeName.localeCompare(b.employeeName),
+    );
   }, [filteredSubmissions, activeTab]);
 
   const kpis = useMemo(() => {
@@ -610,18 +647,67 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
             acc.total++;
           }
         } else {
-          if (effectiveStatus === "pending_supervisor") acc.pending++;
-          if (effectiveStatus === "revision_manager") acc.revision++;
+          const isPendingCoordinator =
+            effectiveStatus === "pending_coordinator" &&
+            s.overtimeCoordinatorUid === userProfile.uid;
+          const isPendingSupervisor =
+            effectiveStatus === "pending_supervisor" &&
+            (s.directSupervisorUid === userProfile.uid ||
+              s.managerUid === userProfile.uid);
 
-          const decisionDate = s.managerDecisionAt?.toDate();
+          if (isPendingCoordinator || isPendingSupervisor) acc.pending++;
+
           if (
-            decisionDate &&
-            decisionDate >= monthStart &&
-            decisionDate < monthEnd
+            effectiveStatus === "revision_manager" ||
+            effectiveStatus === "revision_requested_by_coordinator"
           ) {
-            if (effectiveStatus === "approved_by_manager") acc.approved++;
-            if (effectiveStatus === "rejected_manager") acc.rejected++;
+            acc.revision++;
           }
+
+          const coordinatorDecisionDate =
+            s.coordinatorDecisionAt?.toDate?.() ||
+            (typeof s.coordinatorDecisionAt === "string"
+              ? new Date(s.coordinatorDecisionAt)
+              : null);
+          const supervisorDecisionDate =
+            s.supervisorApprovedAt?.toDate?.() ||
+            (typeof s.supervisorApprovedAt === "string"
+              ? new Date(s.supervisorApprovedAt)
+              : null);
+          const managerDecisionDate =
+            s.managerDecisionAt?.toDate?.() ||
+            (typeof s.managerDecisionAt === "string"
+              ? new Date(s.managerDecisionAt)
+              : null);
+
+          const hasApprovedThisMonth =
+            (s.coordinatorDecision === "approved" &&
+              (s.coordinatorDecisionBy === userProfile.uid ||
+                (s as any).coordinatorApprovedBy === userProfile.uid) &&
+              coordinatorDecisionDate &&
+              coordinatorDecisionDate >= monthStart &&
+              coordinatorDecisionDate < monthEnd) ||
+            (s.supervisorApprovedBy === userProfile.uid &&
+              supervisorDecisionDate &&
+              supervisorDecisionDate >= monthStart &&
+              supervisorDecisionDate < monthEnd) ||
+            (effectiveStatus === "approved_by_manager" &&
+              managerDecisionDate &&
+              managerDecisionDate >= monthStart &&
+              managerDecisionDate < monthEnd);
+
+          if (hasApprovedThisMonth) acc.approved++;
+
+          const rejectedDate =
+            s.rejectedAt?.toDate?.() ||
+            (typeof s.rejectedAt === "string" ? new Date(s.rejectedAt) : null);
+          const hasRejectedThisMonth =
+            s.rejectedBy === userProfile.uid &&
+            rejectedDate &&
+            rejectedDate >= monthStart &&
+            rejectedDate < monthEnd;
+
+          if (hasRejectedThisMonth) acc.rejected++;
         }
 
         return acc;
@@ -636,7 +722,93 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
         revision: 0,
       },
     );
-  }, [submissions, mode]);
+  }, [submissions, userProfile]);
+
+  const userRoles = useMemo(() => {
+    if (!submissions || !userProfile)
+      return { isCoordinator: false, isManager: false };
+    let isCoordinator = false;
+    let isManager = false;
+    for (const s of submissions) {
+      if (s.overtimeCoordinatorUid === userProfile.uid) isCoordinator = true;
+      if (
+        s.directSupervisorUid === userProfile.uid ||
+        s.managerUid === userProfile.uid
+      )
+        isManager = true;
+    }
+    return { isCoordinator, isManager };
+  }, [submissions, userProfile]);
+
+  const organizationTitle = useMemo(() => {
+    if (!userProfile) return "—";
+    const lookup = [
+      userProfile.jobTitle,
+      (userProfile as any).jabatan,
+      (userProfile as any).position,
+      (userProfile as any).structuralPositionLabel,
+      userProfile.workRole,
+      (userProfile as any).title,
+      (userProfile as any).roleDisplayName,
+      (userProfile as any).organizationRoleName,
+    ];
+
+    const value = lookup.find(
+      (item) => typeof item === "string" && item.trim() !== "",
+    ) as string | undefined;
+
+    return value || userProfile.positionTitle || "—";
+  }, [userProfile]);
+
+  const dynamicRoleLabel = useMemo(() => {
+    if (activeTab === "pending_coordinator") {
+      return "Koordinator / Pengawas Lembur";
+    }
+    if (activeTab === "pending_supervisor") {
+      return "Manager Divisi / Atasan Langsung";
+    }
+    const { isCoordinator, isManager } = userRoles;
+    if (isCoordinator && isManager) {
+      return "Koordinator & Manager Divisi";
+    }
+    if (isCoordinator) {
+      return "Koordinator / Pengawas Lembur";
+    }
+    return "Manager Divisi / Atasan Langsung";
+  }, [activeTab, userRoles]);
+
+  const isUserTurn = (s: OvertimeSubmission) => {
+    if (!userProfile) return false;
+    const status = s.status || (s as any).approvalStatus || "draft";
+
+    if (mode === "hrd") {
+      return [
+        "pending_hrd",
+        "approved_by_manager",
+        "revision_hrd",
+        "revision_requested_by_hrd",
+        "verified_manager",
+      ].includes(status);
+    }
+
+    if (mode === "manager") {
+      if (status === "pending_coordinator") {
+        return s.overtimeCoordinatorUid === userProfile.uid;
+      }
+      if (
+        status === "pending_supervisor" ||
+        status === "pending_manager" ||
+        status === "revision_manager"
+      ) {
+        return (
+          s.directSupervisorUid === userProfile.uid ||
+          s.managerUid === userProfile.uid
+        );
+      }
+    }
+
+    return false;
+  };
 
   return (
     <div className="space-y-6">
@@ -676,11 +848,13 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
             <div>
               <CardTitle>Persetujuan Lembur Tim</CardTitle>
               <CardDescription>
-                Tinjau dan setujui pengajuan lembur staff Anda sebagai Manager Divisi.
+                {mode === "manager"
+                  ? "Tinjau dan setujui pengajuan lembur staff Anda sebagai Koordinator atau Manager Divisi."
+                  : "Tinjau dan setujui pengajuan lembur staff Anda sebagai HRD."}
               </CardDescription>
             </div>
-            {mode === "hrd" && (
-              <div className="w-full">
+            <div className="w-full">
+              {mode === "hrd" ? (
                 <Tabs
                   value={activeTab}
                   onValueChange={(value) => setPersistedActiveTab(value as any)}
@@ -692,12 +866,32 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
                     </TabsTrigger>
                     <TabsTrigger value="approved">Disetujui</TabsTrigger>
                     <TabsTrigger value="rejected">Ditolak</TabsTrigger>
-                    <TabsTrigger value="rekap_payroll">Rekap Payroll</TabsTrigger>
+                    <TabsTrigger value="rekap_payroll">
+                      Rekap Payroll
+                    </TabsTrigger>
                     <TabsTrigger value="all">Semua Riwayat</TabsTrigger>
                   </TabsList>
                 </Tabs>
-              </div>
-            )}
+              ) : (
+                <Tabs
+                  value={activeTab}
+                  onValueChange={(value) => setPersistedActiveTab(value as any)}
+                >
+                  <TabsList className="grid w-full grid-cols-4 gap-1">
+                    <TabsTrigger value="pending_coordinator">
+                      Sebagai Koordinator
+                    </TabsTrigger>
+                    <TabsTrigger value="pending_supervisor">
+                      Sebagai Manager Divisi
+                    </TabsTrigger>
+                    <TabsTrigger value="riwayat_saya">
+                      Riwayat Keputusan Saya
+                    </TabsTrigger>
+                    <TabsTrigger value="all">Semua Pengajuan</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              )}
+            </div>
           </div>
 
           {mode === "manager" && userProfile ? (
@@ -711,11 +905,11 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
                     Scope Persetujuan Anda
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Sebagai Manager Divisi / Atasan Langsung
+                    Sebagai {dynamicRoleLabel}
                   </p>
                 </div>
               </div>
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-3xl border border-border bg-background p-4">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">
                     Brand
@@ -734,10 +928,18 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
                 </div>
                 <div className="rounded-3xl border border-border bg-background p-4">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Peran
+                    Jabatan Organisasi
                   </p>
                   <p className="mt-2 text-sm font-semibold text-slate-100">
-                    Manager Divisi / Atasan Langsung
+                    {organizationTitle}
+                  </p>
+                </div>
+                <div className="rounded-3xl border border-border bg-background p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Fungsi Approval Saat Ini
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-slate-100">
+                    {dynamicRoleLabel}
                   </p>
                 </div>
               </div>
@@ -748,25 +950,9 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
             className={`grid gap-3 items-end ${
               mode === "hrd"
                 ? "md:grid-cols-2 xl:grid-cols-[1.1fr_1.1fr_1.1fr_1.1fr_1.8fr]"
-                : "lg:grid-cols-[1fr_1fr_1.8fr]"
+                : "lg:grid-cols-[1fr_1.8fr]"
             }`}
           >
-            {mode === "manager" && (
-              <Select
-                value={activeTab}
-                onValueChange={(val) => setPersistedActiveTab(val as any)}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Pilih status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="perlu_diproses">Perlu Diproses</SelectItem>
-                  <SelectItem value="riwayat_saya">Riwayat Saya</SelectItem>
-                  <SelectItem value="all">Semua Pengajuan</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
-
             {mode === "hrd" && (
               <>
                 <Select
@@ -886,8 +1072,13 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
               <div className="space-y-4">
                 <div className="flex justify-between items-center bg-slate-900/40 p-4 rounded-2xl border border-slate-800">
                   <div>
-                    <h4 className="text-sm font-bold text-white uppercase tracking-wider">Rekapitulasi Lembur Bulanan</h4>
-                    <p className="text-xs text-slate-400">Total akumulasi jam lembur yang disetujui (siap payroll) untuk periode {periodFilter}.</p>
+                    <h4 className="text-sm font-bold text-white uppercase tracking-wider">
+                      Rekapitulasi Lembur Bulanan
+                    </h4>
+                    <p className="text-xs text-slate-400">
+                      Total akumulasi jam lembur yang disetujui (siap payroll)
+                      untuk periode {periodFilter}.
+                    </p>
                   </div>
                   <Badge className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold px-3 py-1">
                     {payrollRecapGrouped.length} Karyawan Terdaftar
@@ -898,11 +1089,21 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
                     <TableHeader className="bg-slate-900/50">
                       <TableRow className="border-slate-800/50 hover:bg-slate-900/50">
                         <TableHead className="px-6 py-4 text-left text-xs uppercase font-bold text-slate-400 w-10"></TableHead>
-                        <TableHead className="px-3 py-4 text-left text-xs uppercase font-bold text-slate-400">Nama Karyawan</TableHead>
-                        <TableHead className="px-3 py-4 text-left text-xs uppercase font-bold text-slate-400">Brand / Divisi</TableHead>
-                        <TableHead className="px-3 py-4 text-center text-xs uppercase font-bold text-slate-400 w-32">Frekuensi Lembur</TableHead>
-                        <TableHead className="px-3 py-4 text-right text-xs uppercase font-bold text-emerald-400 w-48">Total Durasi Payroll</TableHead>
-                        <TableHead className="px-6 py-4 text-right text-xs uppercase font-bold text-slate-400 w-32">Aksi</TableHead>
+                        <TableHead className="px-3 py-4 text-left text-xs uppercase font-bold text-slate-400">
+                          Nama Karyawan
+                        </TableHead>
+                        <TableHead className="px-3 py-4 text-left text-xs uppercase font-bold text-slate-400">
+                          Brand / Divisi
+                        </TableHead>
+                        <TableHead className="px-3 py-4 text-center text-xs uppercase font-bold text-slate-400 w-32">
+                          Frekuensi Lembur
+                        </TableHead>
+                        <TableHead className="px-3 py-4 text-right text-xs uppercase font-bold text-emerald-400 w-48">
+                          Total Durasi Payroll
+                        </TableHead>
+                        <TableHead className="px-6 py-4 text-right text-xs uppercase font-bold text-slate-400 w-32">
+                          Aksi
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -910,16 +1111,20 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
                         const isExpanded = expandedEmployeeId === g.employeeUid;
                         const totalHours = Math.floor(g.totalMinutes / 60);
                         const totalMins = g.totalMinutes % 60;
-                        const durationLabel = totalHours > 0 
-                          ? `${totalHours} jam ${totalMins} menit` 
-                          : `${totalMins} menit`;
+                        const durationLabel =
+                          totalHours > 0
+                            ? `${totalHours} jam ${totalMins} menit`
+                            : `${totalMins} menit`;
 
                         return (
-                          <>
-                            <TableRow 
-                              key={g.employeeUid} 
+                          <Fragment key={g.employeeUid}>
+                            <TableRow
                               className="border-slate-800/50 hover:bg-slate-900/10 transition-colors cursor-pointer"
-                              onClick={() => setExpandedEmployeeId(isExpanded ? null : g.employeeUid)}
+                              onClick={() =>
+                                setExpandedEmployeeId(
+                                  isExpanded ? null : g.employeeUid,
+                                )
+                              }
                             >
                               <TableCell className="px-6 py-4 text-center">
                                 <span className="text-slate-500 font-mono text-xs">
@@ -933,19 +1138,29 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
                                 {g.brandName} / {g.divisionName}
                               </TableCell>
                               <TableCell className="px-3 py-4 text-center">
-                                <Badge variant="secondary" className="bg-slate-850 text-slate-300 font-bold px-2 py-0.5">
+                                <Badge
+                                  variant="secondary"
+                                  className="bg-slate-850 text-slate-300 font-bold px-2 py-0.5"
+                                >
                                   {g.count}x Kerja
                                 </Badge>
                               </TableCell>
                               <TableCell className="px-3 py-4 text-right font-black text-sm text-emerald-400">
                                 {durationLabel}
                               </TableCell>
-                              <TableCell className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
+                              <TableCell
+                                className="px-6 py-4 text-right"
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 <Button
                                   variant="outline"
                                   size="sm"
                                   className="h-8 border-slate-700 hover:bg-slate-800 hover:text-white rounded-xl text-xs"
-                                  onClick={() => setExpandedEmployeeId(isExpanded ? null : g.employeeUid)}
+                                  onClick={() =>
+                                    setExpandedEmployeeId(
+                                      isExpanded ? null : g.employeeUid,
+                                    )
+                                  }
                                 >
                                   {isExpanded ? "Tutup" : "Rincian"}
                                 </Button>
@@ -953,7 +1168,10 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
                             </TableRow>
 
                             {isExpanded && (
-                              <TableRow className="bg-slate-950/40 border-slate-850 hover:bg-slate-950/40">
+                              <TableRow
+                                key={`${g.employeeUid}-details`}
+                                className="bg-slate-950/40 border-slate-850 hover:bg-slate-950/40"
+                              >
                                 <TableCell colSpan={6} className="px-8 py-4">
                                   <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 space-y-3">
                                     <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
@@ -962,46 +1180,85 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
                                     <Table>
                                       <TableHeader className="bg-slate-900/30">
                                         <TableRow className="border-slate-800/50">
-                                          <TableHead className="py-2 text-xs font-semibold text-slate-500">Tanggal</TableHead>
-                                          <TableHead className="py-2 text-xs font-semibold text-slate-500">Jam Kerja</TableHead>
-                                          <TableHead className="py-2 text-xs font-semibold text-slate-500">Lokasi</TableHead>
-                                          <TableHead className="py-2 text-xs font-semibold text-slate-500">Pekerjaan</TableHead>
-                                          <TableHead className="py-2 text-xs font-semibold text-slate-500 text-right text-emerald-500">Durasi Payroll</TableHead>
-                                          <TableHead className="py-2 text-xs font-semibold text-slate-500 text-right">Aksi</TableHead>
+                                          <TableHead className="py-2 text-xs font-semibold text-slate-500">
+                                            Tanggal
+                                          </TableHead>
+                                          <TableHead className="py-2 text-xs font-semibold text-slate-500">
+                                            Jam Kerja
+                                          </TableHead>
+                                          <TableHead className="py-2 text-xs font-semibold text-slate-500">
+                                            Lokasi
+                                          </TableHead>
+                                          <TableHead className="py-2 text-xs font-semibold text-slate-500">
+                                            Pekerjaan
+                                          </TableHead>
+                                          <TableHead className="py-2 text-xs font-semibold text-slate-500 text-right text-emerald-500">
+                                            Durasi Payroll
+                                          </TableHead>
+                                          <TableHead className="py-2 text-xs font-semibold text-slate-500 text-right">
+                                            Aksi
+                                          </TableHead>
                                         </TableRow>
                                       </TableHeader>
                                       <TableBody>
                                         {g.items.map((item) => {
                                           const ovDate = getOvertimeDate(item);
-                                          const itemMinutes = item.approvedMinutesFinal !== undefined && item.approvedMinutesFinal !== null
-                                            ? item.approvedMinutesFinal
-                                            : (item.totalDurationMinutes || 0);
-                                          
-                                          const itemHours = Math.floor(itemMinutes / 60);
-                                          const itemMins = itemMinutes % 60;
-                                          const itemDurationLabel = itemHours > 0 
-                                            ? `${itemHours} jam ${itemMins} menit` 
-                                            : `${itemMins} menit`;
+                                          const itemMinutes =
+                                            item.approvedMinutesFinal !==
+                                              undefined &&
+                                            item.approvedMinutesFinal !== null
+                                              ? item.approvedMinutesFinal
+                                              : item.totalDurationMinutes || 0;
 
-                                          const taskDesc = (item.taskDetails && item.taskDetails[0]?.description) ||
-                                            (item.tasks && item.tasks[0]?.description) ||
-                                            item.reason || "-";
+                                          const itemHours = Math.floor(
+                                            itemMinutes / 60,
+                                          );
+                                          const itemMins = itemMinutes % 60;
+                                          const itemDurationLabel =
+                                            itemHours > 0
+                                              ? `${itemHours} jam ${itemMins} menit`
+                                              : `${itemMins} menit`;
+
+                                          const taskDesc =
+                                            (item.taskDetails &&
+                                              item.taskDetails[0]
+                                                ?.description) ||
+                                            (item.tasks &&
+                                              item.tasks[0]?.description) ||
+                                            item.reason ||
+                                            "-";
 
                                           return (
-                                            <TableRow key={item.id} className="border-slate-900/30 hover:bg-slate-900/10">
+                                            <TableRow
+                                              key={item.id}
+                                              className="border-slate-900/30 hover:bg-slate-900/10"
+                                            >
                                               <TableCell className="py-2 text-xs text-slate-300">
-                                                {ovDate ? format(ovDate, "dd MMMM yyyy", { locale: idLocale }) : "-"}
+                                                {ovDate
+                                                  ? format(
+                                                      ovDate,
+                                                      "dd MMMM yyyy",
+                                                      { locale: idLocale },
+                                                    )
+                                                  : "-"}
                                               </TableCell>
                                               <TableCell className="py-2 text-xs text-slate-400 font-mono">
-                                                {item.startTime} - {item.endTime}
+                                                {item.startTime} -{" "}
+                                                {item.endTime}
                                               </TableCell>
                                               <TableCell className="py-2 text-xs text-slate-300 capitalize">
-                                                {item.location === "kantor" ? "💻 Kantor" 
-                                                  : item.location === "remote" ? "🏡 WFH" 
-                                                  : item.location === "site" ? "🚗 Dinas" 
-                                                  : item.location || "-"}
+                                                {item.location === "kantor"
+                                                  ? "💻 Kantor"
+                                                  : item.location === "remote"
+                                                    ? "🏡 WFH"
+                                                    : item.location === "site"
+                                                      ? "🚗 Dinas"
+                                                      : item.location || "-"}
                                               </TableCell>
-                                              <TableCell className="py-2 text-xs text-slate-400 truncate max-w-[200px]" title={taskDesc}>
+                                              <TableCell
+                                                className="py-2 text-xs text-slate-400 truncate max-w-[200px]"
+                                                title={taskDesc}
+                                              >
                                                 {taskDesc}
                                               </TableCell>
                                               <TableCell className="py-2 text-xs font-bold text-emerald-400 text-right">
@@ -1012,7 +1269,9 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
                                                   variant="link"
                                                   size="sm"
                                                   className="h-auto p-0 text-blue-400 hover:text-blue-300 font-semibold"
-                                                  onClick={() => setSelectedSubmission(item)}
+                                                  onClick={() =>
+                                                    setSelectedSubmission(item)
+                                                  }
                                                 >
                                                   Lihat Dialog
                                                 </Button>
@@ -1026,7 +1285,7 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
                                 </TableCell>
                               </TableRow>
                             )}
-                          </>
+                          </Fragment>
                         );
                       })}
                     </TableBody>
@@ -1038,9 +1297,12 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
                 <div className="h-12 w-12 rounded-full bg-muted/50 flex items-center justify-center mb-4">
                   <Search className="h-6 w-6 text-muted-foreground" />
                 </div>
-                <h3 className="text-lg font-semibold text-slate-200">Tidak ada rekap payroll ditemukan.</h3>
+                <h3 className="text-lg font-semibold text-slate-200">
+                  Tidak ada rekap payroll ditemukan.
+                </h3>
                 <p className="text-sm text-muted-foreground mt-2 max-w-xs">
-                  Coba ubah periode atau filter pencarian untuk melihat data payroll disetujui lainnya.
+                  Coba ubah periode atau filter pencarian untuk melihat data
+                  payroll disetujui lainnya.
                 </p>
               </div>
             )
@@ -1100,10 +1362,8 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
                       (s.tasks && s.tasks[0]?.description) ||
                       s.reason ||
                       "-";
-                    const actionLabel =
-                      mode === "hrd" && effectiveStatus !== "pending_hrd"
-                        ? "Lihat"
-                        : "Review";
+                    const isTurn = isUserTurn(s);
+                    const actionLabel = isTurn ? "Review" : "Detail";
 
                     return (
                       <TableRow
@@ -1118,6 +1378,27 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
                           <div className="text-xs text-muted-foreground truncate">
                             {s.workRole || s.positionTitle || "-"}
                           </div>
+                          {mode === "manager" ? (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {s.overtimeCoordinatorUid === userProfile?.uid ? (
+                                <Badge
+                                  variant="secondary"
+                                  className="px-2 py-1 text-[11px] font-semibold"
+                                >
+                                  Sebagai Koordinator
+                                </Badge>
+                              ) : null}
+                              {s.directSupervisorUid === userProfile?.uid ||
+                              s.managerUid === userProfile?.uid ? (
+                                <Badge
+                                  variant="secondary"
+                                  className="px-2 py-1 text-[11px] font-semibold"
+                                >
+                                  Sebagai Manager Divisi
+                                </Badge>
+                              ) : null}
+                            </div>
+                          ) : null}
                         </TableCell>
                         {mode === "hrd" ? (
                           <>
@@ -1141,7 +1422,8 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
                               </div>
                               <div className="text-xs text-muted-foreground">
                                 {s.startTime} - {s.endTime} ·{" "}
-                                {s.approvedMinutesFinal !== undefined && s.approvedMinutesFinal !== null
+                                {s.approvedMinutesFinal !== undefined &&
+                                s.approvedMinutesFinal !== null
                                   ? `${s.approvedMinutesFinal}m final`
                                   : `${s.totalDurationMinutes}m ajuan`}
                               </div>
@@ -1163,11 +1445,19 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
                             </TableCell>
                             <TableCell className="px-3 py-3 align-top">
                               {s.totalDurationMinutes} menit
-                              {s.approvedMinutesFinal !== undefined && s.approvedMinutesFinal !== null && s.approvedMinutesFinal !== s.totalDurationMinutes && (
-                                <div className="text-[10px] text-amber-500 font-medium mt-1">
-                                  Durasi final HRD: {Math.floor(s.approvedMinutesFinal / 60)} jam {s.approvedMinutesFinal % 60}m, dari pengajuan {Math.floor(s.totalDurationMinutes / 60)} jam {s.totalDurationMinutes % 60}m
-                                </div>
-                              )}
+                              {s.approvedMinutesFinal !== undefined &&
+                                s.approvedMinutesFinal !== null &&
+                                s.approvedMinutesFinal !==
+                                  s.totalDurationMinutes && (
+                                  <div className="text-[10px] text-amber-500 font-medium mt-1">
+                                    Durasi final HRD:{" "}
+                                    {Math.floor(s.approvedMinutesFinal / 60)}{" "}
+                                    jam {s.approvedMinutesFinal % 60}m, dari
+                                    pengajuan{" "}
+                                    {Math.floor(s.totalDurationMinutes / 60)}{" "}
+                                    jam {s.totalDurationMinutes % 60}m
+                                  </div>
+                                )}
                             </TableCell>
                             <TableCell className="px-3 py-3 align-top">
                               {s.workLocationLabel ||
@@ -1190,15 +1480,30 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
                         </TableCell>
                         <TableCell className="px-3 py-3 align-top text-right">
                           <Button
-                            variant="outline"
+                            variant={isTurn ? "default" : "outline"}
                             size="sm"
                             onClick={(event) => {
                               event.stopPropagation();
                               setSelectedSubmission(s);
                             }}
+                            className={
+                              isTurn
+                                ? "bg-emerald-600 hover:bg-emerald-700 text-white border-none"
+                                : ""
+                            }
                           >
                             {actionLabel}
                           </Button>
+                          {mode === "manager" &&
+                            !isTurn &&
+                            effectiveStatus === "pending_coordinator" &&
+                            (s.directSupervisorUid === userProfile?.uid ||
+                              s.managerUid === userProfile?.uid) && (
+                              <div className="text-[10px] text-amber-500 font-medium mt-1 leading-tight max-w-[120px] ml-auto">
+                                Menunggu persetujuan Koordinator terlebih
+                                dahulu.
+                              </div>
+                            )}
                         </TableCell>
                       </TableRow>
                     );
@@ -1212,7 +1517,7 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
                 <Search className="h-6 w-6 text-muted-foreground" />
               </div>
               <h3 className="text-lg font-semibold text-slate-200">
-                {mode === "manager" && activeTab === "perlu_diproses" 
+                {mode === "manager" && activeTab === "perlu_diproses"
                   ? "Tidak ada pengajuan yang perlu Anda proses saat ini."
                   : "Tidak ada pengajuan ditemukan."}
               </h3>
@@ -1222,8 +1527,8 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
                   : "Coba ubah filter atau periode untuk melihat data lainnya."}
               </p>
               {mode === "manager" && activeTab === "perlu_diproses" && (
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="mt-6 rounded-xl"
                   onClick={() => setPersistedActiveTab("riwayat_saya")}
                 >

@@ -18,7 +18,14 @@ import {
 import { OvertimeApprovalStatusBadge } from "./OvertimeApprovalStatusBadge";
 import { useAuth } from "@/providers/auth-provider";
 import { useFirestore, updateDocumentNonBlocking } from "@/firebase";
-import { doc, serverTimestamp, collection, addDoc, updateDoc, arrayUnion } from "firebase/firestore";
+import {
+  doc,
+  serverTimestamp,
+  collection,
+  addDoc,
+  updateDoc,
+  arrayUnion,
+} from "firebase/firestore";
 import { sendNotification, sendHrdNotification } from "@/lib/notifications";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
@@ -35,6 +42,13 @@ import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface ReviewOvertimeDialogProps {
   open: boolean;
@@ -68,6 +82,9 @@ export function ReviewOvertimeDialog({
   const [showApproveDialog, setShowApproveDialog] = useState(false);
   const [showRevisionDialog, setShowRevisionDialog] = useState(false);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [showProxyDialog, setShowProxyDialog] = useState(false);
+  const [proxyMethod, setProxyMethod] = useState("lisan");
+  const [proxyNote, setProxyNote] = useState("");
   const [revisionNote, setRevisionNote] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
   const [hrdHours, setHrdHours] = useState(0);
@@ -88,9 +105,11 @@ export function ReviewOvertimeDialog({
 
   useEffect(() => {
     if (open && submission) {
-      const initialMinutes = submission.approvedMinutesFinal !== undefined && submission.approvedMinutesFinal !== null
-        ? submission.approvedMinutesFinal 
-        : (submission.totalDurationMinutes || 0);
+      const initialMinutes =
+        submission.approvedMinutesFinal !== undefined &&
+        submission.approvedMinutesFinal !== null
+          ? submission.approvedMinutesFinal
+          : submission.totalDurationMinutes || 0;
       setHrdHours(Math.floor(initialMinutes / 60));
       setHrdMinutes(initialMinutes % 60);
       setHrdNotes(submission.hrdNotes || "");
@@ -112,6 +131,8 @@ export function ReviewOvertimeDialog({
 
   const resolvedStatus =
     (submission as any).approvalStatus || submission.status || "draft";
+  const isCoordinatorReview =
+    mode === "manager" && resolvedStatus === "pending_coordinator";
   const tasks = submission.taskDetails || submission.tasks || [];
   const totalEstimatedMinutes = tasks.reduce(
     (sum, task) => sum + (task.estimatedMinutes || 0),
@@ -124,10 +145,32 @@ export function ReviewOvertimeDialog({
     parseSafeDate((submission as any).overtimeDate ?? submission.date) || null;
   const managerDecisionAt = parseSafeDate(submission.managerDecisionAt);
   const isFinal = isFinalStatus(resolvedStatus);
-  const canAct = isActionableStatus(resolvedStatus, mode);
+
+  const getCanActStrict = () => {
+    if (isFinal) return false;
+    if (!userProfile) return false;
+    if (mode === "manager") {
+      if (resolvedStatus === "pending_coordinator") {
+        return submission.overtimeCoordinatorUid === userProfile.uid;
+      }
+      if (resolvedStatus === "pending_supervisor" || resolvedStatus === "pending_manager" || resolvedStatus === "revision_manager") {
+        return submission.directSupervisorUid === userProfile.uid || submission.managerUid === userProfile.uid;
+      }
+    }
+    if (mode === "hrd") {
+      return ["pending_hrd", "approved_by_manager", "revision_hrd", "revision_requested_by_hrd", "verified_manager"].includes(resolvedStatus);
+    }
+    return false;
+  };
+
+  const canAct = getCanActStrict();
   const operatorName = userProfile?.fullName || userProfile?.email || "";
 
+  const isManagerOrHrd = mode === "hrd" || (userProfile && (submission.directSupervisorUid === userProfile.uid || submission.managerUid === userProfile.uid));
+  const canRecordProxyApproval = resolvedStatus === "pending_coordinator" && !!isManagerOrHrd && submission.overtimeCoordinatorUid !== userProfile?.uid;
+
   const approvalStatusLabels: Record<string, string> = {
+    pending_coordinator: "Menunggu Review Koordinator",
     pending_supervisor: "Menunggu Review Manager Divisi",
     pending_hrd: "Diteruskan ke HRD",
     needs_revision: "Perlu Revisi",
@@ -196,38 +239,98 @@ export function ReviewOvertimeDialog({
         "overtime_submissions",
         submission.id!,
       );
-      let payload: Partial<OvertimeSubmission> = {};
+      let payload: any = {};
       const isManagerAction = mode === "manager";
+      const isCoordinatorAction =
+        isManagerAction && resolvedStatus === "pending_coordinator";
 
       if (isManagerAction) {
-        if (decision === "approve") {
-          payload = {
-            approvalStatus: "pending_hrd",
-            status: "pending_hrd",
-            supervisorApprovedAt: serverTimestamp() as any,
-            supervisorApprovedBy: userProfile.uid,
-            supervisorApprovedByName: operatorName || null,
-            managerNotes: note || null,
-            managerDecisionAt: serverTimestamp() as any,
-          };
-        } else if (decision === "reject") {
-          payload = {
-            approvalStatus: "rejected_manager",
-            status: "rejected_manager",
-            rejectedAt: serverTimestamp() as any,
-            rejectedBy: userProfile.uid,
-            rejectionReason: note || null,
-            managerDecisionAt: serverTimestamp() as any,
-          };
-        } else if (decision === "revise") {
-          payload = {
-            approvalStatus: "revision_manager",
-            status: "revision_manager",
-            revisionRequestedAt: serverTimestamp() as any,
-            revisionRequestedBy: userProfile.uid,
-            revisionNote: note || null,
-            managerDecisionAt: serverTimestamp() as any,
-          };
+        if (isCoordinatorAction) {
+          const coordinatorUid = submission.overtimeCoordinatorUid;
+          const managerUid = submission.managerUid || submission.directSupervisorUid || submission.supervisorUid;
+          const isSame = !!(coordinatorUid && managerUid && coordinatorUid === managerUid);
+
+          if (decision === "approve") {
+            if (isSame) {
+              payload = {
+                approvalStatus: "pending_hrd",
+                status: "pending_hrd",
+                coordinatorDecision: "approved",
+                coordinatorDecisionAt: serverTimestamp() as any,
+                coordinatorDecisionBy: userProfile.uid,
+                coordinatorDecisionByName: userProfile.displayName || userProfile.email || operatorName || null,
+                supervisorApprovedAt: serverTimestamp() as any,
+                supervisorApprovedBy: userProfile.uid,
+                supervisorApprovedByName: userProfile.displayName || userProfile.email || operatorName || null,
+                coordinatorNotes: note || null,
+                managerNotes: note || null,
+                managerDecisionAt: serverTimestamp() as any,
+              };
+            } else {
+              payload = {
+                approvalStatus: "pending_supervisor",
+                status: "pending_supervisor",
+                coordinatorDecision: "approved",
+                coordinatorDecisionAt: serverTimestamp() as any,
+                coordinatorDecisionBy: userProfile.uid,
+                coordinatorDecisionByName: userProfile.displayName || userProfile.email || operatorName || null,
+                coordinatorApprovedAt: serverTimestamp() as any,
+                coordinatorApprovedBy: userProfile.uid,
+                coordinatorApprovedByName: userProfile.displayName || userProfile.email || operatorName || null,
+                coordinatorNotes: note || null,
+              };
+            }
+          } else if (decision === "reject") {
+            payload = {
+              approvalStatus: "rejected_by_coordinator",
+              status: "rejected_by_coordinator",
+              rejectedAt: serverTimestamp() as any,
+              rejectedBy: userProfile.uid,
+              rejectionReason: note || null,
+              coordinatorDecision: "rejected",
+              coordinatorDecisionAt: serverTimestamp() as any,
+            } as any;
+          } else if (decision === "revise") {
+            payload = {
+              approvalStatus: "revision_requested_by_coordinator",
+              status: "revision_requested_by_coordinator",
+              revisionRequestedAt: serverTimestamp() as any,
+              revisionRequestedBy: userProfile.uid,
+              revisionNote: note || null,
+              coordinatorDecision: "revision",
+              coordinatorDecisionAt: serverTimestamp() as any,
+            } as any;
+          }
+        } else {
+          if (decision === "approve") {
+            payload = {
+              approvalStatus: "pending_hrd",
+              status: "pending_hrd",
+              supervisorApprovedAt: serverTimestamp() as any,
+              supervisorApprovedBy: userProfile.uid,
+              supervisorApprovedByName: operatorName || null,
+              managerNotes: note || null,
+              managerDecisionAt: serverTimestamp() as any,
+            };
+          } else if (decision === "reject") {
+            payload = {
+              approvalStatus: "rejected_manager",
+              status: "rejected_manager",
+              rejectedAt: serverTimestamp() as any,
+              rejectedBy: userProfile.uid,
+              rejectionReason: note || null,
+              managerDecisionAt: serverTimestamp() as any,
+            };
+          } else if (decision === "revise") {
+            payload = {
+              approvalStatus: "revision_manager",
+              status: "revision_manager",
+              revisionRequestedAt: serverTimestamp() as any,
+              revisionRequestedBy: userProfile.uid,
+              revisionNote: note || null,
+              managerDecisionAt: serverTimestamp() as any,
+            };
+          }
         }
       } else {
         let status: OvertimeSubmission["status"] =
@@ -235,25 +338,35 @@ export function ReviewOvertimeDialog({
         if (decision === "approve") status = "approved_hrd";
         else if (decision === "reject") status = "rejected_hrd";
         else if (decision === "revise") status = "revision_hrd";
-        
+
         payload = {
           status,
           approvalStatus: status,
           hrdReviewerUid: userProfile.uid,
           hrdNotes: note || null,
           hrdDecisionAt: serverTimestamp() as any,
-          approvedMinutesFinal: decision === "approve" ? approvedMinutesFinal : null,
+          approvedMinutesFinal:
+            decision === "approve" ? approvedMinutesFinal : null,
         };
 
         // Create payroll recap & update employee history if approved by HRD
         if (decision === "approve") {
-          const payrollMonth = overtimeDate ? format(overtimeDate, "yyyy-MM") : format(new Date(), "yyyy-MM");
-          const workMode = submission.location === "kantor" ? "Kantor" 
-            : submission.location === "remote" ? "WFH" 
-            : submission.location === "site" ? "Dinas" 
-            : "Kantor";
-          
-          const taskSummary = tasks.map((t: any) => t.description).filter(Boolean).join("; ");
+          const payrollMonth = overtimeDate
+            ? format(overtimeDate, "yyyy-MM")
+            : format(new Date(), "yyyy-MM");
+          const workMode =
+            submission.location === "kantor"
+              ? "Kantor"
+              : submission.location === "remote"
+                ? "WFH"
+                : submission.location === "site"
+                  ? "Dinas"
+                  : "Kantor";
+
+          const taskSummary = tasks
+            .map((t: any) => t.description)
+            .filter(Boolean)
+            .join("; ");
 
           const recapColRef = collection(firestore, "overtime_payroll_recaps");
           await addDoc(recapColRef, {
@@ -261,9 +374,15 @@ export function ReviewOvertimeDialog({
             employeeName: submission.employeeName || submission.fullName || "",
             brand: submission.brandName || "",
             division: submission.divisionName || submission.division || "",
-            managerId: submission.directSupervisorUid || submission.supervisorUid || "",
-            managerName: submission.directSupervisorName || submission.supervisorName || "",
-            overtimeDate: overtimeDate ? format(overtimeDate, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd"),
+            managerId:
+              submission.directSupervisorUid || submission.supervisorUid || "",
+            managerName:
+              submission.directSupervisorName ||
+              submission.supervisorName ||
+              "",
+            overtimeDate: overtimeDate
+              ? format(overtimeDate, "yyyy-MM-dd")
+              : format(new Date(), "yyyy-MM-dd"),
             startTime: submission.startTime || "",
             endTime: submission.endTime || "",
             submittedMinutes: submission.totalDurationMinutes || 0,
@@ -290,16 +409,18 @@ export function ReviewOvertimeDialog({
             status: "approved_hrd",
             location: workLocationLabel,
             notes: note || "",
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
           };
 
           await updateDoc(doc(firestore, "employees", empId), {
-            overtimeHistory: arrayUnion(historyItem)
-          }).catch(err => console.error("Error employees history:", err));
+            overtimeHistory: arrayUnion(historyItem),
+          }).catch((err) => console.error("Error employees history:", err));
 
           await updateDoc(doc(firestore, "employee_profiles", empId), {
-            overtimeHistory: arrayUnion(historyItem)
-          }).catch(err => console.error("Error employee_profiles history:", err));
+            overtimeHistory: arrayUnion(historyItem),
+          }).catch((err) =>
+            console.error("Error employee_profiles history:", err),
+          );
         }
       }
 
@@ -307,63 +428,160 @@ export function ReviewOvertimeDialog({
 
       try {
         if (isManagerAction) {
-          if (decision === "approve") {
-            await Promise.all([
-              sendHrdNotification(firestore, {
-                type: "status_update",
-                module: "employee",
-                title: "Pengajuan Lembur Diteruskan ke HRD",
-                message: `${submission.employeeName || submission.fullName} telah disetujui oleh manager dan menunggu review HRD.`,
-                targetType: "employee",
-                targetId: submission.id || "",
-                actionUrl: "/admin/hrd/persetujuan-lembur",
-                createdBy: userProfile.uid,
-                meta: {
-                  submissionId: submission.id,
-                  employeeUid: submission.employeeUid || submission.uid,
-                },
-              }),
-              sendNotification(firestore, {
+          if (isCoordinatorAction) {
+            if (decision === "approve") {
+              const coordinatorUid = submission.overtimeCoordinatorUid;
+              const managerUid = submission.managerUid || submission.directSupervisorUid || submission.supervisorUid;
+              const isSame = !!(coordinatorUid && managerUid && coordinatorUid === managerUid);
+
+              if (isSame) {
+                await Promise.all([
+                  sendHrdNotification(firestore, {
+                    type: "status_update",
+                    module: "employee",
+                    title: "Pengajuan Lembur Diteruskan ke HRD",
+                    message: `${submission.employeeName || submission.fullName} telah disetujui oleh koordinator (merangkap manager) dan menunggu review HRD.`,
+                    targetType: "employee",
+                    targetId: submission.id || "",
+                    actionUrl: "/admin/hrd/persetujuan-lembur",
+                    createdBy: userProfile.uid,
+                    meta: {
+                      submissionId: submission.id,
+                      employeeUid: submission.employeeUid || submission.uid,
+                    },
+                  }),
+                  sendNotification(firestore, {
+                    userId: submission.employeeUid || submission.uid!,
+                    type: "status_update",
+                    module: "employee",
+                    title: "Pengajuan Lembur Diteruskan ke HRD",
+                    message:
+                      "Pengajuan lembur Anda telah disetujui oleh koordinator (merangkap manager) dan sedang menunggu persetujuan HRD.",
+                    targetType: "user",
+                    targetId: submission.id || "",
+                    actionUrl: "/admin/karyawan/pengajuan-lembur",
+                    createdBy: userProfile.uid,
+                  }),
+                ]);
+              } else {
+                await Promise.all([
+                  managerUid
+                    ? sendNotification(firestore, {
+                        userId: managerUid,
+                        type: "status_update",
+                        module: "employee",
+                        title: "Pengajuan Lembur Diteruskan ke Manager Divisi",
+                        message: note
+                          ? `Koordinator menyetujui pengajuan lembur dan meneruskannya ke manager: ${note}`
+                          : "Pengajuan lembur telah disetujui oleh koordinator dan sedang menunggu review manager.",
+                        targetType: "user",
+                        targetId: submission.id || "",
+                        actionUrl: "/admin/manager/persetujuan-lembur",
+                        createdBy: userProfile.uid,
+                      })
+                    : Promise.resolve(),
+                  sendNotification(firestore, {
+                    userId: submission.employeeUid || submission.uid!,
+                    type: "status_update",
+                    module: "employee",
+                    title: "Pengajuan Lembur Diteruskan ke Manager Divisi",
+                    message:
+                      "Pengajuan lembur Anda telah disetujui oleh koordinator dan sedang menunggu review manager.",
+                    targetType: "user",
+                    targetId: submission.id || "",
+                    actionUrl: "/admin/karyawan/pengajuan-lembur",
+                    createdBy: userProfile.uid,
+                  }),
+                ]);
+              }
+            } else if (decision === "reject") {
+              await sendNotification(firestore, {
                 userId: submission.employeeUid || submission.uid!,
                 type: "status_update",
                 module: "employee",
-                title: "Pengajuan Lembur Diteruskan ke HRD",
-                message:
-                  "Pengajuan lembur Anda telah disetujui oleh manager dan sedang menunggu persetujuan HRD.",
+                title: "Pengajuan Lembur Ditolak oleh Koordinator",
+                message: note
+                  ? `Koordinator menolak pengajuan lembur Anda: ${note}`
+                  : "Koordinator menolak pengajuan lembur Anda.",
                 targetType: "user",
                 targetId: submission.id || "",
                 actionUrl: "/admin/karyawan/pengajuan-lembur",
                 createdBy: userProfile.uid,
-              }),
-            ]);
-          } else if (decision === "reject") {
-            await sendNotification(firestore, {
-              userId: submission.employeeUid || submission.uid!,
-              type: "status_update",
-              module: "employee",
-              title: "Pengajuan Lembur Ditolak oleh Manager Divisi",
-              message: note
-                ? `Manager Divisi menolak pengajuan lembur Anda: ${note}`
-                : "Manager Divisi menolak pengajuan lembur Anda.",
-              targetType: "user",
-              targetId: submission.id || "",
-              actionUrl: "/admin/karyawan/pengajuan-lembur",
-              createdBy: userProfile.uid,
-            });
-          } else if (decision === "revise") {
-            await sendNotification(firestore, {
-              userId: submission.employeeUid || submission.uid!,
-              type: "status_update",
-              module: "employee",
-              title: "Revisi Pengajuan Lembur Diperlukan",
-              message: note
-                ? `Manager meminta revisi: ${note}`
-                : "Manager meminta revisi untuk pengajuan lembur Anda.",
-              targetType: "user",
-              targetId: submission.id || "",
-              actionUrl: "/admin/karyawan/pengajuan-lembur",
-              createdBy: userProfile.uid,
-            });
+              });
+            } else if (decision === "revise") {
+              await sendNotification(firestore, {
+                userId: submission.employeeUid || submission.uid!,
+                type: "status_update",
+                module: "employee",
+                title: "Revisi Pengajuan Lembur Diperlukan",
+                message: note
+                  ? `Koordinator meminta revisi: ${note}`
+                  : "Koordinator meminta revisi untuk pengajuan lembur Anda.",
+                targetType: "user",
+                targetId: submission.id || "",
+                actionUrl: "/admin/karyawan/pengajuan-lembur",
+                createdBy: userProfile.uid,
+              });
+            }
+          } else {
+            if (decision === "approve") {
+              await Promise.all([
+                sendHrdNotification(firestore, {
+                  type: "status_update",
+                  module: "employee",
+                  title: "Pengajuan Lembur Diteruskan ke HRD",
+                  message: `${submission.employeeName || submission.fullName} telah disetujui oleh manager dan menunggu review HRD.`,
+                  targetType: "employee",
+                  targetId: submission.id || "",
+                  actionUrl: "/admin/hrd/persetujuan-lembur",
+                  createdBy: userProfile.uid,
+                  meta: {
+                    submissionId: submission.id,
+                    employeeUid: submission.employeeUid || submission.uid,
+                  },
+                }),
+                sendNotification(firestore, {
+                  userId: submission.employeeUid || submission.uid!,
+                  type: "status_update",
+                  module: "employee",
+                  title: "Pengajuan Lembur Diteruskan ke HRD",
+                  message:
+                    "Pengajuan lembur Anda telah disetujui oleh manager dan sedang menunggu persetujuan HRD.",
+                  targetType: "user",
+                  targetId: submission.id || "",
+                  actionUrl: "/admin/karyawan/pengajuan-lembur",
+                  createdBy: userProfile.uid,
+                }),
+              ]);
+            } else if (decision === "reject") {
+              await sendNotification(firestore, {
+                userId: submission.employeeUid || submission.uid!,
+                type: "status_update",
+                module: "employee",
+                title: "Pengajuan Lembur Ditolak oleh Manager Divisi",
+                message: note
+                  ? `Manager Divisi menolak pengajuan lembur Anda: ${note}`
+                  : "Manager Divisi menolak pengajuan lembur Anda.",
+                targetType: "user",
+                targetId: submission.id || "",
+                actionUrl: "/admin/karyawan/pengajuan-lembur",
+                createdBy: userProfile.uid,
+              });
+            } else if (decision === "revise") {
+              await sendNotification(firestore, {
+                userId: submission.employeeUid || submission.uid!,
+                type: "status_update",
+                module: "employee",
+                title: "Revisi Pengajuan Lembur Diperlukan",
+                message: note
+                  ? `Manager meminta revisi: ${note}`
+                  : "Manager meminta revisi untuk pengajuan lembur Anda.",
+                targetType: "user",
+                targetId: submission.id || "",
+                actionUrl: "/admin/karyawan/pengajuan-lembur",
+                createdBy: userProfile.uid,
+              });
+            }
           }
         } else {
           const titles = {
@@ -372,7 +590,8 @@ export function ReviewOvertimeDialog({
             revise: "HRD Meminta Revisi Pengajuan Lembur",
           };
           const messages = {
-            approve: "HRD telah menyetujui secara final pengajuan lembur Anda untuk payroll.",
+            approve:
+              "HRD telah menyetujui secara final pengajuan lembur Anda untuk payroll.",
             reject: note
               ? `HRD menolak pengajuan lembur Anda: ${note}`
               : "HRD menolak pengajuan lembur Anda.",
@@ -395,7 +614,10 @@ export function ReviewOvertimeDialog({
           });
 
           // Notify Manager who reviewed/approved it
-          const managerUid = submission.directSupervisorUid || submission.supervisorUid || submission.supervisorApprovedBy;
+          const managerUid =
+            submission.directSupervisorUid ||
+            submission.supervisorUid ||
+            submission.supervisorApprovedBy;
           if (managerUid) {
             const managerTitles = {
               approve: `Lembur ${submission.employeeName || submission.fullName} Disetujui HRD`,
@@ -425,11 +647,27 @@ export function ReviewOvertimeDialog({
         console.error("Gagal mengirim notifikasi", notificationError);
       }
 
+      let toastDesc = "";
+      if (decision === "approve") {
+        if (mode === "hrd") {
+          toastDesc = "Pengajuan lembur berhasil disetujui secara final & masuk rekap payroll.";
+        } else if (isCoordinatorAction) {
+          const coordinatorUid = submission.overtimeCoordinatorUid;
+          const managerUid = submission.managerUid || submission.directSupervisorUid || submission.supervisorUid;
+          const isSame = !!(coordinatorUid && managerUid && coordinatorUid === managerUid);
+          toastDesc = isSame 
+            ? "Pengajuan lembur berhasil disetujui dan langsung diteruskan ke HRD."
+            : "Pengajuan lembur berhasil disetujui dan diteruskan ke Manager Divisi.";
+        } else {
+          toastDesc = "Pengajuan lembur berhasil disetujui dan diteruskan ke HRD.";
+        }
+      } else {
+        toastDesc = `Pengajuan telah ${decision === "reject" ? "ditolak" : "diminta revisi"}.`;
+      }
+
       toast({
         title: "Keputusan Disimpan",
-        description: decision === "approve" 
-          ? (mode === "hrd" ? "Pengajuan lembur berhasil disetujui secara final & masuk rekap payroll." : "Pengajuan lembur berhasil disetujui dan diteruskan ke HRD.")
-          : `Pengajuan telah ${decision === "reject" ? "ditolak" : "diminta revisi"}`,
+        description: toastDesc,
       });
       onSuccess();
       onOpenChange(false);
@@ -448,15 +686,17 @@ export function ReviewOvertimeDialog({
     }
   };
 
-  const approvedMinutesFinal = (hrdHours * 60) + Number(hrdMinutes || 0);
-  const isDurationChanged = approvedMinutesFinal !== (submission.totalDurationMinutes || 0);
+  const approvedMinutesFinal = hrdHours * 60 + Number(hrdMinutes || 0);
+  const isDurationChanged =
+    approvedMinutesFinal !== (submission.totalDurationMinutes || 0);
 
   const handleApprove = () => {
     if (mode === "hrd" && isDurationChanged && !hrdNotes.trim()) {
       toast({
         variant: "destructive",
         title: "Catatan HRD Wajib Diisi",
-        description: "Harap berikan penjelasan mengapa durasi final diubah dari durasi pengajuan.",
+        description:
+          "Harap berikan penjelasan mengapa durasi final diubah dari durasi pengajuan.",
       });
       return;
     }
@@ -497,6 +737,100 @@ export function ReviewOvertimeDialog({
     await handleDecision("reject", finalNote);
   };
 
+  const handleProxySubmit = async () => {
+    if (!userProfile) return;
+    if (!submission.id) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Submission ID tidak ditemukan.",
+      });
+      return;
+    }
+
+    const note = proxyNote.trim();
+    if (!note) {
+      toast({
+        variant: "destructive",
+        title: "Catatan Diperlukan",
+        description: "Harap isi catatan konfirmasi manual.",
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const submissionRef = doc(firestore, "overtime_submissions", submission.id);
+      
+      const payload = {
+        approvalStatus: "pending_supervisor",
+        status: "pending_supervisor",
+        coordinatorDecision: "approved_manual",
+        coordinatorApprovedByProxy: true,
+        coordinatorProxyApprovedBy: userProfile.uid,
+        coordinatorProxyApprovedByName: userProfile.fullName || userProfile.displayName || userProfile.email || operatorName || "Manager",
+        coordinatorProxyNote: note,
+        coordinatorProxyMethod: proxyMethod,
+        coordinatorApprovedAt: serverTimestamp() as any,
+        coordinatorApprovedBy: userProfile.uid,
+        coordinatorApprovedByName: (submission as any).overtimeCoordinatorName || "Koordinator",
+      };
+
+      await updateDocumentNonBlocking(submissionRef, payload);
+
+      // Send notifications
+      try {
+        const managerUid = submission.managerUid || submission.directSupervisorUid || submission.supervisorUid;
+        await Promise.all([
+          managerUid
+            ? sendNotification(firestore, {
+                userId: managerUid,
+                type: "status_update",
+                module: "employee",
+                title: "Konfirmasi Koordinator Dicatat (Proxy)",
+                message: `${operatorName} mencatat konfirmasi manual dari koordinator. Pengajuan kini menunggu persetujuan Anda sebagai Manager Divisi.`,
+                targetType: "user",
+                targetId: submission.id || "",
+                actionUrl: "/admin/manager/persetujuan-lembur",
+                createdBy: userProfile.uid,
+              })
+            : Promise.resolve(),
+          sendNotification(firestore, {
+            userId: submission.employeeUid || submission.uid!,
+            type: "status_update",
+            module: "employee",
+            title: "Konfirmasi Koordinator Dicatat",
+            message: `Konfirmasi manual dari koordinator telah dicatat oleh ${operatorName}. Pengajuan sedang menunggu review Manager Divisi.`,
+            targetType: "user",
+            targetId: submission.id || "",
+            actionUrl: "/admin/karyawan/pengajuan-lembur",
+            createdBy: userProfile.uid,
+          }),
+        ]);
+      } catch (notificationError) {
+        console.error("Gagal mengirim notifikasi proxy:", notificationError);
+      }
+
+      toast({
+        title: "Konfirmasi Dicatat",
+        description: "Konfirmasi manual koordinator berhasil disimpan. Status kini menunggu review Manager Divisi.",
+      });
+
+      onSuccess();
+      onOpenChange(false);
+      setShowProxyDialog(false);
+      setProxyNote("");
+    } catch (e: any) {
+      toast({
+        variant: "destructive",
+        title: "Gagal Menyimpan Konfirmasi",
+        description: e.message,
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -509,8 +843,10 @@ export function ReviewOvertimeDialog({
                 </DialogTitle>
                 <DialogDescription className="text-sm text-muted-foreground">
                   {mode === "manager"
-                    ? "Tinjau detail pengajuan untuk membuat keputusan persetujuan sebagai Manager Divisi."
-                    : "Tinjau detail pengajuan dan bukti approval Manager Divisi sebelum memutuskan."}
+                    ? isCoordinatorReview
+                      ? "Tinjau detail pengajuan untuk membuat keputusan persetujuan sebagai Koordinator."
+                      : "Tinjau detail pengajuan untuk membuat keputusan persetujuan sebagai Manager Divisi."
+                    : "Tinjau detail pengajuan dan bukti approval sebelum memutuskan."}
                 </DialogDescription>
               </div>
               <OvertimeApprovalStatusBadge
@@ -529,53 +865,92 @@ export function ReviewOvertimeDialog({
                 </h3>
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                   <div className="space-y-3">
-                    <div className="text-xs text-muted-foreground uppercase font-semibold">Profil Karyawan</div>
-                    <div className="space-y-1">
-                      <p className="text-[10px] text-muted-foreground uppercase">Nama Lengkap</p>
-                      <p className="text-sm font-medium text-white">{submission.employeeName || submission.fullName || "-"}</p>
+                    <div className="text-xs text-muted-foreground uppercase font-semibold">
+                      Profil Karyawan
                     </div>
                     <div className="space-y-1">
-                      <p className="text-[10px] text-muted-foreground uppercase">Jabatan / Peran</p>
-                      <p className="text-sm font-medium text-white">{submission.workRole || submission.positionTitle || "-"}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-[10px] text-muted-foreground uppercase">Brand / Divisi</p>
+                      <p className="text-[10px] text-muted-foreground uppercase">
+                        Nama Lengkap
+                      </p>
                       <p className="text-sm font-medium text-white">
-                        {submission.brandName || "-"} / {submission.divisionName || submission.division || "-"}
+                        {submission.employeeName || submission.fullName || "-"}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-[10px] text-muted-foreground uppercase">
+                        Jabatan / Peran
+                      </p>
+                      <p className="text-sm font-medium text-white">
+                        {submission.workRole || submission.positionTitle || "-"}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-[10px] text-muted-foreground uppercase">
+                        Brand / Divisi
+                      </p>
+                      <p className="text-sm font-medium text-white">
+                        {submission.brandName || "-"} /{" "}
+                        {submission.divisionName || submission.division || "-"}
                       </p>
                     </div>
                   </div>
 
                   <div className="space-y-3">
-                    <div className="text-xs text-muted-foreground uppercase font-semibold">Waktu & Lokasi Lembur</div>
+                    <div className="text-xs text-muted-foreground uppercase font-semibold">
+                      Waktu & Lokasi Lembur
+                    </div>
                     <div className="space-y-1">
-                      <p className="text-[10px] text-muted-foreground uppercase">Tanggal Lembur</p>
+                      <p className="text-[10px] text-muted-foreground uppercase">
+                        Tanggal Lembur
+                      </p>
                       <p className="text-sm font-medium text-white">
                         {overtimeDate
-                          ? format(overtimeDate, "eeee, dd MMMM yyyy", { locale: idLocale })
+                          ? format(overtimeDate, "eeee, dd MMMM yyyy", {
+                              locale: idLocale,
+                            })
                           : "-"}
                       </p>
                     </div>
                     <div className="space-y-1">
-                      <p className="text-[10px] text-muted-foreground uppercase">Jam Kerja Lembur</p>
-                      <p className="text-sm font-medium text-white">{submission.startTime} - {submission.endTime}</p>
+                      <p className="text-[10px] text-muted-foreground uppercase">
+                        Jam Kerja Lembur
+                      </p>
+                      <p className="text-sm font-medium text-white">
+                        {submission.startTime} - {submission.endTime}
+                      </p>
                     </div>
                     <div className="space-y-1">
-                      <p className="text-[10px] text-muted-foreground uppercase">Lokasi Lembur</p>
-                      <p className="text-sm font-medium text-white">{workLocationLabel}</p>
+                      <p className="text-[10px] text-muted-foreground uppercase">
+                        Lokasi Lembur
+                      </p>
+                      <p className="text-sm font-medium text-white">
+                        {workLocationLabel}
+                      </p>
                     </div>
                   </div>
 
                   <div className="space-y-3">
-                    <div className="text-xs text-muted-foreground uppercase font-semibold">Persetujuan Atasan & Alasan</div>
+                    <div className="text-xs text-muted-foreground uppercase font-semibold">
+                      Persetujuan Atasan & Alasan
+                    </div>
                     <div className="space-y-1">
-                      <p className="text-[10px] text-muted-foreground uppercase">Manager Divisi Yang Menyetujui</p>
+                      <p className="text-[10px] text-muted-foreground uppercase">
+                        {resolvedStatus === "pending_coordinator"
+                          ? "Koordinator Reviewer"
+                          : "Manager Divisi Yang Menyetujui"}
+                      </p>
                       <p className="text-sm font-medium text-emerald-400">
-                        {submission.supervisorApprovedByName || submission.directSupervisorName || "Manager Divisi"}
+                        {resolvedStatus === "pending_coordinator"
+                          ? (submission as any).overtimeCoordinatorName || "Koordinator"
+                          : submission.supervisorApprovedByName ||
+                            submission.directSupervisorName ||
+                            "Manager Divisi"}
                       </p>
                     </div>
                     <div className="space-y-1">
-                      <p className="text-[10px] text-muted-foreground uppercase">Alasan Pengajuan Lembur</p>
+                      <p className="text-[10px] text-muted-foreground uppercase">
+                        Alasan Pengajuan Lembur
+                      </p>
                       <p className="text-xs font-medium text-slate-300 leading-relaxed italic">
                         "{submission.reason || "Tidak ada alasan tambahan."}"
                       </p>
@@ -729,29 +1104,51 @@ export function ReviewOvertimeDialog({
                           </Label>
                           <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-1">
-                              <span className="text-[10px] text-slate-400">Jam</span>
+                              <span className="text-[10px] text-slate-400">
+                                Jam
+                              </span>
                               <Input
                                 type="number"
                                 min={0}
                                 value={hrdHours}
-                                onChange={(e) => setHrdHours(Math.max(0, parseInt(e.target.value) || 0))}
+                                onChange={(e) =>
+                                  setHrdHours(
+                                    Math.max(0, parseInt(e.target.value) || 0),
+                                  )
+                                }
                                 className="bg-slate-900 border-slate-700 focus:border-emerald-500 text-white"
                               />
                             </div>
                             <div className="space-y-1">
-                              <span className="text-[10px] text-slate-400">Menit</span>
+                              <span className="text-[10px] text-slate-400">
+                                Menit
+                              </span>
                               <Input
                                 type="number"
                                 min={0}
                                 max={59}
                                 value={hrdMinutes}
-                                onChange={(e) => setHrdMinutes(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+                                onChange={(e) =>
+                                  setHrdMinutes(
+                                    Math.max(
+                                      0,
+                                      Math.min(
+                                        59,
+                                        parseInt(e.target.value) || 0,
+                                      ),
+                                    ),
+                                  )
+                                }
                                 className="bg-slate-900 border-slate-700 focus:border-emerald-500 text-white"
                               />
                             </div>
                           </div>
                           <p className="text-xs text-slate-400 italic">
-                            Konversi: <span className="font-semibold text-emerald-400">{formatMinutesToHuman(approvedMinutesFinal)}</span> ({approvedMinutesFinal} menit)
+                            Konversi:{" "}
+                            <span className="font-semibold text-emerald-400">
+                              {formatMinutesToHuman(approvedMinutesFinal)}
+                            </span>{" "}
+                            ({approvedMinutesFinal} menit)
                           </p>
                         </div>
 
@@ -759,7 +1156,9 @@ export function ReviewOvertimeDialog({
                           <Label className="text-xs uppercase tracking-wide text-slate-300 font-bold flex justify-between">
                             <span>Catatan HRD</span>
                             {isDurationChanged && (
-                              <span className="text-[10px] text-amber-400 font-normal">Wajib diisi *</span>
+                              <span className="text-[10px] text-amber-400 font-normal">
+                                Wajib diisi *
+                              </span>
                             )}
                           </Label>
                           <textarea
@@ -770,7 +1169,12 @@ export function ReviewOvertimeDialog({
                           />
                           {isDurationChanged && !hrdNotes.trim() && (
                             <p className="text-[10px] text-amber-500 italic">
-                              * Catatan wajib diisi karena durasi final diubah dari durasi pengajuan ({formatMinutesToHuman(submission.totalDurationMinutes || 0)}).
+                              * Catatan wajib diisi karena durasi final diubah
+                              dari durasi pengajuan (
+                              {formatMinutesToHuman(
+                                submission.totalDurationMinutes || 0,
+                              )}
+                              ).
                             </p>
                           )}
                         </div>
@@ -787,7 +1191,9 @@ export function ReviewOvertimeDialog({
                     <CardContent className="space-y-4 px-5 pb-5 pt-0">
                       <InfoRow
                         label="Durasi Pengajuan"
-                        value={formatMinutesToHuman(submission.totalDurationMinutes || 0)}
+                        value={formatMinutesToHuman(
+                          submission.totalDurationMinutes || 0,
+                        )}
                       />
                       <InfoRow
                         label="Estimasi Pekerjaan"
@@ -795,32 +1201,47 @@ export function ReviewOvertimeDialog({
                       />
                       <InfoRow
                         label="Selisih Durasi"
-                        value={formatMinutesToHuman(Math.abs((submission.totalDurationMinutes || 0) - totalEstimatedMinutes))}
+                        value={formatMinutesToHuman(
+                          Math.abs(
+                            (submission.totalDurationMinutes || 0) -
+                              totalEstimatedMinutes,
+                          ),
+                        )}
                       />
-                      {submission.approvedMinutesFinal !== undefined && submission.approvedMinutesFinal !== null && (
-                        <InfoRow
-                          label="Durasi Final HRD"
-                          value={formatMinutesToHuman(submission.approvedMinutesFinal)}
-                        />
-                      )}
-                      
+                      {submission.approvedMinutesFinal !== undefined &&
+                        submission.approvedMinutesFinal !== null && (
+                          <InfoRow
+                            label="Durasi Final HRD"
+                            value={formatMinutesToHuman(
+                              submission.approvedMinutesFinal,
+                            )}
+                          />
+                        )}
+
                       {approvedMinutesFinal > totalEstimatedMinutes && (
                         <Alert className="border-amber-500 bg-amber-500/10 w-full mt-2">
-                          <AlertTitle className="text-xs font-bold text-amber-500">Peringatan Selisih Durasi</AlertTitle>
+                          <AlertTitle className="text-xs font-bold text-amber-500">
+                            Peringatan Selisih Durasi
+                          </AlertTitle>
                           <AlertDescription className="text-xs text-amber-600 dark:text-amber-400">
-                            Durasi pengajuan lebih tinggi dari estimasi pekerjaan. HRD dapat menyesuaikan durasi final untuk payroll.
+                            Durasi pengajuan lebih tinggi dari estimasi
+                            pekerjaan. HRD dapat menyesuaikan durasi final untuk
+                            payroll.
                           </AlertDescription>
                         </Alert>
                       )}
 
                       <div className="rounded-xl border border-border bg-background p-3 text-xs">
-                        {totalEstimatedMinutes !== (submission.totalDurationMinutes || 0) ? (
+                        {totalEstimatedMinutes !==
+                        (submission.totalDurationMinutes || 0) ? (
                           <p className="text-amber-700 dark:text-amber-200">
-                            ⚠️ Selisih durasi terdeteksi. Durasi pengajuan berbeda dengan estimasi rincian tugas.
+                            ⚠️ Selisih durasi terdeteksi. Durasi pengajuan
+                            berbeda dengan estimasi rincian tugas.
                           </p>
                         ) : (
                           <p className="text-emerald-700 dark:text-emerald-200">
-                            Durasi pengajuan sudah sesuai dengan estimasi rincian tugas.
+                            Durasi pengajuan sudah sesuai dengan estimasi
+                            rincian tugas.
                           </p>
                         )}
                       </div>
@@ -850,24 +1271,82 @@ export function ReviewOvertimeDialog({
                           locale: idLocale,
                         })}
                       />
-                      
+
+                      {submission.coordinatorApprovedAt && (
+                        <div className="space-y-2 pt-2 border-t border-border/50">
+                          <InfoRow
+                            label={submission.coordinatorApprovedByProxy ? "Disetujui Koordinator (Konfirmasi Manual)" : "Disetujui Koordinator oleh"}
+                            value={
+                              submission.coordinatorApprovedByName ||
+                              (submission as any).overtimeCoordinatorName ||
+                              "Koordinator/Pengawas"
+                            }
+                          />
+                          <InfoRow
+                            label="Waktu Persetujuan Koordinator"
+                            value={format(
+                              parseSafeDate(submission.coordinatorApprovedAt) ||
+                                new Date(),
+                              "eeee, dd MMMM yyyy HH:mm",
+                              { locale: idLocale },
+                            )}
+                          />
+                          {submission.coordinatorApprovedByProxy && (
+                            <div className="bg-slate-905/40 rounded-2xl p-3 border border-border/30 mt-1 space-y-1.5 text-xs text-left">
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Metode Konfirmasi:</span>
+                                <span className="font-semibold text-emerald-400 capitalize">
+                                  {submission.coordinatorProxyMethod === "lisan" && "🗣️ Lisan / Tatap Muka"}
+                                  {submission.coordinatorProxyMethod === "whatsapp" && "💬 WhatsApp / Chat"}
+                                  {submission.coordinatorProxyMethod === "telepon" && "📞 Telepon"}
+                                  {submission.coordinatorProxyMethod === "manual" && "📝 Dokumen Manual"}
+                                  {!["lisan", "whatsapp", "telepon", "manual"].includes(submission.coordinatorProxyMethod || "") && (submission.coordinatorProxyMethod || "-")}
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Dicatat Oleh:</span>
+                                <span className="font-medium text-slate-200">
+                                  {submission.coordinatorProxyApprovedByName || "Atasan / HRD"}
+                                </span>
+                              </div>
+                              {submission.coordinatorProxyNote && (
+                                <div className="pt-1 border-t border-border/20 mt-1">
+                                  <span className="text-muted-foreground block mb-0.5">Catatan Konfirmasi:</span>
+                                  <p className="italic text-slate-300 leading-relaxed bg-slate-950/60 p-2 rounded-lg">
+                                    "{submission.coordinatorProxyNote}"
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {submission.supervisorApprovedAt && (
                         <div className="space-y-2 pt-2 border-t border-border/50">
                           <InfoRow
                             label="Disetujui Manager Divisi oleh"
-                            value={submission.supervisorApprovedByName || "Manager Divisi"}
+                            value={
+                              submission.supervisorApprovedByName ||
+                              "Manager Divisi"
+                            }
                           />
                           <InfoRow
                             label="Waktu Persetujuan Manager"
                             value={format(
-                              parseSafeDate(submission.supervisorApprovedAt) || new Date(),
+                              parseSafeDate(submission.supervisorApprovedAt) ||
+                                new Date(),
                               "eeee, dd MMMM yyyy HH:mm",
-                              { locale: idLocale }
+                              { locale: idLocale },
                             )}
                           />
                           <div className="flex justify-between text-sm">
-                            <p className="text-muted-foreground">Status Lanjutan</p>
-                            <p className="font-bold text-blue-500">Diteruskan ke HRD</p>
+                            <p className="text-muted-foreground">
+                              Status Lanjutan
+                            </p>
+                            <p className="font-bold text-blue-500">
+                              Diteruskan ke HRD
+                            </p>
                           </div>
                         </div>
                       )}
@@ -895,16 +1374,28 @@ export function ReviewOvertimeDialog({
                       )}
                       {submission.hrdDecisionAt && (
                         <div className="space-y-2 pt-2 border-t border-border/50">
-                           <InfoRow
+                          <InfoRow
                             label="Keputusan Final HRD"
                             value={format(
-                              parseSafeDate(submission.hrdDecisionAt) || new Date(),
+                              parseSafeDate(submission.hrdDecisionAt) ||
+                                new Date(),
                               "eeee, dd MMMM yyyy HH:mm",
-                              { locale: idLocale }
+                              { locale: idLocale },
                             )}
                           />
                         </div>
                       )}
+                      {submission.coordinatorNotes && (
+                        <div className="pt-2 border-t border-border/50 mt-2">
+                          <p className="text-xs uppercase text-muted-foreground">
+                            Catatan Koordinator
+                          </p>
+                          <p className="mt-1 text-sm leading-6 italic">
+                            "{submission.coordinatorNotes}"
+                          </p>
+                        </div>
+                      )}
+
                       {submission.managerNotes && (
                         <div className="pt-2">
                           <p className="text-xs uppercase text-muted-foreground">
@@ -946,6 +1437,16 @@ export function ReviewOvertimeDialog({
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Tutup
             </Button>
+            {canRecordProxyApproval && (
+              <Button
+                variant="secondary"
+                onClick={() => setShowProxyDialog(true)}
+                disabled={isSaving}
+                className="bg-amber-600 hover:bg-amber-700 text-white border-none"
+              >
+                Catat Konfirmasi Koordinator
+              </Button>
+            )}
             {canAct && (
               <>
                 <Button
@@ -981,22 +1482,32 @@ export function ReviewOvertimeDialog({
         <DialogContent className="w-[min(90vw,500px)] max-w-[500px] rounded-3xl border border-border bg-slate-950 text-slate-50 p-6 shadow-2xl">
           <DialogHeader>
             <DialogTitle>
-              {mode === "hrd" ? "Setujui Lembur Secara Final?" : "Setujui Pengajuan Lembur?"}
+              {mode === "hrd"
+                ? "Setujui Lembur Secara Final?"
+                : "Setujui Pengajuan Lembur?"}
             </DialogTitle>
             <DialogDescription className="text-slate-400">
-              {mode === "hrd" 
+              {mode === "hrd"
                 ? "Pengajuan lembur ini akan disetujui secara final dan datanya dimasukkan ke rekap payroll bulanan."
-                : "Pengajuan ini akan disetujui dan diteruskan ke HRD untuk review final."}
+                : isCoordinatorReview
+                  ? (submission.overtimeCoordinatorUid === (submission.managerUid || submission.directSupervisorUid || submission.supervisorUid)
+                    ? "Pengajuan ini akan disetujui sebagai Koordinator & Manager Divisi dan diteruskan ke HRD."
+                    : "Pengajuan ini akan disetujui sebagai Koordinator dan diteruskan ke Manager Divisi.")
+                  : "Pengajuan ini akan disetujui dan diteruskan ke HRD untuk review final."}
             </DialogDescription>
             {mode === "hrd" && (
               <div className="mt-4 p-4 rounded-2xl border border-slate-800 bg-slate-900/60 text-xs space-y-2 text-slate-300">
                 <div className="flex justify-between">
                   <span>Karyawan:</span>
-                  <span className="font-bold text-white">{submission.employeeName || submission.fullName}</span>
+                  <span className="font-bold text-white">
+                    {submission.employeeName || submission.fullName}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Durasi Final HRD:</span>
-                  <span className="font-bold text-emerald-400">{formatMinutesToHuman(approvedMinutesFinal)}</span>
+                  <span className="font-bold text-emerald-400">
+                    {formatMinutesToHuman(approvedMinutesFinal)}
+                  </span>
                 </div>
                 {hrdNotes.trim() && (
                   <div className="space-y-1">
@@ -1007,7 +1518,8 @@ export function ReviewOvertimeDialog({
               </div>
             )}
             <p className="mt-4 text-xs text-slate-500">
-              Keputusan ini akan tercatat dalam riwayat persetujuan & audit trail karyawan.
+              Keputusan ini akan tercatat dalam riwayat persetujuan & audit
+              trail karyawan.
             </p>
           </DialogHeader>
           <DialogFooter className="mt-6 flex justify-end gap-3">
@@ -1024,7 +1536,13 @@ export function ReviewOvertimeDialog({
               ) : (
                 <CheckCircle className="mr-2 h-4 w-4" />
               )}
-              {mode === "hrd" ? "Setujui Secara Final" : "Setujui & Teruskan"}
+              {mode === "hrd"
+                ? "Setujui Secara Final"
+                : isCoordinatorReview
+                  ? (submission.overtimeCoordinatorUid === (submission.managerUid || submission.directSupervisorUid || submission.supervisorUid)
+                    ? "Setujui & Teruskan ke HRD"
+                    : "Setujui & Teruskan ke Manager")
+                  : "Setujui & Teruskan"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1173,6 +1691,109 @@ export function ReviewOvertimeDialog({
                 <XCircle className="mr-2 h-4 w-4" />
               )}
               Tolak Pengajuan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Proxy/Assisted Approval Confirmation Dialog */}
+      <Dialog open={showProxyDialog} onOpenChange={setShowProxyDialog}>
+        <DialogContent className="w-[min(90vw,640px)] max-w-[640px] rounded-3xl border border-border bg-slate-950 text-slate-50 p-6 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <span className="text-amber-500">✍️</span> Catat Konfirmasi Manual Koordinator
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Jika Koordinator telah menyetujui secara manual/lisan (tanda tangan kertas/WhatsApp/lisan), Anda dapat meneruskan alur ke Manager Divisi dengan mencatat audit trail di bawah ini.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Summary Section */}
+          <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-4 text-sm text-slate-350 space-y-2.5">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Karyawan:</span>
+              <span className="font-semibold text-white">
+                {submission.employeeName || submission.fullName}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Koordinator Lembur:</span>
+              <span className="font-semibold text-amber-400">
+                {(submission as any).overtimeCoordinatorName || "Koordinator"}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Tanggal Lembur:</span>
+              <span className="font-medium text-white">
+                {overtimeDate
+                  ? format(overtimeDate, "dd MMMM yyyy", { locale: idLocale })
+                  : "-"}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Durasi Lembur:</span>
+              <span className="font-medium text-white">
+                {submission.totalDurationMinutes} menit ({formatMinutesToHuman(submission.totalDurationMinutes || 0)})
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-4 py-3">
+            <div className="grid gap-2">
+              <Label htmlFor="proxy-method" className="text-sm font-semibold text-slate-200">
+                Metode Konfirmasi <span className="text-amber-500">*</span>
+              </Label>
+              <Select value={proxyMethod} onValueChange={setProxyMethod}>
+                <SelectTrigger id="proxy-method" className="w-full bg-slate-900 border-slate-700 focus:border-amber-500 text-white">
+                  <SelectValue placeholder="Pilih metode konfirmasi" />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-900 border-slate-700 text-white">
+                  <SelectItem value="lisan">🗣️ Lisan / Tatap Muka</SelectItem>
+                  <SelectItem value="whatsapp">💬 WhatsApp / Chat</SelectItem>
+                  <SelectItem value="telepon">📞 Telepon / Panggilan Suara</SelectItem>
+                  <SelectItem value="manual">📝 Dokumen Manual / Tanda Tangan Kertas</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="proxy-note" className="text-sm font-semibold text-slate-200">
+                Catatan Konfirmasi Manual <span className="text-amber-500">*</span>
+              </Label>
+              <textarea
+                id="proxy-note"
+                placeholder="Contoh: Disetujui lisan oleh Pak Ariyan saat koordinasi lapangan. Dokumen fisik menyusul."
+                value={proxyNote}
+                onChange={(e) => setProxyNote(e.target.value)}
+                className="min-h-[120px] w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-500 focus-visible:border-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
+                required
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="mt-4 flex justify-end gap-3 border-t border-slate-800 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowProxyDialog(false);
+                setProxyNote("");
+              }}
+              disabled={isSaving}
+              className="border-slate-700 text-slate-300 hover:bg-slate-900 hover:text-white"
+            >
+              Batal
+            </Button>
+            <Button
+              onClick={handleProxySubmit}
+              disabled={isSaving || !proxyNote.trim()}
+              className="bg-amber-600 hover:bg-amber-700 text-white border-none"
+            >
+              {isSaving ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle className="mr-2 h-4 w-4" />
+              )}
+              Catat Konfirmasi
             </Button>
           </DialogFooter>
         </DialogContent>
