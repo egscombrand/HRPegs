@@ -116,7 +116,7 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isOwner(userId) || isInternal();
       allow update: if isOwner(userId) || isSuperAdmin() || isHrd();
-      allow list: if isSuperAdmin() || isHrd();
+      allow list: if isSuperAdmin() || isHrd() || isInternal();
       allow create: if (isOwner(userId) && request.resource.data.role == 'kandidat' && hasValidCreateData(userId)) || isSuperAdmin();
       allow delete: if isSuperAdmin();
 
@@ -379,14 +379,17 @@ service cloud.firestore {
     
     match /overtime_submissions/{submissionId} {
       function isSubmissionOwner() {
-        return request.auth.uid == resource.data.uid;
+        return request.auth.uid == resource.data.uid || request.auth.uid == resource.data.employeeUid;
       }
       function isRequester() {
-        return request.auth.uid == request.resource.data.uid;
+        return request.auth.uid == request.resource.data.uid || request.auth.uid == request.resource.data.employeeUid;
+      }
+      function isAssignedCoordinator() {
+        return request.auth.uid == resource.data.overtimeCoordinatorUid;
       }
       
-      // Allow read by owner, their manager, HR, or Super Admin
-      allow get: if isSignedIn() && (isSubmissionOwner() || isAssignedManager(resource.data) || isHrd() || isSuperAdmin());
+      // Allow read by owner, their manager, coordinator, HR, or Super Admin
+      allow get: if isSignedIn() && (isSubmissionOwner() || isAssignedManager(resource.data) || isAssignedCoordinator() || isHrd() || isSuperAdmin());
       allow list: if isSignedIn(); // Queries must be filtered on client-side
 
       // Allow create by an internal user for themselves
@@ -396,8 +399,10 @@ service cloud.firestore {
       allow update: if isSignedIn() && (
         // Owner can update their draft or revision request
         (isSubmissionOwner() && (resource.data.status == 'draft' || resource.data.status.startsWith('revision_'))) ||
-        // Manager can act on pending_manager requests
-        (isAssignedManager(resource.data) && resource.data.status == 'pending_manager') ||
+        // Coordinator can act on pending_coordinator requests
+        (isAssignedCoordinator() && resource.data.status == 'pending_coordinator') ||
+        // Manager can act on pending_supervisor or pending_manager requests
+        (isAssignedManager(resource.data) && (resource.data.status == 'pending_supervisor' || resource.data.status == 'pending_manager')) ||
         // HRD can act on pending_hrd or approved_by_manager requests
         (isHrd() && (resource.data.status == 'pending_hrd' || resource.data.status == 'approved_by_manager')) ||
         // Super Admin can always update

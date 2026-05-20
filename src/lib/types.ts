@@ -1779,17 +1779,22 @@ export type DailyReport = {
 
 export const OVERTIME_SUBMISSION_STATUSES = [
   "draft",
+  "pending_coordinator",
   "pending_supervisor",
   "pending_manager",
+  "rejected_by_coordinator",
+  "revision_requested_by_coordinator",
+  "rejected_by_manager",
+  "revision_requested_by_manager",
   "rejected_manager",
   "revision_manager",
   "approved_by_manager",
   "pending_hrd",
+  "rejected_by_hrd",
+  "revision_requested_by_hrd",
   "rejected_hrd",
   "revision_hrd",
   "approved_hrd",
-  "rejected_by_hrd",
-  "revision_requested_by_hrd",
   "approved",
 ] as const;
 export type OvertimeSubmissionStatus =
@@ -1833,6 +1838,21 @@ export type OvertimeSubmission = {
   attachments?: string[];
   status: OvertimeSubmissionStatus;
   approvalStatus?: string;
+  
+  // Coordinator Layer Fields
+  overtimeCoordinatorUid?: string;
+  overtimeCoordinatorName?: string;
+  overtimeCoordinatorRole?: string;
+  overtimeCoordinatorPosition?: string;
+  overtimeCoordinatorEmail?: string;
+  overtimeInstructionNote?: string;
+  approvalFlowType?: "staff_to_coordinator_to_manager_to_hrd" | string;
+  coordinatorDecision?: "approved" | "rejected" | "revision_requested" | string | null;
+  coordinatorApprovedAt?: Timestamp | null;
+  coordinatorApprovedBy?: string | null;
+  coordinatorApprovedByName?: string | null;
+  coordinatorNotes?: string | null;
+
   directSupervisorUid?: string;
   directSupervisorName?: string;
   supervisorUid?: string;
@@ -1849,9 +1869,14 @@ export type OvertimeSubmission = {
   managerUid?: string | null;
   managerNotes?: string | null;
   managerDecisionAt?: Timestamp | null;
+  
   hrdReviewerUid?: string | null;
   hrdNotes?: string | null;
   hrdDecisionAt?: Timestamp | null;
+  hrdApprovedAt?: Timestamp | null;
+  hrdApprovedBy?: string | null;
+  hrdApprovedByName?: string | null;
+  
   approvedMinutesFinal?: number | null;
   payrollStatus?: "pending_payroll" | "processing" | "paid" | "excluded" | null;
   payrollStatusUpdatedAt?: Timestamp | null;
@@ -1960,9 +1985,11 @@ export function isFinalStatus(status: string): boolean {
   return [
     "approved",
     "approved_hrd",
+    "rejected_by_coordinator",
+    "rejected_by_manager",
+    "rejected_by_hrd",
     "rejected_manager",
     "rejected_hrd",
-    "rejected_by_hrd",
     "verified_manager",
     "closed",
   ].includes(status);
@@ -1978,8 +2005,9 @@ export function isActionableStatus(
   if (isFinalStatus(status)) return false;
 
   if (mode === "manager") {
-    // For normal flow
+    // For normal flow, including coordinator and manager review stages
     const normalActionable =
+      status === "pending_coordinator" ||
       status === "pending_supervisor" ||
       status === "pending_manager" ||
       status === "revision_manager";
@@ -1991,11 +2019,12 @@ export function isActionableStatus(
   }
 
   if (mode === "hrd") {
-    // HRD can act on items approved by manager or pending hrd review
+    // HRD can act on items approved by manager/coordinator or pending hrd review
     return (
       status === "pending_hrd" ||
       status === "approved_by_manager" ||
       status === "revision_hrd" ||
+      status === "revision_requested_by_hrd" ||
       status === "verified_manager"
     );
   }

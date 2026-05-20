@@ -12,6 +12,11 @@ export const statusDisplay: Record<
     label: "Draft",
     className: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
   },
+  pending_coordinator: {
+    label: "Menunggu Review Koordinator",
+    className:
+      "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-500/10",
+  },
   pending_supervisor: {
     label: "Menunggu Review Manager",
     className:
@@ -62,12 +67,28 @@ export const statusDisplay: Record<
     label: "Ditolak HRD",
     className: "bg-red-100 text-red-800 dark:bg-red-950/30 dark:text-red-300 border border-red-500/10",
   },
+  rejected_by_coordinator: {
+    label: "Ditolak Koordinator",
+    className: "bg-red-100 text-red-800 dark:bg-red-950/30 dark:text-red-300 border border-red-500/10",
+  },
+  revision_requested_by_coordinator: {
+    label: "Perlu Revisi (Koordinator)",
+    className: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 border border-yellow-500/10",
+  },
+  rejected_by_manager: {
+    label: "Ditolak Manager",
+    className: "bg-red-100 text-red-800 dark:bg-red-950/30 dark:text-red-300 border border-red-500/10",
+  },
+  revision_requested_by_manager: {
+    label: "Perlu Revisi (Manager)",
+    className: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 border border-yellow-500/10",
+  },
   rejected_by_hrd: {
     label: "Ditolak HRD",
     className: "bg-red-100 text-red-800 dark:bg-red-950/30 dark:text-red-300 border border-red-500/10",
   },
   revision_requested_by_hrd: {
-    label: "Perlu Revisi",
+    label: "Perlu Revisi (HRD)",
     className: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 border border-yellow-500/10",
   },
   approved: {

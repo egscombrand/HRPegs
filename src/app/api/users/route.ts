@@ -12,6 +12,8 @@ const createSchema = z.object({
   employmentType: z.enum(EMPLOYMENT_TYPES),
   isActive: z.boolean().default(true),
   brandId: z.union([z.string(), z.array(z.string())]).optional(),
+  isDivisionManager: z.boolean().optional(),
+  managedDivision: z.string().nullable().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -42,7 +44,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid request body.', details: parseResult.error.flatten() }, { status: 400 });
     }
 
-    const { email, password, fullName, role, employmentType, brandId, isActive } = parseResult.data;
+    const { email, password, fullName, role, employmentType, brandId, isActive, isDivisionManager, managedDivision } = parseResult.data;
     const requesterRole = userDocData.role;
 
     // --- New Validation Logic ---
@@ -85,6 +87,37 @@ export async function POST(req: NextRequest) {
       userProfile.brandId = Array.isArray(brandId) ? brandId : [];
     } else if (role !== 'super-admin' && brandId) {
       userProfile.brandId = brandId;
+    }
+
+    if (role === 'manager' && isDivisionManager) {
+      if (!brandId || Array.isArray(brandId)) {
+        return NextResponse.json({ error: 'Manager Divisi harus memiliki satu brand penempatan.' }, { status: 400 });
+      }
+      if (!managedDivision) {
+        return NextResponse.json({ error: 'Manager Divisi harus memiliki divisi yang dikelola.' }, { status: 400 });
+      }
+
+      const brandDoc = await db.collection('brands').doc(brandId).get();
+      if (!brandDoc.exists) {
+        return NextResponse.json({ error: 'Brand penempatan tidak ditemukan.' }, { status: 400 });
+      }
+
+      const divQuery = await db.collection('brands').doc(brandId).collection('divisions').where('name', '==', managedDivision).get();
+      if (divQuery.empty) {
+        return NextResponse.json({ error: 'Divisi tidak ditemukan.' }, { status: 400 });
+      }
+
+      const divisionDoc = divQuery.docs[0];
+
+      userProfile.isDivisionManager = true;
+      userProfile.managedBrandId = brandId;
+      userProfile.managedBrandName = brandDoc.data()?.name || null;
+      userProfile.managedDivision = managedDivision;
+      userProfile.managedDivisionId = divisionDoc.id;
+      userProfile.managedDivisionName = managedDivision;
+      userProfile.managedDivisionIds = [divisionDoc.id];
+      userProfile.division = managedDivision;
+      userProfile.divisionId = divisionDoc.id;
     }
 
     await db.collection('users').doc(userRecord.uid).set(userProfile);

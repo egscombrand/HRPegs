@@ -17,6 +17,12 @@ const statusConfig: Record<
     hrdLabel: "Draf",
     className: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
   },
+  pending_coordinator: {
+    managerLabel: "Menunggu Review Anda",
+    hrdLabel: "Menunggu Koordinator",
+    className:
+      "bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-200",
+  },
   pending_supervisor: {
     managerLabel: "Menunggu Review Anda",
     hrdLabel: "Menunggu Manager Divisi",
@@ -30,9 +36,31 @@ const statusConfig: Record<
       "bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-200",
   },
   rejected_manager: {
-    managerLabel: "Ditolak",
-    hrdLabel: "Ditolak",
+    managerLabel: "Ditolak Manager",
+    hrdLabel: "Ditolak Manager",
     className: "bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-200",
+  },
+  rejected_by_coordinator: {
+    managerLabel: "Ditolak Koordinator",
+    hrdLabel: "Ditolak Koordinator",
+    className: "bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-200",
+  },
+  revision_requested_by_coordinator: {
+    managerLabel: "Revisi dari Koordinator",
+    hrdLabel: "Revisi dari Koordinator",
+    className:
+      "bg-amber-100 text-amber-800 dark:bg-amber-800 dark:text-amber-200",
+  },
+  rejected_by_manager: {
+    managerLabel: "Ditolak Manager",
+    hrdLabel: "Ditolak Manager",
+    className: "bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-200",
+  },
+  revision_requested_by_manager: {
+    managerLabel: "Revisi dari Manager",
+    hrdLabel: "Revisi dari Manager",
+    className:
+      "bg-amber-100 text-amber-800 dark:bg-amber-800 dark:text-amber-200",
   },
   revision_manager: {
     managerLabel: "Revisi Diminta",
@@ -82,7 +110,7 @@ const statusConfig: Record<
     managerLabel: "Disetujui HRD",
     hrdLabel: "Disetujui HRD",
     className:
-      "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300 border border-green-500/20",
+      "bg-green-100 text-green-800 dark:bg-green-950/30 dark:text-green-300 border border-green-500/20",
   },
 };
 

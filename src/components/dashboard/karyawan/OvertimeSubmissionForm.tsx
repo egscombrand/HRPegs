@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -48,12 +48,12 @@ import {
   Image,
   CheckCircle,
   Clock,
-  AlertCircle,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import {
   useFirestore,
   useDoc,
+  useCollection,
   useMemoFirebase,
   setDocumentNonBlocking,
 } from "@/firebase";
@@ -63,6 +63,7 @@ import {
   serverTimestamp,
   Timestamp,
   collection,
+  query,
 } from "firebase/firestore";
 import { OvertimeStatusBadge } from "./OvertimeStatusBadge";
 import type {
@@ -116,6 +117,12 @@ const submissionSchema = z
     location: z.enum(["kantor", "remote", "site"], {
       required_error: "Lokasi harus dipilih.",
     }),
+    overtimeCoordinatorUid: z
+      .string({ required_error: "Koordinator/Pengawas lembur harus dipilih." })
+      .min(1, "Koordinator/Pengawas lembur harus dipilih."),
+    overtimeInstructionNote: z
+      .string({ required_error: "Uraian instruksi lembur harus diisi." })
+      .min(10, { message: "Uraian instruksi lembur harus diisi (minimal 10 karakter)." }),
     employeeNotes: z.string().optional(),
     attachments: z.array(z.string()).optional().default([]),
   })
@@ -822,13 +829,36 @@ export function OvertimeSubmissionForm({
     employeeProfile?.hrdEmploymentInfo?.divisionName,
   ]);
 
-  const divisionDocRef = useMemoFirebase(() => {
+  const divisionNameQuery = useMemoFirebase(() => {
     if (!firestore || !staffBrandId || !staffDivisionId) return null;
-    return doc(firestore, "brands", staffBrandId, "divisions", staffDivisionId);
+    return query(
+      collection(firestore, "brands", staffBrandId, "divisions"),
+      where("name", "==", staffDivisionId)
+    );
   }, [firestore, staffBrandId, staffDivisionId]);
 
-  const { data: divisionMaster } =
-    useDoc<DivisionMasterOrganization>(divisionDocRef);
+  const { data: divisionsResult } = useCollection<DivisionMasterOrganization>(divisionNameQuery);
+  const divisionMaster = useMemo(() => divisionsResult?.[0] || null, [divisionsResult]);
+
+  const coordinatorsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, "users"));
+  }, [firestore]);
+
+  const { data: allUsers } = useCollection<any>(coordinatorsQuery);
+
+  const eligibleCoordinators = useMemo(() => {
+    if (!allUsers) return [];
+    return allUsers.filter((u) => {
+      const role = u.role;
+      const level = u.structuralLevel;
+      // Exclude super-admin
+      const isEligibleRole = role === "manager" || role === "direktur" || role === "management" || role === "director";
+      const isEligibleLevel = level === "management" || level === "division_manager" || level === "coordinator" || level === "supervisor" || level === "mandor";
+      return (isEligibleRole || isEligibleLevel) && u.uid !== userProfile?.uid;
+    });
+  }, [allUsers, userProfile?.uid]);
+
   const mode = submission ? (formMode === "view" ? "View" : "Edit") : "Buat";
 
   const form = useForm<FormValues>({
@@ -953,28 +983,63 @@ export function OvertimeSubmissionForm({
     };
   }, [userProfile, employeeProfile, brands]);
 
-  const approvalTarget = useMemo(
-    () => resolveApprovalTarget(employeeProfile, userProfile, divisionMaster),
-    [employeeProfile, userProfile, divisionMaster],
-  );
+  const resolvedManager = useMemo(() => {
+    if (!allUsers || !staffBrandId || !staffDivisionId) return null;
+    const manager = allUsers.find((u) => 
+      (u.isDivisionManager || u.role === "manager") &&
+      (u.managedBrandId === staffBrandId || (Array.isArray(u.brandId) ? u.brandId.includes(staffBrandId) : u.brandId === staffBrandId)) &&
+      (u.managedDivision === staffDivisionId || u.managedDivisionName === staffDivisionId || u.division === staffDivisionId)
+    );
+    if (manager) {
+      return {
+        resolvedManagerUid: manager.uid,
+        resolvedManagerName: manager.fullName || manager.displayName || "",
+        resolvedManagerEmail: manager.email || "",
+        resolvedManagerDivisionName: manager.managedDivision || manager.division || staffDivisionId,
+        resolvedManagerBrandName: manager.managedBrandName || "",
+      };
+    }
+    return null;
+  }, [allUsers, staffBrandId, staffDivisionId]);
+
+  const selectedCoordinatorUid = form.watch("overtimeCoordinatorUid");
+  const selectedCoordinator = useMemo(() => {
+    if (!allUsers || !selectedCoordinatorUid) return null;
+    return allUsers.find(u => u.uid === selectedCoordinatorUid);
+  }, [allUsers, selectedCoordinatorUid]);
 
   const approvalFlow = useMemo(() => {
-    if (!approvalTarget.approvalTargetUid) {
+    let finalManagerUid = resolvedManager?.resolvedManagerUid;
+    let finalManagerName = resolvedManager?.resolvedManagerName;
+
+    if (!finalManagerUid && selectedCoordinator) {
+       if (selectedCoordinator.role === 'manager' || selectedCoordinator.structuralLevel === 'division_manager' || selectedCoordinator.isDivisionManager) {
+           finalManagerUid = selectedCoordinator.uid;
+           finalManagerName = selectedCoordinator.fullName || selectedCoordinator.displayName || "Tanpa Nama";
+       }
+    }
+
+    if (!finalManagerUid) {
+      finalManagerUid = (employeeProfile as any)?.directSupervisorUid || employeeProfile?.supervisorUid || employeeProfile?.managerUid || null;
+      finalManagerName = (employeeProfile as any)?.directSupervisorName || employeeProfile?.supervisorName || employeeProfile?.managerName || null;
+    }
+
+    if (!finalManagerUid) {
       return {
-        flowText: approvalTarget.reason || "Atasan langsung belum ditentukan.",
+        flowText: "Manager Divisi belum ditentukan. Hubungi HRD.",
         hasValidFlow: false,
-        supervisorName: approvalTarget.approvalTargetName || "Belum Ditentukan",
+        supervisorName: "Belum Ditentukan",
         supervisorUid: null,
       };
     }
 
     return {
-      flowText: "Atasan Langsung → HRD",
+      flowText: `Pengawas/Koordinator → ${finalManagerName} → HRD`,
       hasValidFlow: true,
-      supervisorName: approvalTarget.approvalTargetName || "Atasan Langsung",
-      supervisorUid: approvalTarget.approvalTargetUid,
+      supervisorName: finalManagerName,
+      supervisorUid: finalManagerUid,
     };
-  }, [approvalTarget]);
+  }, [resolvedManager, selectedCoordinator, employeeProfile]);
   const totalDuration = useMemo(() => {
     if (!startTimeStr || !endTimeStr) return 0;
     try {
@@ -1042,6 +1107,8 @@ export function OvertimeSubmissionForm({
           location: submission.location,
           employeeNotes: submission.employeeNotes || "",
           attachments: submission.attachments || [],
+          overtimeCoordinatorUid: (submission as any).overtimeCoordinatorUid || "",
+          overtimeInstructionNote: (submission as any).overtimeInstructionNote || "",
         });
         // Reset attachments state for edit mode
         setAttachments([]);
@@ -1056,6 +1123,8 @@ export function OvertimeSubmissionForm({
           location: "kantor",
           employeeNotes: "",
           attachments: [],
+          overtimeCoordinatorUid: "",
+          overtimeInstructionNote: "",
         });
         setAttachments([]);
       }
@@ -1141,10 +1210,22 @@ export function OvertimeSubmissionForm({
 
       const hrd = employeeProfile?.hrdEmploymentInfo;
 
+      console.log("OVERTIME APPROVER DEBUG", {
+        employeeBrandId: staffBrandId,
+        employeeBrandName: displayInfo.brandName,
+        employeeDivisionId: staffDivisionId,
+        employeeDivisionName: displayInfo.division,
+        selectedCoordinator,
+        resolvedManagerUid: resolvedManager?.resolvedManagerUid,
+        resolvedManagerName: resolvedManager?.resolvedManagerName,
+        resolvedManagerDivisionName: resolvedManager?.resolvedManagerDivisionName,
+        employeeProfileManagerUid: employeeProfile?.managerUid,
+        employeeProfileManagerName: employeeProfile?.managerName
+      });
+
       const payload: any = {
-        // Required fields for employee POV
         employeeUid: userProfile.uid,
-        employeeName: employeeProfile?.fullName || userProfile.fullName,
+        employeeName: userProfile.fullName || "",
         employeeType: hrd?.employeeType || userProfile?.employmentType,
 
         // Brand info
@@ -1160,18 +1241,21 @@ export function OvertimeSubmissionForm({
         workRole: hrd?.workRole || displayInfo.positionTitle,
 
         // Supervisor info
-        managerId: approvalFlow.supervisorUid,
+        directSupervisorUid: approvalFlow.supervisorUid,
+        directSupervisorName: approvalFlow.supervisorName,
         managerUid: approvalFlow.supervisorUid,
-        directManagerId: approvalFlow.supervisorUid,
-        directManagerUid: approvalFlow.supervisorUid,
         managerName: approvalFlow.supervisorName,
+        managerDivisionName: resolvedManager?.resolvedManagerDivisionName || displayInfo.division,
+        overtimeCoordinatorUid: selectedCoordinator?.uid || values.overtimeCoordinatorUid,
+        overtimeCoordinatorName: selectedCoordinator?.fullName || "",
+        overtimeCoordinatorPosition: selectedCoordinator?.positionTitle || selectedCoordinator?.structuralLevel || selectedCoordinator?.role || "",
+        overtimeInstructionNote: values.overtimeInstructionNote,
+
         approvalLevel: approvalTarget.approvalLevel,
         requesterStructuralPosition:
           employeeProfile?.hrdEmploymentInfo?.structuralPosition ||
           userProfile?.structuralLevel ||
           "staff",
-        directSupervisorUid: approvalFlow.supervisorUid,
-        directSupervisorName: approvalFlow.supervisorName,
 
         // Overtime details
         overtimeDate: Timestamp.fromDate(values.date),
@@ -1204,8 +1288,10 @@ export function OvertimeSubmissionForm({
         attachments: [...(values.attachments || []), ...attachmentUrls],
 
         // Approval flow
+        approvalFlowType: "staff_to_coordinator_to_manager_to_hrd",
         approvalFlow: approvalFlow.flowText,
-        approvalStatus: "pending_supervisor",
+        approvalStatus: "pending_coordinator",
+        status: "pending_coordinator",
         submittedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
@@ -1421,8 +1507,9 @@ export function OvertimeSubmissionForm({
           </DialogDescription>
         </DialogHeader>
         <div className="flex-1 overflow-y-auto px-6 py-6 pb-10">
-          <div className="space-y-8">
-            {!approvalFlow.hasValidFlow && !isReadOnly && (
+          <Form {...form}>
+            <form id="overtime-form" onSubmit={form.handleSubmit(handleSubmit)} className="space-y-8">
+              {!approvalFlow.hasValidFlow && !isReadOnly && (
               <Alert variant="destructive">
                 <AlertTriangle className="h-4 w-4" />
                 <AlertTitle>Data Atasan Belum Tersedia</AlertTitle>
@@ -1434,7 +1521,7 @@ export function OvertimeSubmissionForm({
               </Alert>
             )}
 
-            <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <section className="grid grid-cols-1 lg:grid-cols-4 gap-4">
               <Card className="p-5 space-y-4">
                 <p className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
                   Profil Anda
@@ -1452,10 +1539,60 @@ export function OvertimeSubmissionForm({
               </Card>
               <Card className="p-5 space-y-4">
                 <p className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
+                  Pengawas/Koordinator
+                </p>
+                <FormField
+                  control={form.control}
+                  name="overtimeCoordinatorUid"
+                  render={({ field }) => (
+                    <FormItem>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                        disabled={isReadOnly}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Pilih Pengawas/Koordinator" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {eligibleCoordinators.map((c) => {
+                            const position = c.positionTitle || c.workRole || c.structuralLevel || (c.role === "manager" ? "Manager Divisi" : c.role === "management" ? "Direktur/Manajemen" : c.role);
+                            const divisionLabel = c.division || c.managedDivision || c.divisionName || "";
+                            const displayLabel = divisionLabel ? `${position} ${divisionLabel}` : position;
+                            return (
+                              <SelectItem key={c.uid} value={c.uid}>
+                                {c.fullName || "Tanpa Nama"} &mdash; {displayLabel}
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="overtimeInstructionNote"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">Uraian Instruksi Lembur</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Instruksi lembur dari pengawas" {...field} readOnly={isReadOnly} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </Card>
+              <Card className="p-5 space-y-4">
+                <p className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
                   Alur Persetujuan
                 </p>
                 <InfoRow
-                  label="Atasan Langsung"
+                  label="Manager Divisi"
                   value={approvalFlow.supervisorName}
                 />
                 <InfoRow label="Divisi" value={displayInfo.division} />
@@ -1464,10 +1601,10 @@ export function OvertimeSubmissionForm({
                     Alur
                   </p>
                   <p
-                    className={`text-base font-semibold text-right ${!approvalFlow.hasValidFlow ? "text-amber-600" : ""}`}
+                    className={`text-sm font-semibold text-right leading-tight ${!approvalFlow.hasValidFlow ? "text-amber-600" : ""}`}
                   >
-                    {approvalFlow.flowText}
-                  </p>
+                    Pengawas/Koordinator → {approvalFlow.supervisorName || "Manager Divisi Belum Ditentukan"} → HRD
+                </p>
                 </div>
               </Card>
               <Card className="p-5 space-y-3 flex flex-col items-center justify-center">
@@ -1503,14 +1640,8 @@ export function OvertimeSubmissionForm({
               </section>
             )}
 
-            <Form {...form}>
-              <form
-                id="overtime-form"
-                onSubmit={form.handleSubmit(handleSubmit)}
-                className="space-y-8"
-              >
-                <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                  <FormField
+            <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              <FormField
                     control={form.control}
                     name="date"
                     render={({ field }) => (
@@ -1906,7 +2037,6 @@ export function OvertimeSubmissionForm({
                 )}
               </form>
             </Form>
-          </div>
         </div>
         <div className="shrink-0 border-t px-6 py-4 flex justify-end gap-3 bg-background">
           {!isReadOnly && (
@@ -1931,7 +2061,7 @@ export function OvertimeSubmissionForm({
                 </span>
                 , dengan alur persetujuan{" "}
                 <span className="font-semibold text-foreground">
-                  {approvalFlow.supervisorName || "Belum Ditentukan"} → HRD
+                  Pengawas/Koordinator → {approvalFlow.supervisorName || "Manager Divisi Belum Ditentukan"} → HRD
                 </span>
                 .
               </div>
@@ -1947,6 +2077,9 @@ export function OvertimeSubmissionForm({
               disabled={
                 isSaving ||
                 !approvalFlow.hasValidFlow ||
+                !form.watch("overtimeCoordinatorUid") ||
+                !staffBrandId ||
+                !staffDivisionId ||
                 uploadingAttachments ||
                 durationValidation.status === "error"
               }

@@ -63,13 +63,16 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const approvalStatusLabel: Record<string, string> = {
   draft: "Draft",
+  pending_coordinator: "Menunggu Pengawas/Koordinator",
   pending_supervisor: "Menunggu Manager Divisi",
   pending_manager: "Menunggu Manager Divisi",
   approved_by_manager: "Menunggu Review HRD",
   pending_hrd: "Menunggu Review HRD",
   needs_revision: "Perlu Revisi",
+  revision_coordinator: "Perlu Revisi",
   revision_manager: "Perlu Revisi",
   revision_hrd: "Perlu Revisi",
+  rejected_coordinator: "Ditolak",
   rejected_manager: "Ditolak",
   rejected_hrd: "Ditolak",
   approved: "Disetujui",
@@ -100,6 +103,9 @@ const getTimelineSteps = (
   supervisorName: string,
   submission: OvertimeSubmission,
 ) => {
+  const coordinatorDisplay =
+    (submission as any).overtimeCoordinatorName ||
+    "pengawas/koordinator";
   const supervisorDisplay =
     (submission as any).directSupervisorName ||
     supervisorName ||
@@ -121,19 +127,83 @@ const getTimelineSteps = (
   };
 
   const step2 = {
+    title: "Review Koordinator",
+    state:
+      status === "pending_coordinator"
+        ? "active"
+        : status === "revision_coordinator"
+          ? "revision"
+          : status === "pending_supervisor" ||
+              status === "pending_hrd" ||
+              status === "pending_manager" ||
+              status === "pending_approval" ||
+              status === "approved" ||
+              status === "approved_hrd" ||
+              status === "needs_revision" ||
+              status === "revision_manager" ||
+              status === "revision_hrd" ||
+              status === "rejected_manager" ||
+              status === "rejected_hrd"
+            ? "completed"
+            : status === "rejected_coordinator" || status === "rejected"
+              ? "rejected"
+              : status === "cancelled"
+                ? "cancelled"
+                : "pending",
+    statusLabel:
+      status === "pending_coordinator"
+        ? "Sedang Berjalan"
+        : status === "revision_coordinator"
+          ? "Revisi"
+          : status === "pending_supervisor" ||
+              status === "pending_hrd" ||
+              status === "pending_manager" ||
+              status === "pending_approval" ||
+              status === "approved" ||
+              status === "approved_hrd" ||
+              status === "needs_revision" ||
+              status === "revision_manager" ||
+              status === "revision_hrd" ||
+              status === "rejected_manager" ||
+              status === "rejected_hrd"
+            ? "Selesai"
+            : status === "rejected_coordinator" || status === "rejected"
+              ? "Ditolak"
+              : status === "cancelled"
+                ? "Dibatalkan"
+                : "Menunggu",
+    description:
+      status === "pending_coordinator"
+        ? `Menunggu persetujuan dari ${coordinatorDisplay}.`
+        : status === "revision_coordinator"
+          ? "Perlu direvisi sesuai catatan koordinator."
+          : status === "rejected_coordinator" || status === "rejected"
+            ? rejectionReason
+              ? `Ditolak: ${rejectionReason}`
+              : "Pengajuan ditolak dan tidak dilanjutkan."
+            : status === "cancelled"
+              ? cancellationReason
+                ? `Dibatalkan: ${cancellationReason}`
+                : "Pengajuan dibatalkan."
+              : status !== "draft"
+                ? "Koordinator telah menyetujui pengajuan."
+                : "Akan dimulai setelah pengajuan dikirim.",
+  };
+
+  const step3 = {
     title: "Review Manager Divisi",
     state:
       status === "pending_supervisor"
         ? "active"
-        : status === "needs_revision"
+        : status === "needs_revision" || status === "revision_manager"
           ? "revision"
           : status === "pending_hrd" ||
               status === "pending_manager" ||
               status === "pending_approval"
             ? "completed"
-            : status === "approved" || status === "approved_hrd"
+            : status === "approved" || status === "approved_hrd" || status === "revision_hrd" || status === "rejected_hrd"
               ? "completed"
-              : status === "rejected"
+              : status === "rejected_manager" || (status === "rejected" && !(submission as any).rejected_by_coordinator)
                 ? "rejected"
                 : status === "cancelled"
                   ? "cancelled"
@@ -141,15 +211,15 @@ const getTimelineSteps = (
     statusLabel:
       status === "pending_supervisor"
         ? "Sedang Berjalan"
-        : status === "needs_revision"
+        : status === "needs_revision" || status === "revision_manager"
           ? "Revisi"
           : status === "pending_hrd" ||
               status === "pending_manager" ||
               status === "pending_approval"
             ? "Selesai"
-            : status === "approved" || status === "approved_hrd"
+            : status === "approved" || status === "approved_hrd" || status === "revision_hrd" || status === "rejected_hrd"
               ? "Selesai"
-              : status === "rejected"
+              : status === "rejected_manager" || (status === "rejected" && !(submission as any).rejected_by_coordinator)
                 ? "Ditolak"
                 : status === "cancelled"
                   ? "Dibatalkan"
@@ -157,26 +227,28 @@ const getTimelineSteps = (
     description:
       status === "pending_supervisor"
         ? `Menunggu persetujuan dari ${supervisorDisplay}.`
-        : status === "needs_revision"
+        : status === "needs_revision" || status === "revision_manager"
           ? "Perlu direvisi sesuai catatan atasan sebelum dilanjutkan."
           : status === "pending_hrd" ||
               status === "pending_manager" ||
-              status === "pending_approval"
-            ? "Atasan telah menyetujui pengajuan dan meneruskan ke HRD."
-            : status === "approved" || status === "approved_hrd"
-              ? "Atasan sudah menyetujui dan pengajuan diteruskan ke HRD."
-              : status === "rejected"
-                ? rejectionReason
-                  ? `Ditolak: ${rejectionReason}`
-                  : "Pengajuan ditolak dan tidak dilanjutkan."
-                : status === "cancelled"
-                  ? cancellationReason
-                    ? `Dibatalkan: ${cancellationReason}`
-                    : "Pengajuan dibatalkan."
-                  : "Akan dimulai setelah pengajuan dikirim.",
+              status === "pending_approval" ||
+              status === "approved" ||
+              status === "approved_hrd" ||
+              status === "revision_hrd" ||
+              status === "rejected_hrd"
+            ? "Atasan telah menyetujui pengajuan."
+            : status === "rejected_manager" || (status === "rejected" && !(submission as any).rejected_by_coordinator)
+              ? rejectionReason
+                ? `Ditolak: ${rejectionReason}`
+                : "Pengajuan ditolak oleh manager."
+              : status === "cancelled"
+                ? cancellationReason
+                  ? `Dibatalkan: ${cancellationReason}`
+                  : "Pengajuan dibatalkan."
+                : "Akan dimulai setelah koordinator menyetujui.",
   };
 
-  const step3 = {
+  const step4 = {
     title: "Review HRD",
     state:
       status === "pending_hrd" ||
@@ -185,10 +257,10 @@ const getTimelineSteps = (
         ? "active"
         : status === "approved" || status === "approved_hrd"
           ? "completed"
-          : status === "needs_revision"
-            ? "pending"
-            : status === "rejected" || status === "cancelled"
-              ? "pending"
+          : status === "revision_hrd"
+            ? "revision"
+            : status === "rejected_hrd"
+              ? "rejected"
               : "pending",
     statusLabel:
       status === "pending_hrd" ||
@@ -197,10 +269,10 @@ const getTimelineSteps = (
         ? "Sedang Berjalan"
         : status === "approved" || status === "approved_hrd"
           ? "Selesai"
-          : status === "needs_revision"
-            ? "Menunggu"
-            : status === "rejected" || status === "cancelled"
-              ? "Menunggu"
+          : status === "revision_hrd"
+            ? "Revisi"
+            : status === "rejected_hrd"
+              ? "Ditolak"
               : "Menunggu",
     description:
       status === "pending_hrd" ||
@@ -209,25 +281,25 @@ const getTimelineSteps = (
         ? "Menunggu review HRD."
         : status === "approved" || status === "approved_hrd"
           ? "HRD telah mereview dan menyetujui pengajuan."
-          : status === "needs_revision"
-            ? "Akan diteruskan ke HRD setelah revisi selesai."
-            : status === "rejected" || status === "cancelled"
-              ? "Tidak dilanjutkan setelah penolakan atau pembatalan."
+          : status === "revision_hrd"
+            ? "HRD meminta revisi pengajuan."
+            : status === "rejected_hrd"
+              ? "HRD menolak pengajuan."
               : "Akan diteruskan ke HRD setelah persetujuan atasan.",
   };
 
-  const step4 = {
+  const step5 = {
     title: "Selesai",
     state:
       status === "approved" || status === "approved_hrd"
         ? "completed"
-        : status === "rejected" || status === "cancelled"
+        : status === "rejected" || status === "rejected_coordinator" || status === "rejected_manager" || status === "rejected_hrd" || status === "cancelled"
           ? "pending"
           : "pending",
     statusLabel:
       status === "approved" || status === "approved_hrd"
         ? "Selesai"
-        : status === "rejected"
+        : status === "rejected" || status === "rejected_coordinator" || status === "rejected_manager" || status === "rejected_hrd"
           ? "Tidak Selesai"
           : status === "cancelled"
             ? "Dibatalkan"
@@ -235,17 +307,18 @@ const getTimelineSteps = (
     description:
       status === "approved" || status === "approved_hrd"
         ? "Pengajuan lembur telah disetujui."
-        : status === "rejected"
+        : status === "rejected" || status === "rejected_coordinator" || status === "rejected_manager" || status === "rejected_hrd"
           ? "Pengajuan tidak selesai karena ditolak."
           : status === "cancelled"
             ? "Pengajuan dibatalkan sebelum proses selesai."
             : "Pengajuan selesai setelah review HRD.",
   };
 
-  return [step1, step2, step3, step4];
+  return [step1, step2, step3, step4, step5];
 };
 
 const isPendingStatus = (status: string) =>
+  status === "pending_coordinator" ||
   status === "pending_supervisor" ||
   status === "pending_manager" ||
   status === "pending_hrd" ||
@@ -268,12 +341,21 @@ const getStatusMeta = (status: string) => {
     };
   }
 
-  if (status === "pending_supervisor" || status === "pending_manager") {
+  if (status === "pending_coordinator") {
     return {
-      waitingFor: "Atasan Langsung",
-      nextStep: "Menunggu persetujuan dari atasan langsung.",
+      waitingFor: "Pengawas/Koordinator",
+      nextStep: "Menunggu review pengawas/koordinator.",
       alertVariant: "default" as const,
       activeStep: 1,
+    };
+  }
+
+  if (status === "pending_supervisor" || status === "pending_manager") {
+    return {
+      waitingFor: "Manager Divisi",
+      nextStep: "Menunggu persetujuan dari manager divisi.",
+      alertVariant: "default" as const,
+      activeStep: 2,
     };
   }
 
@@ -286,11 +368,11 @@ const getStatusMeta = (status: string) => {
       waitingFor: "Tim HRD",
       nextStep: "Menunggu review dan persetujuan akhir HRD.",
       alertVariant: "default" as const,
-      activeStep: 2,
+      activeStep: 3,
     };
   }
 
-  if (status === "revision_manager" || status === "revision_hrd") {
+  if (status === "revision_coordinator" || status === "revision_manager" || status === "revision_hrd") {
     return {
       waitingFor: "Anda",
       nextStep: "Revisi pengajuan sesuai catatan yang diterima.",
@@ -313,7 +395,7 @@ const getStatusMeta = (status: string) => {
       waitingFor: "Selesai",
       nextStep: "Pengajuan lembur telah disetujui.",
       alertVariant: "default" as const,
-      activeStep: 3,
+      activeStep: 4,
     };
   }
 
@@ -322,7 +404,7 @@ const getStatusMeta = (status: string) => {
       waitingFor: "Selesai",
       nextStep: "Pengajuan lembur ditolak. Lihat detail untuk alasan.",
       alertVariant: "destructive" as const,
-      activeStep: 3,
+      activeStep: 4,
     };
   }
 
@@ -457,9 +539,9 @@ const LatestSubmissionCard = ({
           Timeline Status
         </div>
         <div className="flex flex-col gap-3 md:flex-row md:items-start">
-          {getTimelineSteps(status, supervisorDisplay, submission).map(
+            {getTimelineSteps(status, supervisorDisplay, submission).map(
             (step, index) => {
-              const isLast = index === 3;
+              const isLast = index === 4;
               const stateStyles = {
                 completed: {
                   ring: "bg-emerald-500 text-white border-emerald-500",
@@ -566,7 +648,7 @@ export function PengajuanLemburClient() {
     mutate,
   } = useCollection<OvertimeSubmission>(submissionsQuery);
 
-  const { data: employeeProfile, isLoading: isLoadingProfile } =
+  const { data: employeeProfileDoc, isLoading: isLoadingProfileDoc } =
     useDoc<EmployeeProfile>(
       useMemoFirebase(
         () =>
@@ -576,6 +658,20 @@ export function PengajuanLemburClient() {
         [userProfile, firestore],
       ),
     );
+
+  const { data: employeesDoc, isLoading: isLoadingEmployeesDoc } =
+    useDoc<EmployeeProfile>(
+      useMemoFirebase(
+        () =>
+          userProfile && !employeeProfileDoc
+            ? doc(firestore, "employees", userProfile.uid)
+            : null,
+        [userProfile, firestore, employeeProfileDoc],
+      ),
+    );
+
+  const employeeProfile = employeeProfileDoc || employeesDoc || (userProfile as unknown as EmployeeProfile);
+  const isLoadingProfile = isLoadingProfileDoc || isLoadingEmployeesDoc;
 
   const { data: brands, isLoading: isLoadingBrands } = useCollection<Brand>(
     useMemoFirebase(() => collection(firestore, "brands"), [firestore]),
