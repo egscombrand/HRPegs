@@ -62,7 +62,17 @@ import {
   XCircle,
   FileCheck,
 } from "lucide-react";
-import type { UserProfile } from "@/lib/types";
+import { RichTextEditor } from "@/components/ui/RichTextEditor";
+import {
+  buildEmployeeDirectory,
+  type NormalizedDirectoryMember,
+} from "@/lib/employee-directory";
+import type {
+  Brand,
+  EmployeeMasterData,
+  EmployeeProfile,
+  UserProfile,
+} from "@/lib/types";
 
 const MISSION_STATUSES = [
   "draft_mission",
@@ -121,6 +131,13 @@ const EXPENSE_CATEGORIES = [
   "Pengiriman dokumen/sampel",
   "Lainnya",
 ] as const;
+
+function stripHtml(value: string) {
+  return value
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 export type MissionStatus = (typeof MISSION_STATUSES)[number];
 export type MemberStatus = (typeof MEMBER_STATUSES)[number];
@@ -256,6 +273,15 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
   const [missionMembers, setMissionMembers] = useState<
     BusinessTripMissionMember[]
   >([]);
+  const [missionTimeline, setMissionTimeline] = useState<
+    Array<{
+      id: string;
+      message: string;
+      createdAt: any;
+      byUid?: string | null;
+      byName?: string | null;
+    }>
+  >([]);
   const [selectedStaffUids, setSelectedStaffUids] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -326,45 +352,92 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
     destinationAddress: "",
     startDate: "",
     endDate: "",
-    instructionNote: "",
+    instructionHtml: "",
+    instructionText: "",
     costScheme: "reimburse" as CostSchema,
     advanceAmount: "",
     budgetEstimate: "",
   });
   const [assignmentLetter, setAssignmentLetter] = useState<File | null>(null);
 
-  const staffQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(
-      collection(firestore, "users"),
-      where("role", "==", "karyawan"),
-      where("isActive", "==", true),
-    );
-  }, [firestore]);
+  const usersCollectionRef = useMemoFirebase(
+    () => (firestore ? collection(firestore, "users") : null),
+    [firestore],
+  );
 
-  const { data: staffList } = useCollection<UserProfile>(staffQuery);
+  const employeesCollectionRef = useMemoFirebase(
+    () => (firestore ? collection(firestore, "employees") : null),
+    [firestore],
+  );
+
+  const employeeProfilesRef = useMemoFirebase(
+    () => (firestore ? collection(firestore, "employee_profiles") : null),
+    [firestore],
+  );
+
+  const brandsCollectionRef = useMemoFirebase(
+    () => (firestore ? collection(firestore, "brands") : null),
+    [firestore],
+  );
+
+  const { data: usersData, isLoading: usersLoading } =
+    useCollection<UserProfile>(usersCollectionRef);
+  const { data: employeesData, isLoading: employeesLoading } =
+    useCollection<EmployeeMasterData>(employeesCollectionRef);
+  const { data: employeeProfilesData, isLoading: profilesLoading } =
+    useCollection<EmployeeProfile>(employeeProfilesRef);
+  const { data: brandsData, isLoading: brandsLoading } =
+    useCollection<Brand>(brandsCollectionRef);
+
+  const staffLoading =
+    usersLoading || employeesLoading || profilesLoading || brandsLoading;
+
+  const allStaff = useMemo<NormalizedDirectoryMember[]>(() => {
+    return buildEmployeeDirectory(
+      usersData,
+      employeesData,
+      employeeProfilesData,
+      brandsData,
+    );
+  }, [usersData, employeesData, employeeProfilesData, brandsData]);
+
+  const staffByBrand = useMemo(() => {
+    const brands = new Map<string, Map<string, NormalizedDirectoryMember[]>>();
+
+    allStaff.forEach((staff) => {
+      const brand = staff.brandName || "Brand belum diatur";
+      const division = staff.divisionName || "Divisi belum diatur";
+      if (!brands.has(brand)) brands.set(brand, new Map());
+      const divisionMap = brands.get(brand)!;
+      if (!divisionMap.has(division)) divisionMap.set(division, []);
+      divisionMap.get(division)!.push(staff);
+    });
+
+    return brands;
+  }, [allStaff]);
 
   const missionQuery = useMemoFirebase(() => {
     if (!firestore || !userProfile) return null;
 
+    const missionCollection = getBusinessTripMissionCollection();
+    if (!missionCollection) return null;
+
     if (mode === "manager") {
       return query(
-        collectionGroup(firestore, "members"),
-        where("managerUid", "==", userProfile.uid),
+        missionCollection,
+        where("managerUids", "array-contains", userProfile.uid),
         orderBy("createdAt", "desc"),
       );
     }
 
     if (mode === "staff") {
       return query(
-        collectionGroup(firestore, "members"),
-        where("employeeUid", "==", userProfile.uid),
+        missionCollection,
+        where("assignedStaffUids", "array-contains", userProfile.uid),
         orderBy("createdAt", "desc"),
       );
     }
 
-    const missionCollection = getBusinessTripMissionCollection();
-    if (!missionCollection) return null;
     return query(missionCollection, orderBy("createdAt", "desc"));
   }, [firestore, userProfile, mode]);
 
@@ -388,7 +461,8 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
       destinationAddress: "",
       startDate: "",
       endDate: "",
-      instructionNote: "",
+      instructionHtml: "",
+      instructionText: "",
       costScheme: "reimburse",
       advanceAmount: "",
       budgetEstimate: "",
@@ -463,6 +537,24 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
           ...(memberDoc.data() as BusinessTripMissionMember),
         })),
       );
+
+      const timelineCollection = getMissionTimelineCollection(missionId);
+      if (timelineCollection) {
+        const timelineSnap = await getDocs(
+          query(timelineCollection, orderBy("createdAt", "desc")),
+        );
+        setMissionTimeline(
+          timelineSnap.docs.map((entryDoc) => ({
+            id: entryDoc.id,
+            ...(entryDoc.data() as {
+              message: string;
+              createdAt: any;
+              byUid?: string | null;
+              byName?: string | null;
+            }),
+          })),
+        );
+      }
     } catch (error) {
       console.error("Gagal memuat detail misi", error);
     }
@@ -476,6 +568,13 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
     const members = membersSnap.docs.map(
       (m) => m.data() as BusinessTripMissionMember,
     );
+    const managerApprovedCount = members.filter(
+      (member) => member.managerValidationStatus === "approved_by_manager",
+    ).length;
+    const staffConfirmedCount = members.filter(
+      (member) => member.staffConfirmationStatus === "confirmed_by_staff",
+    ).length;
+    const totalMembers = members.length;
     const allApproved = members.every(
       (member) => member.managerValidationStatus === "approved_by_manager",
     );
@@ -511,12 +610,18 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
       nextStatus = "waiting_staff_confirmation";
     }
 
+    const updatePayload: Record<string, any> = {
+      managerApprovedCount,
+      staffConfirmedCount,
+      totalMembers,
+      updatedAt: serverTimestamp(),
+    };
+
     if (nextStatus !== currentStatus) {
-      await updateDoc(missionRef, {
-        status: nextStatus,
-        updatedAt: serverTimestamp(),
-      });
+      updatePayload.status = nextStatus;
     }
+
+    await updateDoc(missionRef, updatePayload);
   };
 
   const handleCreateMission = async () => {
@@ -533,7 +638,7 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
       !missionForm.destinationCity ||
       !missionForm.startDate ||
       !missionForm.endDate ||
-      !missionForm.instructionNote
+      !missionForm.instructionText
     ) {
       return toast({
         variant: "destructive",
@@ -586,6 +691,11 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
       const assignmentNumber =
         missionForm.assignmentNumber || `SPD-${Date.now()}`;
 
+      const assignedStaffUids = staffRecords.map((staff) => staff.uid);
+      const assignedManagerUids = Array.from(
+        new Set(Array.from(managerMap.values()).map((manager) => manager.uid)),
+      );
+
       await setDoc(missionRef, {
         missionName: missionForm.missionName,
         assignmentNumber,
@@ -602,10 +712,19 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
         startDate: Timestamp.fromDate(new Date(missionForm.startDate)),
         endDate: Timestamp.fromDate(new Date(missionForm.endDate)),
         durationDays,
-        instructionNote: missionForm.instructionNote,
+        instructionNote: missionForm.instructionHtml,
+        instructionHtml: missionForm.instructionHtml,
+        instructionText:
+          missionForm.instructionText || stripHtml(missionForm.instructionHtml),
         costScheme: missionForm.costScheme,
         advanceAmount: Number(missionForm.advanceAmount) || 0,
         budgetEstimate: Number(missionForm.budgetEstimate) || 0,
+        assignedStaffUids,
+        assignedStaffCount: assignedStaffUids.length,
+        totalMembers: assignedStaffUids.length,
+        managerApprovedCount: 0,
+        staffConfirmedCount: 0,
+        managerUids: assignedManagerUids,
         status: "pending_manager_validation",
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -666,9 +785,8 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
 
   const handleSelectItem = async (item: any) => {
     if (!firestore) return;
-    if (mode === "manager" || mode === "staff") {
+    if (item?.missionId) {
       const member = item as BusinessTripMissionMember;
-      if (!member.missionId) return;
       setSelectedMember(member);
       await loadMissionDetail(member.missionId);
       return;
@@ -1132,20 +1250,20 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-4">
-          <div className="rounded-2xl border border-slate-700 p-4">
-            <p className="text-sm text-slate-400">Total</p>
+          <div className="rounded-2xl border border-border p-4 bg-card">
+            <p className="text-sm text-muted-foreground">Total</p>
             <p className="text-3xl font-semibold">{summaryCounts.all}</p>
           </div>
-          <div className="rounded-2xl border border-slate-700 p-4">
-            <p className="text-sm text-slate-400">Perlu Tindak Lanjut</p>
+          <div className="rounded-2xl border border-border p-4 bg-card">
+            <p className="text-sm text-muted-foreground">Perlu Tindak Lanjut</p>
             <p className="text-3xl font-semibold">{summaryCounts.pending}</p>
           </div>
-          <div className="rounded-2xl border border-slate-700 p-4">
-            <p className="text-sm text-slate-400">Selesai</p>
+          <div className="rounded-2xl border border-border p-4 bg-card">
+            <p className="text-sm text-muted-foreground">Selesai</p>
             <p className="text-3xl font-semibold">{summaryCounts.completed}</p>
           </div>
-          <div className="rounded-2xl border border-slate-700 p-4">
-            <p className="text-sm text-slate-400">Ditolak / Batal</p>
+          <div className="rounded-2xl border border-border p-4 bg-card">
+            <p className="text-sm text-muted-foreground">Ditolak / Batal</p>
             <p className="text-3xl font-semibold">{summaryCounts.rejected}</p>
           </div>
         </CardContent>
@@ -1352,58 +1470,143 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
               </div>
             </div>
             <div>
-              <Label htmlFor="instructionNote">Instruksi / Catatan</Label>
-              <Textarea
-                id="instructionNote"
-                value={missionForm.instructionNote}
-                onChange={(event) =>
+              <Label>Instruksi / Catatan</Label>
+              <RichTextEditor
+                value={missionForm.instructionHtml}
+                onChange={(value) =>
                   setMissionForm((prev) => ({
                     ...prev,
-                    instructionNote: event.target.value,
+                    instructionHtml: value,
+                    instructionText: stripHtml(value),
                   }))
                 }
-                rows={4}
-                placeholder="Detail arahan untuk tim lapangan"
+                placeholder="Tulis instruksi utama untuk tim lapangan"
               />
             </div>
             <div>
               <Label>Staff yang Ditugaskan</Label>
-              <div className="overflow-x-auto rounded-2xl border border-slate-700 p-2">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead> </TableHead>
-                      <TableHead>Nama</TableHead>
-                      <TableHead>Brand</TableHead>
-                      <TableHead>Divisi</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {staffList?.map((staff) => (
-                      <TableRow key={staff.uid}>
-                        <TableCell>
-                          <input
-                            type="checkbox"
-                            checked={selectedStaffUids.includes(staff.uid)}
-                            onChange={(event) => {
-                              const next = event.target.checked
-                                ? [...selectedStaffUids, staff.uid]
-                                : selectedStaffUids.filter(
-                                    (uid) => uid !== staff.uid,
-                                  );
-                              setSelectedStaffUids(next);
-                            }}
-                          />
-                        </TableCell>
-                        <TableCell>{staff.fullName}</TableCell>
-                        <TableCell>{staff.brandName || "-"}</TableCell>
-                        <TableCell>
-                          {staff.divisionName || staff.division || "-"}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+              <div className="space-y-4 rounded-2xl border border-border bg-card p-4">
+                {staffLoading ? (
+                  <p className="text-sm text-muted-foreground">
+                    Memuat daftar staff operasional...
+                  </p>
+                ) : staffByBrand.size === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Tidak ada anggota operasional yang tersedia.
+                  </p>
+                ) : (
+                  Array.from(staffByBrand.entries()).map(
+                    ([brandName, divisionMap]) => (
+                      <div key={brandName} className="space-y-3">
+                        <div className="rounded-2xl border border-border bg-background p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-4">
+                            <div>
+                              <p className="text-sm font-semibold text-foreground">
+                                {brandName}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Grup Brand
+                              </p>
+                            </div>
+                            <Badge variant="secondary">
+                              {Array.from(divisionMap.values()).reduce(
+                                (sum, members) => sum + members.length,
+                                0,
+                              )}{" "}
+                              orang
+                            </Badge>
+                          </div>
+                        </div>
+                        <div className="space-y-3 pl-2">
+                          {Array.from(divisionMap.entries()).map(
+                            ([divisionName, members]) => (
+                              <div
+                                key={`${brandName}-${divisionName}`}
+                                className="rounded-2xl border border-border bg-muted/10 p-3"
+                              >
+                                <p className="text-sm font-semibold text-foreground">
+                                  {divisionName}
+                                </p>
+                                <div className="mt-3 space-y-2">
+                                  {members.map((member) => {
+                                    const warnings = [];
+                                    if (!member.brandId)
+                                      warnings.push("Brand belum diatur");
+                                    if (!member.divisionId)
+                                      warnings.push("Divisi belum diatur");
+                                    if (!member.managerName)
+                                      warnings.push(
+                                        "Manager Divisi belum ditentukan",
+                                      );
+                                    return (
+                                      <label
+                                        key={member.uid}
+                                        className="flex cursor-pointer flex-col rounded-2xl border border-border bg-background p-3 shadow-sm transition hover:border-primary"
+                                      >
+                                        <div className="flex items-start gap-3">
+                                          <input
+                                            type="checkbox"
+                                            checked={selectedStaffUids.includes(
+                                              member.uid,
+                                            )}
+                                            onChange={(event) => {
+                                              const next = event.target.checked
+                                                ? [
+                                                    ...selectedStaffUids,
+                                                    member.uid,
+                                                  ]
+                                                : selectedStaffUids.filter(
+                                                    (uid) => uid !== member.uid,
+                                                  );
+                                              setSelectedStaffUids(next);
+                                            }}
+                                            className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                                          />
+                                          <div className="min-w-0 flex-1">
+                                            <p className="text-sm font-semibold text-foreground">
+                                              {member.fullName}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                              {member.jobTitle || "-"} •{" "}
+                                              {member.employeeType || "-"}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                              {member.brandName ||
+                                                "Brand belum diatur"}{" "}
+                                              /{" "}
+                                              {member.divisionName ||
+                                                "Divisi belum diatur"}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                              Manager Divisi:{" "}
+                                              {member.managerName || "-"}
+                                            </p>
+                                            {warnings.length > 0 && (
+                                              <div className="mt-2 flex flex-wrap gap-2">
+                                                {warnings.map((warning) => (
+                                                  <span
+                                                    key={warning}
+                                                    className="rounded-full bg-yellow-500/10 px-2 py-1 text-[11px] font-medium text-yellow-700"
+                                                  >
+                                                    {warning}
+                                                  </span>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ),
+                          )}
+                        </div>
+                      </div>
+                    ),
+                  )
+                )}
               </div>
             </div>
             <div>
@@ -1418,13 +1621,16 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                 className="mt-2"
               />
               {assignmentLetter ? (
-                <p className="text-sm text-slate-400 mt-2">
+                <p className="text-sm text-muted-foreground mt-2">
                   Dipilih: {assignmentLetter.name}
                 </p>
               ) : null}
             </div>
             <Button onClick={handleCreateMission} disabled={isSaving}>
               <Upload className="mr-2 h-4 w-4" /> Buat Misi Dinas
+              {selectedStaffUids.length > 0
+                ? ` (${selectedStaffUids.length} orang)`
+                : ""}
             </Button>
           </CardContent>
         </Card>
@@ -1445,21 +1651,25 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Nama Misi</TableHead>
+                  <TableHead>Tujuan</TableHead>
                   <TableHead>Periode</TableHead>
+                  <TableHead>Jumlah Anggota</TableHead>
+                  <TableHead>Progress Validasi</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Skema Biaya</TableHead>
                   <TableHead>Aksi</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-8">
+                    <TableCell colSpan={8} className="text-center py-8">
                       Memuat...
                     </TableCell>
                   </TableRow>
                 ) : missions.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-8">
+                    <TableCell colSpan={8} className="text-center py-8">
                       Tidak ada data.
                     </TableCell>
                   </TableRow>
@@ -1467,24 +1677,33 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                   missions.map((item: any) => {
                     const title = item.missionName;
                     const status =
-                      mode === "manager" || mode === "staff"
-                        ? item.managerValidationStatus ||
-                          item.staffConfirmationStatus ||
-                          item.memberStatus ||
-                          item.missionStatus
-                        : item.status;
+                      item.status ||
+                      item.missionStatus ||
+                      item.managerValidationStatus ||
+                      item.staffConfirmationStatus ||
+                      item.memberStatus;
                     return (
                       <TableRow
-                        key={item.id}
-                        className="hover:bg-slate-950 cursor-pointer"
+                        key={item.id || item.missionId}
+                        className="hover:bg-muted cursor-pointer"
                         onClick={() => handleSelectItem(item)}
                       >
                         <TableCell>{title}</TableCell>
+                        <TableCell>{item.destinationCity || "-"}</TableCell>
                         <TableCell>
                           {formatDate(item.startDate)} -{" "}
                           {formatDate(item.endDate)}
                         </TableCell>
+                        <TableCell>
+                          {item.assignedStaffCount ?? item.totalMembers ?? 0}
+                        </TableCell>
+                        <TableCell>
+                          {`${item.managerApprovedCount ?? 0}/${
+                            item.assignedStaffCount ?? item.totalMembers ?? 0
+                          }`}
+                        </TableCell>
                         <TableCell>{renderStatusLabel(status)}</TableCell>
+                        <TableCell>{item.costScheme || "-"}</TableCell>
                         <TableCell>
                           <Button
                             variant="secondary"
@@ -1518,17 +1737,17 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
           <CardContent className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <p className="text-sm text-slate-400">Nama Misi</p>
+                <p className="text-sm text-muted-foreground">Nama Misi</p>
                 <p className="font-semibold">{selectedMission.missionName}</p>
               </div>
               <div>
-                <p className="text-sm text-slate-400">Nomor SPD</p>
+                <p className="text-sm text-muted-foreground">Nomor SPD</p>
                 <p className="font-semibold">
                   {selectedMission.assignmentNumber}
                 </p>
               </div>
               <div>
-                <p className="text-sm text-slate-400">Klien / Proyek</p>
+                <p className="text-sm text-muted-foreground">Klien / Proyek</p>
                 <p className="font-semibold">
                   {selectedMission.clientName ||
                     selectedMission.projectName ||
@@ -1536,7 +1755,7 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                 </p>
               </div>
               <div>
-                <p className="text-sm text-slate-400">Periode</p>
+                <p className="text-sm text-muted-foreground">Periode</p>
                 <p className="font-semibold">
                   {formatDate(selectedMission.startDate)} -{" "}
                   {formatDate(selectedMission.endDate)} (
@@ -1544,13 +1763,13 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                 </p>
               </div>
               <div>
-                <p className="text-sm text-slate-400">Tujuan</p>
+                <p className="text-sm text-muted-foreground">Tujuan</p>
                 <p className="font-semibold">
                   {selectedMission.destinationCity || "-"}
                 </p>
               </div>
               <div>
-                <p className="text-sm text-slate-400">Alamat</p>
+                <p className="text-sm text-muted-foreground">Alamat</p>
                 <p className="font-semibold">
                   {selectedMission.destinationAddress || "-"}
                 </p>
@@ -1559,41 +1778,43 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
             <Separator />
             <div className="grid gap-4 md:grid-cols-3">
               <div>
-                <p className="text-sm text-slate-400">Status Misi</p>
+                <p className="text-sm text-muted-foreground">Status Misi</p>
                 {renderStatusLabel(selectedMission.status)}
               </div>
               <div>
-                <p className="text-sm text-slate-400">Skema Biaya</p>
+                <p className="text-sm text-muted-foreground">Skema Biaya</p>
                 <p className="font-semibold">
                   {selectedMission.costScheme || "-"}
                 </p>
               </div>
               <div>
-                <p className="text-sm text-slate-400">Estimasi Anggaran</p>
+                <p className="text-sm text-muted-foreground">
+                  Estimasi Anggaran
+                </p>
                 <p className="font-semibold">
                   {formatCurrency(selectedMission.budgetEstimate)}
                 </p>
               </div>
             </div>
             <div>
-              <p className="text-sm text-slate-400">Instruksi</p>
+              <p className="text-sm text-muted-foreground">Instruksi</p>
               <p className="whitespace-pre-wrap">
                 {selectedMission.instructionNote || "-"}
               </p>
             </div>
             <div>
-              <p className="text-sm text-slate-400">Surat Tugas</p>
+              <p className="text-sm text-muted-foreground">Surat Tugas</p>
               {selectedMission.assignmentLetterUrl ? (
                 <a
                   href={selectedMission.assignmentLetterUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-teal-400 underline"
+                  className="text-primary underline"
                 >
                   {selectedMission.assignmentLetterFileName || "Lihat file"}
                 </a>
               ) : (
-                <p className="text-slate-500">Belum tersedia</p>
+                <p className="text-muted-foreground">Belum tersedia</p>
               )}
             </div>
 
@@ -1619,9 +1840,10 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                     {missionMembers.map((member) => (
                       <TableRow
                         key={member.id}
-                        className={
-                          selectedMember?.id === member.id ? "bg-slate-950" : ""
-                        }
+                        className={`cursor-pointer ${
+                          selectedMember?.id === member.id ? "bg-muted" : ""
+                        }`}
+                        onClick={() => setSelectedMember(member)}
                       >
                         <TableCell>{member.employeeName}</TableCell>
                         <TableCell>{member.divisionName || "-"}</TableCell>
@@ -1636,6 +1858,39 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                     ))}
                   </TableBody>
                 </Table>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Timeline Misi</CardTitle>
+                <CardDescription>
+                  Riwayat aksi dan perubahan status misi.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {missionTimeline.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Belum ada riwayat.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {missionTimeline.map((entry) => (
+                      <div
+                        key={entry.id}
+                        className="rounded-2xl border border-border bg-background p-3"
+                      >
+                        <p className="text-sm text-muted-foreground">
+                          {formatDate(entry.createdAt)} •{" "}
+                          {entry.byName || "System"}
+                        </p>
+                        <p className="mt-1 text-sm text-foreground">
+                          {entry.message}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
 

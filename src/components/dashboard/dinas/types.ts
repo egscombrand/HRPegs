@@ -12,6 +12,7 @@ export const MISSION_STATUSES = [
   "completed",
   "rejected",
   "cancelled",
+  "archived_duplicate",
 ] as const;
 
 export const MEMBER_STATUSES = [
@@ -39,7 +40,12 @@ export const TRIP_TYPES = [
   "Lainnya",
 ] as const;
 
-export const COST_SCHEMAS = ["advance", "reimburse", "company_paid", "mixed"] as const;
+export const COST_SCHEMAS = [
+  "advance",
+  "reimburse",
+  "company_paid",
+  "mixed",
+] as const;
 
 export const EXPENSE_CATEGORIES = [
   "Transportasi",
@@ -75,15 +81,28 @@ export type BusinessTripMission = {
   projectName?: string;
   clientName?: string;
   tripType?: BusinessTripType;
+  tripTypeOther?: string;
   destinationCity?: string;
+  destinationRegency?: string;
+  destinationProvince?: string;
+  destinationGoogleMaps?: string;
   destinationAddress?: string;
   startDate?: any;
   endDate?: any;
   durationDays?: number;
   instructionNote?: string;
+  instructionHtml?: string;
+  duplicateOf?: string;
   costScheme?: CostSchema;
   advanceAmount?: number;
   budgetEstimate?: number;
+  memberCount?: number;
+  managerApprovedCount?: number;
+  staffConfirmedCount?: number;
+  missionCode?: string;
+  documentSource?: "firebase_storage" | "google_drive_link";
+  googleDriveLink?: string;
+  duplicateMissionIds?: string[];
   status?: MissionStatus;
   createdAt?: any;
   updatedAt?: any;
@@ -128,7 +147,7 @@ export type BusinessTripMissionMember = {
   locationPic?: string;
   baNumber?: string;
   fieldConditionNote?: string;
-  
+
   missionStatus?: MissionStatus;
   createdAt?: any;
   updatedAt?: any;

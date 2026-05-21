@@ -6,12 +6,16 @@ import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
+  getDoc,
+  getDocs,
   orderBy,
   query,
   serverTimestamp,
   setDoc,
   Timestamp,
+  updateDoc,
 } from "firebase/firestore";
 import { uploadFile } from "@/lib/storage/storage-adapter";
 import { useToast } from "@/hooks/use-toast";
@@ -53,20 +57,32 @@ import {
   ChevronDown,
   ChevronRight,
   Check,
+  MapPin,
+  Calendar,
+  FileText,
+  Wallet,
 } from "lucide-react";
 import {
   BusinessTripMission,
+  BusinessTripMissionMember,
   BusinessTripType,
   CostSchema,
   TRIP_TYPES,
   COST_SCHEMAS,
 } from "./types";
+import { normalizeEmployeeRow } from "@/lib/employee-row-normalizer";
+import { RichTextEditor } from "@/components/ui/RichTextEditor";
+import type {
+  Brand,
+  EmployeeProfile,
+  EmployeeMasterData,
+  UserProfile,
+} from "@/lib/types";
 
 // ===== Normalized Staff type for internal use =====
 type NormalizedStaff = {
   uid: string;
   fullName: string;
-  email: string;
   employeeId: string;
   brandId: string;
   brandName: string;
@@ -77,143 +93,30 @@ type NormalizedStaff = {
   managerName: string;
   employmentStatus: string;
   employeeType: string;
-  roleName: string;
+  structuralPosition: string;
+  isDivisionManager: boolean;
 };
 
-// ===== Helper: Normalize employee_profiles document to a consistent shape =====
-function normalizeStaff(data: any): NormalizedStaff | null {
-  // Get UID from multiple possible fields
-  const uid = data.uid || data.userId || data.employeeUid || data.id || "";
+// ===== Exclusion constants =====
+// Roles that should never appear in the staff picker
+const EXCLUDED_USER_ROLES = new Set([
+  "super-admin",
+  "super_admin",
+  "hrd",
+  "hr",
+  "admin-system",
+  "system-admin",
+  "system_admin",
+  "admin_system",
+  "kandidat",
+  "candidate",
+]);
 
-  // Get name from multiple possible fields (including nested dataDiriIdentitas)
-  const fullName =
-    data.fullName ||
-    data.name ||
-    data.displayName ||
-    data.dataDiriIdentitas?.fullName ||
-    "";
+// Structural positions to exclude (direktur/management level)
+const EXCLUDED_STRUCTURAL_RE = /^(management|direktur|director)$/i;
 
-  // If no UID or name, skip this record
-  if (!uid || !fullName) return null;
-
-  const email =
-    data.email ||
-    data.personalEmail ||
-    data.dataDiriIdentitas?.personalEmail ||
-    "";
-
-  const employeeId =
-    data.employeeId ||
-    data.nomorIndukKaryawan ||
-    data.employeeNumber ||
-    data.hrdEmploymentInfo?.employeeId ||
-    "";
-
-  const brandId = data.brandId || data.hrdEmploymentInfo?.brandId || "";
-
-  const brandName =
-    data.brandName ||
-    data.brand ||
-    data.hrdEmploymentInfo?.brand ||
-    data.hrdEmploymentInfo?.brandName ||
-    "";
-
-  const divisionId =
-    data.divisionId || data.hrdEmploymentInfo?.divisionId || "";
-
-  const divisionName =
-    data.division ||
-    data.divisionName ||
-    data.hrdEmploymentInfo?.divisi ||
-    data.hrdEmploymentInfo?.divisionName ||
-    data.department ||
-    "";
-
-  const jobTitle =
-    data.positionTitle ||
-    data.jobTitle ||
-    data.jabatan ||
-    data.workRole ||
-    data.position ||
-    data.hrdEmploymentInfo?.jabatan ||
-    data.hrdEmploymentInfo?.workRole ||
-    data.hrdEmploymentInfo?.structuralPosition ||
-    "";
-
-  const managerUid =
-    data.managerUid ||
-    data.directSupervisorUid ||
-    data.supervisorUid ||
-    data.hrdEmploymentInfo?.directSupervisorUid ||
-    "";
-
-  const managerName =
-    data.managerName ||
-    data.directSupervisorName ||
-    data.supervisorName ||
-    data.hrdEmploymentInfo?.directSupervisorName ||
-    data.hrdEmploymentInfo?.atasanLangsung ||
-    "";
-
-  const employmentStatus =
-    data.employmentStatus ||
-    data.statusKerja ||
-    data.hrdEmploymentInfo?.statusKerja ||
-    data.hrdEmploymentInfo?.employmentStatus ||
-    "";
-
-  const employeeType =
-    data.employeeType ||
-    data.tipeKaryawan ||
-    data.employmentType ||
-    data.hrdEmploymentInfo?.tipeKaryawan ||
-    data.hrdEmploymentInfo?.employeeType ||
-    "";
-
-  const roleName =
-    data.role ||
-    data.userRole ||
-    data.roleName ||
-    (Array.isArray(data.roles) ? data.roles[0] : "") ||
-    data.accountRole ||
-    "";
-
-  // Collect all role/position/jabatan fields to check for exclusion
-  const checkTexts = [
-    roleName,
-    jobTitle,
-    data.workRole,
-    data.hrdEmploymentInfo?.workRole,
-    data.structuralPosition,
-    data.hrdEmploymentInfo?.structuralPosition,
-    data.role,
-    data.userRole,
-    data.accountRole,
-  ].filter(Boolean).map(t => String(t).toLowerCase());
-
-  const isExcluded = checkTexts.some(text =>
-    /(hrd|super-admin|kandidat|direktur|director|management)/i.test(text)
-  );
-
-  if (isExcluded) return null;
-
-  return {
-    uid,
-    fullName,
-    email,
-    employeeId,
-    brandId,
-    brandName,
-    divisionId,
-    divisionName,
-    jobTitle,
-    managerUid,
-    managerName,
-    employmentStatus,
-    employeeType,
-    roleName,
-  };
-}
+// Job-title keywords that signal direktur/management
+const EXCLUDED_TITLE_RE = /direktur|director|manajemen|management/i;
 
 // ===== Helpers =====
 function formatDate(value: any) {
@@ -274,29 +177,48 @@ function stripHtml(html = "") {
 }
 
 function validateAssignmentLetterFile(file: File) {
-  if (!file) {
-    return { isValid: false, message: "File tidak boleh kosong." };
-  }
-
+  if (!file) return { isValid: false, message: "File tidak boleh kosong." };
   if (!ALLOWED_ASSIGNMENT_FILE_TYPES.includes(file.type)) {
     return {
       isValid: false,
       message: "Format file tidak diperbolehkan. Pilih PDF, DOC, atau DOCX.",
     };
   }
-
   if (file.size === 0) {
     return { isValid: false, message: "File kosong tidak dapat diunggah." };
   }
-
   if (file.size > 10 * 1024 * 1024) {
     return {
       isValid: false,
       message: "Ukuran file terlalu besar. Maksimal 10 MB.",
     };
   }
-
   return { isValid: true, file };
+}
+
+// ===== Section Header Component =====
+function SectionHeader({
+  icon: Icon,
+  title,
+  description,
+}: {
+  icon: React.ElementType;
+  title: string;
+  description?: string;
+}) {
+  return (
+    <div className="flex items-start gap-3 pb-3 border-b border-border">
+      <div className="flex-shrink-0 mt-0.5 h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+        <Icon className="h-4 w-4 text-primary" />
+      </div>
+      <div>
+        <h3 className="text-base font-semibold text-foreground">{title}</h3>
+        {description && (
+          <p className="text-sm text-muted-foreground mt-0.5">{description}</p>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // ===== Staff Picker Component =====
@@ -317,51 +239,51 @@ function StaffPicker({
   const [brandFilter, setBrandFilter] = useState("__all__");
   const [divisionFilter, setDivisionFilter] = useState("__all__");
   const [employeeTypeFilter, setEmployeeTypeFilter] = useState("__all__");
-  const [employmentStatusFilter, setEmploymentStatusFilter] =
-    useState("__all__");
   const [collapsedBrands, setCollapsedBrands] = useState<Set<string>>(
     new Set(),
   );
 
-  // Extract unique brands, divisions, types, and statuses for filter dropdowns
-  const { brands, divisions, employeeTypes, employmentStatuses } =
-    useMemo(() => {
-      const brandSet = new Map<string, string>();
-      const divisionSet = new Map<string, string>();
-      const typeSet = new Map<string, string>();
-      const statusSet = new Map<string, string>();
-      allStaff.forEach((s) => {
-        if (s.brandName) brandSet.set(s.brandId || s.brandName, s.brandName);
-        if (s.divisionName)
-          divisionSet.set(s.divisionId || s.divisionName, s.divisionName);
-        if (s.employeeType) typeSet.set(s.employeeType, s.employeeType);
-        if (s.employmentStatus)
-          statusSet.set(s.employmentStatus, s.employmentStatus);
-      });
-      return {
-        brands: Array.from(brandSet.entries()).map(([id, name]) => ({
-          id,
-          name,
-        })),
-        divisions: Array.from(divisionSet.entries()).map(([id, name]) => ({
-          id,
-          name,
-        })),
-        employeeTypes: Array.from(typeSet.entries()).map(([id, name]) => ({
-          id,
-          name,
-        })),
-        employmentStatuses: Array.from(statusSet.entries()).map(
-          ([id, name]) => ({ id, name }),
-        ),
-      };
-    }, [allStaff]);
+  // ── Extract filter options ────────────────────────────────────────────────
+  const { brands, divisions, employeeTypes } = useMemo(() => {
+    const brandSet = new Map<string, string>();
+    const divisionSet = new Map<string, string>();
+    const typeSet = new Map<string, string>();
 
-  // Filter staff based on search and filters
+    allStaff.forEach((s) => {
+      const bName =
+        s.brandName && s.brandName !== "Brand belum diatur"
+          ? s.brandName
+          : null;
+      const dName =
+        s.divisionName && s.divisionName !== "Divisi belum diatur"
+          ? s.divisionName
+          : null;
+      if (bName) brandSet.set(s.brandId || bName, bName);
+      if (dName) divisionSet.set(s.divisionId || dName, dName);
+      if (s.employeeType && s.employeeType !== "Staf")
+        typeSet.set(s.employeeType, s.employeeType);
+    });
+
+    return {
+      brands: Array.from(brandSet.entries()).map(([id, name]) => ({
+        id,
+        name,
+      })),
+      divisions: Array.from(divisionSet.entries()).map(([id, name]) => ({
+        id,
+        name,
+      })),
+      employeeTypes: Array.from(typeSet.entries()).map(([id, name]) => ({
+        id,
+        name,
+      })),
+    };
+  }, [allStaff]);
+
+  // ── Apply filters ─────────────────────────────────────────────────────────
   const filteredStaff = useMemo(() => {
     let result = allStaff;
 
-    // Search filter
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       result = result.filter(
@@ -376,10 +298,11 @@ function StaffPicker({
       );
     }
 
-    // Brand filter
     if (brandFilter !== "__all__") {
       if (brandFilter === "__empty__") {
-        result = result.filter((s) => !s.brandName);
+        result = result.filter(
+          (s) => !s.brandId && s.brandName === "Brand belum diatur",
+        );
       } else {
         result = result.filter(
           (s) => (s.brandId || s.brandName) === brandFilter,
@@ -387,10 +310,9 @@ function StaffPicker({
       }
     }
 
-    // Division filter
     if (divisionFilter !== "__all__") {
       if (divisionFilter === "__empty__") {
-        result = result.filter((s) => !s.divisionName);
+        result = result.filter((s) => s.divisionName === "Divisi belum diatur");
       } else {
         result = result.filter(
           (s) => (s.divisionId || s.divisionName) === divisionFilter,
@@ -398,75 +320,54 @@ function StaffPicker({
       }
     }
 
-    // Employee type filter
     if (employeeTypeFilter !== "__all__") {
-      if (employeeTypeFilter === "__empty__") {
-        result = result.filter((s) => !s.employeeType);
-      } else {
-        result = result.filter(
-          (s) => (s.employeeType || "") === employeeTypeFilter,
-        );
-      }
-    }
-
-    // Employment status filter
-    if (employmentStatusFilter !== "__all__") {
-      if (employmentStatusFilter === "__empty__") {
-        result = result.filter((s) => !s.employmentStatus);
-      } else {
-        result = result.filter(
-          (s) => (s.employmentStatus || "") === employmentStatusFilter,
-        );
-      }
+      result = result.filter((s) => s.employeeType === employeeTypeFilter);
     }
 
     return result;
-  }, [
-    allStaff,
-    searchQuery,
-    brandFilter,
-    divisionFilter,
-    employeeTypeFilter,
-    employmentStatusFilter,
-  ]);
+  }, [allStaff, searchQuery, brandFilter, divisionFilter, employeeTypeFilter]);
 
+  // ── Group Brand → Division → Staff ────────────────────────────────────────
   const grouped = useMemo(() => {
     const map = new Map<string, Map<string, NormalizedStaff[]>>();
 
     filteredStaff.forEach((s) => {
       const bKey = s.brandName || "__no_brand__";
       const dKey = s.divisionName || "__no_division__";
-
       if (!map.has(bKey)) map.set(bKey, new Map());
       const divMap = map.get(bKey)!;
       if (!divMap.has(dKey)) divMap.set(dKey, []);
       divMap.get(dKey)!.push(s);
     });
 
-    const sorted = Array.from(map.entries())
+    return Array.from(map.entries())
       .sort(([a], [b]) => {
-        if (a === "__no_brand__") return 1;
-        if (b === "__no_brand__") return -1;
+        if (a === "Brand belum diatur" || a === "__no_brand__") return 1;
+        if (b === "Brand belum diatur" || b === "__no_brand__") return -1;
         return a.localeCompare(b);
       })
       .map(([brand, divMap]) => ({
         brand,
         brandLabel: brand === "__no_brand__" ? "Brand belum diatur" : brand,
+        isUnknownBrand:
+          brand === "__no_brand__" || brand === "Brand belum diatur",
         divisions: Array.from(divMap.entries())
           .sort(([a], [b]) => {
-            if (a === "__no_division__") return 1;
-            if (b === "__no_division__") return -1;
+            if (a === "Divisi belum diatur" || a === "__no_division__")
+              return 1;
+            if (b === "Divisi belum diatur" || b === "__no_division__")
+              return -1;
             return a.localeCompare(b);
           })
           .map(([div, staff]) => ({
             division: div,
             divisionLabel:
               div === "__no_division__" ? "Divisi belum diatur" : div,
+            isUnknownDivision:
+              div === "__no_division__" || div === "Divisi belum diatur",
             staff: staff.sort((a, b) => a.fullName.localeCompare(b.fullName)),
           })),
       }));
-
-    return sorted;
   }, [filteredStaff]);
 
   const toggleBrandCollapse = (brand: string) => {
@@ -478,34 +379,31 @@ function StaffPicker({
     });
   };
 
-  // Selected staff chips
   const selectedStaff = useMemo(
     () => allStaff.filter((s) => selectedUids.includes(s.uid)),
     [allStaff, selectedUids],
   );
 
-  // Error state
+  // ── State renders ─────────────────────────────────────────────────────────
   if (error) {
     return (
-      <div className="border border-destructive/50 rounded-md p-4 bg-destructive/5">
+      <div className="border border-destructive/50 rounded-lg p-4 bg-destructive/5">
         <div className="flex items-center gap-2 text-destructive">
           <AlertTriangle className="h-4 w-4" />
           <span className="font-medium">Error memuat data karyawan</span>
         </div>
         <p className="text-sm text-muted-foreground mt-1">
-          {error?.message ||
-            "Terjadi kesalahan saat mengambil data employee_profiles."}
+          {error?.message || "Terjadi kesalahan saat mengambil data karyawan."}
         </p>
       </div>
     );
   }
 
-  // Loading state
   if (isLoading) {
     return (
-      <div className="border rounded-md p-8 flex items-center justify-center">
-        <div className="text-center space-y-2">
-          <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full mx-auto" />
+      <div className="border border-border rounded-lg p-8 flex items-center justify-center bg-muted/20">
+        <div className="text-center space-y-3">
+          <div className="animate-spin h-7 w-7 border-2 border-primary border-t-transparent rounded-full mx-auto" />
           <p className="text-sm text-muted-foreground">
             Memuat data karyawan...
           </p>
@@ -514,13 +412,14 @@ function StaffPicker({
     );
   }
 
-  // Empty state - no employees at all
   if (allStaff.length === 0) {
     return (
-      <div className="border rounded-md p-8 flex items-center justify-center">
+      <div className="border border-border rounded-lg p-8 flex items-center justify-center bg-muted/20">
         <div className="text-center space-y-2">
           <Users className="h-8 w-8 text-muted-foreground mx-auto" />
-          <p className="text-sm font-medium">Belum ada data karyawan.</p>
+          <p className="text-sm font-medium text-foreground">
+            Belum ada data karyawan.
+          </p>
           <p className="text-xs text-muted-foreground">
             Pastikan collection employee_profiles sudah terisi.
           </p>
@@ -534,31 +433,42 @@ function StaffPicker({
       {/* Selected Staff Chips */}
       {selectedStaff.length > 0 && (
         <div className="space-y-2">
-          <Label className="text-sm font-medium">
-            Staff Terpilih ({selectedStaff.length})
+          <Label className="text-sm font-medium text-foreground">
+            Tim Terpilih ({selectedStaff.length} orang)
           </Label>
           <div className="flex flex-wrap gap-2">
             {selectedStaff.map((s) => (
               <div
                 key={s.uid}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-sm"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/30 text-sm"
               >
-                <span className="font-medium">{s.fullName}</span>
-                {s.jobTitle && (
-                  <span className="text-muted-foreground">| {s.jobTitle}</span>
+                <div className="h-5 w-5 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+                  <span className="text-[10px] font-bold text-primary">
+                    {s.fullName.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+                <span className="font-medium text-foreground">
+                  {s.fullName}
+                </span>
+                {s.isDivisionManager && (
+                  <Badge variant="secondary" className="text-[10px] h-4 px-1">
+                    MGR
+                  </Badge>
                 )}
                 {!s.managerUid && !s.managerName && (
-                  <AlertTriangle
-                    className="h-3 w-3 text-amber-500"
-                    title="Manager belum ditentukan"
-                  />
+                  <span title="Manager belum ditentukan">
+                    <AlertTriangle
+                      className="h-3 w-3 text-amber-500"
+                      aria-label="Manager belum ditentukan"
+                    />
+                  </span>
                 )}
                 <button
                   type="button"
                   onClick={() => onToggle(s.uid)}
-                  className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
+                  className="ml-0.5 hover:bg-destructive/20 rounded-full p-0.5 transition-colors"
                 >
-                  <X className="h-3 w-3" />
+                  <X className="h-3 w-3 text-muted-foreground" />
                 </button>
               </div>
             ))}
@@ -567,21 +477,21 @@ function StaffPicker({
       )}
 
       {/* Search & Filters */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
-        <div className="relative lg:col-span-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+        <div className="relative sm:col-span-2">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Cari nama, jabatan, tipe, brand, divisi..."
+            placeholder="Cari nama, jabatan, brand, divisi..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 bg-slate-950 border-slate-700 text-slate-100 placeholder:text-slate-500"
+            className="pl-9"
           />
         </div>
         <Select value={brandFilter} onValueChange={setBrandFilter}>
-          <SelectTrigger className="bg-slate-950 border-slate-700 text-slate-100">
+          <SelectTrigger>
             <SelectValue placeholder="Filter Brand" />
           </SelectTrigger>
-          <SelectContent className="bg-slate-900 border-slate-700 text-slate-100">
+          <SelectContent>
             <SelectItem value="__all__">Semua Brand</SelectItem>
             {brands.map((b) => (
               <SelectItem key={b.id} value={b.id}>
@@ -592,10 +502,10 @@ function StaffPicker({
           </SelectContent>
         </Select>
         <Select value={divisionFilter} onValueChange={setDivisionFilter}>
-          <SelectTrigger className="bg-slate-950 border-slate-700 text-slate-100">
+          <SelectTrigger>
             <SelectValue placeholder="Filter Divisi" />
           </SelectTrigger>
-          <SelectContent className="bg-slate-900 border-slate-700 text-slate-100">
+          <SelectContent>
             <SelectItem value="__all__">Semua Divisi</SelectItem>
             {divisions.map((d) => (
               <SelectItem key={d.id} value={d.id}>
@@ -605,56 +515,22 @@ function StaffPicker({
             <SelectItem value="__empty__">Divisi belum diatur</SelectItem>
           </SelectContent>
         </Select>
-        <Select
-          value={employeeTypeFilter}
-          onValueChange={setEmployeeTypeFilter}
-        >
-          <SelectTrigger className="bg-slate-950 border-slate-700 text-slate-100">
-            <SelectValue placeholder="Filter Tipe" />
-          </SelectTrigger>
-          <SelectContent className="bg-slate-900 border-slate-700 text-slate-100">
-            <SelectItem value="__all__">Semua Tipe</SelectItem>
-            {employeeTypes.map((t) => (
-              <SelectItem key={t.id} value={t.id}>
-                {t.name}
-              </SelectItem>
-            ))}
-            <SelectItem value="__empty__">Tipe belum diatur</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select
-          value={employmentStatusFilter}
-          onValueChange={setEmploymentStatusFilter}
-        >
-          <SelectTrigger className="bg-slate-950 border-slate-700 text-slate-100">
-            <SelectValue placeholder="Filter Status" />
-          </SelectTrigger>
-          <SelectContent className="bg-slate-900 border-slate-700 text-slate-100">
-            <SelectItem value="__all__">Semua Status</SelectItem>
-            {employmentStatuses.map((s) => (
-              <SelectItem key={s.id} value={s.id}>
-                {s.name}
-              </SelectItem>
-            ))}
-            <SelectItem value="__empty__">Status belum diatur</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
 
-      {/* Staff List - Grouped */}
-      <div className="border border-slate-700 rounded-md bg-slate-900 max-h-[400px] overflow-y-auto">
+      {/* Staff List – Grouped by Brand → Division */}
+      <div className="border border-border rounded-lg bg-card overflow-hidden max-h-[460px] overflow-y-auto">
         {filteredStaff.length === 0 ? (
           <div className="p-8 text-center">
             <Search className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
-            <p className="text-sm font-medium">
+            <p className="text-sm font-medium text-foreground">
               Tidak ada staff sesuai filter.
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              Coba ubah kata kunci pencarian atau filter brand/divisi.
+              Coba ubah kata kunci pencarian atau filter.
             </p>
           </div>
         ) : (
-          <div className="divide-y">
+          <div>
             {grouped.map((brandGroup) => {
               const isCollapsed = collapsedBrands.has(brandGroup.brand);
               const totalInBrand = brandGroup.divisions.reduce(
@@ -669,32 +545,40 @@ function StaffPicker({
               );
 
               return (
-                <div key={brandGroup.brand}>
+                <div
+                  key={brandGroup.brand}
+                  className="border-b border-border last:border-b-0"
+                >
                   {/* Brand Header */}
                   <button
                     type="button"
                     onClick={() => toggleBrandCollapse(brandGroup.brand)}
-                    className="w-full flex items-center gap-2 px-4 py-2.5 bg-slate-950 hover:bg-slate-800 transition-colors text-left"
+                    className="w-full flex items-center gap-2 px-4 py-2.5 bg-muted/40 hover:bg-muted/70 transition-colors text-left"
                   >
                     {isCollapsed ? (
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                     ) : (
-                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                     )}
-                    <span className="font-semibold text-sm flex items-center gap-1.5">
-                      {brandGroup.brand === "__no_brand__" ? (
-                        <span className="text-amber-500 flex items-center gap-1">
-                          <AlertTriangle className="h-3.5 w-3.5" />
+                    <span className="font-semibold text-sm flex items-center gap-1.5 flex-1 min-w-0">
+                      {brandGroup.isUnknownBrand ? (
+                        <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                          <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
                           Brand belum diatur
                         </span>
                       ) : (
-                        brandGroup.brandLabel
+                        <span className="text-foreground truncate">
+                          {brandGroup.brandLabel}
+                        </span>
                       )}
                     </span>
-                    <Badge variant="secondary" className="ml-auto text-xs">
+                    <Badge
+                      variant="secondary"
+                      className="ml-auto text-xs flex-shrink-0"
+                    >
                       {selectedInBrand > 0
                         ? `${selectedInBrand}/${totalInBrand} dipilih`
-                        : `${totalInBrand} staff`}
+                        : `${totalInBrand} orang`}
                     </Badge>
                   </button>
 
@@ -702,16 +586,16 @@ function StaffPicker({
                     <div>
                       {brandGroup.divisions.map((divGroup) => (
                         <div key={divGroup.division}>
-                          {/* Division Header */}
-                          <div className="px-4 py-1.5 bg-slate-950 border-b border-slate-700">
-                            <span className="text-xs font-semibold uppercase tracking-wide pl-6 flex items-center gap-1.5">
-                              {divGroup.division === "__no_division__" ? (
-                                <span className="text-amber-500/90 flex items-center gap-1">
+                          {/* Division Sub-header */}
+                          <div className="px-4 py-1.5 bg-muted/20 border-t border-border/60">
+                            <span className="text-xs font-semibold uppercase tracking-wide pl-6 flex items-center gap-1.5 text-muted-foreground">
+                              {divGroup.isUnknownDivision ? (
+                                <span className="text-amber-600/80 dark:text-amber-400/80 flex items-center gap-1">
                                   <AlertTriangle className="h-3 w-3" />
                                   Divisi belum diatur
                                 </span>
                               ) : (
-                                <span className="text-slate-300">{divGroup.divisionLabel}</span>
+                                divGroup.divisionLabel
                               )}
                             </span>
                           </div>
@@ -719,25 +603,34 @@ function StaffPicker({
                           {/* Staff Items */}
                           {divGroup.staff.map((staff) => {
                             const isSelected = selectedUids.includes(staff.uid);
+                            const noBrand =
+                              !staff.brandId &&
+                              staff.brandName === "Brand belum diatur";
+                            const noDivision =
+                              staff.divisionName === "Divisi belum diatur";
                             const noManager =
                               !staff.managerUid && !staff.managerName;
+                            const hasWarning =
+                              noBrand || noDivision || noManager;
+                            const noTitle =
+                              staff.jobTitle === "Jabatan belum diatur";
 
                             return (
                               <div
                                 key={staff.uid}
                                 onClick={() => onToggle(staff.uid)}
-                                className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors border-b border-slate-800/60 last:border-b-0 ${
+                                className={`flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors border-t border-border/40 ${
                                   isSelected
                                     ? "bg-primary/5 hover:bg-primary/10"
-                                    : "hover:bg-slate-800/40"
+                                    : "hover:bg-muted/40"
                                 }`}
                               >
-                                {/* Checkbox indicator */}
+                                {/* Checkbox */}
                                 <div
-                                  className={`flex-shrink-0 h-5 w-5 rounded border-2 flex items-center justify-center transition-colors ${
+                                  className={`flex-shrink-0 mt-0.5 h-5 w-5 rounded border-2 flex items-center justify-center transition-colors ${
                                     isSelected
                                       ? "bg-primary border-primary text-primary-foreground"
-                                      : "border-slate-600"
+                                      : "border-border bg-background"
                                   }`}
                                 >
                                   {isSelected && <Check className="h-3 w-3" />}
@@ -745,68 +638,72 @@ function StaffPicker({
 
                                 {/* Staff Info */}
                                 <div className="flex-1 min-w-0">
-                                  <div className="flex flex-wrap items-center gap-x-2 text-sm text-slate-100 font-medium">
-                                    <span className="font-semibold text-slate-100">
+                                  {/* Name row */}
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-semibold text-sm text-foreground">
                                       {staff.fullName}
                                     </span>
-                                    <span className="text-slate-600 text-xs font-normal">|</span>
-                                    <span className="text-slate-300 text-xs font-normal">
-                                      {staff.jobTitle ? (
-                                        staff.jobTitle
-                                      ) : (
-                                        <span className="text-amber-500 font-medium">
-                                          Jabatan belum diatur
-                                        </span>
+                                    {staff.isDivisionManager && (
+                                      <Badge
+                                        variant="outline"
+                                        className="text-[10px] h-4 px-1.5 border-blue-400/50 text-blue-600 dark:text-blue-400 bg-blue-500/10"
+                                      >
+                                        Manager Divisi
+                                      </Badge>
+                                    )}
+                                    {staff.employeeId && (
+                                      <span className="text-[10px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">
+                                        {staff.employeeId}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Details row */}
+                                  <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
+                                    {/* Jabatan */}
+                                    {noTitle ? (
+                                      <span className="text-xs text-amber-600 dark:text-amber-400">
+                                        Jabatan belum diatur
+                                      </span>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">
+                                        {staff.jobTitle}
+                                      </span>
+                                    )}
+
+                                    {staff.employeeType &&
+                                      staff.employeeType !== "Staf" && (
+                                        <>
+                                          <span className="text-muted-foreground/40 text-xs">
+                                            •
+                                          </span>
+                                          <span className="text-xs text-muted-foreground">
+                                            {staff.employeeType}
+                                          </span>
+                                        </>
                                       )}
+
+                                    {/* Manager */}
+                                    <span className="text-muted-foreground/40 text-xs">
+                                      •
                                     </span>
-                                    <span className="text-slate-600 text-xs font-normal">|</span>
-                                    <span className="text-slate-300 text-xs font-normal">
-                                      {staff.employeeType ? (
-                                        staff.employeeType
-                                      ) : (
-                                        <span className="text-amber-500 font-medium">
-                                          Tipe belum diatur
-                                        </span>
-                                      )}
-                                    </span>
-                                    <span className="text-slate-600 text-xs font-normal">|</span>
-                                    <span className="text-slate-300 text-xs font-normal">
-                                      {staff.brandName ? (
-                                        staff.brandName
-                                      ) : (
-                                        <span className="text-amber-500 font-medium">
-                                          Brand belum diatur
-                                        </span>
-                                      )}
-                                    </span>
-                                    <span className="text-slate-600 text-xs font-normal">|</span>
-                                    <span className="text-slate-300 text-xs font-normal">
-                                      {staff.divisionName ? (
-                                        staff.divisionName
-                                      ) : (
-                                        <span className="text-amber-500 font-medium">
-                                          Divisi belum diatur
-                                        </span>
-                                      )}
-                                    </span>
-                                    <span className="text-slate-600 text-xs font-normal">|</span>
-                                    <span className="text-slate-300 text-xs font-normal">
-                                      {staff.managerName ? (
-                                        `Manager: ${staff.managerName}`
-                                      ) : (
-                                        <span className="text-amber-500 font-medium">
-                                          Manager belum ditentukan
-                                        </span>
-                                      )}
-                                    </span>
+                                    {noManager ? (
+                                      <span className="text-xs text-amber-600 dark:text-amber-400">
+                                        Manager belum ditentukan
+                                      </span>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">
+                                        Mgr: {staff.managerName}
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
 
-                                {/* Manager Warning */}
-                                {noManager && (
+                                {/* Warning indicator */}
+                                {hasWarning && (
                                   <div
-                                    className="flex-shrink-0"
-                                    title="Manager Divisi belum ditentukan untuk staff ini."
+                                    className="flex-shrink-0 mt-0.5"
+                                    title="Data belum lengkap"
                                   >
                                     <AlertTriangle className="h-4 w-4 text-amber-500" />
                                   </div>
@@ -825,20 +722,20 @@ function StaffPicker({
         )}
       </div>
 
-      {/* Warning for selected staff without manager */}
+      {/* Warning: selected staff without manager */}
       {selectedStaff.some((s) => !s.managerUid && !s.managerName) && (
-        <div className="flex items-start gap-2 p-3 rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
+        <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
           <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
           <div className="text-sm text-amber-800 dark:text-amber-300">
             <span className="font-medium">Perhatian:</span> Beberapa staff yang
             dipilih belum memiliki Manager Divisi. Misi tetap bisa dibuat, namun
-            validasi manager akan menunggu sampai manager ditentukan.
+            validasi manager akan menunggu.
           </div>
         </div>
       )}
 
       <p className="text-xs text-muted-foreground">
-        Total: {allStaff.length} karyawan | Ditampilkan: {filteredStaff.length}{" "}
+        Total karyawan: {allStaff.length} | Ditampilkan: {filteredStaff.length}{" "}
         | Terpilih: {selectedStaff.length}
       </p>
     </div>
@@ -865,7 +762,7 @@ export function ManagementDinasClient() {
     destinationGoogleMaps: "",
     startDate: "",
     endDate: "",
-    instructionNote: "",
+    instructionNote: "", // stores TipTap HTML output
     costScheme: "reimburse" as CostSchema,
     advanceAmount: "",
     budgetEstimate: "",
@@ -878,40 +775,1374 @@ export function ManagementDinasClient() {
     string | null
   >(null);
   const [selectedStaffUids, setSelectedStaffUids] = useState<string[]>([]);
-  const [isCreating, setIsCreating] = useState(false);
+  const [activeMode, setActiveMode] = useState<
+    "list" | "create" | "detail" | "edit" | "manage"
+  >("list");
+  const [activeMission, setActiveMission] =
+    useState<BusinessTripMission | null>(null);
+  const [activeMissionMembers, setActiveMissionMembers] = useState<
+    BusinessTripMissionMember[]
+  >([]);
+  const [activeMissionTimeline, setActiveMissionTimeline] = useState<any[]>([]);
+  const [activeMissionStaffChanges, setActiveMissionStaffChanges] = useState<
+    any[]
+  >([]);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [missionRefreshId, setMissionRefreshId] = useState(0);
+  const [manageSelectedStaffUids, setManageSelectedStaffUids] = useState<
+    string[]
+  >([]);
+  const [manageStaffReason, setManageStaffReason] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Fetch ALL employee_profiles - NO restrictive where clause
-  const staffQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return collection(firestore, "employee_profiles");
-  }, [firestore]);
+  const refreshMissionList = () => {
+    setMissionRefreshId((prev) => prev + 1);
+  };
+
+  // ── Fetch all 4 collections in parallel ──────────────────────────────────
+  const { data: usersData, isLoading: usersLoading } =
+    useCollection<UserProfile>(
+      useMemoFirebase(() => collection(firestore, "users"), [firestore]),
+    );
+
+  const { data: employeesData, isLoading: employeesLoading } =
+    useCollection<EmployeeMasterData>(
+      useMemoFirebase(() => collection(firestore, "employees"), [firestore]),
+    );
 
   const {
-    data: rawStaffList,
-    isLoading: staffLoading,
-    error: staffError,
-  } = useCollection<any>(staffQuery);
+    data: employeeProfilesData,
+    isLoading: profilesLoading,
+    error: profilesError,
+  } = useCollection<EmployeeProfile>(
+    useMemoFirebase(
+      () => collection(firestore, "employee_profiles"),
+      [firestore],
+    ),
+  );
 
-  // Normalize all employee profiles
-  const normalizedStaff = useMemo(() => {
-    if (!rawStaffList) return [];
-    return rawStaffList
-      .map((doc: any) => normalizeStaff(doc))
-      .filter((s: NormalizedStaff | null): s is NormalizedStaff => s !== null);
-  }, [rawStaffList]);
+  const { data: brandsData, isLoading: brandsLoading } = useCollection<Brand>(
+    useMemoFirebase(() => collection(firestore, "brands"), [firestore]),
+  );
 
-  // Mission list query
+  const staffLoading =
+    usersLoading || employeesLoading || profilesLoading || brandsLoading;
+
+  // ── Helper: should this user/profile be excluded? ────────────────────────
+  const shouldExclude = useCallback(
+    (
+      userRole: string | undefined,
+      structuralPosition: string,
+      jobTitle: string,
+    ): boolean => {
+      if (userRole && EXCLUDED_USER_ROLES.has(userRole.toLowerCase()))
+        return true;
+      if (structuralPosition && EXCLUDED_STRUCTURAL_RE.test(structuralPosition))
+        return true;
+      if (jobTitle && EXCLUDED_TITLE_RE.test(jobTitle)) return true;
+      return false;
+    },
+    [],
+  );
+
+  // ── Build merged + normalized + filtered staff list ───────────────────────
+  const allMergedStaff = useMemo<NormalizedStaff[]>(() => {
+    if (staffLoading) return [];
+
+    const brands = brandsData || [];
+
+    // Build index maps for O(1) lookups
+    const usersByUid = new Map<string, UserProfile>();
+    (usersData ?? []).forEach((u) => usersByUid.set(u.uid, u));
+
+    const employeesByUid = new Map<string, EmployeeMasterData>();
+    (employeesData ?? []).forEach((e) => employeesByUid.set(e.uid, e));
+
+    const seenUids = new Set<string>();
+    const result: NormalizedStaff[] = [];
+
+    // ── PASS 1: employee_profiles (primary source of truth) ──────────────
+    (employeeProfilesData ?? []).forEach((profile) => {
+      const uid = (profile as any).uid || (profile as any).id;
+      if (!uid) return;
+      if (seenUids.has(uid)) return;
+      seenUids.add(uid);
+
+      const user = usersByUid.get(uid);
+      const emp = employeesByUid.get(uid);
+      const normalized = normalizeEmployeeRow(
+        emp ?? {},
+        profile,
+        user ?? {},
+        brands,
+      );
+
+      // Apply exclusion filter
+      if (
+        shouldExclude(
+          user?.role,
+          normalized.structuralPosition || "",
+          normalized.jabatan,
+        )
+      )
+        return;
+
+      // Resolve best available display name
+      const resolvedName =
+        emp?.fullName ||
+        profile?.fullName ||
+        (profile as any)?.employeeName ||
+        (profile as any)?.name ||
+        (profile?.dataDiriIdentitas as any)?.namaLengkap ||
+        user?.fullName ||
+        (user as any)?.displayName ||
+        profile?.email ||
+        user?.email ||
+        "";
+
+      if (!resolvedName) return; // skip nameless ghost docs
+
+      result.push({
+        uid,
+        fullName: resolvedName,
+        employeeId: normalized.employeeId || "",
+        brandId: normalized.brandId || "",
+        brandName: normalized.brandName,
+        divisionId: normalized.divisionId || "",
+        divisionName: normalized.divisi,
+        jobTitle: normalized.jabatan,
+        managerUid: normalized.directSupervisorUid || "",
+        managerName: normalized.directSupervisorName || "",
+        employmentStatus: normalized.employmentStatus || "",
+        employeeType: normalized.tipeKaryawan,
+        structuralPosition: normalized.structuralPosition || "",
+        isDivisionManager:
+          normalized.isDivisionManager ||
+          normalized.structuralPosition === "division_manager" ||
+          false,
+      });
+    });
+
+    // ── PASS 2: users with 'karyawan' role that have NO profile yet ───────
+    (usersData ?? []).forEach((u) => {
+      if (seenUids.has(u.uid)) return;
+      if (EXCLUDED_USER_ROLES.has((u.role || "").toLowerCase())) return;
+      if (u.role === "kandidat") return;
+      // Only include users that explicitly have a karyawan-level indicator
+      if (
+        u.role !== "karyawan" &&
+        !(u as any).employmentType &&
+        !(u as any).structuralLevel
+      )
+        return;
+
+      seenUids.add(u.uid);
+
+      const emp = employeesByUid.get(u.uid);
+      const normalized = normalizeEmployeeRow(emp ?? u, null, u, brands);
+
+      if (
+        shouldExclude(
+          u.role,
+          normalized.structuralPosition || "",
+          normalized.jabatan,
+        )
+      )
+        return;
+
+      result.push({
+        uid: u.uid,
+        fullName: u.fullName || (u as any)?.displayName || u.email || "",
+        employeeId: normalized.employeeId || "",
+        brandId: normalized.brandId || "",
+        brandName: normalized.brandName,
+        divisionId: normalized.divisionId || "",
+        divisionName: normalized.divisi,
+        jobTitle: normalized.jabatan,
+        managerUid: normalized.directSupervisorUid || "",
+        managerName: normalized.directSupervisorName || "",
+        employmentStatus: normalized.employmentStatus || "",
+        employeeType: normalized.tipeKaryawan,
+        structuralPosition: normalized.structuralPosition || "",
+        isDivisionManager:
+          normalized.isDivisionManager ||
+          normalized.structuralPosition === "division_manager" ||
+          (u as any)?.isDivisionManager ||
+          false,
+      });
+    });
+
+    return result.sort((a, b) => a.fullName.localeCompare(b.fullName));
+  }, [
+    usersData,
+    employeesData,
+    employeeProfilesData,
+    brandsData,
+    staffLoading,
+    shouldExclude,
+  ]);
+
+  // ── Mission list query ────────────────────────────────────────────────────
   const missionQuery = useMemoFirebase(() => {
     if (!firestore) return null;
     return query(
       collection(firestore, "business_trip_missions"),
       orderBy("createdAt", "desc"),
     );
-  }, [firestore]);
+  }, [firestore, missionRefreshId]);
 
   const { data: missionItems, isLoading } =
     useCollection<BusinessTripMission>(missionQuery);
+
+  const mergedMissionItems = useMemo(() => {
+    if (!missionItems) return [];
+
+    const groups = new Map<string, BusinessTripMission[]>();
+
+    missionItems
+      .filter((mission) => mission.status !== "archived_duplicate")
+      .forEach((mission) => {
+        const key = [
+          mission.missionName?.trim().toLowerCase() ?? "",
+          mission.destinationProvince?.trim().toLowerCase() ?? "",
+          mission.destinationRegency?.trim().toLowerCase() ?? "",
+          mission.destinationAddress?.trim().toLowerCase() ?? "",
+          mission.startDate
+            ? String((mission.startDate as any)?.seconds ?? mission.startDate)
+            : "",
+          mission.endDate
+            ? String((mission.endDate as any)?.seconds ?? mission.endDate)
+            : "",
+          mission.assignedByUid ?? "",
+        ].join("|");
+
+        const current = groups.get(key) || [];
+        current.push(mission);
+        groups.set(key, current);
+      });
+
+    const merged: BusinessTripMission[] = [];
+    groups.forEach((group) => {
+      if (group.length === 1) {
+        merged.push(group[0]);
+        return;
+      }
+
+      const primary = group.reduce((best, item) => {
+        const bestTs = (best.createdAt as any)?.seconds ?? 0;
+        const itemTs = (item.createdAt as any)?.seconds ?? 0;
+        return itemTs < bestTs ? item : best;
+      }, group[0]);
+
+      const memberCount =
+        group.reduce((sum, item) => sum + (item.memberCount ?? 0), 0) ||
+        group.length;
+      const managerApprovedCount = group.reduce(
+        (sum, item) => sum + (item.managerApprovedCount ?? 0),
+        0,
+      );
+      const staffConfirmedCount = group.reduce(
+        (sum, item) => sum + (item.staffConfirmedCount ?? 0),
+        0,
+      );
+
+      merged.push({
+        ...primary,
+        memberCount,
+        managerApprovedCount,
+        staffConfirmedCount,
+        duplicateMissionIds: group
+          .slice(1)
+          .map((item) => item.id)
+          .filter((id): id is string => Boolean(id)),
+      });
+    });
+
+    return merged.sort(
+      (a, b) =>
+        ((b.createdAt as any)?.seconds ?? 0) -
+        ((a.createdAt as any)?.seconds ?? 0),
+    );
+  }, [missionItems]);
+
+  const hasDuplicateMissions =
+    (missionItems?.length ?? 0) > mergedMissionItems.length;
+
+  const cleanupMissionGroups = useMemo(() => {
+    if (!missionItems) return [];
+
+    const groups = new Map<string, BusinessTripMission[]>();
+    missionItems.forEach((mission) => {
+      const key = [
+        mission.missionName?.trim().toLowerCase() ?? "",
+        mission.destinationProvince?.trim().toLowerCase() ?? "",
+        mission.destinationRegency?.trim().toLowerCase() ?? "",
+        mission.destinationAddress?.trim().toLowerCase() ?? "",
+        mission.startDate
+          ? String((mission.startDate as any)?.seconds ?? mission.startDate)
+          : "",
+        mission.endDate
+          ? String((mission.endDate as any)?.seconds ?? mission.endDate)
+          : "",
+        mission.assignedByUid ?? "",
+      ].join("|");
+
+      const current = groups.get(key) || [];
+      current.push(mission);
+      groups.set(key, current);
+    });
+
+    return Array.from(groups.values()).filter((group) => group.length > 1);
+  }, [missionItems]);
+
+  const deleteCollectionDocs = async (collectionRef: any) => {
+    const snap = await getDocs(collectionRef);
+    await Promise.all(
+      snap.docs.map((docSnap: any) =>
+        deleteDoc(doc(collectionRef, docSnap.id)),
+      ),
+    );
+  };
+
+  const handleCleanupDuplicateMissions = async () => {
+    if (!firestore || cleanupMissionGroups.length === 0) return;
+    setIsSaving(true);
+    try {
+      for (const group of cleanupMissionGroups) {
+        const primary = group.reduce((best, item) => {
+          const bestTs = (best.createdAt as any)?.seconds ?? 0;
+          const itemTs = (item.createdAt as any)?.seconds ?? 0;
+          return itemTs < bestTs ? item : best;
+        }, group[0]);
+        if (!primary.id) continue;
+
+        const primaryDocRef = doc(
+          firestore,
+          "business_trip_missions",
+          primary.id,
+        );
+        const primarySnapshot = await getDoc(primaryDocRef);
+        if (!primarySnapshot.exists()) {
+          continue;
+        }
+
+        const primaryMembersRef = collection(
+          firestore,
+          "business_trip_missions",
+          primary.id,
+          "members",
+        );
+        const primaryMembersSnap = await getDocs(primaryMembersRef);
+        const existingUids = new Set(
+          primaryMembersSnap.docs.map(
+            (docSnap) => (docSnap.data() as any).employeeUid,
+          ),
+        );
+
+        let addedMembers = 0;
+
+        for (const duplicate of group.slice(1)) {
+          if (!duplicate.id) continue;
+
+          const duplicateDocRef = doc(
+            firestore,
+            "business_trip_missions",
+            duplicate.id,
+          );
+          const duplicateSnapshot = await getDoc(duplicateDocRef);
+          if (!duplicateSnapshot.exists()) continue;
+
+          const duplicateMembersRef = collection(
+            firestore,
+            "business_trip_missions",
+            duplicate.id,
+            "members",
+          );
+          const duplicateMembersSnap = await getDocs(duplicateMembersRef);
+
+          for (const dupMemberDoc of duplicateMembersSnap.docs) {
+            const memberData = dupMemberDoc.data();
+            const employeeUid = (memberData as any).employeeUid;
+            if (!employeeUid || existingUids.has(employeeUid)) continue;
+
+            const newMemberRef = doc(primaryMembersRef);
+            await setDoc(newMemberRef, {
+              ...memberData,
+              missionId: primary.id,
+              missionName: primary.missionName,
+              assignmentNumber: primary.assignmentNumber,
+              updatedAt: serverTimestamp(),
+            });
+            existingUids.add(employeeUid);
+            addedMembers += 1;
+          }
+
+          await updateDoc(duplicateDocRef, {
+            status: "archived_duplicate",
+            duplicateOf: primary.id,
+            updatedAt: serverTimestamp(),
+          });
+        }
+
+        if (addedMembers > 0 || group.length > 1) {
+          await updateDoc(primaryDocRef, {
+            memberCount: existingUids.size,
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
+
+      toast({
+        title: "Cleanup duplicate misi selesai",
+        description: "Duplikat misi telah digabungkan ke dokumen utama.",
+      });
+    } catch (error: any) {
+      console.error(error);
+      toast({
+        variant: "destructive",
+        title: "Gagal cleanup duplikat misi",
+        description: error?.message || "Coba lagi nanti.",
+      });
+    } finally {
+      setIsSaving(false);
+      refreshMissionList();
+    }
+  };
+
+  const loadActiveMissionData = async (mission: BusinessTripMission) => {
+    if (!firestore || !mission.id) return;
+    setDetailLoading(true);
+    try {
+      const membersSnap = await getDocs(
+        collection(firestore, "business_trip_missions", mission.id, "members"),
+      );
+      const timelineSnap = await getDocs(
+        collection(firestore, "business_trip_missions", mission.id, "timeline"),
+      );
+      const staffChangesSnap = await getDocs(
+        collection(
+          firestore,
+          "business_trip_missions",
+          mission.id,
+          "staff_changes",
+        ),
+      );
+
+      setActiveMissionMembers(
+        membersSnap.docs.map((memberDoc) => ({
+          id: memberDoc.id,
+          ...(memberDoc.data() as BusinessTripMissionMember),
+        })),
+      );
+      setActiveMissionTimeline(
+        timelineSnap.docs
+          .map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as any) }))
+          .sort((a, b) => {
+            const aTs = (a.createdAt as any)?.seconds ?? 0;
+            const bTs = (b.createdAt as any)?.seconds ?? 0;
+            return bTs - aTs;
+          }),
+      );
+      setActiveMissionStaffChanges(
+        staffChangesSnap.docs
+          .map((docSnap) => ({ id: docSnap.id, ...(docSnap.data() as any) }))
+          .sort((a, b) => {
+            const aTs = (a.requestedAt as any)?.seconds ?? 0;
+            const bTs = (b.requestedAt as any)?.seconds ?? 0;
+            return bTs - aTs;
+          }),
+      );
+    } catch (error: any) {
+      console.error(error);
+      toast({
+        variant: "destructive",
+        title: "Gagal memuat detail misi",
+        description: error?.message || "Coba lagi nanti.",
+      });
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const selectMissionForDetail = async (mission: BusinessTripMission) => {
+    setActiveMission(mission);
+    setActiveMode("detail");
+    await loadActiveMissionData(mission);
+  };
+
+  const selectMissionForEdit = async (mission: BusinessTripMission) => {
+    setActiveMission(mission);
+    setMissionForm({
+      missionName: mission.missionName || "",
+      assignmentNumber: mission.assignmentNumber || "",
+      projectName: mission.projectName || "",
+      clientName: mission.clientName || "",
+      tripType: mission.tripType || "Sampling",
+      tripTypeOther: mission.tripTypeOther || "",
+      destinationProvince: mission.destinationProvince || "",
+      destinationRegency: mission.destinationRegency || "",
+      destinationAddress: mission.destinationAddress || "",
+      destinationGoogleMaps: mission.destinationGoogleMaps || "",
+      startDate:
+        mission.startDate instanceof Timestamp
+          ? mission.startDate.toDate().toISOString().slice(0, 10)
+          : mission.startDate || "",
+      endDate:
+        mission.endDate instanceof Timestamp
+          ? mission.endDate.toDate().toISOString().slice(0, 10)
+          : mission.endDate || "",
+      instructionNote: mission.instructionNote || "",
+      costScheme: mission.costScheme || "reimburse",
+      advanceAmount: String(mission.advanceAmount ?? ""),
+      budgetEstimate: String(mission.budgetEstimate ?? ""),
+      googleDriveLink: mission.googleDriveLink || "",
+    });
+    setActiveMode("edit");
+  };
+
+  const selectMissionForManage = async (mission: BusinessTripMission) => {
+    setActiveMission(mission);
+    setManageSelectedStaffUids([]);
+    setManageStaffReason("");
+    setActiveMode("manage");
+    await loadActiveMissionData(mission);
+  };
+
+  const handleUpdateMission = async () => {
+    if (!firestore || !activeMission?.id) return;
+    if (
+      activeMission.status === "completed" ||
+      activeMission.status === "cancelled"
+    ) {
+      toast({
+        variant: "destructive",
+        title: "Misi tidak dapat diedit",
+        description:
+          "Misi yang sudah selesai atau dibatalkan tidak bisa diubah.",
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const missionDocRef = doc(
+        firestore,
+        "business_trip_missions",
+        activeMission.id,
+      );
+      const missionSnapshot = await getDoc(missionDocRef);
+      if (!missionSnapshot.exists()) {
+        toast({
+          variant: "destructive",
+          title: "Misi tidak ditemukan",
+          description: "Data misi sudah tidak tersedia.",
+        });
+        return;
+      }
+
+      await updateDoc(missionDocRef, {
+        missionName: missionForm.missionName,
+        assignmentNumber: missionForm.assignmentNumber,
+        projectName: missionForm.projectName,
+        clientName: missionForm.clientName,
+        tripType: missionForm.tripType,
+        tripTypeOther:
+          missionForm.tripType === "Lainnya" ? missionForm.tripTypeOther : "",
+        destinationProvince: missionForm.destinationProvince,
+        destinationRegency: missionForm.destinationRegency,
+        destinationAddress: missionForm.destinationAddress,
+        destinationGoogleMaps: missionForm.destinationGoogleMaps,
+        startDate: Timestamp.fromDate(new Date(missionForm.startDate)),
+        endDate: Timestamp.fromDate(new Date(missionForm.endDate)),
+        durationDays: calculateDurationDays(
+          missionForm.startDate,
+          missionForm.endDate,
+        ),
+        instructionNote: missionForm.instructionNote,
+        instructionHtml: missionForm.instructionNote,
+        instructionText: stripHtml(missionForm.instructionNote),
+        costScheme: missionForm.costScheme,
+        advanceAmount: Number(missionForm.advanceAmount) || 0,
+        budgetEstimate:
+          Number(parseRupiahInput(missionForm.budgetEstimate)) || 0,
+        updatedAt: serverTimestamp(),
+      });
+
+      toast({
+        title: "Perubahan misi tersimpan",
+        description: "Informasi misi telah diperbarui.",
+      });
+      refreshMissionList();
+      setActiveMode("list");
+      setActiveMission(null);
+    } catch (error: any) {
+      console.error(error);
+      toast({
+        variant: "destructive",
+        title: "Gagal menyimpan misi",
+        description: error?.message || "Coba lagi nanti.",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleArchiveMission = async (mission: BusinessTripMission) => {
+    if (!firestore || !mission.id) return;
+    setIsSaving(true);
+    try {
+      const missionDocRef = doc(
+        firestore,
+        "business_trip_missions",
+        mission.id,
+      );
+      const missionSnapshot = await getDoc(missionDocRef);
+      if (!missionSnapshot.exists()) {
+        toast({
+          variant: "destructive",
+          title: "Misi tidak ditemukan",
+          description: "Misi sudah dihapus atau tidak tersedia.",
+        });
+        return;
+      }
+      await updateDoc(missionDocRef, {
+        status: "cancelled",
+        updatedAt: serverTimestamp(),
+      });
+      toast({
+        title: "Misi dibatalkan",
+        description: "Perjalanan dinas berhasil dibatalkan.",
+      });
+      refreshMissionList();
+    } catch (error: any) {
+      console.error(error);
+      toast({
+        variant: "destructive",
+        title: "Gagal batalkan misi",
+        description: error?.message || "Coba lagi nanti.",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleAddStaffToMission = async () => {
+    if (!firestore || !activeMission?.id) return;
+    if (manageSelectedStaffUids.length === 0) {
+      toast({
+        variant: "destructive",
+        title: "Pilih staff terlebih dahulu",
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const missionDocRef = doc(
+        firestore,
+        "business_trip_missions",
+        activeMission.id,
+      );
+      const missionSnapshot = await getDoc(missionDocRef);
+      if (!missionSnapshot.exists()) {
+        toast({
+          variant: "destructive",
+          title: "Misi tidak ditemukan",
+        });
+        return;
+      }
+
+      const selectedStaff = allMergedStaff.filter((staff) =>
+        manageSelectedStaffUids.includes(staff.uid),
+      );
+      const membersRef = collection(
+        firestore,
+        "business_trip_missions",
+        activeMission.id,
+        "members",
+      );
+
+      await Promise.all(
+        selectedStaff.map(async (staff) => {
+          const memberRef = doc(membersRef);
+          await setDoc(memberRef, {
+            missionId: activeMission.id,
+            missionName: activeMission.missionName,
+            assignmentNumber: activeMission.assignmentNumber,
+            employeeUid: staff.uid,
+            employeeName: staff.fullName,
+            employeePosition: staff.jobTitle || "-",
+            brandId: staff.brandId || "",
+            brandName: staff.brandName || "-",
+            divisionId: staff.divisionId || "",
+            divisionName: staff.divisionName || "-",
+            managerUid: staff.managerUid || "",
+            managerName: staff.managerName || "",
+            startDate: activeMission.startDate,
+            endDate: activeMission.endDate,
+            durationDays: activeMission.durationDays,
+            memberStatus: "waiting_manager_validation",
+            managerValidationStatus: staff.managerUid
+              ? "pending"
+              : "pending_no_manager",
+            staffConfirmationStatus: "waiting",
+            missionStatus: activeMission.status || "pending_manager_validation",
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        }),
+      );
+
+      await addDoc(
+        collection(
+          firestore,
+          "business_trip_missions",
+          activeMission.id,
+          "staff_changes",
+        ),
+        {
+          action: "add_staff",
+          newEmployees: selectedStaff.map((s) => ({
+            uid: s.uid,
+            name: s.fullName,
+            brandName: s.brandName,
+            divisionName: s.divisionName,
+          })),
+          requestedBy: userProfile?.uid,
+          requestedByName: userProfile?.fullName,
+          reason: manageStaffReason || "Penambahan staff baru",
+          requestedAt: serverTimestamp(),
+        },
+      );
+
+      await updateDoc(missionDocRef, {
+        memberCount: (activeMission.memberCount ?? 0) + selectedStaff.length,
+        updatedAt: serverTimestamp(),
+      });
+
+      toast({
+        title: "Staff ditambahkan",
+        description: `Berhasil menambah ${selectedStaff.length} staff baru.`,
+      });
+      await loadActiveMissionData(activeMission);
+      refreshMissionList();
+      setManageSelectedStaffUids([]);
+    } catch (error: any) {
+      console.error(error);
+      toast({
+        variant: "destructive",
+        title: "Gagal tambah staff",
+        description: error?.message || "Coba lagi nanti.",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleArchiveStaffMember = async (
+    member: BusinessTripMissionMember,
+  ) => {
+    if (!firestore || !activeMission?.id || !member.id) return;
+    setIsSaving(true);
+    try {
+      const memberRef = doc(
+        firestore,
+        "business_trip_missions",
+        activeMission.id,
+        "members",
+        member.id,
+      );
+      const memberSnapshot = await getDoc(memberRef);
+      if (!memberSnapshot.exists()) {
+        toast({
+          variant: "destructive",
+          title: "Data anggota tidak ditemukan",
+        });
+        return;
+      }
+
+      await updateDoc(memberRef, {
+        memberStatus: "archived",
+        updatedAt: serverTimestamp(),
+      });
+      await addDoc(
+        collection(
+          firestore,
+          "business_trip_missions",
+          activeMission.id,
+          "staff_changes",
+        ),
+        {
+          action: "archive_staff",
+          oldEmployee: {
+            uid: member.employeeUid,
+            name: member.employeeName,
+          },
+          requestedBy: userProfile?.uid,
+          requestedByName: userProfile?.fullName,
+          reason: manageStaffReason || "Arsipkan staff yang batal ikut",
+          requestedAt: serverTimestamp(),
+        },
+      );
+      toast({
+        title: "Staff diarsipkan",
+        description: `${member.employeeName} berhasil diarsipkan.`,
+      });
+      await loadActiveMissionData(activeMission);
+    } catch (error: any) {
+      console.error(error);
+      toast({
+        variant: "destructive",
+        title: "Gagal arsipkan staff",
+        description: error?.message || "Coba lagi nanti.",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCloseDetails = () => {
+    setActiveMode("list");
+    setActiveMission(null);
+    setActiveMissionMembers([]);
+    setActiveMissionTimeline([]);
+    setActiveMissionStaffChanges([]);
+  };
+
+  const handleCancelEdit = () => {
+    setActiveMode("list");
+    setActiveMission(null);
+  };
+
+  const handleOpenCreate = () => {
+    setActiveMode("create");
+  };
+
+  const handleCloseCreate = () => {
+    setActiveMode("list");
+  };
+
+  const renderMissionDetailView = () => {
+    if (!activeMission) return null;
+
+    return (
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Detail Misi Dinas</CardTitle>
+            <CardDescription>
+              Informasi lengkap misi, anggota, timeline, dan riwayat perubahan.
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={handleCloseDetails}>
+              Kembali
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => selectMissionForEdit(activeMission)}
+            >
+              Edit
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => selectMissionForManage(activeMission)}
+            >
+              Kelola Staff
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm text-muted-foreground">Nama Misi</p>
+              <p className="font-medium">{activeMission.missionName}</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Nomor Surat</p>
+              <p className="font-medium">
+                {activeMission.assignmentNumber || "-"}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Klien</p>
+              <p className="font-medium">{activeMission.clientName}</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Tujuan</p>
+              <p className="font-medium">
+                {activeMission.destinationProvince}
+                {activeMission.destinationRegency
+                  ? ` / ${activeMission.destinationRegency}`
+                  : ""}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Tanggal</p>
+              <p className="font-medium">
+                {formatDate(activeMission.startDate)} –{" "}
+                {formatDate(activeMission.endDate)}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Status</p>
+              <div>{renderStatusLabel(activeMission.status)}</div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="rounded-lg border border-border p-4">
+              <p className="text-sm text-muted-foreground">Anggota</p>
+              <p className="mt-2 text-2xl font-semibold">
+                {activeMission.memberCount ?? 0}
+              </p>
+            </div>
+            <div className="rounded-lg border border-border p-4">
+              <p className="text-sm text-muted-foreground">Validasi Manager</p>
+              <p className="mt-2 text-2xl font-semibold">
+                {activeMission.managerApprovedCount ?? 0}/
+                {activeMission.memberCount ?? 0}
+              </p>
+            </div>
+            <div className="rounded-lg border border-border p-4">
+              <p className="text-sm text-muted-foreground">Konfirmasi Staff</p>
+              <p className="mt-2 text-2xl font-semibold">
+                {activeMission.staffConfirmedCount ?? 0}/
+                {activeMission.memberCount ?? 0}
+              </p>
+            </div>
+          </div>
+
+          <section className="space-y-3">
+            <h3 className="text-lg font-semibold">Instruksi</h3>
+            <div
+              className="prose max-w-none text-sm"
+              dangerouslySetInnerHTML={{
+                __html: activeMission.instructionHtml || "",
+              }}
+            />
+          </section>
+
+          <section className="space-y-3">
+            <h3 className="text-lg font-semibold">Timeline</h3>
+            {detailLoading ? (
+              <p className="text-sm text-muted-foreground">
+                Memuat timeline...
+              </p>
+            ) : activeMissionTimeline.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Belum ada aktivitas timeline.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {activeMissionTimeline.map((event) => (
+                  <div
+                    key={event.id}
+                    className="rounded-lg border border-border p-3"
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <p className="font-medium">{event.message}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatDate(
+                          (event.createdAt as any)?.toDate?.() ??
+                            event.createdAt,
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="space-y-3">
+            <h3 className="text-lg font-semibold">Anggota Misi</h3>
+            {activeMissionMembers.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Belum ada anggota terdaftar.
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-md border border-border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nama</TableHead>
+                      <TableHead>Posisi</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {activeMissionMembers.map((member) => (
+                      <TableRow key={member.id}>
+                        <TableCell>{member.employeeName}</TableCell>
+                        <TableCell>{member.employeePosition || "-"}</TableCell>
+                        <TableCell>
+                          <Badge className="capitalize">
+                            {member.memberStatus?.replace(/_/g, " ")}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </section>
+
+          <section className="space-y-3">
+            <h3 className="text-lg font-semibold">Riwayat Perubahan Staff</h3>
+            {activeMissionStaffChanges.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Belum ada perubahan staff.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {activeMissionStaffChanges.map((change) => (
+                  <div
+                    key={change.id}
+                    className="rounded-lg border border-border p-3"
+                  >
+                    <p className="font-medium capitalize">{change.action}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {change.reason}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDate(
+                        (change.requestedAt as any)?.toDate?.() ??
+                          change.requestedAt,
+                      )}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  const renderMissionEditView = () => {
+    if (!activeMission) return null;
+
+    return (
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between border-b border-border pb-4">
+          <div>
+            <CardTitle>Edit Misi Dinas</CardTitle>
+            <CardDescription>
+              Ubah informasi misi dan simpan perubahan.
+            </CardDescription>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleCancelEdit}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </CardHeader>
+
+        <CardContent className="pt-6 space-y-8">
+          <section className="space-y-4">
+            <SectionHeader
+              icon={FileText}
+              title="Informasi Misi"
+              description="Ubah data misi sesuai kebutuhan."
+            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Nama Misi Dinas</Label>
+                <Input
+                  value={missionForm.missionName}
+                  onChange={(e) =>
+                    setMissionForm({
+                      ...missionForm,
+                      missionName: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Nomor Surat Tugas/SPD</Label>
+                <Input
+                  value={missionForm.assignmentNumber}
+                  onChange={(e) =>
+                    setMissionForm({
+                      ...missionForm,
+                      assignmentNumber: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Brand / Proyek</Label>
+                <Input
+                  value={missionForm.projectName}
+                  onChange={(e) =>
+                    setMissionForm({
+                      ...missionForm,
+                      projectName: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Nama Klien</Label>
+                <Input
+                  value={missionForm.clientName}
+                  onChange={(e) =>
+                    setMissionForm({
+                      ...missionForm,
+                      clientName: e.target.value,
+                    })
+                  }
+                />
+              </div>
+            </div>
+          </section>
+
+          <section className="space-y-4">
+            <SectionHeader
+              icon={MapPin}
+              title="Tujuan & Jadwal"
+              description="Perbarui lokasi dan tanggal perjalanan."
+            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Provinsi Tujuan</Label>
+                <Input
+                  value={missionForm.destinationProvince}
+                  onChange={(e) =>
+                    setMissionForm({
+                      ...missionForm,
+                      destinationProvince: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Kota / Kabupaten</Label>
+                <Input
+                  value={missionForm.destinationRegency}
+                  onChange={(e) =>
+                    setMissionForm({
+                      ...missionForm,
+                      destinationRegency: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label>Alamat Lengkap Tujuan</Label>
+                <Textarea
+                  value={missionForm.destinationAddress}
+                  onChange={(e) =>
+                    setMissionForm({
+                      ...missionForm,
+                      destinationAddress: e.target.value,
+                    })
+                  }
+                  className="min-h-[80px] resize-none"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Tanggal Berangkat</Label>
+                <Input
+                  type="date"
+                  value={missionForm.startDate}
+                  onChange={(e) =>
+                    setMissionForm({
+                      ...missionForm,
+                      startDate: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Tanggal Pulang</Label>
+                <Input
+                  type="date"
+                  value={missionForm.endDate}
+                  onChange={(e) =>
+                    setMissionForm({ ...missionForm, endDate: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+          </section>
+
+          <section className="space-y-4">
+            <SectionHeader
+              icon={FileText}
+              title="Instruksi"
+              description="Perbarui instruksi perjalanan dinas."
+            />
+            <RichTextEditor
+              value={missionForm.instructionNote}
+              onChange={(html) =>
+                setMissionForm({ ...missionForm, instructionNote: html })
+              }
+            />
+          </section>
+
+          <div className="pt-2 border-t border-border">
+            <Button
+              onClick={handleUpdateMission}
+              disabled={
+                isSaving || !missionForm.missionName || !missionForm.clientName
+              }
+              className="w-full"
+              size="lg"
+            >
+              {isSaving ? "Menyimpan..." : "Simpan Perubahan"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  const renderMissionManageView = () => {
+    if (!activeMission) return null;
+
+    return (
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Kelola Staff Misi</CardTitle>
+            <CardDescription>
+              Tambah, arsipkan, atau tinjau riwayat perubahan staff untuk misi
+              ini.
+            </CardDescription>
+          </div>
+          <Button variant="outline" onClick={handleCloseDetails}>
+            Kembali
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <section className="space-y-4">
+            <SectionHeader
+              icon={Users}
+              title="Anggota Saat Ini"
+              description="Daftar anggota yang sudah terdaftar pada misi ini."
+            />
+            {activeMissionMembers.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Belum ada anggota misi.
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-md border border-border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nama</TableHead>
+                      <TableHead>Posisi</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Aksi</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {activeMissionMembers.map((member) => (
+                      <TableRow key={member.id}>
+                        <TableCell>{member.employeeName}</TableCell>
+                        <TableCell>{member.employeePosition || "-"}</TableCell>
+                        <TableCell>
+                          <Badge className="capitalize">
+                            {member.memberStatus?.replace(/_/g, " ")}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleArchiveStaffMember(member)}
+                          >
+                            Arsipkan
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </section>
+
+          <section className="space-y-4">
+            <SectionHeader
+              icon={Users}
+              title="Tambah Staff Baru"
+              description="Pilih staff untuk ditambahkan ke misi ini."
+            />
+            <div className="grid grid-cols-1 gap-4">
+              <StaffPicker
+                allStaff={allMergedStaff}
+                selectedUids={manageSelectedStaffUids}
+                onToggle={(uid) =>
+                  setManageSelectedStaffUids((prev) =>
+                    prev.includes(uid)
+                      ? prev.filter((id) => id !== uid)
+                      : [...prev, uid],
+                  )
+                }
+                isLoading={staffLoading}
+                error={profilesError}
+              />
+              <div className="space-y-2">
+                <Label>Alasan Penambahan / Perubahan</Label>
+                <Textarea
+                  value={manageStaffReason}
+                  onChange={(e) => setManageStaffReason(e.target.value)}
+                  className="min-h-[100px]"
+                />
+              </div>
+              <Button
+                onClick={handleAddStaffToMission}
+                disabled={isSaving || manageSelectedStaffUids.length === 0}
+              >
+                {isSaving ? "Menyimpan..." : "Tambah Staff"}
+              </Button>
+            </div>
+          </section>
+
+          <section className="space-y-4">
+            <SectionHeader
+              icon={Users}
+              title="Riwayat Perubahan Staff"
+              description="Catatan penambahan dan pengarsipan staff pada misi."
+            />
+            {activeMissionStaffChanges.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Belum ada riwayat perubahan.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {activeMissionStaffChanges.map((change) => (
+                  <div
+                    key={change.id}
+                    className="rounded-lg border border-border p-3"
+                  >
+                    <p className="font-medium capitalize">{change.action}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {change.reason}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDate(
+                        (change.requestedAt as any)?.toDate?.() ??
+                          change.requestedAt,
+                      )}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </CardContent>
+      </Card>
+    );
+  };
 
   const calculateDurationDays = (start?: string, end?: string) => {
     if (!start || !end) return 0;
@@ -923,6 +2154,7 @@ export function ManagementDinasClient() {
 
   const handleCreateMission = async () => {
     if (!firestore || !userProfile?.uid) return;
+
     if (!assignmentLetterFile && !missionForm.googleDriveLink) {
       return toast({
         variant: "destructive",
@@ -947,7 +2179,7 @@ export function ManagementDinasClient() {
     if (missionForm.tripType === "Lainnya" && !missionForm.tripTypeOther) {
       return toast({
         variant: "destructive",
-        title: "Sebutkan jenis dinas lainya jika dipilih Lainnya.",
+        title: "Sebutkan jenis dinas lainnya jika dipilih Lainnya.",
       });
     }
     if (selectedStaffUids.length === 0) {
@@ -959,8 +2191,7 @@ export function ManagementDinasClient() {
 
     setIsSaving(true);
     try {
-      // Get selected staff from normalized data (no extra Firestore read needed)
-      const selectedStaffData = normalizedStaff.filter((s) =>
+      const selectedStaffData = allMergedStaff.filter((s) =>
         selectedStaffUids.includes(s.uid),
       );
 
@@ -980,9 +2211,7 @@ export function ManagementDinasClient() {
             assignmentLetterFile,
             filePath,
             userProfile.uid,
-            {
-              compress: false,
-            },
+            { compress: false },
           );
           assignmentLetterUrl =
             uploadResult.downloadUrl ||
@@ -999,7 +2228,7 @@ export function ManagementDinasClient() {
             toast({
               title: "Upload file gagal",
               description:
-                "File tidak dapat diunggah, menggunakan link Google Drive sebagai sumber dokumen.",
+                "Menggunakan link Google Drive sebagai sumber dokumen.",
             });
             assignmentLetterUrl = missionForm.googleDriveLink;
             assignmentLetterFileName = "";
@@ -1018,11 +2247,12 @@ export function ManagementDinasClient() {
       );
       const assignmentNumber =
         missionForm.assignmentNumber || `SPD-${Date.now()}`;
+      const instructionText = stripHtml(missionForm.instructionNote);
 
-      // Create main mission document
       await setDoc(missionRef, {
         missionName: missionForm.missionName,
         assignmentNumber,
+        missionCode: assignmentNumber,
         assignmentLetterUrl,
         assignmentLetterFileName,
         documentSource,
@@ -1042,18 +2272,21 @@ export function ManagementDinasClient() {
         startDate: Timestamp.fromDate(new Date(missionForm.startDate)),
         endDate: Timestamp.fromDate(new Date(missionForm.endDate)),
         durationDays,
-        instructionNote: missionForm.instructionNote,
+        instructionNote: missionForm.instructionNote, // HTML (legacy compat)
+        instructionHtml: missionForm.instructionNote, // HTML (canonical)
+        instructionText, // Plain text
         costScheme: missionForm.costScheme,
         advanceAmount: Number(missionForm.advanceAmount) || 0,
         budgetEstimate:
           Number(parseRupiahInput(missionForm.budgetEstimate)) || 0,
         memberCount: selectedStaffData.length,
+        managerApprovedCount: 0,
+        staffConfirmedCount: 0,
         status: "pending_manager_validation",
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
 
-      // Create subcollection members for each selected staff
       await Promise.all(
         selectedStaffData.map(async (staff) => {
           const membersCollection = collection(
@@ -1069,7 +2302,6 @@ export function ManagementDinasClient() {
             assignmentNumber,
             employeeUid: staff.uid,
             employeeName: staff.fullName,
-            employeeEmail: staff.email || "",
             employeePosition: staff.jobTitle || "-",
             brandId: staff.brandId || "",
             brandName: staff.brandName || "-",
@@ -1092,7 +2324,6 @@ export function ManagementDinasClient() {
         }),
       );
 
-      // Add timeline entry
       const timelineCollection = collection(
         firestore,
         "business_trip_missions",
@@ -1130,7 +2361,8 @@ export function ManagementDinasClient() {
       setAssignmentLetterFile(null);
       setAssignmentLetterError(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
-      setIsCreating(false);
+      setActiveMode("list");
+
       toast({
         title: "Misi Dinas berhasil dibuat",
         description: `${selectedStaffData.length} anggota telah ditambahkan ke misi.`,
@@ -1157,7 +2389,8 @@ export function ManagementDinasClient() {
 
   return (
     <div className="space-y-6">
-      {!isCreating ? (
+      {activeMode === "list" ? (
+        /* ===== MISSION LIST VIEW ===== */
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
@@ -1166,34 +2399,54 @@ export function ManagementDinasClient() {
                 Kelola misi dinas yang dibuat oleh Management.
               </CardDescription>
             </div>
-            <Button onClick={() => setIsCreating(true)}>
-              <Plus className="mr-2 h-4 w-4" /> Buat Misi Baru
-            </Button>
+            <div className="flex items-center gap-2">
+              {hasDuplicateMissions && (
+                <Button
+                  variant="outline"
+                  onClick={handleCleanupDuplicateMissions}
+                  disabled={isSaving || isLoading}
+                >
+                  Atasi Duplikat Misi
+                </Button>
+              )}
+              <Button onClick={() => handleOpenCreate()}>
+                <Plus className="mr-2 h-4 w-4" /> Buat Misi Baru
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <div>Loading data...</div>
+              <div className="p-8 text-center text-muted-foreground">
+                Memuat data...
+              </div>
             ) : (
-              <div className="rounded-md border overflow-x-auto">
+              <div className="rounded-md border border-border overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Nama Misi</TableHead>
                       <TableHead>Tujuan</TableHead>
                       <TableHead>Tanggal</TableHead>
+                      <TableHead>Jumlah Anggota</TableHead>
+                      <TableHead>Progress Validasi Manager</TableHead>
+                      <TableHead>Progress Konfirmasi Staff</TableHead>
                       <TableHead>Skema Biaya</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Aksi</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {missionItems?.length === 0 ? (
+                    {mergedMissionItems.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center">
+                        <TableCell
+                          colSpan={9}
+                          className="text-center text-muted-foreground py-8"
+                        >
                           Belum ada misi dinas
                         </TableCell>
                       </TableRow>
                     ) : (
-                      missionItems?.map((mission) => (
+                      mergedMissionItems.map((mission) => (
                         <TableRow key={mission.id}>
                           <TableCell className="font-medium">
                             {mission.missionName}
@@ -1203,40 +2456,79 @@ export function ManagementDinasClient() {
                           </TableCell>
                           <TableCell>
                             <div>
-                              {mission.destinationRegency ||
-                                mission.destinationCity ||
-                                "-"}
+                              {mission.destinationProvince || "-"}
+                              {mission.destinationRegency
+                                ? ` / ${mission.destinationRegency}`
+                                : ""}
                             </div>
-                            <div className="text-xs text-muted-foreground">
-                              {mission.destinationProvince || ""}
-                            </div>
-                            <div className="text-xs text-muted-foreground mt-1">
-                              {mission.destinationAddress}
-                            </div>
-                            {mission.destinationGoogleMaps && (
-                              <div className="text-xs text-primary underline mt-1">
-                                <a
-                                  href={mission.destinationGoogleMaps}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                >
-                                  Google Maps
-                                </a>
+                            {mission.destinationAddress && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                {mission.destinationAddress}
                               </div>
                             )}
-                            <div className="text-xs text-muted-foreground mt-1">
-                              {mission.clientName}
-                            </div>
+                            {mission.destinationGoogleMaps && (
+                              <a
+                                href={mission.destinationGoogleMaps}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-xs text-primary underline mt-1 block"
+                              >
+                                Google Maps
+                              </a>
+                            )}
                           </TableCell>
                           <TableCell>
-                            {formatDate(mission.startDate)} -{" "}
+                            {formatDate(mission.startDate)} –{" "}
                             {formatDate(mission.endDate)}
+                          </TableCell>
+                          <TableCell>
+                            {mission.memberCount ?? 0} anggota
+                          </TableCell>
+                          <TableCell>
+                            {`${mission.managerApprovedCount ?? 0}/${
+                              mission.memberCount ?? 0
+                            } validasi`}
+                          </TableCell>
+                          <TableCell>
+                            {`${mission.staffConfirmedCount ?? 0}/${
+                              mission.memberCount ?? 0
+                            } konfirmasi`}
                           </TableCell>
                           <TableCell className="capitalize">
                             {mission.costScheme?.replace("_", " ")}
                           </TableCell>
                           <TableCell>
                             {renderStatusLabel(mission.status)}
+                          </TableCell>
+                          <TableCell className="flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => selectMissionForDetail(mission)}
+                            >
+                              Detail
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => selectMissionForEdit(mission)}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => selectMissionForManage(mission)}
+                            >
+                              Kelola Staff
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleArchiveMission(mission)}
+                            >
+                              Batalkan
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))
@@ -1247,471 +2539,499 @@ export function ManagementDinasClient() {
             )}
           </CardContent>
         </Card>
-      ) : (
-        <Card className="bg-[#111827] border-slate-700 text-slate-100">
-          <CardHeader className="flex flex-row items-center justify-between border-b border-slate-700 pb-4">
+      ) : activeMode === "create" ? (
+        /* ===== MISSION CREATE FORM ===== */
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between border-b border-border pb-4">
             <div>
-              <CardTitle className="text-slate-100">Buat Misi Dinas Baru</CardTitle>
-              <CardDescription className="text-slate-400">
+              <CardTitle>Buat Misi Dinas Baru</CardTitle>
+              <CardDescription>
                 Isi form untuk membuat Surat Perintah Dinas.
               </CardDescription>
             </div>
             <Button
               variant="ghost"
               size="icon"
-              className="text-slate-400 hover:text-slate-100 hover:bg-slate-800"
-              onClick={() => setIsCreating(false)}
+              onClick={handleCloseCreate}
+              className="text-muted-foreground hover:text-foreground"
             >
               <X className="h-4 w-4" />
             </Button>
           </CardHeader>
-          <CardContent className="space-y-6 pt-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-slate-200">Nama Misi Dinas</Label>
-                <Input
-                  value={missionForm.missionName}
-                  onChange={(e) =>
-                    setMissionForm({
-                      ...missionForm,
-                      missionName: e.target.value,
-                    })
-                  }
-                  className="bg-slate-950 border-slate-700 text-slate-100 placeholder:text-slate-500"
-                  placeholder="Contoh: Audit Lapangan Q3"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-slate-200">Nomor Surat Tugas/SPD</Label>
-                <Input
-                  value={missionForm.assignmentNumber}
-                  onChange={(e) =>
-                    setMissionForm({
-                      ...missionForm,
-                      assignmentNumber: e.target.value,
-                    })
-                  }
-                  className="bg-slate-950 border-slate-700 text-slate-100 placeholder:text-slate-500"
-                  placeholder="Opsional (Otomatis jika kosong)"
-                />
-              </div>
 
-              <div className="space-y-2">
-                <Label className="text-slate-200">Brand / Proyek</Label>
-                <Input
-                  value={missionForm.projectName}
-                  onChange={(e) =>
-                    setMissionForm({
-                      ...missionForm,
-                      projectName: e.target.value,
-                    })
-                  }
-                  className="bg-slate-950 border-slate-700 text-slate-100 placeholder:text-slate-500"
-                  placeholder="Nama Proyek/Brand"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-slate-200">Nama Klien</Label>
-                <Input
-                  value={missionForm.clientName}
-                  onChange={(e) =>
-                    setMissionForm({
-                      ...missionForm,
-                      clientName: e.target.value,
-                    })
-                  }
-                  className="bg-slate-950 border-slate-700 text-slate-100 placeholder:text-slate-500"
-                  placeholder="Klien tujuan"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-slate-200">Jenis Dinas</Label>
-                <Select
-                  value={missionForm.tripType}
-                  onValueChange={(val: any) =>
-                    setMissionForm({ ...missionForm, tripType: val })
-                  }
-                >
-                  <SelectTrigger className="bg-slate-950 border-slate-700 text-slate-100">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-slate-900 border-slate-700 text-slate-100">
-                    {TRIP_TYPES.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {t}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {missionForm.tripType === "Lainnya" && (
+          <CardContent className="pt-6 space-y-8">
+            {/* ── SECTION 1: INFORMASI MISI ─────────────────────────────── */}
+            <section className="space-y-4">
+              <SectionHeader
+                icon={FileText}
+                title="1. Informasi Misi"
+                description="Nama misi, nomor surat, brand/proyek, klien, dan jenis dinas."
+              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-slate-200">Sebutkan jenis dinas lainnya</Label>
+                  <Label>
+                    Nama Misi Dinas <span className="text-destructive">*</span>
+                  </Label>
                   <Input
-                    value={missionForm.tripTypeOther}
+                    value={missionForm.missionName}
                     onChange={(e) =>
                       setMissionForm({
                         ...missionForm,
-                        tripTypeOther: e.target.value,
+                        missionName: e.target.value,
                       })
                     }
-                    className="bg-slate-950 border-slate-700 text-slate-100 placeholder:text-slate-500"
-                    placeholder="Jenis dinas lainnya"
+                    placeholder="Contoh: Audit Lapangan Q3 – Surabaya"
                   />
                 </div>
-              )}
-              <div className="space-y-2">
-                <Label className="text-slate-200">Provinsi Tujuan</Label>
-                <Input
-                  value={missionForm.destinationProvince}
-                  onChange={(e) =>
-                    setMissionForm({
-                      ...missionForm,
-                      destinationProvince: e.target.value,
-                    })
-                  }
-                  className="bg-slate-950 border-slate-700 text-slate-100 placeholder:text-slate-500"
-                  placeholder="Provinsi"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-slate-200">Kota / Kabupaten Tujuan</Label>
-                <Input
-                  value={missionForm.destinationRegency}
-                  onChange={(e) =>
-                    setMissionForm({
-                      ...missionForm,
-                      destinationRegency: e.target.value,
-                    })
-                  }
-                  className="bg-slate-950 border-slate-700 text-slate-100 placeholder:text-slate-500"
-                  placeholder="Kota atau Kabupaten"
-                />
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <Label className="text-slate-200">Alamat Lengkap Tujuan</Label>
-                <Textarea
-                  value={missionForm.destinationAddress}
-                  onChange={(e) =>
-                    setMissionForm({
-                      ...missionForm,
-                      destinationAddress: e.target.value,
-                    })
-                  }
-                  className="bg-slate-950 border-slate-700 text-slate-100 placeholder:text-slate-500 min-h-[100px]"
-                  placeholder="Alamat lengkap lokasi tugas"
-                />
-              </div>
-              <div className="space-y-2 md:col-span-2">
-                <Label className="text-slate-200">Link Google Maps (opsional)</Label>
-                <Input
-                  value={missionForm.destinationGoogleMaps}
-                  onChange={(e) =>
-                    setMissionForm({
-                      ...missionForm,
-                      destinationGoogleMaps: e.target.value,
-                    })
-                  }
-                  className="bg-slate-950 border-slate-700 text-slate-100 placeholder:text-slate-500"
-                  placeholder="https://maps.google.com/..."
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-slate-200">Tanggal Berangkat</Label>
-                <Input
-                  type="date"
-                  value={missionForm.startDate}
-                  onChange={(e) =>
-                    setMissionForm({
-                      ...missionForm,
-                      startDate: e.target.value,
-                    })
-                  }
-                  className="bg-slate-950 border-slate-700 text-slate-100 placeholder:text-slate-500 [color-scheme:dark]"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-slate-200">Tanggal Pulang</Label>
-                <Input
-                  type="date"
-                  value={missionForm.endDate}
-                  onChange={(e) =>
-                    setMissionForm({ ...missionForm, endDate: e.target.value })
-                  }
-                  className="bg-slate-950 border-slate-700 text-slate-100 placeholder:text-slate-500 [color-scheme:dark]"
-                />
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <Label className="text-slate-200">Instruksi Utama</Label>
-                <div className="rounded-xl border border-slate-700 bg-slate-900 text-slate-100">
-                  <div className="flex flex-wrap gap-2 border-b border-slate-700 bg-slate-950 p-2">
-                    <button
-                      type="button"
-                      className="rounded px-2.5 py-1 text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-slate-100 transition-colors"
-                      onClick={() => document.execCommand("bold")}
-                    >
-                      B
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded px-2.5 py-1 text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-slate-100 transition-colors"
-                      onClick={() => document.execCommand("italic")}
-                    >
-                      I
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded px-2.5 py-1 text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-slate-100 transition-colors"
-                      onClick={() => document.execCommand("underline")}
-                    >
-                      U
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded px-2.5 py-1 text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-slate-100 transition-colors"
-                      onClick={() =>
-                        document.execCommand("insertUnorderedList")
-                      }
-                    >
-                      • List
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded px-2.5 py-1 text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-slate-100 transition-colors"
-                      onClick={() => document.execCommand("insertOrderedList")}
-                    >
-                      1. List
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded px-2.5 py-1 text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-slate-100 transition-colors"
-                      onClick={() => document.execCommand("justifyLeft")}
-                    >
-                      Left
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded px-2.5 py-1 text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-slate-100 transition-colors"
-                      onClick={() => document.execCommand("justifyCenter")}
-                    >
-                      Center
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded px-2.5 py-1 text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-slate-100 transition-colors"
-                      onClick={() => document.execCommand("justifyRight")}
-                    >
-                      Right
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded px-2.5 py-1 text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-slate-100 transition-colors"
-                      onClick={() => document.execCommand("justifyFull")}
-                    >
-                      Justify
-                    </button>
-                  </div>
-                  <div
-                    contentEditable
-                    suppressContentEditableWarning
-                    className="min-h-[180px] p-3 outline-none text-sm leading-6 text-slate-100 rich-editor"
-                    onInput={(e) =>
+                <div className="space-y-2">
+                  <Label>Nomor Surat Tugas/SPD</Label>
+                  <Input
+                    value={missionForm.assignmentNumber}
+                    onChange={(e) =>
                       setMissionForm({
                         ...missionForm,
-                        instructionNote: (e.currentTarget as HTMLDivElement)
-                          .innerHTML,
+                        assignmentNumber: e.target.value,
                       })
                     }
-                    dangerouslySetInnerHTML={{
-                      __html: missionForm.instructionNote,
-                    }}
-                    placeholder="Instruksi untuk anggota dinas..."
+                    placeholder="Opsional – otomatis jika kosong"
                   />
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-slate-200">Skema Biaya</Label>
-                <Select
-                  value={missionForm.costScheme}
-                  onValueChange={(val: any) =>
-                    setMissionForm({ ...missionForm, costScheme: val })
-                  }
-                >
-                  <SelectTrigger className="bg-slate-950 border-slate-700 text-slate-100">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-slate-900 border-slate-700 text-slate-100">
-                    {COST_SCHEMAS.map((t) => (
-                      <SelectItem key={t} value={t} className="capitalize">
-                        {t.replace("_", " ")}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-slate-200">Estimasi Anggaran</Label>
-                <Input
-                  type="text"
-                  value={formatRupiah(missionForm.budgetEstimate)}
-                  onChange={(e) =>
-                    setMissionForm({
-                      ...missionForm,
-                      budgetEstimate: parseRupiahInput(e.target.value),
-                    })
-                  }
-                  className="bg-slate-950 border-slate-700 text-slate-100 placeholder:text-slate-500"
-                  placeholder="Rp 1.000.000"
-                />
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <Label className="text-slate-200">Upload Surat Tugas / SPD</Label>
-                <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/60 p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                    <Button
-                      type="button"
-                      className="bg-primary hover:bg-primary/90 text-white font-medium"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      Pilih File
-                    </Button>
-                    <div className="min-w-0 flex-1 text-sm">
-                      {assignmentLetterFile ? (
-                        <div className="space-y-1">
-                          <p className="font-medium text-slate-200">
-                            {assignmentLetterFile.name}
-                          </p>
-                          <p className="text-xs text-slate-400">
-                            {(assignmentLetterFile.size / 1024 / 1024).toFixed(
-                              2,
-                            )}{" "}
-                            MB • {assignmentLetterFile.type}
-                          </p>
-                        </div>
-                      ) : (
-                        <p className="text-sm text-slate-400">
-                          Pilih file PDF/DOC/DOCX maksimal 10 MB.
-                        </p>
-                      )}
-                    </div>
-                    {assignmentLetterFile && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="text-slate-400 hover:text-slate-100 hover:bg-slate-800"
-                        onClick={() => {
-                          setAssignmentLetterFile(null);
-                          setAssignmentLetterError(null);
-                          if (fileInputRef.current)
-                            fileInputRef.current.value = "";
-                        }}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".pdf,.doc,.docx"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0] || null;
-                      if (!file) {
-                        setAssignmentLetterFile(null);
-                        return;
-                      }
-                      const validation = validateAssignmentLetterFile(file);
-                      if (!validation.isValid) {
-                        setAssignmentLetterFile(null);
-                        setAssignmentLetterError(validation.message || null);
-                        return;
-                      }
-                      setAssignmentLetterError(null);
-                      setAssignmentLetterFile(file);
-                    }}
+                <div className="space-y-2">
+                  <Label>Brand / Proyek</Label>
+                  <Input
+                    value={missionForm.projectName}
+                    onChange={(e) =>
+                      setMissionForm({
+                        ...missionForm,
+                        projectName: e.target.value,
+                      })
+                    }
+                    placeholder="Nama brand atau proyek"
                   />
-                  {assignmentLetterError && (
-                    <p className="text-sm text-destructive mt-2">
-                      {assignmentLetterError}
-                    </p>
-                  )}
-
-                  <div className="grid grid-cols-1 gap-2 mt-4">
-                    <Label className="text-sm font-medium text-slate-200">
-                      Link Google Drive (opsional)
+                </div>
+                <div className="space-y-2">
+                  <Label>
+                    Nama Klien <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    value={missionForm.clientName}
+                    onChange={(e) =>
+                      setMissionForm({
+                        ...missionForm,
+                        clientName: e.target.value,
+                      })
+                    }
+                    placeholder="Klien atau mitra tujuan dinas"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>
+                    Jenis Dinas <span className="text-destructive">*</span>
+                  </Label>
+                  <Select
+                    value={missionForm.tripType}
+                    onValueChange={(val: any) =>
+                      setMissionForm({ ...missionForm, tripType: val })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TRIP_TYPES.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {t}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {missionForm.tripType === "Lainnya" && (
+                  <div className="space-y-2">
+                    <Label>
+                      Sebutkan jenis dinas lainnya{" "}
+                      <span className="text-destructive">*</span>
                     </Label>
                     <Input
-                      value={missionForm.googleDriveLink}
+                      value={missionForm.tripTypeOther}
                       onChange={(e) =>
                         setMissionForm({
                           ...missionForm,
-                          googleDriveLink: e.target.value,
+                          tripTypeOther: e.target.value,
                         })
                       }
-                      className="bg-slate-950 border-slate-700 text-slate-100 placeholder:text-slate-500"
-                      placeholder="https://drive.google.com/..."
+                      placeholder="Jenis dinas lainnya"
                     />
-                    <p className="text-xs text-slate-400 mt-1">
-                      Jika upload file tidak tersedia atau quota Firebase penuh,
-                      gunakan link Google Drive sebagai sumber dokumen.
-                    </p>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {/* ── SECTION 2: TUJUAN & JADWAL ───────────────────────────── */}
+            <section className="space-y-4">
+              <SectionHeader
+                icon={MapPin}
+                title="2. Tujuan & Jadwal"
+                description="Lokasi tujuan, alamat lengkap, link Google Maps, dan tanggal perjalanan."
+              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>
+                    Provinsi Tujuan <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    value={missionForm.destinationProvince}
+                    onChange={(e) =>
+                      setMissionForm({
+                        ...missionForm,
+                        destinationProvince: e.target.value,
+                      })
+                    }
+                    placeholder="Provinsi"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>
+                    Kota / Kabupaten <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    value={missionForm.destinationRegency}
+                    onChange={(e) =>
+                      setMissionForm({
+                        ...missionForm,
+                        destinationRegency: e.target.value,
+                      })
+                    }
+                    placeholder="Kota atau Kabupaten"
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>
+                    Alamat Lengkap Tujuan{" "}
+                    <span className="text-destructive">*</span>
+                  </Label>
+                  <Textarea
+                    value={missionForm.destinationAddress}
+                    onChange={(e) =>
+                      setMissionForm({
+                        ...missionForm,
+                        destinationAddress: e.target.value,
+                      })
+                    }
+                    className="min-h-[80px] resize-none"
+                    placeholder="Alamat lengkap lokasi tugas"
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Link Google Maps (opsional)</Label>
+                  <Input
+                    value={missionForm.destinationGoogleMaps}
+                    onChange={(e) =>
+                      setMissionForm({
+                        ...missionForm,
+                        destinationGoogleMaps: e.target.value,
+                      })
+                    }
+                    placeholder="https://maps.google.com/..."
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>
+                    Tanggal Berangkat{" "}
+                    <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    type="date"
+                    value={missionForm.startDate}
+                    onChange={(e) =>
+                      setMissionForm({
+                        ...missionForm,
+                        startDate: e.target.value,
+                      })
+                    }
+                    className="[color-scheme:light] dark:[color-scheme:dark]"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>
+                    Tanggal Pulang <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    type="date"
+                    value={missionForm.endDate}
+                    onChange={(e) =>
+                      setMissionForm({
+                        ...missionForm,
+                        endDate: e.target.value,
+                      })
+                    }
+                    className="[color-scheme:light] dark:[color-scheme:dark]"
+                  />
+                </div>
+                {missionForm.startDate &&
+                  missionForm.endDate &&
+                  new Date(missionForm.endDate) >=
+                    new Date(missionForm.startDate) && (
+                    <div className="md:col-span-2">
+                      <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+                        <Calendar className="h-4 w-4" />
+                        Durasi perjalanan:{" "}
+                        <span className="font-semibold text-foreground">
+                          {calculateDurationDays(
+                            missionForm.startDate,
+                            missionForm.endDate,
+                          )}{" "}
+                          hari
+                        </span>
+                      </p>
+                    </div>
+                  )}
+              </div>
+            </section>
+
+            {/* ── SECTION 3: INSTRUKSI ─────────────────────────────────── */}
+            <section className="space-y-4">
+              <SectionHeader
+                icon={FileText}
+                title="3. Instruksi Utama"
+                description="Instruksi lengkap untuk seluruh anggota tim dinas."
+              />
+              <RichTextEditor
+                value={missionForm.instructionNote}
+                onChange={(html) =>
+                  setMissionForm({ ...missionForm, instructionNote: html })
+                }
+                placeholder="Tulis instruksi pelaksanaan dinas di sini... (bold, italic, bullet list tersedia di toolbar)"
+              />
+              {!stripHtml(missionForm.instructionNote) && (
+                <p className="text-xs text-muted-foreground">
+                  Instruksi utama wajib diisi sebelum misi dapat dibuat.
+                </p>
+              )}
+            </section>
+
+            {/* ── SECTION 4: BIAYA & DOKUMEN ───────────────────────────── */}
+            <section className="space-y-4">
+              <SectionHeader
+                icon={Wallet}
+                title="4. Biaya & Dokumen"
+                description="Skema biaya, estimasi anggaran, dan upload Surat Tugas/SPD."
+              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>
+                    Skema Biaya <span className="text-destructive">*</span>
+                  </Label>
+                  <Select
+                    value={missionForm.costScheme}
+                    onValueChange={(val: any) =>
+                      setMissionForm({ ...missionForm, costScheme: val })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {COST_SCHEMAS.map((t) => (
+                        <SelectItem key={t} value={t} className="capitalize">
+                          {t.replace("_", " ")}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Estimasi Anggaran</Label>
+                  <Input
+                    type="text"
+                    value={formatRupiah(missionForm.budgetEstimate)}
+                    onChange={(e) =>
+                      setMissionForm({
+                        ...missionForm,
+                        budgetEstimate: parseRupiahInput(e.target.value),
+                      })
+                    }
+                    placeholder="Rp 0"
+                  />
+                </div>
+
+                {/* Upload Surat Tugas */}
+                <div className="space-y-3 md:col-span-2">
+                  <Label>
+                    Upload Surat Tugas / SPD{" "}
+                    <span className="text-muted-foreground font-normal">
+                      (wajib salah satu: file atau link Drive)
+                    </span>
+                  </Label>
+                  <div className="rounded-xl border border-dashed border-border bg-muted/30 p-4 space-y-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="shrink-0"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        Pilih File PDF/DOC/DOCX
+                      </Button>
+                      <div className="min-w-0 flex-1 text-sm">
+                        {assignmentLetterFile ? (
+                          <div>
+                            <p className="font-medium text-foreground truncate">
+                              {assignmentLetterFile.name}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {(
+                                assignmentLetterFile.size /
+                                1024 /
+                                1024
+                              ).toFixed(2)}{" "}
+                              MB
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="text-muted-foreground">
+                            Pilih file PDF/DOC/DOCX, maks 10 MB.
+                          </p>
+                        )}
+                      </div>
+                      {assignmentLetterFile && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="text-muted-foreground hover:text-destructive shrink-0"
+                          onClick={() => {
+                            setAssignmentLetterFile(null);
+                            setAssignmentLetterError(null);
+                            if (fileInputRef.current)
+                              fileInputRef.current.value = "";
+                          }}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf,.doc,.docx"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] || null;
+                        if (!file) {
+                          setAssignmentLetterFile(null);
+                          return;
+                        }
+                        const validation = validateAssignmentLetterFile(file);
+                        if (!validation.isValid) {
+                          setAssignmentLetterFile(null);
+                          setAssignmentLetterError(validation.message || null);
+                          return;
+                        }
+                        setAssignmentLetterError(null);
+                        setAssignmentLetterFile(file);
+                      }}
+                    />
+                    {assignmentLetterError && (
+                      <p className="text-sm text-destructive">
+                        {assignmentLetterError}
+                      </p>
+                    )}
+
+                    {/* Separator */}
+                    <div className="relative">
+                      <div className="absolute inset-0 flex items-center">
+                        <span className="w-full border-t border-border" />
+                      </div>
+                      <div className="relative flex justify-center text-xs uppercase">
+                        <span className="bg-muted/30 px-3 text-muted-foreground">
+                          atau
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-sm">
+                        Link Google Drive (opsional)
+                      </Label>
+                      <Input
+                        value={missionForm.googleDriveLink}
+                        onChange={(e) =>
+                          setMissionForm({
+                            ...missionForm,
+                            googleDriveLink: e.target.value,
+                          })
+                        }
+                        placeholder="https://drive.google.com/..."
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Alternatif jika upload file tidak tersedia atau quota
+                        Firebase penuh.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            </section>
 
-            {/* ===== STAFF PICKER SECTION ===== */}
-            <div className="space-y-4 pt-4 border-t">
-              <div className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                <h3 className="text-lg font-semibold">
-                  Pilih Staff (Lintas Brand/Divisi)
-                </h3>
-              </div>
+            {/* ── SECTION 5: TIM DINAS ─────────────────────────────────── */}
+            <section className="space-y-4">
+              <SectionHeader
+                icon={Users}
+                title="5. Tim Dinas"
+                description="Pilih anggota tim yang akan melaksanakan misi dinas ini."
+              />
               <StaffPicker
-                allStaff={normalizedStaff}
+                allStaff={allMergedStaff}
                 selectedUids={selectedStaffUids}
                 onToggle={toggleStaffSelection}
                 isLoading={staffLoading}
-                error={staffError}
+                error={profilesError}
               />
-            </div>
+            </section>
 
-            <Button
-              onClick={handleCreateMission}
-              disabled={
-                isSaving ||
-                !missionForm.missionName ||
-                !missionForm.clientName ||
-                !missionForm.destinationProvince ||
-                !missionForm.destinationRegency ||
-                !missionForm.destinationAddress ||
-                !missionForm.startDate ||
-                !missionForm.endDate ||
-                !stripHtml(missionForm.instructionNote) ||
-                (missionForm.tripType === "Lainnya" &&
-                  !missionForm.tripTypeOther) ||
-                (!assignmentLetterFile && !missionForm.googleDriveLink) ||
-                selectedStaffUids.length === 0
-              }
-              className="w-full"
-              size="lg"
-            >
-              {isSaving
-                ? "Menyimpan..."
-                : `Buat Misi Dinas (${selectedStaffUids.length} staff)`}
-            </Button>
+            {/* ── SUBMIT ───────────────────────────────────────────────── */}
+            <div className="pt-2 border-t border-border">
+              <Button
+                onClick={handleCreateMission}
+                disabled={
+                  isSaving ||
+                  !missionForm.missionName ||
+                  !missionForm.clientName ||
+                  !missionForm.destinationProvince ||
+                  !missionForm.destinationRegency ||
+                  !missionForm.destinationAddress ||
+                  !missionForm.startDate ||
+                  !missionForm.endDate ||
+                  !stripHtml(missionForm.instructionNote) ||
+                  (missionForm.tripType === "Lainnya" &&
+                    !missionForm.tripTypeOther) ||
+                  (!assignmentLetterFile && !missionForm.googleDriveLink) ||
+                  selectedStaffUids.length === 0
+                }
+                className="w-full"
+                size="lg"
+              >
+                {isSaving
+                  ? "Menyimpan..."
+                  : selectedStaffUids.length > 0
+                    ? `Buat Misi Dinas (${selectedStaffUids.length} orang)`
+                    : "Buat Misi Dinas"}
+              </Button>
+              <p className="text-xs text-muted-foreground text-center mt-2">
+                Pastikan semua field wajib (*) sudah diisi dan minimal satu
+                staff dipilih.
+              </p>
+            </div>
           </CardContent>
         </Card>
-      )}
+      ) : activeMode === "detail" ? (
+        renderMissionDetailView()
+      ) : activeMode === "edit" ? (
+        renderMissionEditView()
+      ) : activeMode === "manage" ? (
+        renderMissionManageView()
+      ) : null}
     </div>
   );
 }
