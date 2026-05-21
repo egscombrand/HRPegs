@@ -28,6 +28,7 @@ export const MEMBER_STATUSES = [
   "returned",
   "report_submitted",
   "completed",
+  "archived",
 ] as const;
 
 export const TRIP_TYPES = [

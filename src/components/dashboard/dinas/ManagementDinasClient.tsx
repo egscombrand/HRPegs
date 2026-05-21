@@ -152,6 +152,87 @@ function renderStatusLabel(status?: string) {
   return <Badge variant="secondary">{normalized}</Badge>;
 }
 
+function buildManagerValidationSummaries(members: BusinessTripMissionMember[]) {
+  const managerMap = new Map<
+    string,
+    {
+      managerUid: string;
+      managerName: string;
+      divisionName: string;
+      memberUids: string[];
+      status: "approved" | "rejected" | "pending";
+      notes?: string;
+      decidedAt?: any;
+    }
+  >();
+
+  members
+    .filter((member) => member.memberStatus !== "archived")
+    .forEach((member) => {
+      const key = member.managerUid
+        ? `${member.managerUid}::${member.divisionName || ""}`
+        : `unassigned::${member.employeeUid}`;
+      const existing = managerMap.get(key);
+      const managerName = member.managerName || "Manager belum ditentukan";
+      const divisionName = member.divisionName || "Divisi belum diatur";
+      const status = member.managerValidationStatus;
+      const derivedStatus =
+        status === "approved_by_manager"
+          ? "approved"
+          : status === "rejected_by_manager"
+            ? "rejected"
+            : "pending";
+
+      if (!existing) {
+        managerMap.set(key, {
+          managerUid: member.managerUid || "",
+          managerName,
+          divisionName,
+          memberUids: [member.employeeUid],
+          status: derivedStatus,
+          notes: member.managerValidationNote || member.staffConfirmationNote,
+          decidedAt: member.updatedAt,
+        });
+        return;
+      }
+
+      existing.memberUids = Array.from(
+        new Set([...existing.memberUids, member.employeeUid]),
+      );
+
+      if (existing.status !== "approved" && derivedStatus === "approved") {
+        existing.status = "approved";
+      }
+      if (existing.status !== "rejected" && derivedStatus === "rejected") {
+        existing.status = "rejected";
+      }
+      if (!existing.notes && member.managerValidationNote) {
+        existing.notes = member.managerValidationNote;
+      }
+      if (!existing.decidedAt && member.updatedAt) {
+        existing.decidedAt = member.updatedAt;
+      }
+    });
+
+  return Array.from(managerMap.values());
+}
+
+function computeManagerValidationProgress(
+  members: BusinessTripMissionMember[],
+) {
+  const managerValidations = buildManagerValidationSummaries(members);
+  return {
+    managerValidations,
+    managerCount: managerValidations.length,
+    approvedCount: managerValidations.filter(
+      (item) => item.status === "approved",
+    ).length,
+    rejectedCount: managerValidations.filter(
+      (item) => item.status === "rejected",
+    ).length,
+  };
+}
+
 const ALLOWED_ASSIGNMENT_FILE_TYPES = [
   "application/pdf",
   "application/msword",
@@ -239,46 +320,60 @@ function StaffPicker({
   const [brandFilter, setBrandFilter] = useState("__all__");
   const [divisionFilter, setDivisionFilter] = useState("__all__");
   const [employeeTypeFilter, setEmployeeTypeFilter] = useState("__all__");
+  const [structuralPositionFilter, setStructuralPositionFilter] =
+    useState("__all__");
   const [collapsedBrands, setCollapsedBrands] = useState<Set<string>>(
     new Set(),
   );
 
   // ── Extract filter options ────────────────────────────────────────────────
-  const { brands, divisions, employeeTypes } = useMemo(() => {
-    const brandSet = new Map<string, string>();
-    const divisionSet = new Map<string, string>();
-    const typeSet = new Map<string, string>();
+  const { brands, divisions, employeeTypes, structuralPositions } =
+    useMemo(() => {
+      const brandSet = new Map<string, string>();
+      const divisionSet = new Map<string, string>();
+      const typeSet = new Map<string, string>();
+      const structuralPositionSet = new Map<string, string>();
 
-    allStaff.forEach((s) => {
-      const bName =
-        s.brandName && s.brandName !== "Brand belum diatur"
-          ? s.brandName
-          : null;
-      const dName =
-        s.divisionName && s.divisionName !== "Divisi belum diatur"
-          ? s.divisionName
-          : null;
-      if (bName) brandSet.set(s.brandId || bName, bName);
-      if (dName) divisionSet.set(s.divisionId || dName, dName);
-      if (s.employeeType && s.employeeType !== "Staf")
-        typeSet.set(s.employeeType, s.employeeType);
-    });
+      allStaff.forEach((s) => {
+        const bName =
+          s.brandName && s.brandName !== "Brand belum diatur"
+            ? s.brandName
+            : null;
+        const dName =
+          s.divisionName && s.divisionName !== "Divisi belum diatur"
+            ? s.divisionName
+            : null;
+        if (bName) brandSet.set(s.brandId || bName, bName);
+        if (dName) divisionSet.set(s.divisionId || dName, dName);
+        if (s.employeeType && s.employeeType !== "Staf")
+          typeSet.set(s.employeeType, s.employeeType);
+        if (s.structuralPosition)
+          structuralPositionSet.set(s.structuralPosition, s.structuralPosition);
+      });
 
-    return {
-      brands: Array.from(brandSet.entries()).map(([id, name]) => ({
+      const structuralPositions = Array.from(
+        structuralPositionSet.entries(),
+      ).map(([id, name]) => ({
         id,
         name,
-      })),
-      divisions: Array.from(divisionSet.entries()).map(([id, name]) => ({
-        id,
-        name,
-      })),
-      employeeTypes: Array.from(typeSet.entries()).map(([id, name]) => ({
-        id,
-        name,
-      })),
-    };
-  }, [allStaff]);
+      }));
+
+      return {
+        brands: Array.from(brandSet.entries()).map(([id, name]) => ({
+          id,
+          name,
+        })),
+        divisions: Array.from(divisionSet.entries()).map(([id, name]) => ({
+          id,
+          name,
+        })),
+        employeeTypes: Array.from(typeSet.entries()).map(([id, name]) => ({
+          id,
+          name,
+        })),
+        structuralPositions,
+      };
+    }, [allStaff]);
 
   // ── Apply filters ─────────────────────────────────────────────────────────
   const filteredStaff = useMemo(() => {
@@ -293,6 +388,7 @@ function StaffPicker({
           s.employeeType.toLowerCase().includes(q) ||
           s.brandName.toLowerCase().includes(q) ||
           s.divisionName.toLowerCase().includes(q) ||
+          s.structuralPosition.toLowerCase().includes(q) ||
           s.managerName.toLowerCase().includes(q) ||
           s.employeeId.toLowerCase().includes(q),
       );
@@ -324,8 +420,25 @@ function StaffPicker({
       result = result.filter((s) => s.employeeType === employeeTypeFilter);
     }
 
+    if (structuralPositionFilter !== "__all__") {
+      if (structuralPositionFilter === "__empty__") {
+        result = result.filter((s) => !s.structuralPosition);
+      } else {
+        result = result.filter(
+          (s) => s.structuralPosition === structuralPositionFilter,
+        );
+      }
+    }
+
     return result;
-  }, [allStaff, searchQuery, brandFilter, divisionFilter, employeeTypeFilter]);
+  }, [
+    allStaff,
+    searchQuery,
+    brandFilter,
+    divisionFilter,
+    employeeTypeFilter,
+    structuralPositionFilter,
+  ]);
 
   // ── Group Brand → Division → Staff ────────────────────────────────────────
   const grouped = useMemo(() => {
@@ -513,6 +626,25 @@ function StaffPicker({
               </SelectItem>
             ))}
             <SelectItem value="__empty__">Divisi belum diatur</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select
+          value={structuralPositionFilter}
+          onValueChange={setStructuralPositionFilter}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Filter Status Struktur" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">Semua Status Struktur</SelectItem>
+            {structuralPositions.map((item) => (
+              <SelectItem key={item.id} value={item.id}>
+                {item.name}
+              </SelectItem>
+            ))}
+            <SelectItem value="__empty__">
+              Status Struktur belum diatur
+            </SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -728,8 +860,8 @@ function StaffPicker({
           <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
           <div className="text-sm text-amber-800 dark:text-amber-300">
             <span className="font-medium">Perhatian:</span> Beberapa staff yang
-            dipilih belum memiliki Manager Divisi. Misi tetap bisa dibuat, namun
-            validasi manager akan menunggu.
+            dipilih belum memiliki Manager Divisi. Perjalanan dinas tetap bisa
+            dibuat, namun validasi manager akan menunggu.
           </div>
         </div>
       )}
@@ -774,6 +906,11 @@ export function ManagementDinasClient() {
   const [assignmentLetterError, setAssignmentLetterError] = useState<
     string | null
   >(null);
+  const [editAssignmentLetterFile, setEditAssignmentLetterFile] =
+    useState<File | null>(null);
+  const [editAssignmentLetterError, setEditAssignmentLetterError] = useState<
+    string | null
+  >(null);
   const [selectedStaffUids, setSelectedStaffUids] = useState<string[]>([]);
   const [activeMode, setActiveMode] = useState<
     "list" | "create" | "detail" | "edit" | "manage"
@@ -794,6 +931,15 @@ export function ManagementDinasClient() {
   >([]);
   const [manageStaffReason, setManageStaffReason] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const editFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const activeMissionMemberUids = useMemo(
+    () =>
+      activeMissionMembers
+        .filter((member) => member.memberStatus !== "archived")
+        .map((member) => member.employeeUid),
+    [activeMissionMembers],
+  );
 
   const refreshMissionList = () => {
     setMissionRefreshId((prev) => prev + 1);
@@ -981,6 +1127,14 @@ export function ManagementDinasClient() {
     staffLoading,
     shouldExclude,
   ]);
+
+  const availableStaffForAddition = useMemo(
+    () =>
+      allMergedStaff.filter(
+        (staff) => !activeMissionMemberUids.includes(staff.uid),
+      ),
+    [allMergedStaff, activeMissionMemberUids],
+  );
 
   // ── Mission list query ────────────────────────────────────────────────────
   const missionQuery = useMemoFirebase(() => {
@@ -1193,14 +1347,15 @@ export function ManagementDinasClient() {
       }
 
       toast({
-        title: "Cleanup duplicate misi selesai",
-        description: "Duplikat misi telah digabungkan ke dokumen utama.",
+        title: "Pembersihan duplikat perjalanan dinas selesai",
+        description:
+          "Duplikat perjalanan dinas telah digabungkan ke dokumen utama.",
       });
     } catch (error: any) {
       console.error(error);
       toast({
         variant: "destructive",
-        title: "Gagal cleanup duplikat misi",
+        title: "Gagal membersihkan duplikat perjalanan dinas",
         description: error?.message || "Coba lagi nanti.",
       });
     } finally {
@@ -1256,7 +1411,7 @@ export function ManagementDinasClient() {
       console.error(error);
       toast({
         variant: "destructive",
-        title: "Gagal memuat detail misi",
+        title: "Gagal memuat detail perjalanan dinas",
         description: error?.message || "Coba lagi nanti.",
       });
     } finally {
@@ -1297,6 +1452,8 @@ export function ManagementDinasClient() {
       budgetEstimate: String(mission.budgetEstimate ?? ""),
       googleDriveLink: mission.googleDriveLink || "",
     });
+    setEditAssignmentLetterFile(null);
+    setEditAssignmentLetterError(null);
     setActiveMode("edit");
   };
 
@@ -1316,9 +1473,9 @@ export function ManagementDinasClient() {
     ) {
       toast({
         variant: "destructive",
-        title: "Misi tidak dapat diedit",
+        title: "Perjalanan dinas tidak dapat diedit",
         description:
-          "Misi yang sudah selesai atau dibatalkan tidak bisa diubah.",
+          "Perjalanan dinas yang sudah selesai atau dibatalkan tidak bisa diubah.",
       });
       return;
     }
@@ -1334,10 +1491,45 @@ export function ManagementDinasClient() {
       if (!missionSnapshot.exists()) {
         toast({
           variant: "destructive",
-          title: "Misi tidak ditemukan",
-          description: "Data misi sudah tidak tersedia.",
+          title: "Perjalanan dinas tidak ditemukan",
+          description: "Data perjalanan sudah tidak tersedia.",
         });
         return;
+      }
+
+      let assignmentLetterUrl = activeMission.assignmentLetterUrl || "";
+      let assignmentLetterFileName =
+        activeMission.assignmentLetterFileName || "";
+      let documentSource =
+        activeMission.documentSource ||
+        (missionForm.googleDriveLink
+          ? "google_drive_link"
+          : "firebase_storage");
+      let documentUpdated = false;
+      const existingDriveLink = activeMission.googleDriveLink || "";
+      const newDriveLink = missionForm.googleDriveLink?.trim() || "";
+
+      if (editAssignmentLetterFile) {
+        const filePath = `business_trip_missions/${userProfile?.uid || ""}/${Date.now()}_${editAssignmentLetterFile.name}`;
+        const uploadResult = await uploadFile(
+          editAssignmentLetterFile,
+          filePath,
+          userProfile?.uid || "",
+          { compress: false },
+        );
+        assignmentLetterUrl =
+          uploadResult.downloadUrl ||
+          uploadResult.viewUrl ||
+          assignmentLetterUrl;
+        assignmentLetterFileName =
+          uploadResult.fileName || editAssignmentLetterFile.name;
+        documentSource = "firebase_storage";
+        documentUpdated = true;
+      } else if (newDriveLink !== existingDriveLink) {
+        assignmentLetterUrl = newDriveLink;
+        assignmentLetterFileName = "";
+        documentSource = "google_drive_link";
+        documentUpdated = true;
       }
 
       await updateDoc(missionDocRef, {
@@ -1365,12 +1557,31 @@ export function ManagementDinasClient() {
         advanceAmount: Number(missionForm.advanceAmount) || 0,
         budgetEstimate:
           Number(parseRupiahInput(missionForm.budgetEstimate)) || 0,
+        assignmentLetterUrl,
+        assignmentLetterFileName,
+        documentSource,
+        googleDriveLink: newDriveLink,
         updatedAt: serverTimestamp(),
       });
 
+      if (documentUpdated) {
+        const timelineCollection = collection(
+          firestore,
+          "business_trip_missions",
+          activeMission.id,
+          "timeline",
+        );
+        await addDoc(timelineCollection, {
+          message: "Dokumen Surat Tugas/SPD diperbarui.",
+          createdAt: serverTimestamp(),
+          byUid: userProfile?.uid,
+          byName: userProfile?.fullName,
+        });
+      }
+
       toast({
-        title: "Perubahan misi tersimpan",
-        description: "Informasi misi telah diperbarui.",
+        title: "Perubahan perjalanan dinas tersimpan",
+        description: "Informasi perjalanan telah diperbarui.",
       });
       refreshMissionList();
       setActiveMode("list");
@@ -1379,7 +1590,7 @@ export function ManagementDinasClient() {
       console.error(error);
       toast({
         variant: "destructive",
-        title: "Gagal menyimpan misi",
+        title: "Gagal menyimpan perjalanan dinas",
         description: error?.message || "Coba lagi nanti.",
       });
     } finally {
@@ -1400,8 +1611,8 @@ export function ManagementDinasClient() {
       if (!missionSnapshot.exists()) {
         toast({
           variant: "destructive",
-          title: "Misi tidak ditemukan",
-          description: "Misi sudah dihapus atau tidak tersedia.",
+          title: "Perjalanan dinas tidak ditemukan",
+          description: "Perjalanan dinas sudah dihapus atau tidak tersedia.",
         });
         return;
       }
@@ -1410,7 +1621,7 @@ export function ManagementDinasClient() {
         updatedAt: serverTimestamp(),
       });
       toast({
-        title: "Misi dibatalkan",
+        title: "Perjalanan dinas dibatalkan",
         description: "Perjalanan dinas berhasil dibatalkan.",
       });
       refreshMissionList();
@@ -1418,7 +1629,7 @@ export function ManagementDinasClient() {
       console.error(error);
       toast({
         variant: "destructive",
-        title: "Gagal batalkan misi",
+        title: "Gagal membatalkan perjalanan dinas",
         description: error?.message || "Coba lagi nanti.",
       });
     } finally {
@@ -1435,6 +1646,13 @@ export function ManagementDinasClient() {
       });
       return;
     }
+    if (!manageStaffReason.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Alasan penambahan wajib diisi",
+      });
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -1447,7 +1665,7 @@ export function ManagementDinasClient() {
       if (!missionSnapshot.exists()) {
         toast({
           variant: "destructive",
-          title: "Misi tidak ditemukan",
+          title: "Perjalanan dinas tidak ditemukan",
         });
         return;
       }
@@ -1462,12 +1680,12 @@ export function ManagementDinasClient() {
         "members",
       );
 
-      await Promise.all(
+      const newMembers = await Promise.all(
         selectedStaff.map(async (staff) => {
           const memberRef = doc(membersRef);
-          await setDoc(memberRef, {
-            missionId: activeMission.id,
-            missionName: activeMission.missionName,
+          const memberData: BusinessTripMissionMember = {
+            missionId: activeMission.id || "",
+            missionName: activeMission.missionName || "",
             assignmentNumber: activeMission.assignmentNumber,
             employeeUid: staff.uid,
             employeeName: staff.fullName,
@@ -1478,18 +1696,15 @@ export function ManagementDinasClient() {
             divisionName: staff.divisionName || "-",
             managerUid: staff.managerUid || "",
             managerName: staff.managerName || "",
-            startDate: activeMission.startDate,
-            endDate: activeMission.endDate,
-            durationDays: activeMission.durationDays,
             memberStatus: "waiting_manager_validation",
-            managerValidationStatus: staff.managerUid
-              ? "pending"
-              : "pending_no_manager",
-            staffConfirmationStatus: "waiting",
+            managerValidationStatus: "waiting_manager_validation",
+            staffConfirmationStatus: "waiting_staff_confirmation",
             missionStatus: activeMission.status || "pending_manager_validation",
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
-          });
+          };
+          await setDoc(memberRef, memberData);
+          return memberData;
         }),
       );
 
@@ -1510,19 +1725,32 @@ export function ManagementDinasClient() {
           })),
           requestedBy: userProfile?.uid,
           requestedByName: userProfile?.fullName,
-          reason: manageStaffReason || "Penambahan staff baru",
+          reason: manageStaffReason,
           requestedAt: serverTimestamp(),
         },
       );
 
+      const activeMembers = activeMissionMembers.filter(
+        (member) => member.memberStatus !== "archived",
+      );
+      const managerValidations = buildManagerValidationSummaries([
+        ...activeMembers,
+        ...newMembers,
+      ]);
+
       await updateDoc(missionDocRef, {
         memberCount: (activeMission.memberCount ?? 0) + selectedStaff.length,
+        managerValidationCount: managerValidations.length,
+        managerApprovedCount: managerValidations.filter(
+          (item) => item.status === "approved",
+        ).length,
+        managerValidations,
         updatedAt: serverTimestamp(),
       });
 
       toast({
-        title: "Staff ditambahkan",
-        description: `Berhasil menambah ${selectedStaff.length} staff baru.`,
+        title: "Anggota berhasil ditambahkan",
+        description: `Berhasil menambah ${selectedStaff.length} anggota baru.`,
       });
       await loadActiveMissionData(activeMission);
       refreshMissionList();
@@ -1543,6 +1771,13 @@ export function ManagementDinasClient() {
     member: BusinessTripMissionMember,
   ) => {
     if (!firestore || !activeMission?.id || !member.id) return;
+    if (!manageStaffReason.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Alasan pembatalan wajib diisi",
+      });
+      return;
+    }
     setIsSaving(true);
     try {
       const memberRef = doc(
@@ -1580,10 +1815,30 @@ export function ManagementDinasClient() {
           },
           requestedBy: userProfile?.uid,
           requestedByName: userProfile?.fullName,
-          reason: manageStaffReason || "Arsipkan staff yang batal ikut",
+          reason: manageStaffReason,
           requestedAt: serverTimestamp(),
         },
       );
+
+      const remainingMembers = activeMissionMembers.filter(
+        (m) => m.id !== member.id && m.memberStatus !== "archived",
+      );
+      const managerValidations =
+        buildManagerValidationSummaries(remainingMembers);
+      const missionDocRef = doc(
+        firestore,
+        "business_trip_missions",
+        activeMission.id,
+      );
+      await updateDoc(missionDocRef, {
+        managerValidationCount: managerValidations.length,
+        managerApprovedCount: managerValidations.filter(
+          (item) => item.status === "approved",
+        ).length,
+        managerValidations,
+        updatedAt: serverTimestamp(),
+      });
+
       toast({
         title: "Staff diarsipkan",
         description: `${member.employeeName} berhasil diarsipkan.`,
@@ -1629,9 +1884,10 @@ export function ManagementDinasClient() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle>Detail Misi Dinas</CardTitle>
+            <CardTitle>Detail Perjalanan Dinas</CardTitle>
             <CardDescription>
-              Informasi lengkap misi, anggota, timeline, dan riwayat perubahan.
+              Informasi lengkap perjalanan dinas, anggota, timeline, dan riwayat
+              perubahan.
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
@@ -1648,175 +1904,363 @@ export function ManagementDinasClient() {
               variant="secondary"
               onClick={() => selectMissionForManage(activeMission)}
             >
-              Kelola Staff
+              Kelola Anggota
             </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <p className="text-sm text-muted-foreground">Nama Misi</p>
-              <p className="font-medium">{activeMission.missionName}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Nomor Surat</p>
-              <p className="font-medium">
-                {activeMission.assignmentNumber || "-"}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Klien</p>
-              <p className="font-medium">{activeMission.clientName}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Tujuan</p>
-              <p className="font-medium">
-                {activeMission.destinationProvince}
-                {activeMission.destinationRegency
-                  ? ` / ${activeMission.destinationRegency}`
-                  : ""}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Tanggal</p>
-              <p className="font-medium">
-                {formatDate(activeMission.startDate)} –{" "}
-                {formatDate(activeMission.endDate)}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Status</p>
-              <div>{renderStatusLabel(activeMission.status)}</div>
-            </div>
-          </div>
+          {(() => {
+            const activeMembers = activeMissionMembers.filter(
+              (member) => member.memberStatus !== "archived",
+            );
+            const managerProgress =
+              computeManagerValidationProgress(activeMembers);
+            const confirmedCount = activeMembers.filter(
+              (member) =>
+                member.staffConfirmationStatus === "confirmed_by_staff",
+            ).length;
+            const documentUrl =
+              activeMission.assignmentLetterUrl ||
+              activeMission.googleDriveLink ||
+              "";
+            const documentLabel =
+              activeMission.assignmentLetterFileName ||
+              (activeMission.googleDriveLink ? "Link Google Drive" : "");
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="rounded-lg border border-border p-4">
-              <p className="text-sm text-muted-foreground">Anggota</p>
-              <p className="mt-2 text-2xl font-semibold">
-                {activeMission.memberCount ?? 0}
-              </p>
-            </div>
-            <div className="rounded-lg border border-border p-4">
-              <p className="text-sm text-muted-foreground">Validasi Manager</p>
-              <p className="mt-2 text-2xl font-semibold">
-                {activeMission.managerApprovedCount ?? 0}/
-                {activeMission.memberCount ?? 0}
-              </p>
-            </div>
-            <div className="rounded-lg border border-border p-4">
-              <p className="text-sm text-muted-foreground">Konfirmasi Staff</p>
-              <p className="mt-2 text-2xl font-semibold">
-                {activeMission.staffConfirmedCount ?? 0}/
-                {activeMission.memberCount ?? 0}
-              </p>
-            </div>
-          </div>
+            return (
+              <>
+                <section className="space-y-4">
+                  <SectionHeader
+                    icon={FileText}
+                    title="Ringkasan Perjalanan Dinas"
+                    description="Informasi utama perjalanan dan status saat ini."
+                  />
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="rounded-lg border border-border p-4">
+                      <p className="text-sm text-muted-foreground">
+                        Judul Perjalanan
+                      </p>
+                      <p className="mt-2 font-semibold text-foreground">
+                        {activeMission.missionName}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-border p-4">
+                      <p className="text-sm text-muted-foreground">
+                        Nomor Surat/SPD
+                      </p>
+                      <p className="mt-2 font-semibold text-foreground">
+                        {activeMission.assignmentNumber || "-"}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-border p-4">
+                      <p className="text-sm text-muted-foreground">Status</p>
+                      <div className="mt-2">
+                        {renderStatusLabel(activeMission.status)}
+                      </div>
+                    </div>
+                  </div>
+                </section>
 
-          <section className="space-y-3">
-            <h3 className="text-lg font-semibold">Instruksi</h3>
-            <div
-              className="prose max-w-none text-sm"
-              dangerouslySetInnerHTML={{
-                __html: activeMission.instructionHtml || "",
-              }}
-            />
-          </section>
+                <section className="space-y-4">
+                  <SectionHeader
+                    icon={FileText}
+                    title="Informasi Surat Tugas/SPD"
+                    description="Tinjau dokumen Surat Tugas/SPD yang terlampir."
+                  />
+                  <div className="rounded-lg border border-border p-4 bg-muted/30">
+                    {documentUrl ? (
+                      <div className="grid grid-cols-1 gap-3">
+                        <div>
+                          <p className="text-sm text-muted-foreground">
+                            Nama dokumen
+                          </p>
+                          <p className="font-medium">{documentLabel}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">
+                            Sumber dokumen
+                          </p>
+                          <p className="font-medium capitalize">
+                            {activeMission.documentSource === "firebase_storage"
+                              ? "Upload"
+                              : "Google Drive"}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <a
+                            href={documentUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <Button size="sm" variant="outline">
+                              Lihat Dokumen
+                            </Button>
+                          </a>
+                          {activeMission.documentSource ===
+                            "google_drive_link" && (
+                            <a
+                              href={activeMission.googleDriveLink}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              <Button size="sm" variant="secondary">
+                                Buka Link
+                              </Button>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Surat Tugas belum dilampirkan.
+                      </p>
+                    )}
+                  </div>
+                </section>
 
-          <section className="space-y-3">
-            <h3 className="text-lg font-semibold">Timeline</h3>
-            {detailLoading ? (
-              <p className="text-sm text-muted-foreground">
-                Memuat timeline...
-              </p>
-            ) : activeMissionTimeline.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Belum ada aktivitas timeline.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {activeMissionTimeline.map((event) => (
+                <section className="space-y-4">
+                  <SectionHeader
+                    icon={MapPin}
+                    title="Tujuan & Jadwal"
+                    description="Detail lokasi, alamat, dan tanggal perjalanan."
+                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="rounded-lg border border-border p-4">
+                      <p className="text-sm text-muted-foreground">Tujuan</p>
+                      <p className="font-medium">
+                        {activeMission.destinationProvince}
+                        {activeMission.destinationRegency
+                          ? ` / ${activeMission.destinationRegency}`
+                          : ""}
+                      </p>
+                      {activeMission.destinationAddress && (
+                        <p className="text-sm text-muted-foreground mt-2">
+                          {activeMission.destinationAddress}
+                        </p>
+                      )}
+                    </div>
+                    <div className="rounded-lg border border-border p-4">
+                      <p className="text-sm text-muted-foreground">Tanggal</p>
+                      <p className="font-medium">
+                        {formatDate(activeMission.startDate)} –{" "}
+                        {formatDate(activeMission.endDate)}
+                      </p>
+                      {activeMission.destinationGoogleMaps && (
+                        <a
+                          href={activeMission.destinationGoogleMaps}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-primary underline mt-2 block"
+                        >
+                          Google Maps
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </section>
+
+                <section className="space-y-4">
+                  <SectionHeader
+                    icon={FileText}
+                    title="Instruksi Perjalanan"
+                    description="Instruksi lengkap untuk seluruh anggota dinas."
+                  />
                   <div
-                    key={event.id}
-                    className="rounded-lg border border-border p-3"
-                  >
-                    <div className="flex items-center justify-between gap-4">
-                      <p className="font-medium">{event.message}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatDate(
-                          (event.createdAt as any)?.toDate?.() ??
-                            event.createdAt,
-                        )}
+                    className="prose max-w-none text-sm"
+                    dangerouslySetInnerHTML={{
+                      __html: activeMission.instructionHtml || "",
+                    }}
+                  />
+                </section>
+
+                <section className="space-y-4">
+                  <SectionHeader
+                    icon={Users}
+                    title="Anggota Dinas"
+                    description="Daftar anggota aktif dalam perjalanan dinas ini."
+                  />
+                  {activeMembers.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Belum ada anggota terdaftar.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto rounded-md border border-border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Nama</TableHead>
+                            <TableHead>Posisi</TableHead>
+                            <TableHead>Manager</TableHead>
+                            <TableHead>Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {activeMembers.map((member) => (
+                            <TableRow key={member.id}>
+                              <TableCell>{member.employeeName}</TableCell>
+                              <TableCell>
+                                {member.employeePosition || "-"}
+                              </TableCell>
+                              <TableCell>{member.managerName || "-"}</TableCell>
+                              <TableCell>
+                                <Badge className="capitalize">
+                                  {member.memberStatus?.replace(/_/g, " ")}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </section>
+
+                <section className="space-y-4">
+                  <SectionHeader
+                    icon={Users}
+                    title="Validasi Manager Divisi"
+                    description="Validasi dihitung per manager unik, bukan per anggota."
+                  />
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="rounded-lg border border-border p-4">
+                      <p className="text-sm text-muted-foreground">
+                        Manager unik
+                      </p>
+                      <p className="mt-2 text-2xl font-semibold">
+                        {managerProgress.managerCount}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-border p-4">
+                      <p className="text-sm text-muted-foreground">
+                        Sudah disetujui
+                      </p>
+                      <p className="mt-2 text-2xl font-semibold">
+                        {managerProgress.approvedCount}/
+                        {managerProgress.managerCount}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-border p-4">
+                      <p className="text-sm text-muted-foreground">Ditolak</p>
+                      <p className="mt-2 text-2xl font-semibold">
+                        {managerProgress.rejectedCount}
                       </p>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </section>
+                  {managerProgress.managerValidations.length > 0 && (
+                    <div className="rounded-lg border border-border p-4">
+                      {managerProgress.managerValidations.map((item) => (
+                        <div
+                          key={`${item.managerUid}-${item.divisionName}`}
+                          className="mb-3 last:mb-0"
+                        >
+                          <p className="font-medium">{item.managerName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {item.divisionName}
+                          </p>
+                          <p className="text-sm">
+                            Status:{" "}
+                            <span className="font-semibold capitalize">
+                              {item.status}
+                            </span>
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {item.memberUids.length} anggota
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
 
-          <section className="space-y-3">
-            <h3 className="text-lg font-semibold">Anggota Misi</h3>
-            {activeMissionMembers.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Belum ada anggota terdaftar.
-              </p>
-            ) : (
-              <div className="overflow-x-auto rounded-md border border-border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Nama</TableHead>
-                      <TableHead>Posisi</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {activeMissionMembers.map((member) => (
-                      <TableRow key={member.id}>
-                        <TableCell>{member.employeeName}</TableCell>
-                        <TableCell>{member.employeePosition || "-"}</TableCell>
-                        <TableCell>
-                          <Badge className="capitalize">
-                            {member.memberStatus?.replace(/_/g, " ")}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </section>
-
-          <section className="space-y-3">
-            <h3 className="text-lg font-semibold">Riwayat Perubahan Staff</h3>
-            {activeMissionStaffChanges.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Belum ada perubahan staff.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {activeMissionStaffChanges.map((change) => (
-                  <div
-                    key={change.id}
-                    className="rounded-lg border border-border p-3"
-                  >
-                    <p className="font-medium capitalize">{change.action}</p>
+                <section className="space-y-4">
+                  <SectionHeader
+                    icon={Users}
+                    title="Konfirmasi Staff"
+                    description="Tampilan progress konfirmasi staf aktif."
+                  />
+                  <div className="rounded-lg border border-border p-4">
                     <p className="text-sm text-muted-foreground">
-                      {change.reason}
+                      Staf yang sudah konfirmasi
                     </p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatDate(
-                        (change.requestedAt as any)?.toDate?.() ??
-                          change.requestedAt,
-                      )}
+                    <p className="mt-2 text-2xl font-semibold">
+                      {confirmedCount}/{activeMembers.length}
                     </p>
                   </div>
-                ))}
-              </div>
-            )}
-          </section>
+                </section>
+
+                <section className="space-y-4">
+                  <SectionHeader
+                    icon={Calendar}
+                    title="Timeline"
+                    description="Rekam jejak aktivitas perjalanan dinas."
+                  />
+                  {detailLoading ? (
+                    <p className="text-sm text-muted-foreground">
+                      Memuat timeline...
+                    </p>
+                  ) : activeMissionTimeline.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Belum ada aktivitas timeline.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {activeMissionTimeline.map((event) => (
+                        <div
+                          key={event.id}
+                          className="rounded-lg border border-border p-3"
+                        >
+                          <div className="flex items-center justify-between gap-4">
+                            <p className="font-medium">{event.message}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatDate(
+                                (event.createdAt as any)?.toDate?.() ??
+                                  event.createdAt,
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                <section className="space-y-4">
+                  <SectionHeader
+                    icon={Users}
+                    title="Riwayat Perubahan Staff"
+                    description="Catatan perubahan anggota dinas."
+                  />
+                  {activeMissionStaffChanges.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Belum ada perubahan staff.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {activeMissionStaffChanges.map((change) => (
+                        <div
+                          key={change.id}
+                          className="rounded-lg border border-border p-3"
+                        >
+                          <p className="font-medium capitalize">
+                            {change.action}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {change.reason}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatDate(
+                              (change.requestedAt as any)?.toDate?.() ??
+                                change.requestedAt,
+                            )}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              </>
+            );
+          })()}
         </CardContent>
       </Card>
     );
@@ -1829,9 +2273,9 @@ export function ManagementDinasClient() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between border-b border-border pb-4">
           <div>
-            <CardTitle>Edit Misi Dinas</CardTitle>
+            <CardTitle>Edit Perjalanan Dinas</CardTitle>
             <CardDescription>
-              Ubah informasi misi dan simpan perubahan.
+              Ubah informasi perjalanan dinas dan simpan perubahan.
             </CardDescription>
           </div>
           <Button
@@ -1848,12 +2292,12 @@ export function ManagementDinasClient() {
           <section className="space-y-4">
             <SectionHeader
               icon={FileText}
-              title="Informasi Misi"
-              description="Ubah data misi sesuai kebutuhan."
+              title="Informasi Perjalanan Dinas"
+              description="Ubah data perjalanan dinas sesuai kebutuhan."
             />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Nama Misi Dinas</Label>
+                <Label>Nama Perjalanan Dinas</Label>
                 <Input
                   value={missionForm.missionName}
                   onChange={(e) =>
@@ -1987,6 +2431,161 @@ export function ManagementDinasClient() {
             />
           </section>
 
+          <section className="space-y-4">
+            <SectionHeader
+              icon={FileText}
+              title="Surat Tugas/SPD"
+              description="Lihat dokumen aktif dan ganti file atau link jika diperlukan."
+            />
+            <div className="grid grid-cols-1 gap-4">
+              <div className="rounded-lg border border-border p-4 bg-muted/30">
+                <p className="text-sm text-muted-foreground">
+                  Dokumen Surat Tugas/SPD aktif
+                </p>
+                {activeMission.assignmentLetterUrl ||
+                activeMission.googleDriveLink ? (
+                  <div className="mt-3 space-y-2">
+                    <p className="text-sm font-medium text-foreground">
+                      {activeMission.assignmentLetterFileName ||
+                        activeMission.googleDriveLink ||
+                        "Surat Tugas aktif"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Sumber dokumen:{" "}
+                      {activeMission.documentSource === "firebase_storage"
+                        ? "Upload"
+                        : "Google Drive"}
+                    </p>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      <a
+                        href={
+                          activeMission.assignmentLetterUrl ||
+                          activeMission.googleDriveLink
+                        }
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <Button size="sm" variant="outline">
+                          Lihat Dokumen
+                        </Button>
+                      </a>
+                      {activeMission.documentSource === "google_drive_link" &&
+                        activeMission.googleDriveLink && (
+                          <a
+                            href={activeMission.googleDriveLink}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <Button size="sm" variant="secondary">
+                              Buka Link
+                            </Button>
+                          </a>
+                        )}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    Surat Tugas belum dilampirkan.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>Ganti File Surat Tugas / SPD</Label>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="shrink-0"
+                    onClick={() => editFileInputRef.current?.click()}
+                  >
+                    Pilih File Baru
+                  </Button>
+                  <div className="min-w-0 text-sm">
+                    {editAssignmentLetterFile ? (
+                      <div>
+                        <p className="font-medium text-foreground truncate">
+                          {editAssignmentLetterFile.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {(
+                            editAssignmentLetterFile.size /
+                            1024 /
+                            1024
+                          ).toFixed(2)}{" "}
+                          MB
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground">
+                        Pilih file PDF/DOC/DOCX untuk mengganti dokumen SPD.
+                      </p>
+                    )}
+                  </div>
+                  {editAssignmentLetterFile && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="text-muted-foreground hover:text-destructive shrink-0"
+                      onClick={() => {
+                        setEditAssignmentLetterFile(null);
+                        setEditAssignmentLetterError(null);
+                        if (editFileInputRef.current)
+                          editFileInputRef.current.value = "";
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                <input
+                  ref={editFileInputRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] || null;
+                    if (!file) {
+                      setEditAssignmentLetterFile(null);
+                      return;
+                    }
+                    const validation = validateAssignmentLetterFile(file);
+                    if (!validation.isValid) {
+                      setEditAssignmentLetterFile(null);
+                      setEditAssignmentLetterError(validation.message || null);
+                      return;
+                    }
+                    setEditAssignmentLetterError(null);
+                    setEditAssignmentLetterFile(file);
+                  }}
+                />
+                {editAssignmentLetterError && (
+                  <p className="text-sm text-destructive">
+                    {editAssignmentLetterError}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>Update Link Google Drive</Label>
+                <Input
+                  value={missionForm.googleDriveLink}
+                  onChange={(e) =>
+                    setMissionForm({
+                      ...missionForm,
+                      googleDriveLink: e.target.value,
+                    })
+                  }
+                  placeholder="https://drive.google.com/..."
+                />
+                <p className="text-xs text-muted-foreground">
+                  Jika tidak mengganti file, Anda dapat menyimpan link baru.
+                </p>
+              </div>
+            </div>
+          </section>
+
           <div className="pt-2 border-t border-border">
             <Button
               onClick={handleUpdateMission}
@@ -2011,10 +2610,10 @@ export function ManagementDinasClient() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle>Kelola Staff Misi</CardTitle>
+            <CardTitle>Kelola Anggota Dinas</CardTitle>
             <CardDescription>
-              Tambah, arsipkan, atau tinjau riwayat perubahan staff untuk misi
-              ini.
+              Tambah, arsipkan, atau tinjau riwayat perubahan anggota untuk
+              perjalanan dinas ini.
             </CardDescription>
           </div>
           <Button variant="outline" onClick={handleCloseDetails}>
@@ -2026,11 +2625,11 @@ export function ManagementDinasClient() {
             <SectionHeader
               icon={Users}
               title="Anggota Saat Ini"
-              description="Daftar anggota yang sudah terdaftar pada misi ini."
+              description="Daftar anggota yang sudah terdaftar pada perjalanan dinas ini."
             />
             {activeMissionMembers.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Belum ada anggota misi.
+                Belum ada anggota perjalanan dinas.
               </p>
             ) : (
               <div className="overflow-x-auto rounded-md border border-border">
@@ -2073,12 +2672,12 @@ export function ManagementDinasClient() {
           <section className="space-y-4">
             <SectionHeader
               icon={Users}
-              title="Tambah Staff Baru"
-              description="Pilih staff untuk ditambahkan ke misi ini."
+              title="Tambah Anggota Dinas"
+              description="Pilih anggota baru yang belum terdaftar di perjalanan dinas ini."
             />
             <div className="grid grid-cols-1 gap-4">
               <StaffPicker
-                allStaff={allMergedStaff}
+                allStaff={availableStaffForAddition}
                 selectedUids={manageSelectedStaffUids}
                 onToggle={(uid) =>
                   setManageSelectedStaffUids((prev) =>
@@ -2096,13 +2695,18 @@ export function ManagementDinasClient() {
                   value={manageStaffReason}
                   onChange={(e) => setManageStaffReason(e.target.value)}
                   className="min-h-[100px]"
+                  placeholder="Tuliskan alasan wajib untuk perubahan anggota."
                 />
               </div>
               <Button
                 onClick={handleAddStaffToMission}
-                disabled={isSaving || manageSelectedStaffUids.length === 0}
+                disabled={
+                  isSaving ||
+                  manageSelectedStaffUids.length === 0 ||
+                  !manageStaffReason.trim()
+                }
               >
-                {isSaving ? "Menyimpan..." : "Tambah Staff"}
+                {isSaving ? "Menyimpan..." : "Tambah Anggota Dinas"}
               </Button>
             </div>
           </section>
@@ -2111,7 +2715,7 @@ export function ManagementDinasClient() {
             <SectionHeader
               icon={Users}
               title="Riwayat Perubahan Staff"
-              description="Catatan penambahan dan pengarsipan staff pada misi."
+              description="Catatan penambahan dan pengarsipan staf pada perjalanan dinas."
             />
             {activeMissionStaffChanges.length === 0 ? (
               <p className="text-sm text-muted-foreground">
@@ -2173,7 +2777,7 @@ export function ManagementDinasClient() {
     ) {
       return toast({
         variant: "destructive",
-        title: "Lengkapi semua informasi misi dinas.",
+        title: "Lengkapi semua informasi perjalanan dinas.",
       });
     }
     if (missionForm.tripType === "Lainnya" && !missionForm.tripTypeOther) {
@@ -2313,10 +2917,8 @@ export function ManagementDinasClient() {
             endDate: Timestamp.fromDate(new Date(missionForm.endDate)),
             durationDays,
             memberStatus: "waiting_manager_validation",
-            managerValidationStatus: staff.managerUid
-              ? "pending"
-              : "pending_no_manager",
-            staffConfirmationStatus: "waiting",
+            managerValidationStatus: "waiting_manager_validation",
+            staffConfirmationStatus: "waiting_staff_confirmation",
             missionStatus: "pending_manager_validation",
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
@@ -2331,10 +2933,10 @@ export function ManagementDinasClient() {
         "timeline",
       );
       await addDoc(timelineCollection, {
-        message: `Misi Dinas dibuat dengan ${selectedStaffData.length} anggota.`,
+        message: `Perjalanan Dinas dibuat dengan ${selectedStaffData.length} anggota.`,
         createdAt: serverTimestamp(),
-        byUid: userProfile.uid,
-        byName: userProfile.fullName,
+        byUid: userProfile?.uid || "",
+        byName: userProfile?.fullName || "",
       });
 
       // Reset form
@@ -2364,14 +2966,14 @@ export function ManagementDinasClient() {
       setActiveMode("list");
 
       toast({
-        title: "Misi Dinas berhasil dibuat",
-        description: `${selectedStaffData.length} anggota telah ditambahkan ke misi.`,
+        title: "Perjalanan Dinas berhasil dibuat",
+        description: `${selectedStaffData.length} anggota telah ditambahkan ke perjalanan dinas.`,
       });
     } catch (error: any) {
       console.error(error);
       toast({
         variant: "destructive",
-        title: "Gagal membuat misi dinas",
+        title: "Gagal membuat perjalanan dinas",
         description: error?.message || "Coba lagi.",
       });
     } finally {
@@ -2394,9 +2996,9 @@ export function ManagementDinasClient() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle>Daftar Misi Dinas</CardTitle>
+              <CardTitle>Daftar Perjalanan Dinas</CardTitle>
               <CardDescription>
-                Kelola misi dinas yang dibuat oleh Management.
+                Kelola perjalanan dinas yang dibuat oleh Management.
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
@@ -2406,11 +3008,11 @@ export function ManagementDinasClient() {
                   onClick={handleCleanupDuplicateMissions}
                   disabled={isSaving || isLoading}
                 >
-                  Atasi Duplikat Misi
+                  Atasi Duplikat Perjalanan Dinas
                 </Button>
               )}
               <Button onClick={() => handleOpenCreate()}>
-                <Plus className="mr-2 h-4 w-4" /> Buat Misi Baru
+                <Plus className="mr-2 h-4 w-4" /> Buat Perjalanan Dinas Baru
               </Button>
             </div>
           </CardHeader>
@@ -2424,7 +3026,7 @@ export function ManagementDinasClient() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Nama Misi</TableHead>
+                      <TableHead>Nama Perjalanan</TableHead>
                       <TableHead>Tujuan</TableHead>
                       <TableHead>Tanggal</TableHead>
                       <TableHead>Jumlah Anggota</TableHead>
@@ -2442,7 +3044,7 @@ export function ManagementDinasClient() {
                           colSpan={9}
                           className="text-center text-muted-foreground py-8"
                         >
-                          Belum ada misi dinas
+                          Belum ada perjalanan dinas
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -2520,7 +3122,7 @@ export function ManagementDinasClient() {
                               variant="secondary"
                               onClick={() => selectMissionForManage(mission)}
                             >
-                              Kelola Staff
+                              Kelola Anggota
                             </Button>
                             <Button
                               size="sm"
@@ -2544,7 +3146,7 @@ export function ManagementDinasClient() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between border-b border-border pb-4">
             <div>
-              <CardTitle>Buat Misi Dinas Baru</CardTitle>
+              <CardTitle>Buat Perjalanan Dinas Baru</CardTitle>
               <CardDescription>
                 Isi form untuk membuat Surat Perintah Dinas.
               </CardDescription>
@@ -2560,17 +3162,18 @@ export function ManagementDinasClient() {
           </CardHeader>
 
           <CardContent className="pt-6 space-y-8">
-            {/* ── SECTION 1: INFORMASI MISI ─────────────────────────────── */}
+            {/* ── SECTION 1: INFORMASI PERJALANAN DINAS ─────────────────────────────── */}
             <section className="space-y-4">
               <SectionHeader
                 icon={FileText}
-                title="1. Informasi Misi"
-                description="Nama misi, nomor surat, brand/proyek, klien, dan jenis dinas."
+                title="1. Informasi Perjalanan Dinas"
+                description="Nama perjalanan, nomor surat, brand/proyek, klien, dan jenis dinas."
               />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>
-                    Nama Misi Dinas <span className="text-destructive">*</span>
+                    Nama Perjalanan Dinas{" "}
+                    <span className="text-destructive">*</span>
                   </Label>
                   <Input
                     value={missionForm.missionName}
@@ -2805,7 +3408,8 @@ export function ManagementDinasClient() {
               />
               {!stripHtml(missionForm.instructionNote) && (
                 <p className="text-xs text-muted-foreground">
-                  Instruksi utama wajib diisi sebelum misi dapat dibuat.
+                  Instruksi utama wajib diisi sebelum perjalanan dinas dapat
+                  dibuat.
                 </p>
               )}
             </section>
@@ -2979,7 +3583,7 @@ export function ManagementDinasClient() {
               <SectionHeader
                 icon={Users}
                 title="5. Tim Dinas"
-                description="Pilih anggota tim yang akan melaksanakan misi dinas ini."
+                description="Pilih anggota tim yang akan melaksanakan perjalanan dinas ini."
               />
               <StaffPicker
                 allStaff={allMergedStaff}
@@ -3015,8 +3619,8 @@ export function ManagementDinasClient() {
                 {isSaving
                   ? "Menyimpan..."
                   : selectedStaffUids.length > 0
-                    ? `Buat Misi Dinas (${selectedStaffUids.length} orang)`
-                    : "Buat Misi Dinas"}
+                    ? `Buat Perjalanan Dinas (${selectedStaffUids.length} orang)`
+                    : "Buat Perjalanan Dinas"}
               </Button>
               <p className="text-xs text-muted-foreground text-center mt-2">
                 Pastikan semua field wajib (*) sudah diisi dan minimal satu
