@@ -86,3 +86,67 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+/* Custom Rich Text Editor Styles */
+.rich-editor {
+  background: transparent;
+  color: inherit;
+  min-height: 180px;
+  outline: none;
+}
+
+.rich-editor ul {
+  list-style-type: disc !important;
+  padding-left: 1.5rem !important;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.rich-editor ol {
+  list-style-type: decimal !important;
+  padding-left: 1.5rem !important;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.rich-editor li {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+/* ProseMirror compatibility classes */
+.ProseMirror {
+  background: transparent;
+  color: inherit;
+  min-height: 160px;
+  outline: none;
+}
+
+.ProseMirror ul {
+  list-style-type: disc !important;
+  padding-left: 1.5rem !important;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.ProseMirror ol {
+  list-style-type: decimal !important;
+  padding-left: 1.5rem !important;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.ProseMirror li {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+/* ContentEditable Placeholder */
+.rich-editor:empty::before {
+  content: attr(placeholder);
+  color: #64748b; /* text-slate-500 */
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+

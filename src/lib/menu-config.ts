@@ -148,7 +148,7 @@ const EMPLOYEE_MONITORING_ITEMS: MenuGroup = {
       icon: createElement(FileHeart),
     },
     {
-      key: "monitoring.field_duty",
+      key: "hrd.dinas.monitoring",
       href: "/admin/hrd/monitoring/dinas",
       label: "Dinas (Tracking)",
       icon: createElement(MapPin),
@@ -160,7 +160,7 @@ const EMPLOYEE_MONITORING_ITEMS: MenuGroup = {
       icon: createElement(FileText),
     },
     {
-      key: "hrd.finance_dinas",
+      key: "hrd.dinas.expense_verification",
       href: "/admin/hrd/finance/verifikasi-dinas",
       label: "Verifikasi Biaya Dinas",
       icon: createElement(DollarSign),
@@ -220,12 +220,24 @@ const REVIEW_ITEMS: MenuGroup = {
       icon: createElement(CalendarOff),
     },
     {
-      key: "manager.field_duty_approval",
+      key: "review.dinas.validation",
       href: "/admin/manager/validasi-dinas",
       label: "Validasi Dinas Staff",
       icon: createElement(MapPin),
     },
   ],
+};
+
+const MANAGEMENT_MENU_ITEMS: MenuGroup = {
+  title: "Management",
+  items: [
+    {
+      key: "management.business_trip_missions",
+      href: "/admin/management/perjalanan-dinas",
+      label: "Perjalanan Dinas / Misi Dinas",
+      icon: createElement(MapPin),
+    }
+  ]
 };
 
 const DEVELOPER_MENU_ITEMS: MenuGroup = {
@@ -245,6 +257,7 @@ export const ALL_MENU_GROUPS: MenuGroup[] = [
   EMPLOYEE_MANAGEMENT_ITEMS,
   EMPLOYEE_MONITORING_ITEMS,
   REVIEW_ITEMS,
+  MANAGEMENT_MENU_ITEMS,
   {
     title: "Administrasi",
     items: [
@@ -412,6 +425,32 @@ export const ALL_MENU_GROUPS: MenuGroup[] = [
 ];
 
 export const MENU_CONFIG: Record<string, MenuGroup[]> = {
+  management: [
+    MANAGEMENT_MENU_ITEMS,
+    EMPLOYEE_MONITORING_ITEMS,
+    {
+      title: "Administrasi",
+      items: [
+        {
+          key: "admin.structure",
+          href: "/admin/super-admin/struktur-organisasi",
+          label: "Organisasi Perusahaan",
+          icon: createElement(KanbanSquare),
+        },
+      ],
+    },
+    {
+      title: "Personal",
+      items: [
+        {
+          key: "personal.interviews",
+          href: "/admin/interviews",
+          label: "My Interviews",
+          icon: createElement(Video),
+        },
+      ],
+    }
+  ],
   "super-admin": [
     RECRUITMENT_MENU_ITEMS,
     EMPLOYEE_MANAGEMENT_ITEMS,
@@ -505,6 +544,7 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
     },
   ],
   manager: [
+    MANAGEMENT_MENU_ITEMS,
     {
       title: "Manager",
       items: [
@@ -564,9 +604,9 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
           icon: createElement(FileHeart),
         },
         {
-          key: "employee.field_duty",
-          href: "/admin/karyawan/pengajuan-dinas",
-          label: "Pengajuan Dinas",
+          key: "employee.dinas.confirmation",
+          href: "/admin/karyawan/konfirmasi-dinas",
+          label: "Konfirmasi & Laporan Dinas",
           icon: createElement(MapPin),
         },
         {
@@ -620,9 +660,9 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
           icon: createElement(FileHeart),
         },
         {
-          key: "employee.field_duty",
-          href: "/admin/karyawan/pengajuan-dinas",
-          label: "Pengajuan Dinas",
+          key: "employee.dinas.confirmation",
+          href: "/admin/karyawan/konfirmasi-dinas",
+          label: "Konfirmasi & Laporan Dinas",
           icon: createElement(MapPin),
         },
         {
@@ -686,9 +726,9 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
           icon: createElement(FileHeart),
         },
         {
-          key: "employee.field_duty",
-          href: "/admin/karyawan/pengajuan-dinas",
-          label: "Pengajuan Dinas",
+          key: "employee.dinas.confirmation",
+          href: "/admin/karyawan/konfirmasi-dinas",
+          label: "Konfirmasi & Laporan Dinas",
           icon: createElement(MapPin),
         },
         {

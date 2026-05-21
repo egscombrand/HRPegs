@@ -153,6 +153,16 @@ export function DashboardLayout({
               return leaveStatus.isEligible;
           }
           
+          if (item.key === 'management.business_trip_missions') {
+              if (roleKey === 'super-admin') return true;
+              const title = (employeeProfile?.jobTitle || employeeProfile?.organizationRole || '').toLowerCase();
+              return title.includes('director') || title.includes('direktur');
+          }
+
+          if (item.key === 'review.dinas.validation') {
+              return !!userProfile?.isDivisionManager;
+          }
+          
           const reviewKeys = ['review.reports', 'manager.overtime_approval', 'manager.permission_approval', 'manager.leave_approval', 'hrd.permission_approval', 'hrd.overtime_approval', 'hrd.leave_approval'];
           if (reviewKeys.includes(item.key) && !userCanReview) {
               return false;
