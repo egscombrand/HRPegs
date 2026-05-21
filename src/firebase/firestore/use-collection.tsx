@@ -40,6 +40,39 @@ export interface InternalQuery extends Query<DocumentData> {
   };
 }
 
+function isInvalidFirestoreTarget(
+  target:
+    | ((CollectionReference<DocumentData> | Query<DocumentData>) & {
+        __memo?: boolean;
+      })
+    | null
+    | undefined,
+) {
+  if (!target) return true;
+
+  if ((target as any).type === "collection") {
+    return !(target as CollectionReference<DocumentData>).path;
+  }
+
+  const queryTarget = target as unknown as InternalQuery;
+  const pathObject = queryTarget?._query?.path;
+  const canonicalPath = pathObject?.canonicalString as
+    | string
+    | (() => string)
+    | undefined;
+
+  if (typeof canonicalPath === "function") {
+    const path = canonicalPath.call(pathObject);
+    return typeof path !== "string" || path.length === 0;
+  }
+
+  if (typeof canonicalPath === "string") {
+    return canonicalPath.length === 0;
+  }
+
+  return true;
+}
+
 /**
  * React hook to subscribe to a Firestore collection or query in real-time.
  * Handles nullable references.
@@ -67,12 +100,15 @@ export function useCollection<T = any>(
 
   const [data, setData] = useState<StateDataType>(null);
   const [isLoading, setIsLoading] = useState<boolean>(
-    !!memoizedTargetRefOrQuery,
+    !!memoizedTargetRefOrQuery &&
+      !isInvalidFirestoreTarget(memoizedTargetRefOrQuery),
   );
   const [error, setError] = useState<FirestoreError | Error | null>(null);
 
+  const shouldFetch = !isInvalidFirestoreTarget(memoizedTargetRefOrQuery);
+
   const fetchData = useCallback(async () => {
-    if (!memoizedTargetRefOrQuery) return;
+    if (!shouldFetch || !memoizedTargetRefOrQuery) return;
     setIsLoading(true);
     try {
       const querySnapshot = await getDocs(memoizedTargetRefOrQuery);
@@ -90,8 +126,8 @@ export function useCollection<T = any>(
   }, [memoizedTargetRefOrQuery]);
 
   useEffect(() => {
-    if (!memoizedTargetRefOrQuery) {
-      setData(null);
+    if (!shouldFetch) {
+      setData([]);
       setError(null);
       setIsLoading(false);
       return;
