@@ -17,7 +17,10 @@ import {
   Timestamp,
   updateDoc,
 } from "firebase/firestore";
-import { uploadFileToGoogleDrive } from "@/lib/storage/storage-adapter";
+import {
+  uploadFileToGoogleDrive,
+  UploadOptions,
+} from "@/lib/storage/storage-adapter";
 import {
   extractFileIdFromUrl,
   openSecureFile,
@@ -72,10 +75,9 @@ import {
   BusinessTripMission,
   BusinessTripMissionMember,
   BusinessTripType,
-  CostSchema,
   TRIP_TYPES,
-  COST_SCHEMAS,
 } from "./types";
+import { createTravelMission } from "@/lib/travel-utils";
 import { normalizeEmployeeRow } from "@/lib/employee-row-normalizer";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import type {
@@ -882,7 +884,7 @@ function StaffPicker({
 
 // ===== Main Component =====
 export function ManagementDinasClient() {
-  const { userProfile } = useAuth();
+  const { userProfile, firebaseUser } = useAuth();
   const firestore = useFirestore();
   const { toast } = useToast();
 
@@ -901,10 +903,10 @@ export function ManagementDinasClient() {
     startDate: "",
     endDate: "",
     instructionNote: "", // stores TipTap HTML output
-    costScheme: "reimburse" as CostSchema,
+    googleDriveLink: "",
+    costScheme: "",
     advanceAmount: "",
     budgetEstimate: "",
-    googleDriveLink: "",
   });
   const [assignmentLetterFile, setAssignmentLetterFile] = useState<File | null>(
     null,
@@ -960,23 +962,28 @@ export function ManagementDinasClient() {
     /api\/storage\/view\?fileId=/.test(url || "");
 
   const activeDocumentUrl = useMemo(() => {
-    if (!activeMission) return "";
-    const assignmentDriveUrl = activeMission.assignmentLetterDriveUrl?.trim();
-    const manualLink = activeMission.googleDriveLink?.trim();
-    const webViewLink = activeMission.googleDriveWebViewLink?.trim();
-    const legacyUrl = activeMission.assignmentLetterUrl?.trim();
+    if (!activeMission || !activeMission.id) return "";
 
-    if (isApiStorageViewUrl(legacyUrl) && !assignmentDriveUrl) {
-      return manualLink || webViewLink || "";
+    const manualLink = activeMission.googleDriveLink?.trim();
+    const assignmentDriveUrl = activeMission.assignmentLetterDriveUrl?.trim();
+
+    if (
+      activeMission.assignmentLetterSource === "google_drive_link" ||
+      activeMission.documentSource === "google_drive_link"
+    ) {
+      return manualLink || assignmentDriveUrl || "";
     }
 
-    return (
-      assignmentDriveUrl ||
-      manualLink ||
-      webViewLink ||
-      (isApiStorageViewUrl(legacyUrl) ? "" : legacyUrl) ||
-      ""
-    );
+    if (
+      activeMission.assignmentLetterSource === "system_drive_upload" ||
+      activeMission.assignmentLetterSource === "local_upload" ||
+      activeMission.assignmentLetterSource === "google_drive" ||
+      activeMission.assignmentLetterSource === "firebase_storage"
+    ) {
+      return `/api/business-trips/${activeMission.id}/document-preview`;
+    }
+
+    return manualLink || assignmentDriveUrl || "";
   }, [activeMission]);
 
   const activeDocumentLabel = useMemo(() => {
@@ -991,10 +998,10 @@ export function ManagementDinasClient() {
 
   const activeDocumentSourceLabel = useMemo(() => {
     if (!activeMission) return "";
-    if (
-      activeMission.assignmentLetterSource === "local_upload" ||
-      activeMission.assignmentLetterSource === "system_drive_upload"
-    ) {
+    if (activeMission.assignmentLetterSource === "local_upload") {
+      return "Upload File";
+    }
+    if (activeMission.assignmentLetterSource === "system_drive_upload") {
       return "Upload File via Drive HRP";
     }
     if (activeMission.assignmentLetterSource === "google_drive_link") {
@@ -1018,22 +1025,49 @@ export function ManagementDinasClient() {
   };
 
   const handlePreviewDocument = async () => {
-    if (!activeMission) return;
+    if (!activeMission || !activeMission.id) return;
     setDocumentViewerError(null);
 
     const storedUrl = activeDocumentUrl;
-    const isApiView =
-      !!storedUrl?.includes("/api/storage/view?fileId=") ||
-      /api\/storage\/view\?fileId=/.test(storedUrl || "");
-
-    if (!storedUrl || isApiView) {
+    if (!storedUrl) {
       setDocumentViewerError(
         "Dokumen belum bisa dibuka lintas akun. Pastikan permission Google Drive sudah dibuka untuk viewer internal.",
       );
       return;
     }
 
-    window.open(storedUrl, "_blank", "noopener,noreferrer");
+    if (storedUrl.includes("/api/business-trips/")) {
+      setIsDocumentPreviewing(true);
+      try {
+        if (!firebaseUser) {
+          throw new Error(
+            "Sesi login tidak terbaca. Silakan refresh halaman lalu coba lagi.",
+          );
+        }
+        const token = await firebaseUser.getIdToken();
+        const response = await fetch(storedUrl, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(text || "Gagal memuat dokumen.");
+        }
+
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        window.open(blobUrl, "_blank");
+      } catch (error: any) {
+        console.error("Gagal pratinjau dokumen:", error);
+        setDocumentViewerError(error?.message || "Gagal memuat dokumen.");
+      } finally {
+        setIsDocumentPreviewing(false);
+      }
+    } else {
+      window.open(storedUrl, "_blank", "noopener,noreferrer");
+    }
   };
 
   const refreshMissionList = () => {
@@ -1542,10 +1576,10 @@ export function ManagementDinasClient() {
           ? mission.endDate.toDate().toISOString().slice(0, 10)
           : mission.endDate || "",
       instructionNote: mission.instructionNote || "",
-      costScheme: mission.costScheme || "reimburse",
-      advanceAmount: String(mission.advanceAmount ?? ""),
-      budgetEstimate: String(mission.budgetEstimate ?? ""),
       googleDriveLink: mission.googleDriveLink || "",
+      costScheme: mission.costScheme || "",
+      advanceAmount: mission.advanceAmount?.toString() || "",
+      budgetEstimate: mission.budgetEstimate?.toString() || "",
     });
     setEditAssignmentLetterFile(null);
     setEditAssignmentLetterError(null);
@@ -1628,9 +1662,14 @@ export function ManagementDinasClient() {
       const newDriveLink = missionForm.googleDriveLink?.trim() || "";
 
       if (editAssignmentLetterFile) {
+        const categoryUploadOptions: UploadOptions = {
+          category: "business_trip_spd",
+          ownerUid: userProfile?.uid || "",
+        };
         const uploadResult = await uploadFileToGoogleDrive(
           editAssignmentLetterFile,
           userProfile?.uid || "",
+          categoryUploadOptions,
         );
         assignmentLetterDriveUrl =
           uploadResult.googleDriveWebViewLink ||
@@ -2142,7 +2181,7 @@ export function ManagementDinasClient() {
                           <p className="font-medium capitalize text-foreground">
                             {activeMission.assignmentLetterSource ===
                             "local_upload"
-                              ? "Upload File via Drive HRP"
+                              ? "Upload File"
                               : activeMission.assignmentLetterSource ===
                                   "system_drive_upload"
                                 ? "Upload File via Drive HRP"
@@ -2622,7 +2661,7 @@ export function ManagementDinasClient() {
                     <p className="text-xs text-muted-foreground">
                       Sumber dokumen:{" "}
                       {activeMission.assignmentLetterSource === "local_upload"
-                        ? "Upload File via Drive HRP"
+                        ? "Upload File"
                         : activeMission.assignmentLetterSource ===
                             "system_drive_upload"
                           ? "Upload File via Drive HRP"
@@ -2976,56 +3015,67 @@ export function ManagementDinasClient() {
 
     setIsSaving(true);
     try {
-      const selectedStaffData = allMergedStaff.filter((s) =>
-        selectedStaffUids.includes(s.uid),
+      // Use shared utility to create the mission and related approval documents
+      const result = await createTravelMission({
+        firestore,
+        missionForm,
+        selectedStaffUids,
+        userProfile,
+        directorUid: userProfile.uid,
+        directorName: userProfile.fullName,
+      });
+
+      const selectedStaff = allMergedStaff.filter((staff) =>
+        selectedStaffUids.includes(staff.uid),
       );
 
-      if (selectedStaffData.length === 0) {
-        throw new Error("Data staff terpilih tidak ditemukan.");
-      }
-
+      // Upload assignment letter if provided (same logic as before, but simplified after mission creation)
       let assignmentLetterUrl = missionForm.googleDriveLink;
-      let assignmentLetterDriveUrl = missionForm.googleDriveLink || "";
+      let assignmentLetterDriveUrl = "";
       let assignmentLetterDriveFileId = "";
-      let assignmentLetterFileName = assignmentLetterFile?.name || "";
+      let assignmentLetterFileName = "";
+      let documentSource:
+        | "firebase_storage"
+        | "google_drive_link"
+        | "google_drive" = "google_drive_link";
+      let assignmentLetterSource:
+        | "local_upload"
+        | "system_drive_upload"
+        | "google_drive"
+        | "google_drive_link"
+        | "firebase_storage" = "google_drive_link";
       let assignmentLetterAccessMode:
         | "anyone_with_link"
         | "internal_viewer"
         | null = null;
-      let documentSource:
-        | "google_drive"
-        | "google_drive_link"
-        | "firebase_storage" = missionForm.googleDriveLink
-        ? "google_drive_link"
-        : "google_drive";
-      let assignmentLetterSource:
-        | "local_upload"
-        | "system_drive_upload"
-        | "google_drive_link"
-        | "google_drive"
-        | "firebase_storage" = missionForm.googleDriveLink
-        ? "google_drive_link"
-        : "system_drive_upload";
       let assignmentLetterUploadedAt: any = null;
-      let assignmentLetterUploadedBy = "";
+      let assignmentLetterUploadedBy: string = "";
 
       if (assignmentLetterFile) {
         try {
           const uploadResult = await uploadFileToGoogleDrive(
             assignmentLetterFile,
             userProfile.uid,
+            {
+              category: "business_trip_spd",
+              ownerUid: userProfile.uid,
+            },
           );
-
+          assignmentLetterUrl =
+            uploadResult.googleDriveWebViewLink ||
+            uploadResult.webViewLink ||
+            uploadResult.directViewUrl ||
+            uploadResult.viewUrl ||
+            "";
           assignmentLetterDriveUrl =
             uploadResult.googleDriveWebViewLink ||
             uploadResult.webViewLink ||
             uploadResult.directViewUrl ||
             uploadResult.viewUrl ||
-            assignmentLetterDriveUrl;
+            "";
           assignmentLetterDriveFileId = uploadResult.fileId || "";
-          assignmentLetterUrl = assignmentLetterDriveUrl || assignmentLetterUrl;
           assignmentLetterFileName =
-            uploadResult.fileName || assignmentLetterFileName;
+            uploadResult.fileName || assignmentLetterFile.name;
           documentSource = "google_drive";
           assignmentLetterSource = "system_drive_upload";
           assignmentLetterAccessMode =
@@ -3040,16 +3090,23 @@ export function ManagementDinasClient() {
               description:
                 "Menggunakan link Google Drive sebagai sumber dokumen.",
             });
+            assignmentLetterUrl = missionForm.googleDriveLink;
             assignmentLetterDriveUrl = missionForm.googleDriveLink;
             assignmentLetterDriveFileId = "";
-            assignmentLetterUrl = missionForm.googleDriveLink;
             assignmentLetterFileName = "";
             documentSource = "google_drive_link";
             assignmentLetterSource = "google_drive_link";
+            assignmentLetterUploadedAt = null;
+            assignmentLetterUploadedBy = "";
           } else {
             throw uploadError;
           }
         }
+      } else if (missionForm.googleDriveLink) {
+        assignmentLetterUrl = missionForm.googleDriveLink;
+        assignmentLetterDriveUrl = missionForm.googleDriveLink;
+        documentSource = "google_drive_link";
+        assignmentLetterSource = "google_drive_link";
       }
 
       const missionCollection = collection(firestore, "business_trip_missions");
@@ -3063,7 +3120,7 @@ export function ManagementDinasClient() {
       const instructionText = stripHtml(missionForm.instructionNote);
       const assignedManagerUids = Array.from(
         new Set(
-          selectedStaffData
+          selectedStaff
             .map(
               (staff) =>
                 staff.managerUid || (staff.isDivisionManager ? staff.uid : ""),
@@ -3073,7 +3130,7 @@ export function ManagementDinasClient() {
       );
 
       const managerValidationSummaries = buildManagerValidationSummaries(
-        selectedStaffData.map((staff) => ({
+        selectedStaff.map((staff) => ({
           missionId: missionRef.id,
           missionName: missionForm.missionName,
           assignmentNumber,
@@ -3122,6 +3179,10 @@ export function ManagementDinasClient() {
         projectName: missionForm.projectName,
         clientName: missionForm.clientName,
         tripType: missionForm.tripType,
+        costScheme: missionForm.costScheme,
+        advanceAmount: Number(missionForm.advanceAmount) || 0,
+        budgetEstimate:
+          Number(parseRupiahInput(missionForm.budgetEstimate)) || 0,
         tripTypeOther:
           missionForm.tripType === "Lainnya" ? missionForm.tripTypeOther : "",
         destinationProvince: missionForm.destinationProvince,
@@ -3134,7 +3195,7 @@ export function ManagementDinasClient() {
         instructionNote: missionForm.instructionNote, // HTML (legacy compat)
         instructionHtml: missionForm.instructionNote, // HTML (canonical)
         instructionText, // Plain text
-        memberCount: selectedStaffData.length,
+        memberCount: selectedStaff.length,
         managerApprovedCount: managerValidationSummaries.filter(
           (item) => item.status === "approved",
         ).length,
@@ -3147,7 +3208,7 @@ export function ManagementDinasClient() {
       });
 
       await Promise.all(
-        selectedStaffData.map(async (staff) => {
+        selectedStaff.map(async (staff) => {
           const membersCollection = collection(
             firestore,
             "business_trip_missions",
@@ -3198,7 +3259,7 @@ export function ManagementDinasClient() {
         "timeline",
       );
       await addDoc(timelineCollection, {
-        message: `Perjalanan Dinas dibuat dengan ${selectedStaffData.length} anggota.`,
+        message: `Perjalanan Dinas dibuat dengan ${selectedStaff.length} anggota.`,
         createdAt: serverTimestamp(),
         byUid: userProfile?.uid || "",
         byName: userProfile?.fullName || "",
@@ -3219,10 +3280,10 @@ export function ManagementDinasClient() {
         startDate: "",
         endDate: "",
         instructionNote: "",
-        costScheme: "reimburse",
+        googleDriveLink: "",
+        costScheme: "",
         advanceAmount: "",
         budgetEstimate: "",
-        googleDriveLink: "",
       });
       setSelectedStaffUids([]);
       setAssignmentLetterFile(null);
@@ -3232,7 +3293,7 @@ export function ManagementDinasClient() {
 
       toast({
         title: "Perjalanan Dinas berhasil dibuat",
-        description: `${selectedStaffData.length} anggota telah ditambahkan ke perjalanan dinas.`,
+        description: `${selectedStaff.length} anggota telah ditambahkan ke perjalanan dinas.`,
       });
     } catch (error: any) {
       console.error(error);

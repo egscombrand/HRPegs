@@ -42,13 +42,6 @@ export const TRIP_TYPES = [
   "Lainnya",
 ] as const;
 
-export const COST_SCHEMAS = [
-  "advance",
-  "reimburse",
-  "company_paid",
-  "mixed",
-] as const;
-
 export const EXPENSE_CATEGORIES = [
   "Transportasi",
   "Tiket perjalanan",
@@ -68,7 +61,7 @@ export const EXPENSE_CATEGORIES = [
 export type MissionStatus = (typeof MISSION_STATUSES)[number];
 export type MemberStatus = (typeof MEMBER_STATUSES)[number];
 export type BusinessTripType = (typeof TRIP_TYPES)[number];
-export type CostSchema = (typeof COST_SCHEMAS)[number];
+
 export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
 
 export type BusinessTripMission = {
@@ -96,6 +89,9 @@ export type BusinessTripMission = {
   clientName?: string;
   tripType?: BusinessTripType;
   tripTypeOther?: string;
+  costScheme?: string;
+  advanceAmount?: number;
+  budgetEstimate?: number;
   destinationCity?: string;
   destinationRegency?: string;
   destinationProvince?: string;
@@ -107,9 +103,7 @@ export type BusinessTripMission = {
   instructionNote?: string;
   instructionHtml?: string;
   duplicateOf?: string;
-  costScheme?: CostSchema;
-  advanceAmount?: number;
-  budgetEstimate?: number;
+
   memberCount?: number;
   managerApprovedCount?: number;
   staffConfirmedCount?: number;
@@ -137,6 +131,17 @@ export type BusinessTripMissionMember = {
   managerUid?: string;
   managerName?: string;
   memberStatus?: MemberStatus;
+  directSupervisorUid?: string;
+  directSupervisorName?: string;
+  approvalTargetUid?: string;
+  approvalTargetName?: string;
+  approvalLevel?: "division_manager" | "director";
+  requiresApproval?: boolean;
+  approvalStatus?:
+    | "pending"
+    | "approved"
+    | "rejected"
+    | "validated_by_assigner";
   managerValidationStatus?: MemberStatus;
   managerValidationNote?: string;
   managerReplacementSuggestion?: string;
@@ -145,8 +150,7 @@ export type BusinessTripMissionMember = {
   transportationPlan?: string;
   departurePoint?: string;
   contactDuringTrip?: string;
-  cashAdvanceRequired?: boolean;
-  advanceNeededAmount?: number;
+
   actualDepartureAt?: any;
   actualReturnAt?: any;
   reportStatus?: string;

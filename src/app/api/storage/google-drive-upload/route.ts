@@ -88,6 +88,10 @@ async function resolveDrivePath(
       pathSegments = ["offering_templates", options.brandId];
       break;
 
+    case "business_trip_spd":
+      pathSegments = ["business_trip_spd"];
+      break;
+
     case "overtime":
       if (!options.ownerUid)
         throw new Error("ownerUid is required for overtime");

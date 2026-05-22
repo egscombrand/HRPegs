@@ -160,12 +160,6 @@ const EMPLOYEE_MONITORING_ITEMS: MenuGroup = {
       icon: createElement(FileText),
     },
     {
-      key: "hrd.dinas.expense_verification",
-      href: "/admin/hrd/finance/verifikasi-dinas",
-      label: "Verifikasi Biaya Dinas",
-      icon: createElement(DollarSign),
-    },
-    {
       key: "hrd.leave_approval",
       href: "/admin/hrd/persetujuan-cuti",
       label: "Persetujuan Cuti",

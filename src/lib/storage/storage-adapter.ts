@@ -37,7 +37,8 @@ export type StorageCategory =
   | "leave"
   | "permission"
   | "logo"
-  | "section_asset";
+  | "section_asset"
+  | "business_trip_spd";
 
 export interface UploadOptions {
   compress?: boolean;
