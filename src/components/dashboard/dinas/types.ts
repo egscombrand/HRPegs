@@ -89,9 +89,6 @@ export type BusinessTripMission = {
   clientName?: string;
   tripType?: BusinessTripType;
   tripTypeOther?: string;
-  costScheme?: string;
-  advanceAmount?: number;
-  budgetEstimate?: number;
   destinationCity?: string;
   destinationRegency?: string;
   destinationProvince?: string;
@@ -142,6 +139,9 @@ export type BusinessTripMissionMember = {
     | "approved"
     | "rejected"
     | "validated_by_assigner";
+  startDate?: any;
+  endDate?: any;
+  durationDays?: number;
   managerValidationStatus?: MemberStatus;
   managerValidationNote?: string;
   managerReplacementSuggestion?: string;
@@ -168,6 +168,32 @@ export type BusinessTripMissionMember = {
   fieldConditionNote?: string;
 
   missionStatus?: MissionStatus;
+  createdAt?: any;
+  updatedAt?: any;
+};
+
+export type BusinessTripApprovalRequest = {
+  id?: string;
+  missionId: string;
+  missionName?: string;
+  approverUid: string;
+  approverName: string;
+  approverRole?: string;
+  approvalLevel?: "division_manager" | "director" | "hrd";
+  memberUids: string[]; // Array of employee UIDs that need approval from this approver
+  memberNames: string[];
+  approvedMemberUids?: string[];
+  rejectedMemberUids?: string[];
+  status:
+    | "pending"
+    | "approved"
+    | "rejected"
+    | "partial_approved"
+    | "replacement_requested";
+  notes?: string;
+  decidedAt?: any;
+  rejectionReason?: string;
+  replacementSuggestions?: { [uid: string]: string }; // Map of member UID to suggested replacement
   createdAt?: any;
   updatedAt?: any;
 };

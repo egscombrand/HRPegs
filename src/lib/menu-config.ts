@@ -219,6 +219,12 @@ const REVIEW_ITEMS: MenuGroup = {
       label: "Validasi Perjalanan Dinas Tim",
       icon: createElement(MapPin),
     },
+    {
+      key: "review.business_trip_approval",
+      href: "/admin/review/persetujuan-dinas",
+      label: "Persetujuan Perjalanan Dinas",
+      icon: createElement(CheckSquare),
+    },
   ],
 };
 

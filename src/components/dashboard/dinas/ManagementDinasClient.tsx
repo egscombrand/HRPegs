@@ -16,6 +16,7 @@ import {
   setDoc,
   Timestamp,
   updateDoc,
+  where,
 } from "firebase/firestore";
 import {
   uploadFileToGoogleDrive,
@@ -77,7 +78,7 @@ import {
   BusinessTripType,
   TRIP_TYPES,
 } from "./types";
-import { createTravelMission } from "@/lib/travel-utils";
+import { determineApprovalTarget } from "@/lib/travel-utils";
 import { normalizeEmployeeRow } from "@/lib/employee-row-normalizer";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import type {
@@ -904,9 +905,6 @@ export function ManagementDinasClient() {
     endDate: "",
     instructionNote: "", // stores TipTap HTML output
     googleDriveLink: "",
-    costScheme: "",
-    advanceAmount: "",
-    budgetEstimate: "",
   });
   const [assignmentLetterFile, setAssignmentLetterFile] = useState<File | null>(
     null,
@@ -1267,12 +1265,26 @@ export function ManagementDinasClient() {
 
   // ── Mission list query ────────────────────────────────────────────────────
   const missionQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
+    if (!firestore || !userProfile?.uid) return null;
+
+    // HRD and Super Admin can see all missions for monitoring
+    const isHrdOrSuperAdmin =
+      userProfile.role === "hrd" || userProfile.role === "super_admin";
+
+    if (isHrdOrSuperAdmin) {
+      return query(
+        collection(firestore, "business_trip_missions"),
+        orderBy("createdAt", "desc"),
+      );
+    }
+
+    // Directors and managers only see missions they created
     return query(
       collection(firestore, "business_trip_missions"),
+      where("assignedByUid", "==", userProfile.uid),
       orderBy("createdAt", "desc"),
     );
-  }, [firestore, missionRefreshId]);
+  }, [firestore, userProfile?.uid, userProfile?.role, missionRefreshId]);
 
   const { data: missionItems, isLoading } =
     useCollection<BusinessTripMission>(missionQuery);
@@ -1577,9 +1589,6 @@ export function ManagementDinasClient() {
           : mission.endDate || "",
       instructionNote: mission.instructionNote || "",
       googleDriveLink: mission.googleDriveLink || "",
-      costScheme: mission.costScheme || "",
-      advanceAmount: mission.advanceAmount?.toString() || "",
-      budgetEstimate: mission.budgetEstimate?.toString() || "",
     });
     setEditAssignmentLetterFile(null);
     setEditAssignmentLetterError(null);
@@ -1721,10 +1730,6 @@ export function ManagementDinasClient() {
         instructionNote: missionForm.instructionNote,
         instructionHtml: missionForm.instructionNote,
         instructionText: stripHtml(missionForm.instructionNote),
-        costScheme: missionForm.costScheme,
-        advanceAmount: Number(missionForm.advanceAmount) || 0,
-        budgetEstimate:
-          Number(parseRupiahInput(missionForm.budgetEstimate)) || 0,
         assignmentLetterUrl,
         assignmentLetterDriveUrl,
         assignmentLetterDriveFileId,
@@ -2296,7 +2301,10 @@ export function ManagementDinasClient() {
                           <TableRow>
                             <TableHead>Nama</TableHead>
                             <TableHead>Posisi</TableHead>
-                            <TableHead>Manager</TableHead>
+                            <TableHead>Brand / Divisi</TableHead>
+                            <TableHead>Atasan / Approver</TableHead>
+                            <TableHead>Approval Status</TableHead>
+                            <TableHead>Confirmation Status</TableHead>
                             <TableHead>Status</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -2307,10 +2315,37 @@ export function ManagementDinasClient() {
                               <TableCell>
                                 {member.employeePosition || "-"}
                               </TableCell>
-                              <TableCell>{member.managerName || "-"}</TableCell>
+                              <TableCell>
+                                {member.brandName || "-"} /{" "}
+                                {member.divisionName || "-"}
+                              </TableCell>
+                              <TableCell>
+                                {member.approvalTargetName ||
+                                  member.managerName ||
+                                  "-"}
+                              </TableCell>
                               <TableCell>
                                 <Badge className="capitalize">
-                                  {member.memberStatus?.replace(/_/g, " ")}
+                                  {(
+                                    member.approvalStatus ||
+                                    member.managerValidationStatus ||
+                                    "-"
+                                  ).replace(/_/g, " ")}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <Badge className="capitalize">
+                                  {(
+                                    member.staffConfirmationStatus || "-"
+                                  ).replace(/_/g, " ")}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <Badge className="capitalize">
+                                  {(member.memberStatus || "-").replace(
+                                    /_/g,
+                                    " ",
+                                  )}
                                 </Badge>
                               </TableCell>
                             </TableRow>
@@ -3015,21 +3050,11 @@ export function ManagementDinasClient() {
 
     setIsSaving(true);
     try {
-      // Use shared utility to create the mission and related approval documents
-      const result = await createTravelMission({
-        firestore,
-        missionForm,
-        selectedStaffUids,
-        userProfile,
-        directorUid: userProfile.uid,
-        directorName: userProfile.fullName,
-      });
-
       const selectedStaff = allMergedStaff.filter((staff) =>
         selectedStaffUids.includes(staff.uid),
       );
 
-      // Upload assignment letter if provided (same logic as before, but simplified after mission creation)
+      // Upload assignment letter if provided
       let assignmentLetterUrl = missionForm.googleDriveLink;
       let assignmentLetterDriveUrl = "";
       let assignmentLetterDriveFileId = "";
@@ -3179,10 +3204,6 @@ export function ManagementDinasClient() {
         projectName: missionForm.projectName,
         clientName: missionForm.clientName,
         tripType: missionForm.tripType,
-        costScheme: missionForm.costScheme,
-        advanceAmount: Number(missionForm.advanceAmount) || 0,
-        budgetEstimate:
-          Number(parseRupiahInput(missionForm.budgetEstimate)) || 0,
         tripTypeOther:
           missionForm.tripType === "Lainnya" ? missionForm.tripTypeOther : "",
         destinationProvince: missionForm.destinationProvince,
@@ -3207,6 +3228,7 @@ export function ManagementDinasClient() {
         updatedAt: serverTimestamp(),
       });
 
+      const memberDocs: BusinessTripMissionMember[] = [];
       await Promise.all(
         selectedStaff.map(async (staff) => {
           const membersCollection = collection(
@@ -3219,8 +3241,19 @@ export function ManagementDinasClient() {
           const memberManagerUid =
             staff.managerUid || (staff.isDivisionManager ? staff.uid : "");
           const isManagerAsStaff = staff.isDivisionManager;
+          const approvalTarget = await determineApprovalTarget(
+            staff,
+            userProfile.uid,
+            userProfile.fullName,
+          );
 
-          await setDoc(memberRef, {
+          const approverIsCreator =
+            !!approvalTarget.approverUid &&
+            approvalTarget.approverUid === userProfile.uid;
+          const approvalNeeded =
+            !!approvalTarget.approverUid && !approverIsCreator;
+
+          const memberData: BusinessTripMissionMember = {
             missionId: missionRef.id,
             missionName: missionForm.missionName,
             assignmentNumber,
@@ -3233,19 +3266,94 @@ export function ManagementDinasClient() {
             divisionName: staff.divisionName || "-",
             managerUid: memberManagerUid,
             managerName: staff.managerName || staff.fullName,
-            requiresManagerValidation: !isManagerAsStaff,
+            approvalTargetUid: approvalTarget.approverUid || undefined,
+            approvalTargetName: approvalTarget.approverName || undefined,
+            approvalLevel: approvalTarget.level,
+            requiresApproval: approvalNeeded,
+            approvalStatus: approverIsCreator
+              ? "validated_by_assigner"
+              : "pending",
             startDate: Timestamp.fromDate(new Date(missionForm.startDate)),
             endDate: Timestamp.fromDate(new Date(missionForm.endDate)),
             durationDays,
-            memberStatus: "waiting_staff_confirmation",
+            memberStatus: approvalNeeded
+              ? "waiting_manager_validation"
+              : "waiting_staff_confirmation",
             managerValidationStatus: isManagerAsStaff
               ? "validated_by_assigner"
-              : "waiting_manager_validation",
+              : approvalNeeded
+                ? "waiting_manager_validation"
+                : "waiting_manager_validation",
             managerValidationNote: isManagerAsStaff
               ? "Disetujui oleh pemberi tugas"
               : undefined,
             staffConfirmationStatus: "waiting_staff_confirmation",
             missionStatus: "pending_manager_validation",
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          };
+
+          memberDocs.push(memberData);
+          await setDoc(memberRef, memberData);
+        }),
+      );
+
+      const approvalGroups = new Map<
+        string,
+        {
+          approverName: string;
+          approvalLevel: "division_manager" | "director";
+          memberUids: string[];
+          memberNames: string[];
+        }
+      >();
+
+      for (const member of memberDocs) {
+        if (
+          !member.approvalTargetUid ||
+          member.approvalTargetUid === userProfile.uid
+        )
+          continue;
+
+        const key = member.approvalTargetUid;
+        const existing = approvalGroups.get(key);
+        if (existing) {
+          existing.memberUids.push(member.employeeUid);
+          existing.memberNames.push(member.employeeName);
+        } else {
+          approvalGroups.set(key, {
+            approverName: member.approvalTargetName || member.managerName || "",
+            approvalLevel: member.approvalLevel || "division_manager",
+            memberUids: [member.employeeUid],
+            memberNames: [member.employeeName],
+          });
+        }
+      }
+
+      await Promise.all(
+        Array.from(approvalGroups.entries()).map(([approverUid, group]) => {
+          const approvalCollection = collection(
+            firestore,
+            "business_trip_missions",
+            missionRef.id,
+            "approval_requests",
+          );
+          const approvalRef = doc(approvalCollection);
+          return setDoc(approvalRef, {
+            missionId: missionRef.id,
+            missionName: missionForm.missionName,
+            approverUid,
+            approverName: group.approverName,
+            approverRole:
+              group.approvalLevel === "division_manager"
+                ? "manager_division"
+                : "director",
+            approvalLevel: group.approvalLevel,
+            memberUids: group.memberUids,
+            memberNames: group.memberNames,
+            status: "pending",
+            notes: "",
+            decidedAt: null,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           });
@@ -3281,9 +3389,6 @@ export function ManagementDinasClient() {
         endDate: "",
         instructionNote: "",
         googleDriveLink: "",
-        costScheme: "",
-        advanceAmount: "",
-        budgetEstimate: "",
       });
       setSelectedStaffUids([]);
       setAssignmentLetterFile(null);

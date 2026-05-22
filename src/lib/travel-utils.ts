@@ -1,8 +1,25 @@
-import { Timestamp, writeBatch, doc, collection, serverTimestamp, setDoc } from 'firebase/firestore';
-import { BusinessTripMission, BusinessTripMissionMember } from '@/components/dashboard/dinas/types';
-import { normalizeEmployeeRow } from '@/lib/employee-row-normalizer';
-import { UserProfile } from '@/providers/auth-provider';
-import { Firestore } from 'firebase/firestore';
+import {
+  Timestamp,
+  writeBatch,
+  doc,
+  collection,
+  serverTimestamp,
+  setDoc,
+  getDoc,
+} from "firebase/firestore";
+import {
+  BusinessTripMission,
+  BusinessTripMissionMember,
+} from "@/components/dashboard/dinas/types";
+import { normalizeEmployeeRow } from "@/lib/employee-row-normalizer";
+import { UserProfile } from "@/providers/auth-provider";
+import { Firestore } from "firebase/firestore";
+
+type ApprovalTargetStaff = {
+  isDivisionManager?: boolean;
+  managerUid?: string;
+  managerName?: string | null;
+};
 
 /**
  * Determine the approver for a staff member.
@@ -12,16 +29,35 @@ import { Firestore } from 'firebase/firestore';
  *   The director is assumed to be the `managerUid` of the division manager.
  */
 export async function determineApprovalTarget(
-  staff: NormalizedStaff,
-  directorUid: string,
-  directorName: string,
-): Promise<{ approverUid: string; approverName: string; level: 'division_manager' | 'director' }> {
+  staff: ApprovalTargetStaff,
+  fallbackDirectorUid: string,
+  fallbackDirectorName: string,
+): Promise<{
+  approverUid: string | null;
+  approverName: string | null;
+  level: "division_manager" | "director";
+}> {
   if (staff.isDivisionManager) {
-    // Manager is also traveling, cannot approve self → promote to director.
-    return { approverUid: directorUid, approverName: directorName, level: 'director' };
+    if (staff.managerUid) {
+      return {
+        approverUid: staff.managerUid,
+        approverName: staff.managerName || null,
+        level: "director",
+      };
+    }
+
+    return {
+      approverUid: fallbackDirectorUid,
+      approverName: fallbackDirectorName || null,
+      level: "director",
+    };
   }
-  // Regular staff, approve by their division manager.
-  return { approverUid: staff.managerUid, approverName: staff.managerName, level: 'division_manager' };
+
+  return {
+    approverUid: staff.managerUid || null,
+    approverName: staff.managerName || null,
+    level: "division_manager",
+  };
 }
 
 /**
@@ -30,11 +66,24 @@ export async function determineApprovalTarget(
  */
 export function groupMembersByApprover(
   members: BusinessTripMissionMember[],
-): Map<string, { memberUids: string[]; memberNames: string[]; approverName: string; level: 'division_manager' | 'director' }> {
+): Map<
+  string,
+  {
+    memberUids: string[];
+    memberNames: string[];
+    approverName: string;
+    level: "division_manager" | "director";
+  }
+> {
   const map = new Map();
   for (const m of members) {
     const key = m.approvalTargetUid!;
-    const entry = map.get(key) ?? { memberUids: [], memberNames: [], approverName: m.approvalTargetName!, level: m.approvalLevel! };
+    const entry = map.get(key) ?? {
+      memberUids: [],
+      memberNames: [],
+      approverName: m.approvalTargetName!,
+      level: m.approvalLevel!,
+    };
     entry.memberUids.push(m.employeeUid);
     entry.memberNames.push(m.employeeName);
     map.set(key, entry);
@@ -54,10 +103,17 @@ export async function createTravelMission(params: {
   directorUid: string; // usually the creating user's UID (director/management)
   directorName: string;
 }): Promise<{ missionId: string }> {
-  const { firestore, missionForm, selectedStaffUids, userProfile, directorUid, directorName } = params;
+  const {
+    firestore,
+    missionForm,
+    selectedStaffUids,
+    userProfile,
+    directorUid,
+    directorName,
+  } = params;
   const batch = writeBatch(firestore);
 
-  const missionRef = doc(collection(firestore, 'business_trip_missions'));
+  const missionRef = doc(collection(firestore, "business_trip_missions"));
   const missionId = missionRef.id;
 
   const missionData: BusinessTripMission = {
@@ -80,7 +136,7 @@ export async function createTravelMission(params: {
     assignedByUid: userProfile.uid,
     assignedByName: userProfile.displayName,
     // visibility and status are derived later
-    status: 'draft_mission',
+    status: "draft_mission",
     createdAt: serverTimestamp() as any,
     updatedAt: serverTimestamp() as any,
   } as BusinessTripMission;
@@ -90,7 +146,9 @@ export async function createTravelMission(params: {
   // Fetch employee profiles for selected staff
   const staffDocs = await Promise.all(
     selectedStaffUids.map(async (uid) => {
-      const snap = await getDoc(doc(collection(firestore, 'employee_profiles'), uid));
+      const snap = await getDoc(
+        doc(collection(firestore, "employee_profiles"), uid),
+      );
       return { uid, data: snap.exists() ? snap.data() : null } as const;
     }),
   );
@@ -98,7 +156,11 @@ export async function createTravelMission(params: {
   const memberDocs: BusinessTripMissionMember[] = [];
   for (const { uid, data } of staffDocs) {
     const normalized = normalizeEmployeeRow(data);
-    const { approverUid, approverName, level } = await determineApprovalTarget(normalized, directorUid, directorName);
+    const { approverUid, approverName, level } = await determineApprovalTarget(
+      normalized,
+      directorUid,
+      directorName,
+    );
     const member: BusinessTripMissionMember = {
       missionId,
       missionName: missionForm.missionName,
@@ -116,42 +178,58 @@ export async function createTravelMission(params: {
       approvalTargetName: approverName,
       approvalLevel: level,
       requiresApproval: true,
-      approvalStatus: 'pending',
-      memberStatus: 'waiting_manager_validation',
+      approvalStatus: "pending",
+      memberStatus: "waiting_manager_validation",
       createdAt: serverTimestamp() as any,
       updatedAt: serverTimestamp() as any,
     } as BusinessTripMissionMember;
     memberDocs.push(member);
-    const memberRef = doc(collection(missionRef, 'members'));
+    const memberRef = doc(collection(missionRef, "members"));
     batch.set(memberRef, member);
   }
 
   // Build approval_requests sub‑collection (one doc per distinct approver)
-  const approvalsMap = new Map<string, { approverName: string; level: 'division_manager' | 'director'; memberUids: string[]; memberNames: string[] }>();
+  const approvalsMap = new Map<
+    string,
+    {
+      approverName: string;
+      level: "division_manager" | "director";
+      memberUids: string[];
+      memberNames: string[];
+    }
+  >();
   for (const m of memberDocs) {
     const key = m.approvalTargetUid!;
-    const entry = approvalsMap.get(key) ?? { approverName: m.approvalTargetName!, level: m.approvalLevel!, memberUids: [], memberNames: [] };
+    const entry = approvalsMap.get(key) ?? {
+      approverName: m.approvalTargetName!,
+      level: m.approvalLevel!,
+      memberUids: [],
+      memberNames: [],
+    };
     entry.memberUids.push(m.employeeUid);
     entry.memberNames.push(m.employeeName);
     approvalsMap.set(key, entry);
   }
-  for (const [approverUid, { approverName, level, memberUids, memberNames }] of approvalsMap) {
-    const approvalRef = doc(collection(missionRef, 'approval_requests'));
+  approvalsMap.forEach((group, approverUid) => {
+    const approvalRef = doc(collection(missionRef, "approval_requests"));
     const approvalData = {
+      missionId,
+      missionName: missionForm.missionName,
       approverUid,
-      approverName,
-      approverRole: level === 'division_manager' ? 'manager_division' : 'director',
-      approvalLevel: level,
-      memberUids,
-      memberNames,
-      status: 'pending',
-      notes: '',
+      approverName: group.approverName,
+      approverRole:
+        group.level === "division_manager" ? "manager_division" : "director",
+      approvalLevel: group.level,
+      memberUids: group.memberUids,
+      memberNames: group.memberNames,
+      status: "pending",
+      notes: "",
       decidedAt: null,
       createdAt: serverTimestamp() as any,
       updatedAt: serverTimestamp() as any,
     };
     batch.set(approvalRef, approvalData);
-  }
+  });
 
   await batch.commit();
   return { missionId };
