@@ -30,6 +30,11 @@ export interface NormalizedEmployeeRow {
   directSupervisorUid?: string;
   directSupervisorName?: string;
   workSystem?: string;
+  // Manager fields
+  managerUid?: string;
+  managerName?: string;
+  directManagerId?: string;
+  directManagerName?: string;
 }
 
 /**
@@ -42,8 +47,9 @@ export function normalizeEmployeeRow(
   brands: Brand[] = [],
 ): NormalizedEmployeeRow {
   // 1. Resolve Brand
-  const hrdInfo = profile?.hrdEmploymentInfo || employee?.hrdEmploymentInfo || {};
-  
+  const hrdInfo =
+    profile?.hrdEmploymentInfo || employee?.hrdEmploymentInfo || {};
+
   const rawBrandId =
     hrdInfo.brandId ||
     employee?.brandId ||
@@ -66,7 +72,12 @@ export function normalizeEmployeeRow(
   let brandName = String(rawBrandName || "").trim();
 
   // If we have ID but no name, or name is a placeholder, resolve from brands collection
-  if (brandId && (!brandName || brandName === "Belum diatur" || brandName === "Brand belum diatur")) {
+  if (
+    brandId &&
+    (!brandName ||
+      brandName === "Belum diatur" ||
+      brandName === "Brand belum diatur")
+  ) {
     const foundBrand = brands.find((b) => b.id === brandId);
     if (foundBrand) {
       brandName = foundBrand.name;
@@ -92,9 +103,7 @@ export function normalizeEmployeeRow(
   ).trim();
 
   const divisionId = String(
-    hrdInfo.divisionId ||
-      employee?.divisionId ||
-      "",
+    hrdInfo.divisionId || employee?.divisionId || "",
   ).trim();
 
   // 3. Resolve Jabatan (Position) / Work Role
@@ -119,7 +128,7 @@ export function normalizeEmployeeRow(
       user?.employmentType ||
       "",
   ).trim();
-  
+
   const employeeType = tipeKaryawan;
 
   const employmentStatus = String(
@@ -140,9 +149,7 @@ export function normalizeEmployeeRow(
   ).trim();
 
   const employeeId = String(
-    hrdInfo.employeeId ||
-      employee?.employeeId ||
-      "",
+    hrdInfo.employeeId || employee?.employeeId || "",
   ).trim();
 
   const structuralPosition = String(
@@ -174,6 +181,32 @@ export function normalizeEmployeeRow(
       "",
   ).trim();
 
+  const managerUid = String(
+    hrdInfo.managerUid ||
+      employee?.managerUid ||
+      employee?.manager ||
+      profile?.managerUid ||
+      user?.managerUid ||
+      "",
+  ).trim();
+
+  const managerName = String(
+    hrdInfo.managerName ||
+      employee?.managerName ||
+      employee?.managerName ||
+      profile?.managerName ||
+      user?.managerName ||
+      "",
+  ).trim();
+
+  const directManagerId = String(
+    hrdInfo.directManagerId || employee?.directManagerId || "",
+  ).trim();
+
+  const directManagerName = String(
+    hrdInfo.directManagerName || employee?.directManagerName || "",
+  ).trim();
+
   const statusKerja = normalizeEmployeeOperationalStatus(
     employee,
     profile,
@@ -195,13 +228,22 @@ export function normalizeEmployeeRow(
     employeeId: employeeId || undefined,
     divisionId: divisionId || undefined,
     structuralPosition: structuralPosition || undefined,
-    isDivisionManager: hrdInfo.isDivisionManager || employee?.isDivisionManager || user?.isDivisionManager || false,
-    fullName: employee?.fullName || profile?.fullName || user?.fullName || undefined,
+    isDivisionManager:
+      hrdInfo.isDivisionManager ||
+      employee?.isDivisionManager ||
+      user?.isDivisionManager ||
+      false,
+    fullName:
+      employee?.fullName || profile?.fullName || user?.fullName || undefined,
     workRole: workRole || undefined,
     employeeType: employeeType || undefined,
     employmentStatus: employmentStatus || undefined,
     directSupervisorUid: directSupervisorUid || undefined,
     directSupervisorName: directSupervisorName || undefined,
     workSystem: workSystem || undefined,
+    managerUid: managerUid || undefined,
+    managerName: managerName || undefined,
+    directManagerId: directManagerId || undefined,
+    directManagerName: directManagerName || undefined,
   };
 }

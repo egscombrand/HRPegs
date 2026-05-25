@@ -23,9 +23,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import {
   Table,
   TableBody,
@@ -34,15 +31,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
+import { Check, ChevronDown, RefreshCcw, XCircle } from "lucide-react";
+import { Timestamp } from "firebase/firestore";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
-import { Check, ChevronDown, RefreshCcw, XCircle } from "lucide-react";
 
 function formatDate(value: any) {
   try {
     if (!value) return "-";
-    const date = value?.toDate ? value.toDate() : new Date(value);
-    return format(date, "dd MMM yyyy HH:mm", { locale: idLocale });
+    const date = value instanceof Timestamp ? value.toDate() : new Date(value);
+    return format(date, "dd MMM yyyy", { locale: idLocale });
   } catch {
     return "-";
   }
@@ -89,8 +90,11 @@ export function BusinessTripApprovalClient() {
     );
   }, [firestore, userProfile?.uid]);
 
-  const { data: approvalRequests, isLoading: isLoadingRequests } =
-    useCollection<BusinessTripApprovalRequest>(approvalQuery);
+  const {
+    data: approvalRequests,
+    isLoading: isLoadingRequests,
+    error: approvalQueryError,
+  } = useCollection<BusinessTripApprovalRequest>(approvalQuery);
 
   const approvalRows = useMemo(
     () => approvalRequests || [],
@@ -366,22 +370,19 @@ export function BusinessTripApprovalClient() {
               <p className="text-sm text-muted-foreground">
                 Tidak ada permintaan persetujuan saat ini.
               </p>
-              <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-900">
-                <p className="font-semibold">Debug Persetujuan</p>
-                <p>UID saat ini: {userProfile?.uid || "-"}</p>
-                <p>
-                  Jumlah approval_requests mentah:{" "}
-                  {approvalRequests?.length ?? 0}
-                </p>
-                <p>
-                  Approver UIDs:{" "}
-                  {approvalRequests
-                    ?.map((request) => request.approverUid)
-                    .filter(Boolean)
-                    .join(", ") || "-"}
-                </p>
-                <p>Status query: {isLoadingRequests ? "memuat" : "selesai"}</p>
-              </div>
+              {approvalQueryError ? (
+                <div className="p-4 rounded bg-amber-500/10 border border-amber-500/20 mb-4">
+                  <p className="text-sm font-bold text-amber-400">
+                    Terjadi error saat memuat persetujuan:
+                  </p>
+                  <pre className="text-xs text-amber-200 mt-2 break-words">
+                    {String(
+                      (approvalQueryError as any)?.message ||
+                        approvalQueryError,
+                    )}
+                  </pre>
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="space-y-4">

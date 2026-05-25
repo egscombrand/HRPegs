@@ -161,6 +161,12 @@ export async function createTravelMission(params: {
       directorUid,
       directorName,
     );
+    // If no approver could be determined, abort creation and surface error
+    if (!approverUid) {
+      throw new Error(
+        `Tidak dapat menentukan approver untuk user ${uid} (${normalized.fullName}). Periksa Struktur Organisasi.`,
+      );
+    }
     const member: BusinessTripMissionMember = {
       missionId,
       missionName: missionForm.missionName,
@@ -184,8 +190,22 @@ export async function createTravelMission(params: {
       updatedAt: serverTimestamp() as any,
     } as BusinessTripMissionMember;
     memberDocs.push(member);
-    const memberRef = doc(collection(missionRef, "members"));
+    // Use employee UID as document id for members (canonical)
+    const memberRef = doc(collection(missionRef, "members"), uid);
     batch.set(memberRef, member);
+    // Create notification for staff
+    const staffNotifRef = doc(
+      collection(firestore, "users", uid, "notifications"),
+    );
+    batch.set(staffNotifRef, {
+      type: "business_trip_assigned",
+      missionId,
+      missionName: missionForm.missionName,
+      createdAt: serverTimestamp() as any,
+      read: false,
+      byUid: userProfile.uid,
+      byName: userProfile.displayName || userProfile.uid,
+    });
   }
 
   // Build approval_requests sub‑collection (one doc per distinct approver)
@@ -211,7 +231,11 @@ export async function createTravelMission(params: {
     approvalsMap.set(key, entry);
   }
   approvalsMap.forEach((group, approverUid) => {
-    const approvalRef = doc(collection(missionRef, "approval_requests"));
+    // Use approver UID as document id for approval_requests (canonical)
+    const approvalRef = doc(
+      collection(missionRef, "approval_requests"),
+      approverUid,
+    );
     const approvalData = {
       missionId,
       missionName: missionForm.missionName,
@@ -229,6 +253,20 @@ export async function createTravelMission(params: {
       updatedAt: serverTimestamp() as any,
     };
     batch.set(approvalRef, approvalData);
+    // Create notification for approver
+    const notifRef = doc(
+      collection(firestore, "users", approverUid, "notifications"),
+    );
+    batch.set(notifRef, {
+      type: "business_trip_approval_request",
+      missionId,
+      missionName: missionForm.missionName,
+      approverUid,
+      createdAt: serverTimestamp() as any,
+      read: false,
+      byUid: userProfile.uid,
+      byName: userProfile.displayName || userProfile.uid,
+    });
   });
 
   await batch.commit();

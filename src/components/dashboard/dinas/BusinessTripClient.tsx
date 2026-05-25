@@ -400,6 +400,9 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
       byName?: string | null;
     }>
   >([]);
+  const [missionDetailError, setMissionDetailError] = useState<string | null>(
+    null,
+  );
   const [selectedStaffUids, setSelectedStaffUids] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -541,7 +544,11 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
     return query(missionCollection, orderBy("createdAt", "desc"));
   }, [firestore, userProfile, mode]);
 
-  const { data: missionItems, isLoading } = useCollection<any>(missionQuery);
+  const {
+    data: missionItems,
+    isLoading,
+    error: missionQueryError,
+  } = useCollection<any>(missionQuery);
 
   const missions = useMemo(() => {
     if (!missionItems) return [];
@@ -700,11 +707,15 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
 
   const loadMissionDetail = async (missionId: string) => {
     if (!firestore || !missionId) return;
+    setMissionDetailError(null);
     try {
       const missionRef = getBusinessTripMissionDoc(missionId);
       if (!missionRef) return;
       const missionSnap = await getDoc(missionRef);
-      if (!missionSnap.exists()) return;
+      if (!missionSnap.exists()) {
+        setSelectedMission(null);
+        return;
+      }
       setSelectedMission({
         id: missionId,
         ...(missionSnap.data() as BusinessTripMission),
@@ -736,8 +747,21 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
           })),
         );
       }
-    } catch (error) {
-      console.error("Gagal memuat detail misi", error);
+    } catch (error: any) {
+      console.error("Gagal memuat detail misi", {
+        missionId,
+        uid: userProfile?.uid,
+        role: userProfile?.role,
+        jobTitle: userProfile?.jobTitle || userProfile?.positionTitle,
+        structuralLevel: userProfile?.structuralLevel,
+        error,
+      });
+      setMissionDetailError(
+        "Anda tidak memiliki akses atau rules belum mengizinkan membaca detail perjalanan dinas.",
+      );
+      setSelectedMission(null);
+      setMissionMembers([]);
+      setMissionTimeline([]);
     }
   };
 
@@ -965,7 +989,7 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
         approvalTargetUids: [],
         approvalRequestCount: 0,
         pendingApprovalCount: 0,
-        status: "pending_approval",
+        status: "pending_manager_validation",
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -1032,14 +1056,34 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
             approvalStatus: validatedByAssigner
               ? "validated_by_assigner"
               : "pending",
-            staffConfirmationStatus: "waiting",
-            memberStatus: "waiting_approval",
+            staffConfirmationStatus: "waiting_staff_confirmation",
+            memberStatus: validatedByAssigner
+              ? "validated_by_assigner"
+              : "waiting_manager_validation",
             startDate: Timestamp.fromDate(new Date(missionForm.startDate)),
             endDate: Timestamp.fromDate(new Date(missionForm.endDate)),
             durationDays,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           });
+
+          // Notify staff about assignment
+          try {
+            const staffNotifRef = doc(
+              collection(firestore, "users", staff.uid, "notifications"),
+            );
+            await setDoc(staffNotifRef, {
+              type: "business_trip_assigned",
+              missionId: missionRef.id,
+              missionName: missionForm.missionName,
+              createdAt: serverTimestamp(),
+              read: false,
+              byUid: userProfile.uid,
+              byName: userProfile.fullName,
+            });
+          } catch (e) {
+            console.warn("Notify staff failed", e);
+          }
 
           if (validatedByAssigner) return;
 
@@ -1084,9 +1128,33 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
+        // Notify approver
+        try {
+          const notifRef = doc(
+            collection(firestore, "users", approverUid, "notifications"),
+          );
+          await setDoc(notifRef, {
+            type: "business_trip_approval_request",
+            missionId: missionRef.id,
+            missionName: missionForm.missionName,
+            approverUid,
+            createdAt: serverTimestamp(),
+            read: false,
+            byUid: userProfile.uid,
+            byName: userProfile.fullName,
+          });
+        } catch (e) {
+          console.warn("Notify approver failed", e);
+        }
       }
 
       const approvalTargetUids = Array.from(approvalGroups.keys());
+      // Determine final mission status: if there are approvals required, pending_manager_validation, else waiting_staff_confirmation
+      const initialStatus =
+        approvalTargetUids.length > 0
+          ? "pending_manager_validation"
+          : "waiting_staff_confirmation";
+
       await updateDoc(missionRef, {
         approvalTargetUids,
         approvalRequestCount: approvalGroups.size,
@@ -1094,7 +1162,7 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
         memberUids: assignedStaffUids,
         memberCount: assignedStaffUids.length,
         pendingConfirmationCount: assignedStaffUids.length,
-        status: "pending_approval",
+        status: initialStatus,
         updatedAt: serverTimestamp(),
       });
 
@@ -1824,6 +1892,19 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                       Memuat...
                     </TableCell>
                   </TableRow>
+                ) : missionQueryError ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-6">
+                      <div className="p-3 rounded bg-amber-500/10 border border-amber-500/20">
+                        <p className="text-sm font-bold text-amber-400">
+                          Terjadi error saat memuat data Perjalanan Dinas:
+                        </p>
+                        <pre className="text-xs text-amber-200 mt-2 break-words">
+                          {String(missionQueryError.message)}
+                        </pre>
+                      </div>
+                    </TableCell>
+                  </TableRow>
                 ) : missions.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-8">
@@ -1885,7 +1966,24 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
         </CardContent>
       </Card>
 
-      {selectedMission ? (
+      {missionDetailError ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Akses Ditolak</CardTitle>
+            <CardDescription>
+              Anda tidak memiliki akses atau rules belum mengizinkan membaca
+              detail perjalanan dinas.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Jika ini adalah Direktur/Management dan Anda yakin sudah
+              seharusnya bisa melihat data, periksa Firestore rules dan konsol
+              browser untuk detail denied path.
+            </p>
+          </CardContent>
+        </Card>
+      ) : selectedMission ? (
         <Card>
           <CardHeader>
             <CardTitle>Detail Misi</CardTitle>

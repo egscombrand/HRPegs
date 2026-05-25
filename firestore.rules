@@ -62,6 +62,26 @@ service cloud.firestore {
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
+
+    function getCurrentUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isManagement() {
+      if (!isSignedIn()) return false;
+      let user = getCurrentUserData();
+      let role = user.role;
+      let structuralLevel = user.structuralLevel;
+      let structuralPosition = user.structuralPosition;
+      let position = user.position;
+      let jobTitle = user.jobTitle;
+
+      return role in ['super-admin', 'hrd', 'management', 'manager', 'director', 'direktur'] ||
+             structuralLevel in ['director', 'management'] ||
+             structuralPosition in ['director', 'management', 'division_manager'] ||
+             position in ['Director Of Operational Environesia', 'Director Of Business Development Environesia', 'Director'] ||
+             jobTitle in ['Director Of Operational Environesia', 'Director Of Business Development Environesia', 'Director'];
+    }
     
     /**
      * WARNING: NOT SAFE FOR LIST QUERIES.
@@ -641,6 +661,126 @@ service cloud.firestore {
         resource.data.status in ['pending_manager', 'pending_manager_review', 'pending_director', 'pending_director_review'] ||
         resource.data.status.startsWith('pending_')
       ));
+    }
+    
+    // --- Business Trip Missions ---
+    match /business_trip_missions/{missionId} {
+      // Read mission doc:
+      // - super_admin and hrd can read all
+      // - creator (assignedByUid) can read
+      // - staff who are part of the mission (assignedStaffUids/memberUids) can read
+      // - approvers listed in approvalTargetUids can read
+      allow get: if isSuperAdmin() || isHrd() || isManagement() ||
+        (isSignedIn() && (
+          resource.data.assignedByUid == request.auth.uid ||
+          (resource.data.assignedStaffUids is list && request.auth.uid in resource.data.assignedStaffUids) ||
+          (resource.data.memberUids is list && request.auth.uid in resource.data.memberUids) ||
+          (resource.data.approvalTargetUids is list && request.auth.uid in resource.data.approvalTargetUids)
+        ));
+
+      // Listing missions is restricted to HRD, Super Admin, and Management.
+      allow list: if isSuperAdmin() || isHrd() || isManagement();
+
+      // Creation allowed for signed-in users; assignedByUid must match requester
+      allow create: if isSignedIn() && request.resource.data.assignedByUid == request.auth.uid;
+
+      // Update allowed for creator, HRD, or Super Admin
+      allow update: if isSuperAdmin() || isHrd() || (isSignedIn() && resource.data.assignedByUid == request.auth.uid);
+
+      // Deletion reserved for Super Admin or HRD
+      allow delete: if isSuperAdmin() || isHrd();
+
+      // Members subcollection: individual member docs keyed by employee UID
+      match /members/{memberId} {
+        // Member doc read rules:
+        // - super_admin/hrd/management can read
+        // - member themselves can read
+        // - approver for that member can read
+        allow get: if isSuperAdmin() || isHrd() || isManagement() || (isSignedIn() && request.auth.uid == memberId) || (isSignedIn() && resource.data.approvalTargetUid == request.auth.uid);
+
+        // Listing members: allow signed-in users (client must filter by employeeUid).
+        allow list: if isSuperAdmin() || isHrd() || isManagement() || isSignedIn();
+
+        // Creation: only mission creator/HRD/Super Admin may create member docs
+        allow create: if isSuperAdmin() || isHrd() || (isSignedIn() && get(/databases/$(database)/documents/business_trip_missions/$(missionId)).data.assignedByUid == request.auth.uid);
+
+        // Update rules:
+        // - staff can only update their confirmation fields
+        // - approver can only update managerValidation related fields
+        // - HRD/Super Admin can update any
+        allow update: if isSuperAdmin() || isHrd() || (
+          isSignedIn() && (
+            // Staff confirmation update
+            ((request.auth.uid == resource.data.employeeUid) &&
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['staffConfirmationStatus','staffConfirmationNote','updatedAt']))
+            // Approver manager validation update
+            || ((request.auth.uid == resource.data.approvalTargetUid) &&
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['managerValidationStatus','managerValidationNote','managerReplacementSuggestion','updatedAt']))
+          )
+        );
+
+        allow delete: if isSuperAdmin() || isHrd();
+      }
+
+      // Approval requests subcollection: documents keyed by approver UID
+      match /approval_requests/{approverId} {
+        allow get: if isSuperAdmin() || isHrd() || isManagement() || (isSignedIn() && request.auth.uid == approverId);
+        // Listing approval requests: allow signed-in users (client must filter by approverUid).
+        allow list: if isSuperAdmin() || isHrd() || isManagement() || isSignedIn();
+        allow create: if isSuperAdmin() || isHrd() || (isSignedIn() && get(/databases/$(database)/documents/business_trip_missions/$(missionId)).data.assignedByUid == request.auth.uid);
+        // Only the approver (or HRD/Super Admin) can update their approval request
+        allow update: if isSuperAdmin() || isHrd() || (isSignedIn() && request.auth.uid == approverId);
+        allow delete: if isSuperAdmin() || isHrd();
+      }
+
+      // Timeline: mission-level timeline entries
+      match /timeline/{entryId} {
+        allow get: if isSuperAdmin() || isHrd() || isManagement() || (isSignedIn() && (
+          resource.data.byUid == request.auth.uid ||
+          get(/databases/$(database)/documents/business_trip_missions/$(missionId)).data.assignedByUid == request.auth.uid ||
+          (get(/databases/$(database)/documents/business_trip_missions/$(missionId)).data.assignedStaffUids is list && request.auth.uid in get(/databases/$(database)/documents/business_trip_missions/$(missionId)).data.assignedStaffUids)
+        ));
+        allow list: if isSignedIn() || isManagement();
+        allow create: if isSuperAdmin() || isHrd() || (isSignedIn() && get(/databases/$(database)/documents/business_trip_missions/$(missionId)).data.assignedByUid == request.auth.uid);
+        allow update, delete: if isSuperAdmin() || isHrd();
+      }
+
+      // Manager validations cache
+      match /manager_validations/{validationId} {
+        allow get: if isSuperAdmin() || isHrd() || isManagement() || (isSignedIn() && (
+          resource.data.managerUid == request.auth.uid ||
+          get(/databases/$(database)/documents/business_trip_missions/$(missionId)).data.assignedByUid == request.auth.uid
+        ));
+        allow list: if isSuperAdmin() || isHrd() || isManagement();
+        allow create, update, delete: if isSuperAdmin() || isHrd() || (isSignedIn() && get(/databases/$(database)/documents/business_trip_missions/$(missionId)).data.assignedByUid == request.auth.uid);
+      }
+    }
+
+    // Legacy business_trips collection for older detail pages and imports
+    match /business_trips/{tripId} {
+      allow get: if isSuperAdmin() || isHrd() || isManagement() ||
+        (isSignedIn() && resource.data.assignedByUid == request.auth.uid);
+      allow list: if isSuperAdmin() || isHrd() || isManagement();
+      allow create: if isSuperAdmin() || isHrd() || (isSignedIn() && request.resource.data.assignedByUid == request.auth.uid);
+      allow update: if isSuperAdmin() || isHrd() || (isSignedIn() && resource.data.assignedByUid == request.auth.uid);
+      allow delete: if isSuperAdmin() || isHrd();
+
+      match /timeline/{entryId} {
+        allow get: if isSuperAdmin() || isHrd() || isManagement() || (isSignedIn() && (
+          resource.data.byUid == request.auth.uid ||
+          get(/databases/$(database)/documents/business_trips/$(tripId)).data.assignedByUid == request.auth.uid
+        ));
+        allow list: if isSuperAdmin() || isHrd() || isManagement() || isSignedIn();
+        allow create: if isSuperAdmin() || isHrd() || (isSignedIn() && get(/databases/$(database)/documents/business_trips/$(tripId)).data.assignedByUid == request.auth.uid);
+        allow update, delete: if isSuperAdmin() || isHrd();
+      }
+
+      match /expenses/{expenseId} {
+        allow get: if isSuperAdmin() || isHrd() || isManagement() || (isSignedIn() && get(/databases/$(database)/documents/business_trips/$(tripId)).data.assignedByUid == request.auth.uid);
+        allow list: if isSuperAdmin() || isHrd() || isManagement() || isSignedIn();
+        allow create: if isSuperAdmin() || isHrd() || (isSignedIn() && get(/databases/$(database)/documents/business_trips/$(tripId)).data.assignedByUid == request.auth.uid);
+        allow update, delete: if isSuperAdmin() || isHrd();
+      }
     }
   }
 }

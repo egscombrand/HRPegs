@@ -292,6 +292,19 @@ function SyncRelationshipsButton({
             directSupervisorName: masterDiv.managerName,
             directManagerId: masterDiv.managerId,
             directManagerName: masterDiv.managerName,
+            managerUid: masterDiv.managerId,
+            managerName: masterDiv.managerName,
+            hrdEmploymentInfo: {
+              directSupervisorUid: masterDiv.managerId,
+              directSupervisorName: masterDiv.managerName,
+              directManagerId: masterDiv.managerId,
+              directManagerName: masterDiv.managerName,
+              managerUid: masterDiv.managerId,
+              managerName: masterDiv.managerName,
+              brandId: staffBrandId,
+              divisionId: staffDivisionId,
+              divisionName: masterDiv.name || masterDiv.divisionName || null,
+            },
             updatedAt: serverTimestamp(),
           };
 
@@ -365,6 +378,19 @@ function SyncRelationshipsButton({
             directSupervisorName: masterDiv.managerDirectSupervisorName,
             directManagerId: masterDiv.managerDirectSupervisorId,
             directManagerName: masterDiv.managerDirectSupervisorName,
+            managerUid: masterDiv.managerDirectSupervisorId,
+            managerName: masterDiv.managerDirectSupervisorName,
+            hrdEmploymentInfo: {
+              directSupervisorUid: masterDiv.managerDirectSupervisorId,
+              directSupervisorName: masterDiv.managerDirectSupervisorName,
+              directManagerId: masterDiv.managerDirectSupervisorId,
+              directManagerName: masterDiv.managerDirectSupervisorName,
+              managerUid: masterDiv.managerDirectSupervisorId,
+              managerName: masterDiv.managerDirectSupervisorName,
+              brandId: managerBrandId,
+              divisionId: managerDivisionId,
+              divisionName: masterDiv.name || masterDiv.divisionName || null,
+            },
             directManagerTitle: masterDiv.managerDirectSupervisorTitle || null,
             updatedAt: serverTimestamp(),
           };
@@ -1704,11 +1730,54 @@ function DivisionManagerTab({
         doc(firestore, "users", selectedManagerUid),
         updateData as any,
       );
+      // Also write comprehensive HRD employment info and manager fields
       await setDoc(
         doc(firestore, "employee_profiles", selectedManagerUid),
-        updateData,
+        {
+          ...updateData,
+          managerUid: manager.uid,
+          managerName: manager.fullName,
+          hrdEmploymentInfo: {
+            brandId: selectedBrand,
+            brandName: brand.name,
+            divisionId: selectedDivision,
+            divisionName: division.name,
+            structuralLevel: "division_manager",
+            structuralPosition: "division_manager",
+            isDivisionManager: true,
+            workRole: `Manager Divisi ${division.name}`,
+            position: `Manager Divisi ${division.name}`,
+            directSupervisorUid: director?.uid || null,
+            directSupervisorName: director?.fullName || null,
+            directManagerId: director?.uid || null,
+            directManagerName: director?.fullName || null,
+            managerUid: manager.uid,
+            managerName: manager.fullName,
+          },
+        },
         { merge: true },
       );
+
+      // Ensure users/{uid} also has nested hrdEmploymentInfo for consistency
+      await updateDoc(doc(firestore, "users", selectedManagerUid), {
+        hrdEmploymentInfo: {
+          brandId: selectedBrand,
+          brandName: brand.name,
+          divisionId: selectedDivision,
+          divisionName: division.name,
+          structuralLevel: "division_manager",
+          structuralPosition: "division_manager",
+          isDivisionManager: true,
+          workRole: `Manager Divisi ${division.name}`,
+          position: `Manager Divisi ${division.name}`,
+          directSupervisorUid: director?.uid || null,
+          directSupervisorName: director?.fullName || null,
+          directManagerId: director?.uid || null,
+          directManagerName: director?.fullName || null,
+          managerUid: manager.uid,
+          managerName: manager.fullName,
+        },
+      });
 
       toast({
         title: "Berhasil",

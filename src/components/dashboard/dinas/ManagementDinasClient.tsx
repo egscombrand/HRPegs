@@ -3316,8 +3316,47 @@ export function ManagementDinasClient() {
 
           memberDocs.push(memberData);
           await setDoc(memberRef, memberData);
+          // Notify staff about assignment
+          try {
+            const staffNotifRef = doc(
+              collection(firestore, "users", staff.uid, "notifications"),
+            );
+            await setDoc(staffNotifRef, {
+              type: "business_trip_assigned",
+              missionId: missionRef.id,
+              missionName: missionForm.missionName,
+              createdAt: serverTimestamp(),
+              read: false,
+              byUid: userProfile.uid,
+              byName: userProfile.fullName,
+            });
+          } catch (e) {
+            console.warn("Notify staff failed", e);
+          }
         }),
       );
+
+      // Validate that all members who require approval have an approver assigned
+      const missingApprovers = memberDocs.filter(
+        (m) => m.requiresApproval && !m.approvalTargetUid,
+      );
+      if (missingApprovers.length > 0) {
+        const names = missingApprovers
+          .slice(0, 5)
+          .map((m) => m.employeeName)
+          .join(", ");
+        toast({
+          variant: "destructive",
+          title: "Gagal membuat misi",
+          description:
+            "Beberapa peserta belum memiliki approver yang valid: " +
+            names +
+            ". Periksa Struktur Organisasi.",
+        });
+        throw new Error(
+          "Missing approvers for some members. Aborting mission create.",
+        );
+      }
 
       const approvalGroups = new Map<
         string,
@@ -3361,6 +3400,8 @@ export function ManagementDinasClient() {
             "approval_requests",
           );
           const approvalRef = doc(approvalCollection, approverUid);
+          const byUid = userProfile?.uid ?? null;
+          const byName = userProfile?.fullName ?? null;
           return setDoc(approvalRef, {
             missionId: missionRef.id,
             missionName: missionForm.missionName,
@@ -3378,6 +3419,23 @@ export function ManagementDinasClient() {
             decidedAt: null,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
+          }).then(() => {
+            // Also create notification for approver
+            const notifRef = doc(
+              collection(firestore, "users", approverUid, "notifications"),
+            );
+            return setDoc(notifRef, {
+              type: "business_trip_approval_request",
+              missionId: missionRef.id,
+              missionName: missionForm.missionName,
+              approverUid,
+              createdAt: serverTimestamp(),
+              read: false,
+              byUid,
+              byName,
+            }).catch((e) => {
+              console.warn("Notify approver failed", e);
+            });
           });
         }),
       );
