@@ -47,6 +47,10 @@ import { Check, RefreshCcw, XCircle } from "lucide-react";
 import { Timestamp } from "firebase/firestore";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
+import {
+  formatDestination as formatDestinationHelper,
+  extractGoogleDriveFileId,
+} from "@/lib/dinas-utils";
 
 function formatDate(value: any) {
   try {
@@ -63,6 +67,10 @@ function stripHtml(value: string) {
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function formatDestination(missionDetails?: any) {
+  return formatDestinationHelper(missionDetails);
 }
 
 function getStatusVariant(status?: string) {
@@ -122,10 +130,15 @@ export function BusinessTripApprovalClient() {
 
   const approvalQuery = useMemoFirebase(() => {
     if (!firestore || !userProfile?.uid) return null;
+    // Include common pending-like statuses so managers see requests
     return query(
       collectionGroup(firestore, "approval_requests"),
       where("approverUid", "==", userProfile.uid),
-      where("status", "==", "pending"),
+      where("status", "in", [
+        "pending",
+        "waiting_manager_validation",
+        "pending_manager_validation",
+      ]),
       orderBy("createdAt", "desc"),
     );
   }, [firestore, userProfile?.uid]);
@@ -178,12 +191,10 @@ export function BusinessTripApprovalClient() {
     };
   }, [firestore, approvalQuery]);
 
+  // silently keep local approvals in sync; no debug logs in UI
   useEffect(() => {
     if (!userProfile?.uid || !approvalRequests) return;
-    console.log("Approval page debug:", {
-      currentUserUid: userProfile.uid,
-      approvalRequestsFound: approvalRequests,
-    });
+    // no-op: approvalRequests used to populate UI via snapshot hook
   }, [approvalRequests, userProfile?.uid]);
 
   useEffect(() => {
@@ -798,8 +809,9 @@ export function BusinessTripApprovalClient() {
                       Tujuan
                     </p>
                     <p className="text-sm font-medium">
-                      {selectedRequestForModal.missionDetails
-                        ?.destinationCity || "-"}
+                      {formatDestination(
+                        selectedRequestForModal.missionDetails,
+                      )}
                     </p>
                   </div>
                   <div>

@@ -69,6 +69,7 @@ import {
 } from "@/lib/employee-directory";
 import { resolveApprovalTarget } from "@/lib/approval-flow";
 import { determineApprovalTarget } from "@/lib/travel-utils";
+import { formatDestination, extractGoogleDriveFileId } from "@/lib/dinas-utils";
 import type {
   Brand,
   EmployeeMasterData,
@@ -160,12 +161,20 @@ export type BusinessTripMission = {
   projectName?: string;
   clientName?: string;
   tripType?: BusinessTripType;
+  destinationLabel?: string;
+  destinationName?: string;
   destinationCity?: string;
+  destinationRegency?: string;
+  destinationKabupaten?: string;
+  destinationProvince?: string;
+  destination?: string;
+  tujuan?: string;
   destinationAddress?: string;
   startDate?: any;
   endDate?: any;
   durationDays?: number;
   instructionNote?: string;
+  instructionHtml?: string;
   costScheme?: CostSchema;
   advanceAmount?: number;
   budgetEstimate?: number;
@@ -251,6 +260,10 @@ function formatDate(value: any) {
 function formatCurrency(value?: number) {
   if (value == null) return "Rp 0";
   return `Rp ${value.toLocaleString("id-ID")}`;
+}
+
+function getDestinationLabel(mission: any): string {
+  return formatDestination(mission);
 }
 
 function renderStatusLabel(status?: MissionStatus | MemberStatus) {
@@ -478,11 +491,7 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
   const [actionNote, setActionNote] = useState("");
   const [replacementSuggestion, setReplacementSuggestion] = useState("");
   const [technicalForm, setTechnicalForm] = useState({
-    transportationPlan: "",
-    departurePoint: "",
     contactDuringTrip: "",
-    cashAdvanceRequired: false,
-    advanceNeededAmount: "",
     staffConfirmationNote: "",
   });
   const [reportForm, setReportForm] = useState({
@@ -579,12 +588,8 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
     }
 
     if (mode === "staff") {
-      // For staff, query member documents so staff sees only missions they are assigned to
-      return query(
-        collectionGroup(firestore, "members"),
-        where("employeeUid", "==", userProfile.uid),
-        orderBy("createdAt", "desc"),
-      );
+      // For staff we'll fetch member docs client-side to allow fallback fields
+      return null;
     }
 
     return query(missionCollection, orderBy("createdAt", "desc"));
@@ -596,12 +601,109 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
     error: missionQueryError,
   } = useCollection<any>(missionQuery);
 
+  // Staff-specific client-side fetch (to support multiple uid fields and avoid filtering by status)
+  const [staffMemberDocs, setStaffMemberDocs] = useState<any[] | null>(null);
+  const [staffMemberLoading, setStaffMemberLoading] = useState(false);
+  const [staffError, setStaffError] = useState<any>(null);
+
+  useEffect(() => {
+    if (mode !== "staff" || !firestore || !userProfile?.uid) {
+      setStaffMemberDocs(null);
+      setStaffMemberLoading(false);
+      setStaffError(null);
+      return;
+    }
+
+    let active = true;
+    setStaffMemberLoading(true);
+    setStaffError(null);
+
+    (async () => {
+      try {
+        const uid = userProfile.uid;
+        const candidateFields = ["employeeUid", "uid", "userId", "memberUid"];
+        const docMap = new Map<string, any>();
+
+        // Query with fallback fields - NO status filtering, get ALL assigned tasks
+        for (const field of candidateFields) {
+          try {
+            const q = query(
+              collectionGroup(firestore, "members"),
+              where(field, "==", uid),
+              orderBy("createdAt", "desc"),
+            );
+            const snap = await getDocs(q);
+            snap.forEach((d) => {
+              const key = d.ref.path;
+              if (!docMap.has(key)) {
+                const data = d.data() as any;
+                // normalize employeeUid to match currentUser.uid
+                data.employeeUid =
+                  data.employeeUid ||
+                  data.uid ||
+                  data.userId ||
+                  data.memberUid ||
+                  null;
+                docMap.set(key, { id: d.id, ...data });
+              }
+            });
+          } catch (err) {
+            // ignore individual field errors, continue
+            console.warn("member field query failed", field, err);
+          }
+        }
+
+        if (!active) return;
+        // Sort by createdAt descending
+        const items = Array.from(docMap.values()).sort((a: any, b: any) => {
+          const aTime =
+            a.createdAt && a.createdAt.toDate
+              ? a.createdAt.toDate().getTime()
+              : a.createdAt
+                ? new Date(a.createdAt).getTime()
+                : 0;
+          const bTime =
+            b.createdAt && b.createdAt.toDate
+              ? b.createdAt.toDate().getTime()
+              : b.createdAt
+                ? new Date(b.createdAt).getTime()
+                : 0;
+          return bTime - aTime;
+        });
+        setStaffMemberDocs(items);
+        console.log(
+          `[Staff Mode] Loaded ${items.length} tugas untuk ${userProfile.fullName}:`,
+          items.map((m) => ({
+            missionName: m.missionName,
+            status: m.memberStatus,
+          })),
+        );
+      } catch (error) {
+        console.error("Gagal memuat tugas staff:", error);
+        if (!active) return;
+        setStaffError(error);
+      } finally {
+        if (!active) return;
+        setStaffMemberLoading(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [mode, firestore, userProfile?.uid, userProfile?.fullName]);
+
   const missions = useMemo(() => {
+    if (mode === "staff") return staffMemberDocs || [];
     if (!missionItems) return [];
     return missionItems as Array<
       BusinessTripMission | BusinessTripMissionMember
     >;
-  }, [missionItems]);
+  }, [missionItems, staffMemberDocs, mode]);
+
+  const isLoadingEffective = mode === "staff" ? staffMemberLoading : isLoading;
+  const missionQueryErrorEffective =
+    mode === "staff" ? staffError : missionQueryError;
 
   const resetMissionForm = () => {
     setMissionForm({
@@ -1412,11 +1514,7 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
           : "declined_by_staff",
         memberStatus: approved ? "ready_to_depart" : "declined_by_staff",
         staffConfirmationNote: technicalForm.staffConfirmationNote,
-        transportationPlan: technicalForm.transportationPlan,
-        departurePoint: technicalForm.departurePoint,
         contactDuringTrip: technicalForm.contactDuringTrip,
-        cashAdvanceRequired: technicalForm.cashAdvanceRequired,
-        advanceNeededAmount: Number(technicalForm.advanceNeededAmount) || 0,
         updatedAt: serverTimestamp(),
       });
       await appendTimelineEntry(
@@ -1426,11 +1524,7 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
       await syncMissionStatus(member.missionId);
       toast({ title: "Konfirmasi staff tersimpan." });
       setTechnicalForm({
-        transportationPlan: "",
-        departurePoint: "",
         contactDuringTrip: "",
-        cashAdvanceRequired: false,
-        advanceNeededAmount: "",
         staffConfirmationNote: "",
       });
       await loadMissionDetail(member.missionId);
@@ -2017,22 +2111,23 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading ? (
+                {isLoadingEffective ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-8">
                       Memuat...
                     </TableCell>
                   </TableRow>
-                ) : missionQueryError ? (
+                ) : missionQueryErrorEffective ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-6">
                       <div className="p-3 rounded bg-amber-500/10 border border-amber-500/20">
                         <p className="text-sm font-bold text-amber-400">
-                          Terjadi error saat memuat data Perjalanan Dinas:
+                          Terjadi masalah saat memuat data perjalanan dinas.
                         </p>
-                        <pre className="text-xs text-amber-200 mt-2 break-words">
-                          {String(missionQueryError.message)}
-                        </pre>
+                        <p className="text-sm text-amber-200 mt-2">
+                          Silakan muat ulang halaman atau hubungi admin jika
+                          masalah berlanjut.
+                        </p>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -2061,11 +2156,18 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                       item.totalMembers ??
                       item.assignedStaffCount ??
                       1;
+                    // For staff mode: can confirm if manager validated
+                    // For other modes: original logic
                     const canConfirm =
-                      approvalStatus &&
-                      approvalStatus !== "waiting_manager_validation" &&
-                      confirmationStatus !== "confirmed_by_staff" &&
-                      confirmationStatus !== "declined_by_staff";
+                      mode === "staff"
+                        ? approvalStatus &&
+                          approvalStatus !== "waiting_manager_validation" &&
+                          confirmationStatus !== "confirmed_by_staff" &&
+                          confirmationStatus !== "declined_by_staff"
+                        : approvalStatus &&
+                          approvalStatus !== "waiting_manager_validation" &&
+                          confirmationStatus !== "confirmed_by_staff" &&
+                          confirmationStatus !== "declined_by_staff";
 
                     return (
                       <TableRow
@@ -2073,15 +2175,26 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                         className="hover:bg-muted cursor-pointer"
                         onClick={() => handleSelectItem(item)}
                       >
-                        <TableCell>{title || "-"}</TableCell>
-                        <TableCell>{item.destinationCity || "-"}</TableCell>
-                        <TableCell>
+                        <TableCell className="font-medium">
+                          {title || "-"}
+                        </TableCell>
+                        <TableCell>{getDestinationLabel(item)}</TableCell>
+                        <TableCell className="text-sm">
                           {formatDate(item.startDate)} -{" "}
                           {formatDate(item.endDate)}
                         </TableCell>
-                        <TableCell>{memberCount}</TableCell>
+                        <TableCell className="text-center">
+                          {memberCount}
+                        </TableCell>
                         <TableCell>
-                          {renderStatusLabel(approvalStatus)}
+                          {mode === "staff" &&
+                          approvalStatus === "waiting_manager_validation" ? (
+                            <Badge variant="warning">
+                              Menunggu persetujuan atasan
+                            </Badge>
+                          ) : (
+                            renderStatusLabel(approvalStatus)
+                          )}
                         </TableCell>
                         <TableCell>
                           {renderStatusLabel(confirmationStatus)}
@@ -2098,17 +2211,19 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                             >
                               Detail
                             </Button>
-                            <Button
-                              variant={canConfirm ? "secondary" : "outline"}
-                              size="sm"
-                              disabled={!canConfirm}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                handleSelectItem(item);
-                              }}
-                            >
-                              Konfirmasi Siap Dinas
-                            </Button>
+                            {mode === "staff" && (
+                              <Button
+                                variant={canConfirm ? "default" : "outline"}
+                                size="sm"
+                                disabled={!canConfirm}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleSelectItem(item);
+                                }}
+                              >
+                                Konfirmasi Siap Dinas
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -2139,88 +2254,182 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
           </CardContent>
         </Card>
       ) : selectedMission ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Detail Misi</CardTitle>
-            <CardDescription>
-              Lihat anggota, status, timeline, dan action yang tersedia.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <p className="text-sm text-muted-foreground">Nama Misi</p>
-                <p className="font-semibold">{selectedMission.missionName}</p>
+        <>
+          <Card>
+            <CardHeader>
+              <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                <div className="space-y-2">
+                  <CardTitle className="text-2xl">
+                    {selectedMission.missionName}
+                  </CardTitle>
+                  <CardDescription className="max-w-2xl text-sm text-muted-foreground">
+                    {selectedMission.clientName ||
+                      selectedMission.projectName ||
+                      "-"}
+                  </CardDescription>
+                  <div className="pt-1 text-xs text-muted-foreground">
+                    Dibuat: {formatDate(selectedMission.createdAt)}
+                  </div>
+                </div>
+                <div className="space-y-2 text-left md:text-right">
+                  {renderStatusLabel(selectedMission.status)}
+                  <p className="text-sm text-muted-foreground">
+                    {formatDate(selectedMission.startDate)} —{" "}
+                    {formatDate(selectedMission.endDate)}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Nomor SPD</p>
-                <p className="font-semibold">
-                  {selectedMission.assignmentNumber}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Klien / Proyek</p>
-                <p className="font-semibold">
-                  {selectedMission.clientName ||
-                    selectedMission.projectName ||
-                    "-"}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Periode</p>
-                <p className="font-semibold">
-                  {formatDate(selectedMission.startDate)} -{" "}
-                  {formatDate(selectedMission.endDate)} (
-                  {selectedMission.durationDays || 0} hari)
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Tujuan</p>
-                <p className="font-semibold">
-                  {selectedMission.destinationCity || "-"}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Alamat</p>
-                <p className="font-semibold">
-                  {selectedMission.destinationAddress || "-"}
-                </p>
-              </div>
-            </div>
-            <Separator />
-            <div className="grid gap-4 md:grid-cols-3">
-              <div>
-                <p className="text-sm text-muted-foreground">Status Misi</p>
-                {renderStatusLabel(selectedMission.status)}
-              </div>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Instruksi</p>
-              <p className="whitespace-pre-wrap">
-                {selectedMission.instructionNote || "-"}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Surat Tugas</p>
-              {selectedMission.assignmentLetterUrl ? (
-                <a
-                  href={selectedMission.assignmentLetterUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-primary underline"
-                >
-                  {selectedMission.assignmentLetterFileName || "Lihat file"}
-                </a>
-              ) : (
-                <p className="text-muted-foreground">Belum tersedia</p>
-              )}
-            </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {(() => {
+                const approvedCount = missionMembers.filter(
+                  (m) => m.managerValidationStatus === "approved_by_manager",
+                ).length;
+                const confirmedCount = missionMembers.filter(
+                  (m) => m.staffConfirmationStatus === "confirmed_by_staff",
+                ).length;
+                return (
+                  <div className="grid gap-4 md:grid-cols-5">
+                    <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                        Nomor SPD
+                      </p>
+                      <p className="mt-2 text-sm font-semibold">
+                        {selectedMission.assignmentNumber || "-"}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                        Tujuan
+                      </p>
+                      <p className="mt-2 text-sm font-semibold line-clamp-2">
+                        {getDestinationLabel(selectedMission)}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                        Anggota
+                      </p>
+                      <p className="mt-2 text-lg font-semibold">
+                        {missionMembers.length}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                        Validasi Manager
+                      </p>
+                      <p className="mt-2 text-sm font-semibold">
+                        <span className="text-primary">{approvedCount}</span>/
+                        {missionMembers.length}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                        Konfirmasi Staff
+                      </p>
+                      <p className="mt-2 text-sm font-semibold">
+                        <span className="text-primary">{confirmedCount}</span>/
+                        {missionMembers.length}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
 
+              <div className="grid gap-4 xl:grid-cols-2">
+                <div className="rounded-2xl border border-border bg-muted/20 p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Lokasi & Alamat
+                  </p>
+                  <p className="mt-2 text-sm text-foreground">
+                    {selectedMission.destinationAddress || "-"}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-border bg-muted/20 p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Instruksi / Catatan
+                  </p>
+                  <p className="mt-2 text-sm leading-relaxed text-foreground">
+                    {stripHtml(
+                      selectedMission.instructionHtml ||
+                        selectedMission.instructionNote ||
+                        "-",
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-border bg-muted/20 p-4">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Dokumen SPD
+                </p>
+                {selectedMission.assignmentLetterUrl ? (
+                  <div className="mt-3 space-y-3">
+                    {(() => {
+                      const fileId = extractGoogleDriveFileId(
+                        selectedMission.assignmentLetterUrl,
+                      );
+                      if (!fileId) {
+                        return (
+                          <div className="space-y-2">
+                            <p className="text-xs text-amber-600 italic">
+                              Format URL tidak dikenali. Hubungi admin untuk
+                              memperbarui dokumen SPD.
+                            </p>
+                            <a
+                              href={selectedMission.assignmentLetterUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center justify-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/15 transition"
+                            >
+                              <FileText className="h-4 w-4" /> Buka Dokumen
+                              (External)
+                            </a>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                          <a
+                            href={`/api/storage/google-drive-preview?fileId=${fileId}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center justify-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/15 transition"
+                          >
+                            <FileText className="h-4 w-4" /> Preview SPD
+                          </a>
+                          <a
+                            href={`/api/storage/google-drive-preview?fileId=${fileId}&download=true`}
+                            download
+                            className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition"
+                          >
+                            Download SPD
+                          </a>
+                        </div>
+                      );
+                    })()}
+                    <p className="text-xs text-muted-foreground italic">
+                      Jika preview gagal karena akses, silakan hubungi admin
+                      atau bagian HR.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Dokumen SPD belum diunggah.
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Anggota Misi</CardTitle>
+                <CardTitle className="text-lg">
+                  Anggota Misi ({missionMembers.length})
+                </CardTitle>
                 <CardDescription>
-                  Statues validasi manager dan konfirmasi staff per anggota.
+                  Status validasi manager dan konfirmasi staff per anggota.
                 </CardDescription>
               </CardHeader>
               <CardContent className="overflow-x-auto">
@@ -2228,24 +2437,33 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Nama</TableHead>
-                      <TableHead>Divisi</TableHead>
-                      <TableHead>Atasan / Approver</TableHead>
-                      <TableHead>Status Manager</TableHead>
-                      <TableHead>Status Staff</TableHead>
+                      <TableHead>Posisi</TableHead>
+                      <TableHead>Brand / Divisi</TableHead>
+                      <TableHead>Approver</TableHead>
+                      <TableHead>Validasi Manager</TableHead>
+                      <TableHead>Konfirmasi Staff</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {missionMembers.map((member) => (
                       <TableRow
                         key={member.id}
-                        className={`cursor-pointer ${
+                        className={`cursor-pointer hover:bg-muted/50 ${
                           selectedMember?.id === member.id ? "bg-muted" : ""
                         }`}
                         onClick={() => setSelectedMember(member)}
                       >
-                        <TableCell>{member.employeeName}</TableCell>
-                        <TableCell>{member.divisionName || "-"}</TableCell>
-                        <TableCell>
+                        <TableCell className="font-semibold">
+                          {member.employeeName}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {member.employeePosition || "-"}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {member.brandName || "-"} /{" "}
+                          {member.divisionName || "-"}
+                        </TableCell>
+                        <TableCell className="text-sm">
                           {member.approvalTargetName || "-"}
                         </TableCell>
                         <TableCell>
@@ -2263,30 +2481,43 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
 
             <Card>
               <CardHeader>
-                <CardTitle>Timeline Misi</CardTitle>
+                <CardTitle className="text-lg">Timeline Aktivitas</CardTitle>
                 <CardDescription>
-                  Riwayat aksi dan perubahan status misi.
+                  Riwayat perubahan status dan aksi yang dilakukan pada misi.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent>
                 {missionTimeline.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Belum ada riwayat.
+                  <p className="text-sm text-muted-foreground italic">
+                    Belum ada riwayat aktivitas.
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {missionTimeline.map((entry) => (
+                    {missionTimeline.map((entry, idx) => (
                       <div
                         key={entry.id}
-                        className="rounded-2xl border border-border bg-background p-3"
+                        className="relative flex gap-3 pb-3 last:pb-0"
                       >
-                        <p className="text-sm text-muted-foreground">
-                          {formatDate(entry.createdAt)} •{" "}
-                          {entry.byName || "System"}
-                        </p>
-                        <p className="mt-1 text-sm text-foreground">
-                          {entry.message}
-                        </p>
+                        {/* Timeline line */}
+                        {idx < missionTimeline.length - 1 && (
+                          <div className="absolute left-[15px] top-10 h-6 w-px bg-border" />
+                        )}
+                        {/* Dot */}
+                        <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border-2 border-primary bg-primary/10">
+                          <div className="h-2 w-2 rounded-full bg-primary" />
+                        </div>
+                        {/* Content */}
+                        <div className="flex-1 rounded-lg border border-border/50 bg-muted/30 p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="flex-1 text-sm font-medium text-foreground">
+                              {entry.message}
+                            </p>
+                          </div>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {formatDate(entry.createdAt)} •{" "}
+                            {entry.byName || "System"}
+                          </p>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -2361,43 +2592,24 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
             selectedMember &&
             selectedMember.staffConfirmationStatus ===
               "waiting_staff_confirmation" ? (
-              <div className="space-y-4">
-                <p className="font-semibold">Konfirmasi Staff</p>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div>
-                    <Label htmlFor="transportationPlan">
-                      Rencana Transportasi
-                    </Label>
-                    <Input
-                      id="transportationPlan"
-                      value={technicalForm.transportationPlan}
-                      onChange={(event) =>
-                        setTechnicalForm((prev) => ({
-                          ...prev,
-                          transportationPlan: event.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="departurePoint">Titik Berangkat</Label>
-                    <Input
-                      id="departurePoint"
-                      value={technicalForm.departurePoint}
-                      onChange={(event) =>
-                        setTechnicalForm((prev) => ({
-                          ...prev,
-                          departurePoint: event.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">
+                    Konfirmasi Siap Dinas
+                  </CardTitle>
+                  <CardDescription>
+                    Konfirmasi kesiapan Anda, isi kontak aktif, dan catatan
+                    kendala jika ada.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-3">
                     <Label htmlFor="contactDuringTrip">
-                      Kontak Saat Perjalanan
+                      Kontak Aktif Selama Dinas
                     </Label>
                     <Input
                       id="contactDuringTrip"
+                      type="text"
                       value={technicalForm.contactDuringTrip}
                       onChange={(event) =>
                         setTechnicalForm((prev) => ({
@@ -2405,70 +2617,68 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                           contactDuringTrip: event.target.value,
                         }))
                       }
+                      placeholder="Contoh: +62 812 3456 7890"
                     />
                   </div>
-                  <div>
-                    <Label htmlFor="advanceNeededAmount">Uang Muka (Rp)</Label>
-                    <Input
-                      id="advanceNeededAmount"
-                      type="number"
-                      value={technicalForm.advanceNeededAmount}
+                  <div className="space-y-3">
+                    <Label htmlFor="staffConfirmationNote">
+                      Catatan Kesiapan / Kendala
+                    </Label>
+                    <Textarea
+                      id="staffConfirmationNote"
+                      value={technicalForm.staffConfirmationNote}
                       onChange={(event) =>
                         setTechnicalForm((prev) => ({
                           ...prev,
-                          advanceNeededAmount: event.target.value,
+                          staffConfirmationNote: event.target.value,
                         }))
                       }
+                      rows={4}
+                      placeholder="Tulis catatan kesiapan atau kendala di perjalanan"
                     />
                   </div>
-                </div>
-                <Textarea
-                  id="staffConfirmationNote"
-                  value={technicalForm.staffConfirmationNote}
-                  onChange={(event) =>
-                    setTechnicalForm((prev) => ({
-                      ...prev,
-                      staffConfirmationNote: event.target.value,
-                    }))
-                  }
-                  rows={3}
-                  placeholder="Catatan tambahan atau kendala"
-                />
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    onClick={() =>
-                      handleStaffConfirmation(selectedMember, true)
-                    }
-                    disabled={
-                      isSaving ||
-                      selectedMember.managerValidationStatus ===
-                        "waiting_manager_validation"
-                    }
-                  >
-                    <CheckCircle2 className="mr-2 h-4 w-4" /> Konfirmasi Siap
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    onClick={() =>
-                      handleStaffConfirmation(selectedMember, false)
-                    }
-                    disabled={
-                      isSaving ||
-                      selectedMember.managerValidationStatus ===
-                        "waiting_manager_validation"
-                    }
-                  >
-                    <XCircle className="mr-2 h-4 w-4" /> Tidak Bisa Ikut
-                  </Button>
-                </div>
-                {selectedMember.managerValidationStatus ===
-                  "waiting_manager_validation" && (
-                  <p className="text-xs text-amber-500 font-medium mt-1">
-                    Menunggu persetujuan atasan/manager sebelum Anda dapat
-                    melakukan konfirmasi.
-                  </p>
-                )}
-              </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      onClick={() =>
+                        handleStaffConfirmation(selectedMember, true)
+                      }
+                      disabled={
+                        isSaving ||
+                        selectedMember.managerValidationStatus ===
+                          "waiting_manager_validation"
+                      }
+                    >
+                      <CheckCircle2 className="mr-2 h-4 w-4" /> Konfirmasi Siap
+                      Dinas
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={() =>
+                        handleStaffConfirmation(selectedMember, false)
+                      }
+                      disabled={
+                        isSaving ||
+                        selectedMember.managerValidationStatus ===
+                          "waiting_manager_validation"
+                      }
+                    >
+                      <XCircle className="mr-2 h-4 w-4" /> Tidak Bisa Ikut
+                    </Button>
+                  </div>
+                  {selectedMember.managerValidationStatus ===
+                    "waiting_manager_validation" && (
+                    <div className="space-y-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+                      <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide">
+                        Menunggu Persetujuan Atasan
+                      </p>
+                      <p className="text-sm text-amber-700/80">
+                        Anda dapat mengkonfirmasi kesiapan setelah manager
+                        atasan menyetujui penugasan ini.
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             ) : null}
 
             {mode === "staff" &&
@@ -2603,7 +2813,7 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
               </div>
             ) : null}
 
-            <div className="flex flex-wrap gap-2 pt-2">
+            <div className="flex flex-wrap gap-2 pt-4">
               <Badge variant="secondary">
                 Dibuat: {formatDate(selectedMission.createdAt)}
               </Badge>
@@ -2611,8 +2821,8 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                 Terakhir diupdate: {formatDate(selectedMission.updatedAt)}
               </Badge>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </>
       ) : null}
     </div>
   );
