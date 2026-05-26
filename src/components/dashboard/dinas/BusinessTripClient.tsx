@@ -2255,124 +2255,207 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
         </Card>
       ) : selectedMission ? (
         <>
-          <Card>
-            <CardHeader>
-              <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-                <div className="space-y-2">
-                  <CardTitle className="text-2xl">
-                    {selectedMission.missionName}
-                  </CardTitle>
-                  <CardDescription className="max-w-2xl text-sm text-muted-foreground">
-                    {selectedMission.clientName ||
-                      selectedMission.projectName ||
-                      "-"}
-                  </CardDescription>
-                  <div className="pt-1 text-xs text-muted-foreground">
-                    Dibuat: {formatDate(selectedMission.createdAt)}
+          {/* Detail Header with Close Button */}
+          <div className="mb-6 flex items-center justify-between rounded-lg border border-border bg-muted/50 p-4">
+            <div className="flex-1">
+              <h1 className="text-3xl font-bold tracking-tight">
+                {selectedMission.missionName}
+              </h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {selectedMission.clientName ||
+                  selectedMission.projectName ||
+                  "-"}
+              </p>
+            </div>
+            <div className="flex flex-col items-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedMission(null)}
+              >
+                Tutup Detail
+              </Button>
+              {renderStatusLabel(selectedMission.status)}
+            </div>
+          </div>
+
+          {/* Summary Cards */}
+          <div className="mb-6 grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+            {(() => {
+              const approvedCount = missionMembers.filter(
+                (m) => m.managerValidationStatus === "approved_by_manager",
+              ).length;
+              const confirmedCount = missionMembers.filter(
+                (m) => m.staffConfirmationStatus === "confirmed_by_staff",
+              ).length;
+              return (
+                <>
+                  <div className="rounded-xl border border-border/50 bg-card p-4 shadow-sm hover:shadow-md transition-shadow">
+                    <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                      Nomor SPD
+                    </p>
+                    <p className="mt-3 text-lg font-semibold">
+                      {selectedMission.assignmentNumber || "-"}
+                    </p>
                   </div>
-                </div>
-                <div className="space-y-2 text-left md:text-right">
-                  {renderStatusLabel(selectedMission.status)}
-                  <p className="text-sm text-muted-foreground">
-                    {formatDate(selectedMission.startDate)} —{" "}
-                    {formatDate(selectedMission.endDate)}
-                  </p>
-                </div>
-              </div>
+
+                  <div className="rounded-xl border border-border/50 bg-card p-4 shadow-sm hover:shadow-md transition-shadow">
+                    <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                      Tujuan
+                    </p>
+                    <p className="mt-3 text-sm font-semibold line-clamp-2">
+                      {getDestinationLabel(selectedMission)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-border/50 bg-card p-4 shadow-sm hover:shadow-md transition-shadow">
+                    <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                      Jumlah Anggota
+                    </p>
+                    <p className="mt-3 text-3xl font-bold text-primary">
+                      {missionMembers.length}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-border/50 bg-card p-4 shadow-sm hover:shadow-md transition-shadow">
+                    <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                      Validasi Manager
+                    </p>
+                    <div className="mt-3 flex items-baseline gap-2">
+                      <p className="text-3xl font-bold text-primary">
+                        {approvedCount}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        dari {missionMembers.length}
+                      </p>
+                    </div>
+                    <div className="mt-2 h-1.5 w-full rounded-full bg-muted">
+                      <div
+                        className="h-1.5 rounded-full bg-primary transition-all"
+                        style={{
+                          width: `${
+                            missionMembers.length > 0
+                              ? (approvedCount / missionMembers.length) * 100
+                              : 0
+                          }%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-border/50 bg-card p-4 shadow-sm hover:shadow-md transition-shadow">
+                    <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                      Konfirmasi Staff
+                    </p>
+                    <div className="mt-3 flex items-baseline gap-2">
+                      <p className="text-3xl font-bold text-primary">
+                        {confirmedCount}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        dari {missionMembers.length}
+                      </p>
+                    </div>
+                    <div className="mt-2 h-1.5 w-full rounded-full bg-muted">
+                      <div
+                        className="h-1.5 rounded-full bg-primary transition-all"
+                        style={{
+                          width: `${
+                            missionMembers.length > 0
+                              ? (confirmedCount / missionMembers.length) * 100
+                              : 0
+                          }%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+
+          {/* Period & Creation Info */}
+          <div className="mb-6 grid gap-4 md:grid-cols-3">
+            <div className="rounded-lg border border-border/50 bg-card/50 p-4">
+              <p className="text-xs font-medium text-muted-foreground">
+                Periode Perjalanan
+              </p>
+              <p className="mt-2 font-medium">
+                {formatDate(selectedMission.startDate)} —{" "}
+                {formatDate(selectedMission.endDate)}
+              </p>
+            </div>
+            <div className="rounded-lg border border-border/50 bg-card/50 p-4">
+              <p className="text-xs font-medium text-muted-foreground">
+                Durasi
+              </p>
+              <p className="mt-2 font-medium">
+                {selectedMission.durationDays || 0} hari
+              </p>
+            </div>
+            <div className="rounded-lg border border-border/50 bg-card/50 p-4">
+              <p className="text-xs font-medium text-muted-foreground">
+                Dibuat
+              </p>
+              <p className="mt-2 font-medium">
+                {formatDate(selectedMission.createdAt)}
+              </p>
+            </div>
+          </div>
+
+          <Separator className="mb-6" />
+
+          {/* Informasi Perjalanan Section */}
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="text-xl">Informasi Perjalanan</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              {(() => {
-                const approvedCount = missionMembers.filter(
-                  (m) => m.managerValidationStatus === "approved_by_manager",
-                ).length;
-                const confirmedCount = missionMembers.filter(
-                  (m) => m.staffConfirmationStatus === "confirmed_by_staff",
-                ).length;
-                return (
-                  <div className="grid gap-4 md:grid-cols-5">
-                    <div className="rounded-2xl border border-border bg-muted/30 p-4">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                        Nomor SPD
-                      </p>
-                      <p className="mt-2 text-sm font-semibold">
-                        {selectedMission.assignmentNumber || "-"}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl border border-border bg-muted/30 p-4">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                        Tujuan
-                      </p>
-                      <p className="mt-2 text-sm font-semibold line-clamp-2">
-                        {getDestinationLabel(selectedMission)}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl border border-border bg-muted/30 p-4">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                        Anggota
-                      </p>
-                      <p className="mt-2 text-lg font-semibold">
-                        {missionMembers.length}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl border border-border bg-muted/30 p-4">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                        Validasi Manager
-                      </p>
-                      <p className="mt-2 text-sm font-semibold">
-                        <span className="text-primary">{approvedCount}</span>/
-                        {missionMembers.length}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl border border-border bg-muted/30 p-4">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                        Konfirmasi Staff
-                      </p>
-                      <p className="mt-2 text-sm font-semibold">
-                        <span className="text-primary">{confirmedCount}</span>/
-                        {missionMembers.length}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              <div className="grid gap-4 xl:grid-cols-2">
-                <div className="rounded-2xl border border-border bg-muted/20 p-4">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Lokasi & Alamat
+              <div className="grid gap-6 md:grid-cols-2">
+                <div>
+                  <h4 className="mb-2 text-sm font-semibold text-foreground">
+                    Tujuan Lengkap
+                  </h4>
+                  <p className="text-sm text-foreground/80">
+                    {getDestinationLabel(selectedMission)}
                   </p>
-                  <p className="mt-2 text-sm text-foreground">
+                </div>
+                <div>
+                  <h4 className="mb-2 text-sm font-semibold text-foreground">
+                    Alamat Tujuan
+                  </h4>
+                  <p className="text-sm text-foreground/80">
                     {selectedMission.destinationAddress || "-"}
                   </p>
                 </div>
-                <div className="rounded-2xl border border-border bg-muted/20 p-4">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Instruksi / Catatan
-                  </p>
-                  <p className="mt-2 text-sm leading-relaxed text-foreground">
-                    {stripHtml(
-                      selectedMission.instructionHtml ||
-                        selectedMission.instructionNote ||
-                        "-",
-                    )}
-                  </p>
-                </div>
               </div>
 
-              <div className="rounded-2xl border border-border bg-muted/20 p-4">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Dokumen SPD
+              <div>
+                <h4 className="mb-2 text-sm font-semibold text-foreground">
+                  Instruksi & Catatan
+                </h4>
+                <p className="rounded-lg bg-muted/30 p-3 text-sm leading-relaxed text-foreground/80">
+                  {stripHtml(
+                    selectedMission.instructionHtml ||
+                      selectedMission.instructionNote ||
+                      "Tidak ada instruksi khusus",
+                  )}
                 </p>
+              </div>
+
+              <div>
+                <h4 className="mb-3 text-sm font-semibold text-foreground">
+                  Dokumen SPD
+                </h4>
                 {selectedMission.assignmentLetterUrl ? (
-                  <div className="mt-3 space-y-3">
+                  <div className="space-y-3">
                     {(() => {
                       const fileId = extractGoogleDriveFileId(
                         selectedMission.assignmentLetterUrl,
                       );
                       if (!fileId) {
                         return (
-                          <div className="space-y-2">
-                            <p className="text-xs text-amber-600 italic">
+                          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+                            <p className="text-xs text-amber-700 mb-2">
                               Format URL tidak dikenali. Hubungi admin untuk
                               memperbarui dokumen SPD.
                             </p>
@@ -2380,151 +2463,181 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                               href={selectedMission.assignmentLetterUrl}
                               target="_blank"
                               rel="noreferrer"
-                              className="inline-flex items-center justify-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/15 transition"
+                              className="inline-flex items-center justify-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/15 transition"
                             >
-                              <FileText className="h-4 w-4" /> Buka Dokumen
+                              <FileText className="h-3.5 w-3.5" /> Buka Dokumen
                               (External)
                             </a>
                           </div>
                         );
                       }
                       return (
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <div className="flex flex-wrap gap-2">
                           <a
                             href={`/api/storage/google-drive-preview?fileId=${fileId}`}
                             target="_blank"
                             rel="noreferrer"
-                            className="inline-flex items-center justify-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/15 transition"
+                            className="inline-flex items-center justify-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/15 transition"
                           >
-                            <FileText className="h-4 w-4" /> Preview SPD
+                            <FileText className="h-3.5 w-3.5" /> Preview SPD
                           </a>
                           <a
                             href={`/api/storage/google-drive-preview?fileId=${fileId}&download=true`}
                             download
-                            className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition"
+                            className="inline-flex items-center justify-center gap-2 rounded-md border border-border bg-muted/50 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted transition"
                           >
                             Download SPD
                           </a>
                         </div>
                       );
                     })()}
-                    <p className="text-xs text-muted-foreground italic">
-                      Jika preview gagal karena akses, silakan hubungi admin
-                      atau bagian HR.
+                    <p className="text-xs italic text-muted-foreground">
+                      Jika preview gagal, silakan coba download atau hubungi
+                      admin.
                     </p>
                   </div>
                 ) : (
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    Dokumen SPD belum diunggah.
-                  </p>
+                  <div className="rounded-lg border border-dashed border-border bg-muted/20 p-3 text-center">
+                    <p className="text-xs text-muted-foreground">
+                      Dokumen SPD belum diunggah
+                    </p>
+                  </div>
                 )}
               </div>
             </CardContent>
           </Card>
 
-          <div className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">
-                  Anggota Misi ({missionMembers.length})
-                </CardTitle>
-                <CardDescription>
-                  Status validasi manager dan konfirmasi staff per anggota.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="overflow-x-auto">
+          {/* Anggota Dinas Section */}
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="text-xl">Anggota Dinas</CardTitle>
+              <CardDescription>
+                {missionMembers.length} anggota dalam perjalanan ini
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-hidden rounded-lg border border-border/50">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>Nama</TableHead>
-                      <TableHead>Posisi</TableHead>
-                      <TableHead>Brand / Divisi</TableHead>
-                      <TableHead>Approver</TableHead>
-                      <TableHead>Validasi Manager</TableHead>
-                      <TableHead>Konfirmasi Staff</TableHead>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="font-semibold">Nama</TableHead>
+                      <TableHead className="font-semibold">Posisi</TableHead>
+                      <TableHead className="font-semibold">
+                        Brand / Divisi
+                      </TableHead>
+                      <TableHead className="font-semibold">Approver</TableHead>
+                      <TableHead className="font-semibold text-center">
+                        Validasi Manager
+                      </TableHead>
+                      <TableHead className="font-semibold text-center">
+                        Konfirmasi Staff
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {missionMembers.map((member) => (
-                      <TableRow
-                        key={member.id}
-                        className={`cursor-pointer hover:bg-muted/50 ${
-                          selectedMember?.id === member.id ? "bg-muted" : ""
-                        }`}
-                        onClick={() => setSelectedMember(member)}
-                      >
-                        <TableCell className="font-semibold">
-                          {member.employeeName}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {member.employeePosition || "-"}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {member.brandName || "-"} /{" "}
-                          {member.divisionName || "-"}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {member.approvalTargetName || "-"}
-                        </TableCell>
-                        <TableCell>
-                          {renderStatusLabel(member.managerValidationStatus)}
-                        </TableCell>
-                        <TableCell>
-                          {renderStatusLabel(member.staffConfirmationStatus)}
+                    {missionMembers.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-6">
+                          <p className="text-sm text-muted-foreground">
+                            Belum ada anggota dalam perjalanan ini
+                          </p>
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : (
+                      missionMembers.map((member, idx) => (
+                        <TableRow
+                          key={member.id}
+                          className={`cursor-pointer transition-colors hover:bg-muted/30 ${
+                            selectedMember?.id === member.id
+                              ? "bg-primary/5"
+                              : ""
+                          } ${idx % 2 === 1 ? "bg-muted/20" : ""}`}
+                          onClick={() => setSelectedMember(member)}
+                        >
+                          <TableCell className="font-medium">
+                            {member.employeeName}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {member.employeePosition || "-"}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {member.brandName && member.divisionName
+                              ? `${member.brandName} / ${member.divisionName}`
+                              : member.brandName || member.divisionName || "-"}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {member.approvalTargetName || "-"}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {renderStatusLabel(member.managerValidationStatus)}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {renderStatusLabel(member.staffConfirmationStatus)}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
-              </CardContent>
-            </Card>
+              </div>
+            </CardContent>
+          </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Timeline Aktivitas</CardTitle>
-                <CardDescription>
-                  Riwayat perubahan status dan aksi yang dilakukan pada misi.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {missionTimeline.length === 0 ? (
-                  <p className="text-sm text-muted-foreground italic">
-                    Belum ada riwayat aktivitas.
+          {/* Timeline Aktivitas Section */}
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="text-xl">Timeline Aktivitas</CardTitle>
+              <CardDescription>
+                Riwayat perubahan status dan aksi yang dilakukan
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {missionTimeline.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border bg-muted/20 p-6 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Belum ada riwayat aktivitas
                   </p>
-                ) : (
-                  <div className="space-y-2">
-                    {missionTimeline.map((entry, idx) => (
-                      <div
-                        key={entry.id}
-                        className="relative flex gap-3 pb-3 last:pb-0"
-                      >
-                        {/* Timeline line */}
-                        {idx < missionTimeline.length - 1 && (
-                          <div className="absolute left-[15px] top-10 h-6 w-px bg-border" />
-                        )}
-                        {/* Dot */}
-                        <div className="mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border-2 border-primary bg-primary/10">
-                          <div className="h-2 w-2 rounded-full bg-primary" />
-                        </div>
-                        {/* Content */}
-                        <div className="flex-1 rounded-lg border border-border/50 bg-muted/30 p-3">
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="flex-1 text-sm font-medium text-foreground">
-                              {entry.message}
-                            </p>
-                          </div>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {formatDate(entry.createdAt)} •{" "}
-                            {entry.byName || "System"}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {missionTimeline.map((entry, idx) => (
+                    <div
+                      key={entry.id}
+                      className="relative flex gap-4 pb-4 last:pb-0"
+                    >
+                      {/* Timeline line connector */}
+                      {idx < missionTimeline.length - 1 && (
+                        <div className="absolute left-[15px] top-10 h-8 w-px bg-gradient-to-b from-primary/50 to-transparent" />
+                      )}
+
+                      {/* Timeline dot */}
+                      <div className="relative mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center">
+                        <div className="absolute inset-0 rounded-full border-2 border-primary bg-primary/10" />
+                        <div className="h-2 w-2 rounded-full bg-primary" />
+                      </div>
+
+                      {/* Timeline content */}
+                      <div className="flex-1 rounded-lg border border-border/50 bg-card/50 p-4 transition-all hover:bg-card hover:shadow-md">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="flex-1 text-sm font-medium text-foreground">
+                            {entry.message}
                           </p>
                         </div>
+                        <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                          <span>{formatDate(entry.createdAt)}</span>
+                          <span>•</span>
+                          <span>{entry.byName || "System"}</span>
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
+          {/* Action Sections (existing logic) */}
+          <div className="space-y-4">
             {mode === "manager" && selectedMember ? (
               <div className="space-y-4">
                 {selectedMember.employeeUid === userProfile?.uid && (
@@ -2557,7 +2670,7 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                     <div className="flex flex-wrap gap-2">
                       <Button
                         onClick={() =>
-                          handleManagerDecision(selectedMember, "approve")
+                          handleManagerDecision(selectedMember!, "approve")
                         }
                         disabled={isSaving}
                       >
@@ -2566,7 +2679,7 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                       <Button
                         variant="secondary"
                         onClick={() =>
-                          handleManagerDecision(selectedMember, "replace")
+                          handleManagerDecision(selectedMember!, "replace")
                         }
                         disabled={isSaving}
                       >
@@ -2576,7 +2689,7 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                       <Button
                         variant="destructive"
                         onClick={() =>
-                          handleManagerDecision(selectedMember, "reject")
+                          handleManagerDecision(selectedMember!, "reject")
                         }
                         disabled={isSaving}
                       >
@@ -2640,11 +2753,11 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                   <div className="flex flex-wrap gap-2">
                     <Button
                       onClick={() =>
-                        handleStaffConfirmation(selectedMember, true)
+                        handleStaffConfirmation(selectedMember!, true)
                       }
                       disabled={
                         isSaving ||
-                        selectedMember.managerValidationStatus ===
+                        selectedMember!.managerValidationStatus ===
                           "waiting_manager_validation"
                       }
                     >
@@ -2654,18 +2767,18 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                     <Button
                       variant="destructive"
                       onClick={() =>
-                        handleStaffConfirmation(selectedMember, false)
+                        handleStaffConfirmation(selectedMember!, false)
                       }
                       disabled={
                         isSaving ||
-                        selectedMember.managerValidationStatus ===
+                        selectedMember!.managerValidationStatus ===
                           "waiting_manager_validation"
                       }
                     >
                       <XCircle className="mr-2 h-4 w-4" /> Tidak Bisa Ikut
                     </Button>
                   </div>
-                  {selectedMember.managerValidationStatus ===
+                  {selectedMember!.managerValidationStatus ===
                     "waiting_manager_validation" && (
                     <div className="space-y-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
                       <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide">
@@ -2687,7 +2800,7 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
             selectedMission?.status === "approved_ready_to_depart" ? (
               <div className="space-y-3">
                 <Button
-                  onClick={() => handleDepart(selectedMember)}
+                  onClick={() => handleDepart(selectedMember!)}
                   disabled={isSaving}
                 >
                   <MapPin className="mr-2 h-4 w-4" /> Check-in Berangkat
@@ -2700,7 +2813,7 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
             selectedMember.memberStatus === "on_duty" ? (
               <div className="space-y-3">
                 <Button
-                  onClick={() => handleReturn(selectedMember)}
+                  onClick={() => handleReturn(selectedMember!)}
                   disabled={isSaving}
                 >
                   <ClipboardCheck className="mr-2 h-4 w-4" /> Check-out Pulang
@@ -2791,7 +2904,7 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                   />
                 </div>
                 <Button
-                  onClick={() => handleSubmitReport(selectedMember)}
+                  onClick={() => handleSubmitReport(selectedMember!)}
                   disabled={isSaving}
                 >
                   <FileCheck className="mr-2 h-4 w-4" /> Kirim Laporan
@@ -2804,7 +2917,7 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
             selectedMission.status === "pending_hrd_finalization" ? (
               <div className="space-y-3">
                 <Button
-                  onClick={() => handleHrdFinalize(selectedMission)}
+                  onClick={() => handleHrdFinalize(selectedMission!)}
                   disabled={isSaving}
                 >
                   <CheckCircle2 className="mr-2 h-4 w-4" /> Finalisasi
@@ -2815,10 +2928,10 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
 
             <div className="flex flex-wrap gap-2 pt-4">
               <Badge variant="secondary">
-                Dibuat: {formatDate(selectedMission.createdAt)}
+                Dibuat: {formatDate(selectedMission!.createdAt)}
               </Badge>
               <Badge variant="secondary">
-                Terakhir diupdate: {formatDate(selectedMission.updatedAt)}
+                Terakhir diupdate: {formatDate(selectedMission!.updatedAt)}
               </Badge>
             </div>
           </div>

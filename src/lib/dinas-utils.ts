@@ -138,6 +138,43 @@ export function extractGoogleDriveFileId(
   return null;
 }
 
+const BUSINESS_TRIP_STATUS_LABELS: Record<string, string> = {
+  pending: "Menunggu persetujuan",
+  waiting: "Menunggu persetujuan",
+  waiting_staff_confirmation: "Menunggu konfirmasi staff",
+  waiting_manager_validation: "Menunggu persetujuan atasan",
+  pending_manager_validation: "Menunggu persetujuan atasan",
+  approved: "Disetujui",
+  approved_by_manager: "Disetujui atasan",
+  approved_ready_to_depart: "Disetujui dan siap berangkat",
+  confirmed_by_staff: "Staff sudah konfirmasi",
+  declined_by_staff: "Staff tidak bisa ikut",
+  rejected: "Ditolak",
+  rejected_by_manager: "Ditolak atasan",
+  replacement_requested: "Menunggu penggantian staff",
+  partial_approved: "Disetujui sebagian",
+  validated_by_assigner: "Divalidasi pemberi tugas",
+  ready_to_depart: "Siap berangkat",
+  on_duty: "Sedang bertugas",
+  returned: "Sudah kembali",
+  report_submitted: "Laporan dikirim",
+  completed: "Selesai",
+  archived: "Diarsip",
+};
+
+export function formatBusinessTripStatus(
+  status: string | undefined | null,
+): string {
+  if (!status) return "-";
+  const normalized = String(status).toLowerCase().trim();
+  if (BUSINESS_TRIP_STATUS_LABELS[normalized]) {
+    return BUSINESS_TRIP_STATUS_LABELS[normalized];
+  }
+  return normalized
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 /**
  * Strip HTML tags from text
  */
