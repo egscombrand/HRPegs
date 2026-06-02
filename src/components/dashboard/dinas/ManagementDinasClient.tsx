@@ -316,24 +316,75 @@ function inferTimelineCategory(entry: { message?: string; category?: string }): 
 
 // Helper: Normalize evidence fields from multiple possible sources
 function normalizeEvidence(raw: any): MilestoneEvidence {
-  // ─ Photos: try multiple field names
+  // ─ Photos: try multiple field names (comprehensive list)
   let photos: MilestoneEvidence["photos"] = [];
-  const photoSource = raw.photos || raw.evidencePhotos || raw.photoUrl || [];
-  if (Array.isArray(photoSource)) {
-    photos = photoSource.map((p: any) => ({
-      photoUrl: p?.photoUrl ?? (typeof p === "string" ? p : null),
-      photoPath: p?.photoPath ?? null,
-      originalFileName: p?.originalFileName ?? null,
-      compressedSize: p?.compressedSize ?? null,
-      uploadedAt: p?.uploadedAt ?? null,
-      expiresAt: p?.expiresAt ?? null,
-    }));
-  } else if (typeof photoSource === "string") {
-    photos = [{ photoUrl: photoSource, photoPath: null, originalFileName: null, compressedSize: null, uploadedAt: null, expiresAt: null }];
+  let photoSource = raw.photos || raw.photoUrls || raw.photoUrl || raw.evidencePhotos ||
+                     raw.evidencePhotoUrls || raw.photo || raw.attachments || raw.files || [];
+
+  // Handle nested evidence object
+  if (!photoSource && raw.evidence && typeof raw.evidence === "object") {
+    photoSource = raw.evidence.photos || raw.evidence.photoUrl || raw.evidence.photoUrls || [];
   }
 
-  // ─ Address: try multiple field names
-  const addressText = raw.addressText || raw.locationAddress || null;
+  if (Array.isArray(photoSource)) {
+    photos = photoSource
+      .filter((p: any) => p != null)
+      .map((p: any) => {
+        // Handle different photo object formats
+        if (typeof p === "string") {
+          return {
+            photoUrl: p,
+            photoPath: null,
+            originalFileName: null,
+            compressedSize: null,
+            uploadedAt: null,
+            expiresAt: null,
+          };
+        }
+        return {
+          photoUrl: p?.photoUrl ?? p?.url ?? (typeof p === "string" ? p : null),
+          photoPath: p?.photoPath ?? p?.path ?? null,
+          originalFileName: p?.originalFileName ?? p?.name ?? p?.filename ?? null,
+          compressedSize: p?.compressedSize ?? p?.size ?? null,
+          uploadedAt: p?.uploadedAt ?? null,
+          expiresAt: p?.expiresAt ?? null,
+        };
+      });
+  } else if (typeof photoSource === "string") {
+    photos = [{
+      photoUrl: photoSource,
+      photoPath: null,
+      originalFileName: null,
+      compressedSize: null,
+      uploadedAt: null,
+      expiresAt: null,
+    }];
+  } else if (photoSource && typeof photoSource === "object") {
+    // Handle single photo object
+    photos = [{
+      photoUrl: photoSource.photoUrl ?? photoSource.url ?? null,
+      photoPath: photoSource.photoPath ?? photoSource.path ?? null,
+      originalFileName: photoSource.originalFileName ?? photoSource.name ?? null,
+      compressedSize: photoSource.compressedSize ?? photoSource.size ?? null,
+      uploadedAt: photoSource.uploadedAt ?? null,
+      expiresAt: photoSource.expiresAt ?? null,
+    }];
+  }
+
+  // ─ Address: try multiple field names (comprehensive list)
+  const addressText = raw.addressText || raw.locationAddress || raw.address || raw.fullAddress ||
+                      (raw.location && raw.location.address) || null;
+
+  // ─ Latitude: try multiple field names
+  const latitude = raw.latitude ?? raw.lat ?? raw.evidenceLat ??
+                   (raw.location && (raw.location.latitude ?? raw.location.lat)) ?? null;
+
+  // ─ Longitude: try multiple field names
+  const longitude = raw.longitude ?? raw.lng ?? raw.evidenceLng ??
+                    (raw.location && (raw.location.longitude ?? raw.location.lng)) ?? null;
+
+  // ─ Location accuracy: try multiple field names
+  const locationAccuracy = raw.locationAccuracy ?? raw.accuracy ?? raw.evidenceAccuracy ?? null;
 
   // ─ Target members: fallback to message parsing if empty
   let targetMemberNames = raw.targetMemberNames || [];
@@ -345,7 +396,7 @@ function normalizeEvidence(raw: any): MilestoneEvidence {
     }
   }
 
-  return {
+  const normalized = {
     id: raw.id ?? "",
     missionId: raw.missionId ?? "",
     milestoneType: raw.milestoneType ?? "departed",
@@ -354,9 +405,9 @@ function normalizeEvidence(raw: any): MilestoneEvidence {
     targetMemberUids,
     targetMemberNames,
     createdAt: raw.createdAt,
-    latitude: raw.latitude ?? raw.evidenceLat ?? null,
-    longitude: raw.longitude ?? raw.evidenceLng ?? null,
-    locationAccuracy: raw.locationAccuracy ?? raw.evidenceAccuracy ?? null,
+    latitude,
+    longitude,
+    locationAccuracy,
     locationCapturedAt: raw.locationCapturedAt ?? null,
     locationStatus: raw.locationStatus ?? raw.evidenceLocationStatus ?? "unavailable",
     locationTrustLevel: raw.locationTrustLevel ?? raw.evidenceLocationTrust ?? raw.trustLevel ?? null,
@@ -373,6 +424,13 @@ function normalizeEvidence(raw: any): MilestoneEvidence {
     note: raw.note ?? null,
     photos,
   };
+
+  // Debug: log detailed structure (can be removed after fixing)
+  if (!photos.some(p => p.photoUrl) && !addressText && latitude === null) {
+    console.warn("⚠️ Evidence normalized but no photos/location found. Raw object keys:", Object.keys(raw));
+  }
+
+  return normalized;
 }
 
 // Helper: Collect evidence from multiple sources (timeline + milestone_evidences + members)
@@ -429,7 +487,19 @@ function collectEvidenceSources(
     ...timelineEvidence.filter((e) => !evidenceColIds.has(e.id!)),
   ];
 
-  console.log("normalized evidence", allEvidence);
+  // Detailed logging for debugging
+  console.log("normalized evidence detail", JSON.stringify(allEvidence, null, 2));
+  allEvidence.forEach((ev, idx) => {
+    console.log(`Evidence ${idx}:`, {
+      id: ev.id,
+      milestoneType: ev.milestoneType,
+      confirmedBy: ev.confirmedByName,
+      photosCount: ev.photos?.length ?? 0,
+      hasAddress: !!ev.addressText,
+      hasCoordinates: ev.latitude != null,
+      accuracy: ev.locationAccuracy,
+    });
+  });
 
   return allEvidence;
 }
@@ -4142,12 +4212,26 @@ export function ManagementDinasClient() {
                     return null;
                   }
                   function EvidenceCard({ ev }: { ev: MilestoneEvidence }) {
-                    const photos = (ev.photos ?? []).slice(0, 3);
-                    const allPhotos = ev.photos ?? [];
+                    const allPhotos = (ev.photos ?? []).filter((p) => p && (p.photoUrl || p.photoPath));
+                    const photos = allPhotos.slice(0, 3);
                     const hasPhotos = allPhotos.length > 0;
                     const isExpired = hasPhotos && photos[0]?.expiresAt && toDate(photos[0].expiresAt) && (toDate(photos[0].expiresAt) as Date) < new Date();
-                    const hasLocation = ev.latitude != null || ev.addressText || ev.manualLocationNote;
+                    const hasAddress = !!ev.addressText;
+                    const hasCoordinates = ev.latitude != null && ev.longitude != null;
+                    const hasLocation = hasAddress || hasCoordinates || !!ev.manualLocationNote;
                     const displayMembers = (ev.targetMemberNames ?? []).filter(Boolean).join(", ") || "–";
+
+                    // Debug: if evidence found but no photos/location, show warning
+                    const missingPhotoLocation = !hasPhotos && !hasLocation;
+                    if (missingPhotoLocation) {
+                      console.warn("Evidence card render: found evidence but no photos/location", {
+                        evidenceId: ev.id,
+                        milestoneType: ev.milestoneType,
+                        photosLength: ev.photos?.length,
+                        addressText: ev.addressText,
+                        latitude: ev.latitude,
+                      });
+                    }
 
                     return (
                       <div className="rounded-xl border border-border/60 bg-muted/10 p-4 space-y-3">
@@ -4241,10 +4325,11 @@ export function ManagementDinasClient() {
                           )}
                         </div>
 
-                        {/* Empty state jika tidak ada lokasi atau foto */}
+                        {/* Debug/Empty state jika tidak ada lokasi atau foto */}
                         {!hasPhotos && !hasLocation && (
-                          <div className="text-xs text-muted-foreground italic py-2">
-                            Tidak ada data foto atau lokasi untuk evidence ini.
+                          <div className="text-xs rounded-lg border border-amber-200/50 bg-amber-50/60 dark:border-amber-800/30 dark:bg-amber-900/10 p-2.5 text-amber-700 dark:text-amber-400">
+                            <p className="font-medium mb-1">⚠️ Evidence ditemukan, tapi field foto/lokasi belum termapping.</p>
+                            <p className="text-[11px] opacity-75">Hubungi admin jika ini terus terjadi.</p>
                           </div>
                         )}
                       </div>
