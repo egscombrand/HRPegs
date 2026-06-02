@@ -2320,42 +2320,77 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
         }),
       );
 
-      // Save milestone evidence (location + photos)
+      // Save milestone evidence (location + photos to Google Drive)
       let savedPhotosCount = 0;
       let savedEvidenceId: string | null = null;
-      let uploadedPhotos: Array<{
-        photoUrl: string | null;
-        photoPath: string | null;
-        originalFileName: string | null;
-        compressedSize: number | null;
-        uploadedAt: any;
-        expiresAt: any;
-      }> = [];
-      if (evidenceOpts && milestone !== "issue_reported") {
+      let uploadedPhotos: Array<any> = [];
 
+      if (evidenceOpts && milestone !== "issue_reported") {
+        // 1. Upload photos to Google Drive
         const expiresAt = Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
-        for (const photoFile of (evidenceOpts.photos ?? [])) {
+        const photosToUpload = evidenceOpts.photos ?? [];
+
+        // Validate: photo wajib ada
+        if (photosToUpload.length === 0) {
+          return toast({
+            variant: "destructive",
+            title: "Foto bukti milestone wajib dipilih",
+            description: `Pilih minimal 1 foto untuk ${getEvidenceType(milestone)}`,
+          });
+        }
+
+        // Upload each photo to Google Drive
+        for (const photoFile of photosToUpload) {
           try {
             const compressed = await compressMilestoneImage(photoFile);
             const storagePath = `milestone_evidence/${missionId}/${userProfile.uid}/${milestone}_${Date.now()}_${uploadedPhotos.length}.jpg`;
-            const result = await uploadFile(compressed, storagePath, userProfile.uid, { compress: false });
-            uploadedPhotos.push({
-              photoUrl: result.downloadUrl ?? null,
-              photoPath: storagePath,
-              originalFileName: photoFile.name,
-              compressedSize: compressed.size,
-              uploadedAt: serverTimestamp(),
-              expiresAt,
+            const result = await uploadFile(compressed, storagePath, userProfile.uid, {
+              compress: false,
+              category: "business_trip_spd",
+              ownerUid: userProfile.uid,
             });
-          } catch (uploadErr) {
-            console.warn("Gagal upload foto bukti milestone:", uploadErr);
+
+            // Normalize upload result (supports both Google Drive and Firebase Storage)
+            uploadedPhotos.push({
+              // Google Drive fields
+              driveFileId: result.fileId ?? null,
+              url: result.webViewLink ?? result.viewUrl ?? result.downloadUrl ?? null,
+              downloadUrl: result.downloadUrl ?? null,
+              directViewUrl: result.directViewUrl ?? null,
+              thumbnailUrl: result.thumbnailUrl ?? null,
+              // General fields
+              storageProvider: result.storageProvider ?? "firebaseStorage",
+              name: result.originalFileName ?? photoFile.name,
+              size: result.finalSize ?? compressed.size,
+              uploadedAt: result.uploadedAt ?? serverTimestamp(),
+              expiresAt: expiresAt,
+              // Fallback for compatibility
+              photoUrl: result.webViewLink ?? result.viewUrl ?? result.downloadUrl ?? null,
+              photoPath: result.fileId ?? storagePath,
+            });
+          } catch (uploadErr: any) {
+            console.error("Gagal upload foto bukti milestone:", uploadErr);
+            return toast({
+              variant: "destructive",
+              title: "Gagal upload foto bukti",
+              description: uploadErr?.message || "Coba lagi",
+            });
           }
         }
+
         savedPhotosCount = uploadedPhotos.length;
+        console.log("upload milestone photo result", uploadedPhotos);
+
+        // 2. Save evidence to Firestore (only if photos uploaded successfully)
+        if (uploadedPhotos.length === 0) {
+          return toast({
+            variant: "destructive",
+            title: "Tidak ada foto yang berhasil diupload",
+          });
+        }
 
         try {
-          const evidenceCol = collection(firestore, "business_trip_missions", missionId, "milestone_evidences");
-          const evidenceDocRef = await addDoc(evidenceCol, {
+          const evidencePayload = {
             milestoneType: milestone,
             evidenceType: getEvidenceType(milestone),
             confirmedByUid: userProfile.uid,
@@ -2386,10 +2421,22 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
             manualLocationNote: evidenceOpts.manualLocationNote || null,
             note: evidenceOpts.note || null,
             photos: uploadedPhotos,
-          });
+          };
+
+          console.log("saving milestone evidence payload", evidencePayload);
+
+          const evidenceCol = collection(firestore, "business_trip_missions", missionId, "milestone_evidences");
+          const evidenceDocRef = await addDoc(evidenceCol, evidencePayload);
           savedEvidenceId = evidenceDocRef.id;
-        } catch (evidenceErr) {
-          console.warn("Gagal menyimpan bukti milestone:", evidenceErr);
+
+          console.log("✅ Milestone evidence saved:", { evidenceId: savedEvidenceId, photosCount: uploadedPhotos.length });
+        } catch (evidenceErr: any) {
+          console.error("Gagal menyimpan bukti milestone:", evidenceErr);
+          return toast({
+            variant: "destructive",
+            title: "Gagal menyimpan bukti milestone",
+            description: evidenceErr?.message || "Coba lagi",
+          });
         }
       }
 
@@ -2427,7 +2474,7 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
         };
 
         // Embed evidence data directly so HRD/Director can read without milestone_evidences access
-        if (evidenceOpts && milestone !== "issue_reported") {
+        if (evidenceOpts && milestone !== "issue_reported" && uploadedPhotos.length > 0) {
           timelineMeta.milestoneType = milestone;
           timelineMeta.confirmedByName = updaterName;
           timelineMeta.confirmedByUid = userProfile.uid;
@@ -2444,12 +2491,14 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
           if (evidenceOpts.manualLocationNote) {
             timelineMeta.evidenceManualNote = evidenceOpts.manualLocationNote;
           }
-          if (uploadedPhotos.length > 0) {
-            timelineMeta.evidencePhotos = uploadedPhotos.map((p) => ({
-              photoUrl: p.photoUrl ?? null,
-              expiresAt: p.expiresAt ?? null,
-            }));
-          }
+          // Embed photo URLs (support both Google Drive and Firebase Storage)
+          timelineMeta.evidencePhotos = uploadedPhotos.map((p) => ({
+            photoUrl: p.url ?? p.photoUrl ?? p.downloadUrl ?? null,
+            googleDriveFileId: p.driveFileId ?? null,
+            thumbnailUrl: p.thumbnailUrl ?? null,
+            storageProvider: p.storageProvider ?? "firebaseStorage",
+            expiresAt: p.expiresAt ?? null,
+          }));
         }
 
         await appendTimelineEntry(missionId, timelineMsg, "tracking", timelineMeta);
