@@ -753,8 +753,8 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
       setRepairRequests([]);
       return;
     }
-    loadRepairRequests(selectedMission.id, selectedMember.employeeUid);
-  }, [firestore, selectedMission?.id, selectedMember?.employeeUid]);
+    loadRepairRequests(selectedMission.id, selectedMember.employeeUid, selectedMember.employeeName);
+  }, [firestore, selectedMission?.id, selectedMember?.employeeUid, selectedMember?.employeeName]);
 
   // Subscribe to final report subcollections when a mission is selected
   useEffect(() => {
@@ -1441,20 +1441,36 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
     }
   };
 
-  const loadRepairRequests = async (missionId: string, memberUid: string) => {
+  const loadRepairRequests = async (missionId: string, memberUid: string, memberName?: string) => {
     if (!firestore || !missionId || !memberUid) return;
     try {
       const evidencesRef = collection(firestore, "business_trip_missions", missionId, "milestone_evidences");
+      // Query for all evidence with repairStatus = "requested"
       const q = query(
         evidencesRef,
-        where("targetMemberUids", "array-contains", memberUid),
         where("repairStatus", "==", "requested"),
       );
       const snapshotUnsubscribe = onSnapshot(q, (snap) => {
-        const repairs = snap.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        } as MilestoneEvidence));
+        const repairs = snap.docs
+          .map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          } as MilestoneEvidence))
+          .filter((repair) => {
+            // Filter untuk evidence yang relevant untuk current user
+            const targetUids = repair.targetMemberUids || [];
+            const targetNames = repair.targetMemberNames || [];
+
+            // Include jika:
+            // 1. targetMemberUids contains current user
+            // 2. OR targetMemberUids kosong dan targetMemberNames kosong (untuk mission member)
+            // 3. OR targetMemberNames contains current user name
+            return (
+              targetUids.includes(memberUid) ||
+              (targetUids.length === 0 && targetNames.length === 0) ||
+              (memberName && targetNames.includes(memberName))
+            );
+          });
         setRepairRequests(repairs);
       });
       return snapshotUnsubscribe;
@@ -5019,13 +5035,13 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                     return (
                       <div
                         key={repair.id}
-                        className="rounded-lg border border-amber-200/60 dark:border-amber-800/40 bg-white dark:bg-muted/20 p-3"
+                        className="rounded-lg border border-amber-200/60 dark:border-amber-800/40 bg-white dark:bg-muted/20 p-3 space-y-2"
                       >
-                        <div className="flex items-start justify-between mb-2">
-                          <div>
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
                             <p className="text-sm font-semibold text-foreground">{milestoneLabel}</p>
-                            {repair.repairReason && (
-                              <p className="text-xs text-muted-foreground mt-0.5">Alasan: {repair.repairReason}</p>
+                            {repair.repairRequestedByName && (
+                              <p className="text-xs text-muted-foreground">Diminta oleh: <span className="font-medium">{repair.repairRequestedByName}</span></p>
                             )}
                           </div>
                           <button
@@ -5035,15 +5051,26 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                               setRepairGps({ status: "idle" });
                               setRepairManualLocation("");
                             }}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-300 bg-amber-100 text-amber-700 hover:bg-amber-200 dark:border-amber-700/40 dark:bg-amber-900/20 dark:text-amber-400 dark:hover:bg-amber-900/30 transition-colors"
+                            className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-300 bg-amber-100 text-amber-700 hover:bg-amber-200 dark:border-amber-700/40 dark:bg-amber-900/20 dark:text-amber-400 dark:hover:bg-amber-900/30 transition-colors whitespace-nowrap"
                           >
                             <Upload className="h-3.5 w-3.5" />
-                            Upload Sekarang
+                            Upload Ulang
                           </button>
                         </div>
+
+                        {repair.targetMemberNames && repair.targetMemberNames.length > 0 && (
+                          <p className="text-xs text-muted-foreground">Untuk: <span className="font-medium">{repair.targetMemberNames.join(", ")}</span></p>
+                        )}
+
+                        {repair.repairReason && (
+                          <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-100/50 dark:bg-amber-900/20 rounded px-2 py-1">
+                            📋 Alasan: {repair.repairReason}
+                          </p>
+                        )}
+
                         {repair.repairRequestedAt && (
                           <p className="text-[10px] text-muted-foreground">
-                            Diminta pada: {formatDateTime(repair.repairRequestedAt)}
+                            🕐 {formatDateTime(repair.repairRequestedAt)}
                           </p>
                         )}
                       </div>
