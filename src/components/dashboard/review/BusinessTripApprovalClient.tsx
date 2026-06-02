@@ -132,6 +132,10 @@ function getStatusVariant(status?: string) {
   return "secondary";
 }
 
+function dedupeById(items: ApprovalRequestWithExtras[]): ApprovalRequestWithExtras[] {
+  return Array.from(new Map(items.map((item) => [item.id, item])).values());
+}
+
 export function BusinessTripApprovalClient() {
   const { userProfile } = useAuth();
   const firestore = useFirestore();
@@ -251,11 +255,16 @@ export function BusinessTripApprovalClient() {
     (async () => {
       try {
         const snap = await getDocs(pendingQuery);
-        const items = snap.docs.map((d) => ({
+        const raw = snap.docs.map((d) => ({
           id: d.id,
           ...(d.data() as any),
           _ref: d.ref,
         }));
+        const items = dedupeById(raw);
+        const ids = raw.map((r) => r.id);
+        const dupIds = ids.filter((id, i) => ids.indexOf(id) !== i);
+        if (dupIds.length) console.log("duplicate pending approval ids", dupIds);
+        console.log("approval request ids (pending)", ids);
         if (!active) return;
         setApprovals(items);
       } catch (err) {
@@ -287,11 +296,16 @@ export function BusinessTripApprovalClient() {
     (async () => {
       try {
         const snap = await getDocs(historyQuery);
-        const items = snap.docs.map((d) => ({
+        const raw = snap.docs.map((d) => ({
           id: d.id,
           ...(d.data() as any),
           _ref: d.ref,
         }));
+        const items = dedupeById(raw);
+        const ids = raw.map((r) => r.id);
+        const dupIds = ids.filter((id, i) => ids.indexOf(id) !== i);
+        if (dupIds.length) console.log("duplicate history approval ids", dupIds);
+        console.log("approval request ids (history)", ids);
         if (!active) return;
         setHistoryApprovals(items);
       } catch (err) {
@@ -367,21 +381,21 @@ export function BusinessTripApprovalClient() {
     try {
       // Refetch pending
       const pendingSnap = await getDocs(pendingQuery);
-      const pendingItems = pendingSnap.docs.map((d) => ({
+      const pendingRaw = pendingSnap.docs.map((d) => ({
         id: d.id,
         ...(d.data() as any),
         _ref: d.ref,
       }));
-      setApprovals(pendingItems);
+      setApprovals(dedupeById(pendingRaw));
 
       // Refetch history
       const historySnap = await getDocs(historyQuery);
-      const historyItems = historySnap.docs.map((d) => ({
+      const historyRaw = historySnap.docs.map((d) => ({
         id: d.id,
         ...(d.data() as any),
         _ref: d.ref,
       }));
-      setHistoryApprovals(historyItems);
+      setHistoryApprovals(dedupeById(historyRaw));
     } catch (error) {
       console.error("Gagal refresh approvals:", error);
     }
@@ -1028,31 +1042,29 @@ export function BusinessTripApprovalClient() {
     [firestore],
   );
 
-  const requestRowsWithMissionName = useMemo(
-    () =>
-      approvals.map((request) => ({
-        ...request,
-        missionDetails: missionDetailsById[request.missionId],
-        missionName:
-          request.missionName ||
-          missionDetailsById[request.missionId]?.missionName ||
-          "-",
-      })),
-    [approvals, missionDetailsById],
-  );
+  const requestRowsWithMissionName = useMemo(() => {
+    const unique = dedupeById(approvals);
+    return unique.map((request) => ({
+      ...request,
+      missionDetails: missionDetailsById[request.missionId],
+      missionName:
+        request.missionName ||
+        missionDetailsById[request.missionId]?.missionName ||
+        "-",
+    }));
+  }, [approvals, missionDetailsById]);
 
-  const historyRowsWithMissionName = useMemo(
-    () =>
-      historyApprovals.map((request) => ({
-        ...request,
-        missionDetails: missionDetailsById[request.missionId],
-        missionName:
-          request.missionName ||
-          missionDetailsById[request.missionId]?.missionName ||
-          "-",
-      })),
-    [historyApprovals, missionDetailsById],
-  );
+  const historyRowsWithMissionName = useMemo(() => {
+    const unique = dedupeById(historyApprovals);
+    return unique.map((request) => ({
+      ...request,
+      missionDetails: missionDetailsById[request.missionId],
+      missionName:
+        request.missionName ||
+        missionDetailsById[request.missionId]?.missionName ||
+        "-",
+    }));
+  }, [historyApprovals, missionDetailsById]);
 
   if (isLoadingRequests && isFetchingHistory) {
     return (

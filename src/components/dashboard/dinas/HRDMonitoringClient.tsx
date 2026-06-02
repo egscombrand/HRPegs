@@ -54,7 +54,7 @@ import {
   Filter,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
-import type { BusinessTripMission, BusinessTripMissionMember, FinalReport, MemberFinalReport, MemberNote } from "./types";
+import type { BusinessTripMission, BusinessTripMissionMember, FinalReport, MemberFinalReport, MemberNote, MilestoneEvidence } from "./types";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -134,6 +134,22 @@ type TimelineEntry = {
   byUid?: string | null;
   byName?: string | null;
   createdAt: any;
+  trustLevel?: "high" | "medium" | "low" | null;
+  evidenceId?: string | null;
+  // Evidence fields embedded in timeline for cross-role access
+  milestoneType?: string | null;
+  confirmedByName?: string | null;
+  confirmedByUid?: string | null;
+  targetMemberNames?: string[] | null;
+  targetMemberUids?: string[] | null;
+  evidenceLat?: number | null;
+  evidenceLng?: number | null;
+  evidenceAccuracy?: number | null;
+  evidenceAddress?: string | null;
+  evidenceLocationStatus?: string | null;
+  evidenceLocationTrust?: string | null;
+  evidenceManualNote?: string | null;
+  evidencePhotos?: Array<{ photoUrl?: string | null; expiresAt?: any }> | null;
 };
 
 // ── Status computation ─────────────────────────────────────────────────────────
@@ -296,6 +312,72 @@ function inferCategory(entry: TimelineEntry): HrdTimelineCategory {
   return "system";
 }
 
+function inferMilestoneTypeFromMsg(msg: string): MilestoneEvidence["milestoneType"] {
+  const lower = (msg ?? "").toLowerCase();
+  if (lower.includes("keberangkatan") || lower.includes("berangkat")) return "departed";
+  if (lower.includes("tiba di lokasi") || lower.includes("sampai lokasi")) return "arrived";
+  if (lower.includes("kegiatan selesai")) return "activity_done";
+  if (lower.includes("kembali")) return "returned";
+  return "departed";
+}
+
+// Helper: Collect evidence from multiple sources (timeline + milestone_evidences + members)
+function collectEvidenceSources(
+  detailTimeline: TimelineEntry[],
+  detailEvidences: MilestoneEvidence[],
+  detailMembers: BusinessTripMissionMember[],
+  missionId: string,
+): MilestoneEvidence[] {
+  // ─ Source 1: Built from timeline entries (has evidence metadata embedded)
+  const timelineEvidence: MilestoneEvidence[] = detailTimeline
+    .filter((e) => {
+      const cat = inferCategory(e);
+      return cat === "tracking" && (e.milestoneType || inferMilestoneTypeFromMsg(e.message));
+    })
+    .map((e) => ({
+      id: e.evidenceId ?? e.id,
+      missionId,
+      milestoneType: (e.milestoneType ?? inferMilestoneTypeFromMsg(e.message)) as MilestoneEvidence["milestoneType"],
+      confirmedByUid: e.confirmedByUid ?? e.byUid ?? "",
+      confirmedByName: e.confirmedByName ?? e.byName ?? "",
+      targetMemberUids: e.targetMemberUids ?? [],
+      targetMemberNames: e.targetMemberNames ?? [],
+      createdAt: e.createdAt,
+      latitude: e.evidenceLat ?? null,
+      longitude: e.evidenceLng ?? null,
+      locationAccuracy: e.evidenceAccuracy ?? null,
+      locationStatus: (e.evidenceLocationStatus ?? "unavailable") as MilestoneEvidence["locationStatus"],
+      locationTrustLevel: (e.evidenceLocationTrust ?? e.trustLevel ?? null) as MilestoneEvidence["locationTrustLevel"],
+      addressText: e.evidenceAddress ?? null,
+      manualLocationNote: e.evidenceManualNote ?? null,
+      photos: (e.evidencePhotos ?? []) as MilestoneEvidence["photos"],
+    }));
+
+  console.log("📸 collectEvidenceSources debug:", {
+    timelineEntriesTotal: detailTimeline.length,
+    timelineTrackingEntries: detailTimeline.filter((e) => inferCategory(e) === "tracking").length,
+    timelineEvidenceBuilt: timelineEvidence.length,
+    timelineEvidenceWithPhotos: timelineEvidence.filter((e) => (e.photos?.length ?? 0) > 0).length,
+    milestone_evidencesCount: detailEvidences.length,
+    milestone_evidencesWithPhotos: detailEvidences.filter((e) => (e.photos?.length ?? 0) > 0).length,
+  });
+
+  // ─ Source 2: milestone_evidences from Firestore (primary collection)
+  const evidenceColIds = new Set(detailEvidences.map((e) => e.id));
+
+  // ─ Combine: prefer milestone_evidences, supplement with timeline evidence for fallback
+  const allEvidence: MilestoneEvidence[] = [
+    ...detailEvidences,
+    ...timelineEvidence.filter((e) => !evidenceColIds.has(e.id!)),
+  ];
+
+  console.log("milestone evidence", detailEvidences);
+  console.log("timeline with evidence", timelineEvidence.filter((e) => (e.photos?.length ?? 0) > 0 || e.latitude != null || e.manualLocationNote));
+  console.log("members with evidence", detailMembers.filter((m) => m.reportStatus === "submitted" || (m as any).trackingEvidence));
+
+  return allEvidence;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Main Component
 // ─────────────────────────────────────────────────────────────────────────────
@@ -320,6 +402,7 @@ export function HRDMonitoringClient() {
   const [detailMemberReports, setDetailMemberReports] = useState<Record<string, MemberFinalReport>>({});
   const [detailMemberNotes, setDetailMemberNotes] = useState<Record<string, MemberNote>>({});
   const [isArchivingMission, setIsArchivingMission] = useState(false);
+  const [detailEvidences, setDetailEvidences] = useState<MilestoneEvidence[]>([]);
 
   // ── Filter / sort state ──────────────────────────────────────────────────
   const [search, setSearch] = useState("");
@@ -400,6 +483,7 @@ export function HRDMonitoringClient() {
       setDetailFinalReport(null);
       setDetailMemberReports({});
       setDetailMemberNotes({});
+      setDetailEvidences([]);
       return;
     }
     setDetailLoading(true);
@@ -451,7 +535,15 @@ export function HRDMonitoringClient() {
       (err) => console.error("member_notes snapshot error:", err),
     );
 
-    return () => { unsubMembers(); unsubTimeline(); unsubFinalReport(); unsubMemberReports(); unsubMemberNotes(); };
+    const unsubEvidences = onSnapshot(
+      query(collection(firestore, `business_trip_missions/${mId}/milestone_evidences`), orderBy("createdAt", "asc")),
+      (snap) => {
+        setDetailEvidences(snap.docs.map((d) => ({ id: d.id, ...d.data() } as MilestoneEvidence)));
+      },
+      (err) => console.error("milestone_evidences snapshot error:", err),
+    );
+
+    return () => { unsubMembers(); unsubTimeline(); unsubFinalReport(); unsubMemberReports(); unsubMemberNotes(); unsubEvidences(); };
   }, [firestore, selectedMission?.id]);
 
   // ── Summary stats ──────────────────────────────────────────────────────────
@@ -663,21 +755,15 @@ export function HRDMonitoringClient() {
                 </div>
               </div>
 
-              {/* Tracking mini-summary */}
+              {/* Computed display status from member milestones */}
               {tracking && tracking.total > 0 && (
-                <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
-                  {[
-                    { icon: Navigation, label: "Berangkat", value: tracking.departed, color: "text-blue-500" },
-                    { icon: MapPin, label: "Sampai", value: tracking.arrived, color: "text-indigo-500" },
-                    { icon: Home, label: "Kembali", value: tracking.returned, color: "text-green-500" },
-                    { icon: AlertTriangle, label: "Kendala", value: tracking.issues, color: "text-amber-500" },
-                  ].map(({ icon: Icon, label, value, color }) => (
-                    <div key={label} className="flex flex-col items-center gap-0.5 rounded-xl border border-border/60 bg-muted/30 px-3 py-2">
-                      <Icon className={`h-4 w-4 ${color}`} />
-                      <span className="text-lg font-bold tabular-nums">{value}<span className="text-xs font-normal text-muted-foreground">/{tracking.total}</span></span>
-                      <span className="text-[10px] text-muted-foreground">{label}</span>
-                    </div>
-                  ))}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className="text-xs text-muted-foreground">{tracking.departed}/{tracking.total} berangkat</span>
+                  {tracking.issues > 0 && (
+                    <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                      {tracking.issues} kendala
+                    </span>
+                  )}
                 </div>
               )}
             </div>
@@ -700,86 +786,298 @@ export function HRDMonitoringClient() {
           </CardContent>
         </Card>
 
-        {/* Progress Perjalanan — step visual with real-time counts */}
+        {/* ── Monitoring Perjalanan ── */}
         {tracking && tracking.total > 0 && (() => {
-          const stepsData = [
+          type StepDef = {
+            key: string;
+            label: string;
+            icon: React.ElementType;
+            milestoneKey: string;
+            count: number;
+            doneNames: string[];
+            notDoneNames: string[];
+            lastAt: any;
+            color: string; bg: string; border: string;
+          };
+
+          const stepsData: StepDef[] = [
             {
-              label: "Berangkat", icon: Navigation, count: tracking.departed,
-              names: activeMembers.filter(m => ["departed","arrived","activity_done","return_started","returned"].includes(m.memberTripStatus ?? "")).map(m => m.employeeName),
+              key: "departed", label: "Berangkat", icon: Navigation, milestoneKey: "departed",
+              count: tracking.departed,
+              doneNames: activeMembers.filter(m => ["departed","arrived","activity_done","return_started","returned"].includes(m.memberTripStatus ?? "")).map(m => m.employeeName),
+              notDoneNames: activeMembers.filter(m => !["departed","arrived","activity_done","return_started","returned"].includes(m.memberTripStatus ?? "")).map(m => m.employeeName),
+              lastAt: activeMembers.filter(m => m.departedAt).reduce((best, m) => toSeconds(m.departedAt) > toSeconds(best) ? m.departedAt : best, null as any),
               color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50/60 dark:bg-blue-900/20", border: "border-blue-200/60 dark:border-blue-800/40",
             },
             {
-              label: "Sampai Lokasi", icon: MapPin, count: tracking.arrived,
-              names: activeMembers.filter(m => ["arrived","activity_done","return_started","returned"].includes(m.memberTripStatus ?? "")).map(m => m.employeeName),
+              key: "arrived", label: "Sampai Lokasi", icon: MapPin, milestoneKey: "arrived",
+              count: tracking.arrived,
+              doneNames: activeMembers.filter(m => ["arrived","activity_done","return_started","returned"].includes(m.memberTripStatus ?? "")).map(m => m.employeeName),
+              notDoneNames: activeMembers.filter(m => !["arrived","activity_done","return_started","returned"].includes(m.memberTripStatus ?? "")).map(m => m.employeeName),
+              lastAt: activeMembers.filter(m => m.arrivedAt).reduce((best, m) => toSeconds(m.arrivedAt) > toSeconds(best) ? m.arrivedAt : best, null as any),
               color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-50/60 dark:bg-indigo-900/20", border: "border-indigo-200/60 dark:border-indigo-800/40",
             },
             {
-              label: "Kegiatan Selesai", icon: CheckCircle2, count: tracking.activityDone,
-              names: activeMembers.filter(m => ["activity_done","return_started","returned"].includes(m.memberTripStatus ?? "")).map(m => m.employeeName),
+              key: "activity_done", label: "Kegiatan Selesai", icon: CheckSquare, milestoneKey: "activity_done",
+              count: tracking.activityDone,
+              doneNames: activeMembers.filter(m => ["activity_done","return_started","returned"].includes(m.memberTripStatus ?? "")).map(m => m.employeeName),
+              notDoneNames: activeMembers.filter(m => !["activity_done","return_started","returned"].includes(m.memberTripStatus ?? "")).map(m => m.employeeName),
+              lastAt: activeMembers.filter(m => m.activityDoneAt).reduce((best, m) => toSeconds(m.activityDoneAt) > toSeconds(best) ? m.activityDoneAt : best, null as any),
               color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-50/60 dark:bg-purple-900/20", border: "border-purple-200/60 dark:border-purple-800/40",
             },
             {
-              label: "Kembali", icon: Home, count: tracking.returned,
-              names: activeMembers.filter(m => m.memberTripStatus === "returned").map(m => m.employeeName),
+              key: "returned", label: "Kembali", icon: Home, milestoneKey: "returned",
+              count: tracking.returned,
+              doneNames: activeMembers.filter(m => m.memberTripStatus === "returned").map(m => m.employeeName),
+              notDoneNames: activeMembers.filter(m => m.memberTripStatus !== "returned").map(m => m.employeeName),
+              lastAt: activeMembers.filter(m => m.returnedAt).reduce((best, m) => toSeconds(m.returnedAt) > toSeconds(best) ? m.returnedAt : best, null as any),
               color: "text-green-600 dark:text-green-400", bg: "bg-green-50/60 dark:bg-green-900/20", border: "border-green-200/60 dark:border-green-800/40",
             },
           ];
 
-          // Find last updated member for narrative
-          let lastUpdatedMember: BusinessTripMissionMember | null = null;
-          let lastUpdateSecs = 0;
-          activeMembers.forEach((m) => {
-            const s = toSeconds(m.lastTripUpdateAt);
-            if (s > lastUpdateSecs) { lastUpdateSecs = s; lastUpdatedMember = m; }
-          });
-
-          const narrative = (() => {
-            if (!lastUpdatedMember) return null;
-            const m = lastUpdatedMember as BusinessTripMissionMember;
-            const name = m.lastTripUpdateByName || m.employeeName;
-            const { label } = memberTripLabel(m.memberTripStatus);
-            return `${name} ${label.toLowerCase()} pada ${formatDateTime(m.lastTripUpdateAt)}.`;
-          })();
-
           return (
             <Card className="border-border/60">
               <CardContent className="p-4 space-y-3">
-                <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
-                  Progress Perjalanan
-                </h3>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">
+                    Monitoring Perjalanan
+                  </h3>
+                  {tracking.issues > 0 && (
+                    <span className="flex items-center gap-1 rounded-full border border-red-200/60 bg-red-50/60 px-2.5 py-0.5 text-[11px] font-semibold text-red-700 dark:border-red-800/30 dark:bg-red-900/20 dark:text-red-400">
+                      <AlertTriangle className="h-3 w-3" />
+                      {tracking.issues} kendala
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                   {stepsData.map((step) => {
                     const Icon = step.icon;
+                    const allDone = step.count >= tracking.total;
+                    const partDone = step.count > 0 && !allDone;
                     return (
                       <div
-                        key={step.label}
-                        className={`rounded-xl border p-3 text-center space-y-1 ${
-                          step.count > 0 ? `${step.bg} ${step.border}` : "border-border/40 bg-muted/5 opacity-50"
+                        key={step.key}
+                        className={`rounded-xl border p-3 space-y-2 ${
+                          allDone ? `${step.bg} ${step.border}` :
+                          partDone ? "border-border/60 bg-muted/10" :
+                          "border-border/40 bg-muted/5 opacity-60"
                         }`}
                       >
-                        <Icon className={`h-4 w-4 mx-auto ${step.count > 0 ? step.color : "text-muted-foreground/40"}`} />
-                        <p className="text-[10px] font-medium text-muted-foreground">{step.label}</p>
-                        <p className={`text-lg font-bold tabular-nums ${step.count > 0 ? step.color : "text-muted-foreground/40"}`}>
-                          {step.count}<span className="text-[10px] font-normal text-muted-foreground">/{tracking.total}</span>
-                        </p>
-                        {step.names.length > 0 && (
-                          <p className="text-[9px] text-muted-foreground leading-tight" title={step.names.join(", ")}>
-                            {step.names.slice(0, 2).join(", ")}{step.names.length > 2 ? ` +${step.names.length - 2}` : ""}
+                        <div className="flex items-center gap-2">
+                          <Icon className={`h-4 w-4 flex-shrink-0 ${step.count > 0 ? step.color : "text-muted-foreground/40"}`} />
+                          <span className="text-xs font-semibold text-foreground">{step.label}</span>
+                          <span className={`ml-auto text-sm font-bold tabular-nums ${step.count > 0 ? step.color : "text-muted-foreground/40"}`}>
+                            {step.count}<span className="text-[10px] font-normal text-muted-foreground">/{tracking.total}</span>
+                          </span>
+                        </div>
+
+                        {step.doneNames.length > 0 && (
+                          <div>
+                            <p className="text-[9px] font-semibold uppercase text-muted-foreground/60 mb-0.5">Sudah</p>
+                            <p className="text-[11px] text-foreground leading-snug">
+                              {step.doneNames.slice(0, 3).join(", ")}
+                              {step.doneNames.length > 3 && ` +${step.doneNames.length - 3}`}
+                            </p>
+                          </div>
+                        )}
+
+                        {step.notDoneNames.length > 0 && step.count > 0 && (
+                          <div>
+                            <p className="text-[9px] font-semibold uppercase text-muted-foreground/60 mb-0.5">Belum</p>
+                            <p className="text-[11px] text-muted-foreground leading-snug">
+                              {step.notDoneNames.slice(0, 2).join(", ")}
+                              {step.notDoneNames.length > 2 && ` +${step.notDoneNames.length - 2}`}
+                            </p>
+                          </div>
+                        )}
+
+                        {step.lastAt && (
+                          <p className="text-[9px] text-muted-foreground/70">
+                            Update terakhir: {formatDateTime(step.lastAt)}
                           </p>
                         )}
                       </div>
                     );
                   })}
                 </div>
-                {narrative && (
-                  <p className="text-xs text-muted-foreground italic">{narrative}</p>
-                )}
-                {tracking.issues > 0 && (
-                  <div className="flex items-center gap-2 rounded-lg border border-red-200/60 dark:border-red-800/30 bg-red-50/60 dark:bg-red-900/20 px-3 py-2 text-xs text-red-700 dark:text-red-400">
-                    <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
-                    <span>{tracking.issues} anggota melaporkan kendala</span>
+              </CardContent>
+            </Card>
+          );
+        })()}
+
+        {/* ── Detail Anggota ── */}
+        {activeMembers.length > 0 && (
+          <Card className="border-border/60">
+            <CardContent className="p-4 space-y-3">
+              <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">
+                Detail Anggota
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-border/60">
+                      <th className="text-left py-2 px-2 text-muted-foreground font-medium">Nama</th>
+                      <th className="text-left py-2 px-2 text-muted-foreground font-medium hidden sm:table-cell">Posisi</th>
+                      <th className="text-center py-2 px-2 text-muted-foreground font-medium">Status</th>
+                      <th className="text-center py-2 px-2 text-muted-foreground font-medium">Berangkat</th>
+                      <th className="text-center py-2 px-2 text-muted-foreground font-medium hidden md:table-cell">Sampai</th>
+                      <th className="text-center py-2 px-2 text-muted-foreground font-medium hidden lg:table-cell">Selesai</th>
+                      <th className="text-center py-2 px-2 text-muted-foreground font-medium">Kembali</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activeMembers.map((m) => {
+                      const { label, color } = memberTripLabel(m.memberTripStatus);
+                      return (
+                        <tr key={m.id} className="border-b border-border/30 hover:bg-muted/20">
+                          <td className="py-2.5 px-2">
+                            <p className="font-medium text-foreground">{m.employeeName}</p>
+                            {m.divisionName && <p className="text-[10px] text-muted-foreground">{m.divisionName}</p>}
+                          </td>
+                          <td className="py-2.5 px-2 hidden sm:table-cell text-muted-foreground">
+                            {m.employeePosition ?? "–"}
+                          </td>
+                          <td className="py-2.5 px-2 text-center">
+                            <span className={`font-semibold ${color}`}>{label}</span>
+                            {m.memberTripStatus === "issue_reported" && m.issueCategory && (
+                              <p className="text-[9px] text-red-500 mt-0.5">{m.issueCategory}</p>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-2 text-center text-muted-foreground">
+                            {m.departedAt ? formatDateTime(m.departedAt) : "–"}
+                          </td>
+                          <td className="py-2.5 px-2 text-center text-muted-foreground hidden md:table-cell">
+                            {m.arrivedAt ? formatDateTime(m.arrivedAt) : "–"}
+                          </td>
+                          <td className="py-2.5 px-2 text-center text-muted-foreground hidden lg:table-cell">
+                            {m.activityDoneAt ? formatDateTime(m.activityDoneAt) : "–"}
+                          </td>
+                          <td className="py-2.5 px-2 text-center text-muted-foreground">
+                            {m.returnedAt ? formatDateTime(m.returnedAt) : "–"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ── Bukti Perjalanan ── */}
+        {(() => {
+          const tracking = memberTrackingMap[selectedMission.id ?? ""];
+          if (!tracking || tracking.total === 0) return null;
+
+          // Collect evidence from multiple sources (timeline + milestone_evidences)
+          const allEvidence = collectEvidenceSources(
+            detailTimeline,
+            detailEvidences,
+            detailMembers,
+            selectedMission.id!,
+          );
+
+          const milestoneOrder = ["departed", "arrived", "activity_done", "returned"] as const;
+          const evidenceTypeLabel: Record<string, string> = {
+            departed: "Bukti Keberangkatan", arrived: "Bukti Tiba di Lokasi",
+            activity_done: "Bukti Kegiatan Selesai", returned: "Bukti Kepulangan",
+          };
+          const milestoneIcon: Record<string, React.ElementType> = {
+            departed: Navigation, arrived: MapPin, activity_done: CheckSquare, returned: Home,
+          };
+          const milestoneColor: Record<string, string> = {
+            departed: "text-blue-600 dark:text-blue-400", arrived: "text-indigo-600 dark:text-indigo-400",
+            activity_done: "text-purple-600 dark:text-purple-400", returned: "text-green-600 dark:text-green-400",
+          };
+          function mkTrustBadge(ev: MilestoneEvidence) {
+            if (ev.locationTrustLevel === "high") return <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700 dark:bg-green-900/30 dark:text-green-400">GPS Valid</span>;
+            if (ev.locationTrustLevel === "medium") return <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">GPS Lemah</span>;
+            if (ev.locationStatus === "manual") return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800/60 dark:text-slate-400">Manual</span>;
+            if (ev.locationTrustLevel === "low") return <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-900/30 dark:text-red-400">Akurasi Rendah</span>;
+            return null;
+          }
+          function EvidenceCard({ ev }: { ev: MilestoneEvidence }) {
+            const photos = (ev.photos ?? []).slice(0, 3);
+            const isExpired = photos[0]?.expiresAt && toDate(photos[0].expiresAt) && (toDate(photos[0].expiresAt) as Date) < new Date();
+            return (
+              <div className="rounded-xl border border-border/50 bg-muted/10 p-3 space-y-2.5">
+                <div className="flex flex-wrap items-start gap-1.5">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <p className="text-sm font-semibold text-foreground">Dikonfirmasi oleh {ev.confirmedByName}</p>
+                      {mkTrustBadge(ev)}
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                      Untuk: {(ev.targetMemberNames ?? []).join(", ")} · {formatDateTime(ev.createdAt)}
+                    </p>
                   </div>
+                </div>
+                {photos.length > 0 && (
+                  isExpired ? (
+                    <p className="text-sm text-muted-foreground italic">Foto bukti sudah kedaluwarsa, metadata tetap tersimpan.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {photos.map((photo, idx) =>
+                        photo.photoUrl ? (
+                          <a key={idx} href={photo.photoUrl} target="_blank" rel="noreferrer"
+                            className="group relative h-20 w-20 overflow-hidden rounded-xl border border-border/60 hover:border-primary/60 transition-colors flex-shrink-0">
+                            <img src={photo.photoUrl} alt={`bukti ${idx + 1}`} className="h-full w-full object-cover" />
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/25 transition-colors">
+                              <ExternalLink className="h-3.5 w-3.5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </div>
+                          </a>
+                        ) : null
+                      )}
+                      {(ev.photos?.length ?? 0) > 3 && (
+                        <div className="h-20 w-20 rounded-xl border border-border/60 bg-muted/40 flex items-center justify-center flex-shrink-0">
+                          <span className="text-sm font-medium text-muted-foreground">+{(ev.photos?.length ?? 0) - 3}</span>
+                        </div>
+                      )}
+                    </div>
+                  )
                 )}
+                <div className="space-y-1">
+                  {ev.addressText && <p className="text-sm text-foreground leading-snug">{ev.addressText}</p>}
+                  {ev.manualLocationNote && <p className="text-sm text-muted-foreground">Catatan: {ev.manualLocationNote}</p>}
+                  {ev.latitude != null && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-xs font-mono text-muted-foreground">
+                        {(ev.latitude as number).toFixed(6)}, {(ev.longitude as number ?? 0).toFixed(6)}
+                        {ev.locationAccuracy != null && ` · ±${Math.round(ev.locationAccuracy as number)}m`}
+                      </p>
+                      <a href={`https://www.google.com/maps?q=${ev.latitude},${ev.longitude}`} target="_blank" rel="noreferrer"
+                        className="inline-flex items-center gap-0.5 text-sm font-medium text-teal-600 hover:underline dark:text-teal-400">
+                        <MapPin className="h-3 w-3" />
+                        Buka Maps
+                      </a>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <Card id="bukti-perjalanan" className="border-border/60 scroll-mt-4">
+              <CardContent className="p-4 space-y-5">
+                <h3 className="font-semibold text-base">Bukti Perjalanan</h3>
+                {milestoneOrder.map((key) => {
+                  const Icon = milestoneIcon[key];
+                  const items = allEvidence.filter((e) => e.milestoneType === key);
+                  return (
+                    <div key={key} className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Icon className={`h-4 w-4 ${milestoneColor[key]}`} />
+                        <p className="text-sm font-semibold">{evidenceTypeLabel[key]}</p>
+                      </div>
+                      {items.length === 0 ? (
+                        <p className="text-sm text-muted-foreground pl-6">Belum ada bukti untuk milestone ini.</p>
+                      ) : items.map((ev) => <EvidenceCard key={ev.id} ev={ev} />)}
+                    </div>
+                  );
+                })}
               </CardContent>
             </Card>
           );
@@ -936,108 +1234,18 @@ export function HRDMonitoringClient() {
           );
         })()}
 
-        <div className="grid gap-4 lg:grid-cols-5">
-          {/* Left: Members tracking */}
-          <div className="lg:col-span-3 space-y-3">
-            <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide px-1">
-              Anggota & Status Perjalanan
-            </h3>
-            {detailLoading ? (
-              <div className="rounded-xl border border-border p-8 text-center text-sm text-muted-foreground">Memuat...</div>
-            ) : activeMembers.length === 0 ? (
-              <div className="rounded-xl border border-border p-8 text-center text-sm text-muted-foreground">Belum ada anggota aktif.</div>
-            ) : (
-              <div className="space-y-2">
-                {activeMembers.map((member) => {
-                  const ts = member.memberTripStatus;
-                  const { label, color } = memberTripLabel(ts);
-                  const hasIssue = ts === "issue_reported";
-                  return (
-                    <div
-                      key={member.id}
-                      className={`rounded-xl border px-4 py-3 ${
-                        hasIssue
-                          ? "border-red-300/60 bg-red-50/40 dark:border-red-800/40 dark:bg-red-900/10"
-                          : ts === "returned"
-                          ? "border-green-300/60 bg-green-50/40 dark:border-green-800/40 dark:bg-green-900/10"
-                          : ts && ts !== "ready"
-                          ? "border-blue-300/60 bg-blue-50/30 dark:border-blue-800/40 dark:bg-blue-900/10"
-                          : "border-border/60 bg-card"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <p className="font-medium text-sm truncate">{member.employeeName}</p>
-                          {member.employeePosition && (
-                            <p className="text-xs text-muted-foreground truncate">{member.employeePosition}</p>
-                          )}
-                          {member.brandName && (
-                            <p className="text-xs text-muted-foreground">{member.brandName}{member.divisionName ? ` · ${member.divisionName}` : ""}</p>
-                          )}
-                        </div>
-                        <span className={`text-xs font-semibold flex-shrink-0 ${color}`}>{label}</span>
-                      </div>
-
-                      {/* Milestone timestamps */}
-                      {ts && ts !== "ready" && (
-                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-muted-foreground">
-                          {member.departedAt && (
-                            <span className="flex items-center gap-0.5">
-                              <Navigation className="h-3 w-3 text-blue-400" />
-                              Berangkat {formatDateTime(member.departedAt)}
-                            </span>
-                          )}
-                          {member.arrivedAt && (
-                            <span className="flex items-center gap-0.5">
-                              <MapPin className="h-3 w-3 text-indigo-400" />
-                              Tiba {formatDateTime(member.arrivedAt)}
-                            </span>
-                          )}
-                          {member.activityDoneAt && (
-                            <span className="flex items-center gap-0.5">
-                              <CheckSquare className="h-3 w-3 text-indigo-400" />
-                              Selesai {formatDateTime(member.activityDoneAt)}
-                            </span>
-                          )}
-                          {member.returnedAt && (
-                            <span className="flex items-center gap-0.5">
-                              <Home className="h-3 w-3 text-green-400" />
-                              Kembali {formatDateTime(member.returnedAt)}
-                            </span>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Issue details */}
-                      {hasIssue && (member.issueNote || member.issueCategory) && (
-                        <div className="mt-2 rounded-lg bg-red-100/60 dark:bg-red-900/20 px-3 py-2 text-xs text-red-800 dark:text-red-300">
-                          <span className="font-semibold">Kendala</span>
-                          {member.issueCategory ? ` · ${member.issueCategory}` : ""}
-                          {member.issueUrgency ? ` · Urgensi: ${member.issueUrgency}` : ""}
-                          {member.issueNote ? `: ${member.issueNote}` : ""}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Right: Timeline */}
-          <div className="lg:col-span-2 space-y-3">
-            <div className="space-y-2 px-1">
-              <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
+        {/* ── Timeline Aktivitas ── */}
+        <Card className="border-border/60">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">
                 Timeline Aktivitas
               </h3>
               <div className="flex flex-wrap gap-1 rounded-lg border border-border overflow-hidden text-xs">
                 {(["tracking", "approval", "changes", "issues", "all"] as const).map((tab) => {
                   const tabLabels: Record<string, string> = {
-                    tracking: "Perjalanan",
-                    approval: "Approval",
-                    changes: "Perubahan",
-                    issues: "Kendala",
-                    all: "Semua",
+                    tracking: "Perjalanan", approval: "Approval",
+                    changes: "Perubahan", issues: "Kendala", all: "Semua",
                   };
                   return (
                     <button
@@ -1045,9 +1253,7 @@ export function HRDMonitoringClient() {
                       type="button"
                       onClick={() => setTimelineTab(tab)}
                       className={`px-2.5 py-1.5 transition-colors ${
-                        timelineTab === tab
-                          ? "bg-primary text-primary-foreground font-semibold"
-                          : "text-muted-foreground hover:bg-muted/60"
+                        timelineTab === tab ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground hover:bg-muted/60"
                       }`}
                     >
                       {tabLabels[tab]}
@@ -1059,71 +1265,89 @@ export function HRDMonitoringClient() {
 
             {(() => {
               const borderColors: Record<string, string> = {
-                tracking: "border-l-blue-500",
-                approval: "border-l-green-500",
-                changes: "border-l-purple-500",
-                issues: "border-l-amber-500",
-                system: "border-l-border",
-              };
-              const catLabels: Record<string, string> = {
-                tracking: "Perjalanan",
-                approval: "Approval",
-                changes: "Perubahan",
-                issues: "Kendala",
-                system: "Sistem",
+                tracking: "border-l-blue-500", approval: "border-l-green-500",
+                changes: "border-l-purple-500", issues: "border-l-amber-500", system: "border-l-border",
               };
               const catColors: Record<string, string> = {
-                tracking: "text-blue-500",
-                approval: "text-green-600",
-                changes: "text-purple-500",
-                issues: "text-amber-600",
-                system: "text-muted-foreground",
+                tracking: "text-blue-500", approval: "text-green-600",
+                changes: "text-purple-500", issues: "text-amber-600", system: "text-muted-foreground",
+              };
+              const catLabels: Record<string, string> = {
+                tracking: "Perjalanan", approval: "Approval",
+                changes: "Perubahan", issues: "Kendala", system: "Sistem",
               };
               const noDataLabels: Record<string, string> = {
-                tracking: "Belum ada log perjalanan.",
-                approval: "Belum ada log approval.",
-                changes: "Belum ada log perubahan.",
-                issues: "Tidak ada kendala dilaporkan.",
-                all: "Belum ada riwayat aktivitas.",
+                tracking: "Belum ada log perjalanan.", approval: "Belum ada log approval.",
+                changes: "Belum ada log perubahan.", issues: "Tidak ada kendala.", all: "Belum ada riwayat.",
               };
+
+              // Summarise long tracking messages into a compact title + sub
+              function summariseTracking(msg: string): { title: string; sub: string } {
+                const lower = msg.toLowerCase();
+                let title = msg;
+                if (lower.includes("keberangkatan") || lower.includes("berangkat")) title = "Konfirmasi Keberangkatan";
+                else if (lower.includes("tiba di lokasi") || lower.includes("sampai lokasi")) title = "Konfirmasi Tiba di Lokasi";
+                else if (lower.includes("kegiatan selesai") || lower.includes("kegiatan selesai")) title = "Konfirmasi Kegiatan Selesai";
+                else if (lower.includes("kembali")) title = "Konfirmasi Kembali";
+                // Extract member names (before the date phrase)
+                const forMatch = msg.match(/untuk:\s*([^.]+?)\s+pada\s/i);
+                const names = forMatch ? forMatch[1].trim() : "";
+                const dateMatch = msg.match(/pada\s+(.+?)\s+pukul\s+(.+?)\./i);
+                const when = dateMatch ? `${dateMatch[1]}, ${dateMatch[2]}` : "";
+                const sub = [names, when].filter(Boolean).join(" · ");
+                return { title, sub };
+              }
+
               return (
-                <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
-                  {detailTimeline.length === 0 ? (
-                    <div className="rounded-xl border border-border p-6 text-center text-sm text-muted-foreground">
-                      Belum ada riwayat aktivitas.
-                    </div>
-                  ) : filteredTimeline.length === 0 ? (
-                    <div className="rounded-xl border border-border p-6 text-center text-sm text-muted-foreground">
+                <div className="space-y-2 max-h-[500px] overflow-y-auto pr-0.5">
+                  {filteredTimeline.length === 0 ? (
+                    <div className="rounded-xl border border-border/60 p-6 text-center text-sm text-muted-foreground">
                       {noDataLabels[timelineTab] ?? "Tidak ada entri."}
                     </div>
-                  ) : (
-                    filteredTimeline.map((entry) => {
-                      const cat = inferCategory(entry);
+                  ) : filteredTimeline.map((entry) => {
+                    const cat = inferCategory(entry);
+                    const isTrackingEntry = cat === "tracking";
+
+                    if (isTrackingEntry) {
+                      // Strip any evidence indicator text from message for clean display
+                      const cleanMsg = entry.message.replace(/\s*\[\d+\s*bukti\s*foto\]/gi, "").trim();
+                      const { title, sub } = summariseTracking(cleanMsg);
                       return (
-                        <div
-                          key={entry.id}
-                          className={`rounded-xl border-l-4 border border-border/40 bg-card px-3 py-2.5 ${borderColors[cat] ?? "border-l-border"}`}
-                        >
-                          <p className="text-xs leading-relaxed text-foreground/90">{entry.message}</p>
-                          <div className="mt-1 flex items-center justify-between gap-2">
-                            <span className="text-[10px] text-muted-foreground">
-                              {entry.byName ? `${entry.byName} · ` : ""}{formatDateTime(entry.createdAt)}
+                        <div key={entry.id} className={`rounded-xl border-l-4 border border-border/40 bg-card px-3 py-3 ${borderColors[cat]}`}>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold text-foreground leading-tight">{title}</p>
+                              {sub && <p className="text-sm text-muted-foreground mt-0.5">{sub}</p>}
+                            </div>
+                            <span className="text-xs text-muted-foreground flex-shrink-0">
+                              {formatDateTime(entry.createdAt)}
                             </span>
-                            {timelineTab === "all" && (
-                              <span className={`text-[9px] font-semibold uppercase tracking-wide ${catColors[cat] ?? "text-muted-foreground"}`}>
-                                {catLabels[cat] ?? "Sistem"}
-                              </span>
-                            )}
                           </div>
                         </div>
                       );
-                    })
-                  )}
+                    }
+
+                    return (
+                      <div key={entry.id} className={`rounded-xl border-l-4 border border-border/40 bg-card px-3 py-2.5 ${borderColors[cat] ?? "border-l-border"}`}>
+                        <p className="text-sm leading-relaxed text-foreground/90">{entry.message}</p>
+                        <div className="mt-1 flex items-center justify-between gap-2">
+                          <span className="text-sm text-muted-foreground">
+                            {entry.byName ? `${entry.byName} · ` : ""}{formatDateTime(entry.createdAt)}
+                          </span>
+                          {timelineTab === "all" && (
+                            <span className={`text-xs font-semibold uppercase tracking-wide ${catColors[cat] ?? "text-muted-foreground"}`}>
+                              {catLabels[cat] ?? "Sistem"}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })()}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }

@@ -152,6 +152,60 @@ function stripHtml(value: string) {
     .trim();
 }
 
+function getEvidenceType(milestone: string): string {
+  if (milestone === "departed") return "Bukti Keberangkatan";
+  if (milestone === "arrived") return "Bukti Tiba di Lokasi";
+  if (milestone === "activity_done") return "Bukti Kegiatan Selesai";
+  if (milestone === "returned") return "Bukti Kepulangan";
+  return milestone;
+}
+
+function getMilestonePhotoHelper(milestone: string): string {
+  if (milestone === "departed") return "Upload foto tim, kendaraan, titik kumpul, atau kondisi siap berangkat.";
+  if (milestone === "arrived") return "Upload foto lokasi proyek, gerbang, papan nama, atau area kerja.";
+  if (milestone === "activity_done") return "Upload foto hasil kegiatan, alat kerja, dokumen lapangan, atau bukti pekerjaan selesai.";
+  if (milestone === "returned") return "Upload foto tim siap pulang, kendaraan, titik pulang, atau bukti sudah kembali.";
+  return "Upload foto bukti kondisi milestone ini.";
+}
+
+function computeTrustLevel(accuracy?: number, status?: string): "high" | "medium" | "low" {
+  if (status !== "captured" || accuracy == null) return "low";
+  if (accuracy <= 100) return "high";
+  if (accuracy <= 300) return "medium";
+  return "low";
+}
+
+async function compressMilestoneImage(file: File): Promise<File> {
+  if (!file.type.startsWith("image/")) return file;
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const maxWidth = 1200;
+      let { width, height } = img;
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+      URL.revokeObjectURL(url);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) return resolve(file);
+          resolve(new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" }));
+        },
+        "image/jpeg",
+        0.7,
+      );
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+}
+
 export type MissionStatus = (typeof MISSION_STATUSES)[number];
 export type MemberStatus = (typeof MEMBER_STATUSES)[number];
 export type BusinessTripType = (typeof TRIP_TYPES)[number];
@@ -255,7 +309,14 @@ export type BusinessTripMissionMember = {
   fieldConditionNote?: string;
   missionStatus?: MissionStatus;
   // Trip tracking milestones (phase 2 detailed tracking)
-  memberTripStatus?: "ready" | "departed" | "arrived" | "activity_done" | "return_started" | "returned" | "issue_reported";
+  memberTripStatus?:
+    | "ready"
+    | "departed"
+    | "arrived"
+    | "activity_done"
+    | "return_started"
+    | "returned"
+    | "issue_reported";
   lastTripUpdateAt?: any;
   lastTripUpdateByUid?: string;
   lastTripUpdateByName?: string;
@@ -309,43 +370,19 @@ function getDestinationLabel(mission: any): string {
 }
 
 function getMemberApprovalStatusBadge(member: BusinessTripMissionMember) {
-  // Fully approved by whoever is the approver
-  if (
-    member.approvalStatus === "approved" ||
-    member.managerValidationStatus === "approved_by_manager"
-  ) {
+  const normalizedApproval = normalizeApprovalStatus(member);
+
+  if (normalizedApproval === "approved_by_manager") {
     return <Badge variant="success">Disetujui atasan</Badge>;
   }
-  // Rejected
-  if (
-    member.managerValidationStatus === "rejected_by_manager" ||
-    member.approvalStatus === "rejected"
-  ) {
-    return <Badge variant="destructive">Ditolak atasan</Badge>;
-  }
-  // Replacement requested
-  if (member.managerValidationStatus === "replacement_requested") {
+  if (normalizedApproval === "replacement_requested") {
     return <Badge variant="destructive">Diminta ganti staff</Badge>;
   }
-  // Division manager pending director approval
-  if (
-    (member.isDivisionManager || member.approvalLevel === "director") &&
-    (member.approvalStatus as string) !== "approved" &&
-    (member.managerValidationStatus as string) !== "approved_by_manager"
-  ) {
-    return <Badge variant="warning">Menunggu persetujuan direktur</Badge>;
+  if (normalizedApproval === "rejected_by_manager") {
+    return <Badge variant="destructive">Ditolak atasan</Badge>;
   }
-  // Regular staff pending manager approval
-  if (
-    !member.managerValidationStatus ||
-    member.managerValidationStatus === "waiting_manager_validation" ||
-    member.memberStatus === "waiting_manager_validation"
-  ) {
-    return <Badge variant="warning">Menunggu persetujuan atasan</Badge>;
-  }
-  return renderStatusLabel(
-    (member.managerValidationStatus || member.memberStatus) as MemberStatus,
-  );
+
+  return <Badge variant="warning">Menunggu persetujuan atasan</Badge>;
 }
 
 function renderStatusLabel(status?: string) {
@@ -374,6 +411,11 @@ function renderStatusLabel(status?: string) {
     declined_by_staff: "destructive",
     ready_to_depart: "success",
     returned: "success",
+    // Legacy / normalized member statuses
+    approved: "success",
+    manager_approved: "success",
+    confirmed: "success",
+    staff_confirmed: "success",
     // Computed UI statuses (phase-1 tracking)
     in_progress: "success",
     needs_attention: "destructive",
@@ -396,10 +438,14 @@ function renderStatusLabel(status?: string) {
     rejected: "Ditolak",
     cancelled: "Dibatalkan",
     approved_by_manager: "Disetujui oleh atasan",
-    validated_by_assigner: "Tervalidasi oleh pemberi tugas",
+    approved: "Disetujui atasan",
+    manager_approved: "Disetujui atasan",
+    validated_by_assigner: "Disetujui atasan",
     replacement_requested: "Diminta ganti staff",
     rejected_by_manager: "Ditolak oleh atasan",
     confirmed_by_staff: "Dikonfirmasi staff",
+    confirmed: "Dikonfirmasi staff",
+    staff_confirmed: "Dikonfirmasi staff",
     declined_by_staff: "Ditolak staff",
     ready_to_depart: "Siap Berangkat",
     returned: "Sudah kembali",
@@ -411,6 +457,51 @@ function renderStatusLabel(status?: string) {
 
   const label = labelMap[status] || String(status).replace(/_/g, " ");
   return <Badge variant={styleMap[status] || "secondary"}>{label}</Badge>;
+}
+
+function normalizeApprovalStatus(member: BusinessTripMissionMember) {
+  const raw = String(
+    member.managerValidationStatus || member.approvalStatus || member.memberStatus || "",
+  ).toLowerCase();
+  if (
+    [
+      "approved",
+      "approved_by_manager",
+      "validated_by_assigner",
+      "manager_approved",
+      "disetujui",
+    ].includes(raw)
+  ) {
+    return "approved_by_manager" as MemberStatus;
+  }
+  if (raw === "replacement_requested") {
+    return "replacement_requested" as MemberStatus;
+  }
+  if (["rejected", "rejected_by_manager", "ditolak"].includes(raw)) {
+    return "rejected_by_manager" as MemberStatus;
+  }
+  return "waiting_manager_validation" as MemberStatus;
+}
+
+function normalizeConfirmationStatus(member: BusinessTripMissionMember) {
+  const raw = String(
+    member.staffConfirmationStatus || (member as any).confirmationStatus || "",
+  ).toLowerCase();
+  if (["confirmed_by_staff", "confirmed", "staff_confirmed"].includes(raw)) {
+    return "confirmed_by_staff" as MemberStatus;
+  }
+  if (["declined_by_staff", "declined", "not_confirmed"].includes(raw)) {
+    return "declined_by_staff" as MemberStatus;
+  }
+  return "waiting_staff_confirmation" as MemberStatus;
+}
+
+function isMemberApproved(member: BusinessTripMissionMember) {
+  return normalizeApprovalStatus(member) === "approved_by_manager";
+}
+
+function isMemberConfirmed(member: BusinessTripMissionMember) {
+  return normalizeConfirmationStatus(member) === "confirmed_by_staff";
 }
 
 function computeMissionDisplayStatus(
@@ -425,8 +516,17 @@ function computeMissionDisplayStatus(
   }
   // Computed in_progress: ready/approved + today >= startDate, or anyone departed/in-transit
   const anyActive = members.some((m) =>
-    ["departed", "arrived", "activity_done", "return_started"].includes(m.memberTripStatus ?? ""),
+    ["departed", "arrived", "activity_done", "return_started"].includes(
+      m.memberTripStatus ?? "",
+    ),
   );
+  const allMembersApproved = members.length > 0 && members.every(isMemberApproved);
+  const allMembersConfirmed = members.length > 0 && members.every(isMemberConfirmed);
+  if (allMembersApproved && allMembersConfirmed && !anyActive) {
+    return "approved_ready_to_depart";
+  }
+  if (!allMembersApproved) return "pending_manager_validation";
+  if (!allMembersConfirmed) return "waiting_staff_confirmation";
   if (anyActive) return "in_progress";
   if (status === "ready_to_depart" || status === "approved_ready_to_depart") {
     const ts = (startDate as any)?.seconds
@@ -578,9 +678,13 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
       byUid?: string | null;
       byName?: string | null;
       category?: "tracking" | "approval" | "system";
+      trustLevel?: "high" | "medium" | "low" | null;
+      evidenceId?: string | null;
     }>
   >([]);
-  const [timelineTab, setTimelineTab] = useState<"all" | "tracking" | "system">("all");
+  const [timelineTab, setTimelineTab] = useState<"all" | "tracking" | "system">(
+    "all",
+  );
   const [missionDetailError, setMissionDetailError] = useState<string | null>(
     null,
   );
@@ -650,10 +754,17 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
       (err) => console.error("final_report snapshot error:", err),
     );
     const unsubMemberReports = onSnapshot(
-      collection(firestore, "business_trip_missions", mId, "member_final_reports"),
+      collection(
+        firestore,
+        "business_trip_missions",
+        mId,
+        "member_final_reports",
+      ),
       (snap) => {
         const map: Record<string, any> = {};
-        snap.docs.forEach((d) => { map[d.id] = { id: d.id, ...d.data() }; });
+        snap.docs.forEach((d) => {
+          map[d.id] = { id: d.id, ...d.data() };
+        });
         setMemberFinalReports(map);
       },
       (err) => console.error("member_final_reports snapshot error:", err),
@@ -662,12 +773,18 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
       collection(firestore, "business_trip_missions", mId, "member_notes"),
       (snap) => {
         const map: Record<string, any> = {};
-        snap.docs.forEach((d) => { map[d.id] = { id: d.id, ...d.data() }; });
+        snap.docs.forEach((d) => {
+          map[d.id] = { id: d.id, ...d.data() };
+        });
         setMemberNotes(map);
       },
       (err) => console.error("member_notes snapshot error:", err),
     );
-    return () => { unsubFinal(); unsubMemberReports(); unsubMemberNotes(); };
+    return () => {
+      unsubFinal();
+      unsubMemberReports();
+      unsubMemberNotes();
+    };
   }, [firestore, selectedMission?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const getBusinessTripMissionCollection = () =>
@@ -708,12 +825,43 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
     estimatedReturnAt: "",
   });
 
+  // Milestone evidence form state
+  type MilestoneGps = {
+    status: "idle" | "capturing" | "captured" | "unavailable";
+    latitude?: number;
+    longitude?: number;
+    accuracy?: number;
+    capturedAt?: Date;
+    trustLevel?: "high" | "medium" | "low";
+    gpsPermissionStatus?: string;
+    // Reverse-geocoded address
+    addressText?: string;
+    streetName?: string;
+    village?: string;
+    district?: string;
+    city?: string;
+    province?: string;
+    postalCode?: string;
+    country?: string;
+    geocodeStatus?: "success" | "failed";
+  };
+  const [milestoneGps, setMilestoneGps] = useState<MilestoneGps>({ status: "idle" });
+  const [milestoneNote, setMilestoneNote] = useState("");
+  const [milestonePhotos, setMilestonePhotos] = useState<{ file: File; preview: string }[]>([]);
+  const [milestoneManualLocation, setMilestoneManualLocation] = useState("");
+
   // Group milestone modal state
   type PendingMilestone = {
-    milestone: "departed" | "arrived" | "activity_done" | "returned" | "issue_reported";
+    milestone:
+      | "departed"
+      | "arrived"
+      | "activity_done"
+      | "returned"
+      | "issue_reported";
     eligible: BusinessTripMissionMember[];
   };
-  const [pendingMilestone, setPendingMilestone] = useState<PendingMilestone | null>(null);
+  const [pendingMilestone, setPendingMilestone] =
+    useState<PendingMilestone | null>(null);
   const [groupSelectedUids, setGroupSelectedUids] = useState<string[]>([]);
 
   const [technicalForm, setTechnicalForm] = useState({
@@ -730,7 +878,9 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
 
   // Final report state
   const [finalReport, setFinalReport] = useState<any | null>(null);
-  const [memberFinalReports, setMemberFinalReports] = useState<Record<string, any>>({});
+  const [memberFinalReports, setMemberFinalReports] = useState<
+    Record<string, any>
+  >({});
   const [memberNotes, setMemberNotes] = useState<Record<string, any>>({});
   const [teamReportForm, setTeamReportForm] = useState({
     ringkasanKegiatan: "",
@@ -750,7 +900,9 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
   });
   const [isSubmittingFinalReport, setIsSubmittingFinalReport] = useState(false);
   const [showFinalReportPanel, setShowFinalReportPanel] = useState(false);
-  const [localReportMode, setLocalReportMode] = useState<"team_report" | "individual_report">("team_report");
+  const [localReportMode, setLocalReportMode] = useState<
+    "team_report" | "individual_report"
+  >("team_report");
   const [missionForm, setMissionForm] = useState({
     missionName: "",
     assignmentNumber: "",
@@ -946,7 +1098,11 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
   // not on every Firestore write (which would overwrite the user's mid-session selection).
   useEffect(() => {
     const firestoreMode = selectedMission?.reportMode as string | undefined;
-    setLocalReportMode(firestoreMode === "individual_report" ? "individual_report" : "team_report");
+    setLocalReportMode(
+      firestoreMode === "individual_report"
+        ? "individual_report"
+        : "team_report",
+    );
   }, [selectedMission?.id]); // intentionally only on mission id change, not every reportMode update
 
   const missions = useMemo(() => {
@@ -987,10 +1143,98 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
     return Math.max(1, Math.ceil(ms / (1000 * 60 * 60 * 24)) + 1);
   };
 
+  const captureMilestoneGps = async () => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setMilestoneGps({ status: "unavailable" });
+      return;
+    }
+    // Clear all stale location data before re-capture
+    setMilestoneGps({ status: "capturing" });
+
+    // Query permission status if Permissions API available
+    let permStatus = "unknown";
+    try {
+      const perm = await navigator.permissions.query({ name: "geolocation" as PermissionName });
+      permStatus = perm.state; // "granted" | "denied" | "prompt"
+    } catch {
+      // Permissions API not supported
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const accuracy = pos.coords.accuracy;
+        const trustLevel = computeTrustLevel(accuracy, "captured");
+        const base: MilestoneGps = {
+          status: "captured",
+          latitude: lat,
+          longitude: lng,
+          accuracy,
+          capturedAt: new Date(),
+          trustLevel,
+          gpsPermissionStatus: permStatus,
+          geocodeStatus: "failed",
+        };
+        setMilestoneGps(base);
+
+        // Reverse geocode via Nominatim (no API key required)
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=id`,
+            { headers: { "User-Agent": "HRPEnvironesia/1.0" } },
+          );
+          if (res.ok) {
+            const data = await res.json();
+            const addr = data.address ?? {};
+            const road = addr.road || addr.pedestrian || addr.footway || addr.path || "";
+            const houseNumber = addr.house_number ? ` No. ${addr.house_number}` : "";
+            const streetName = road ? `${road}${houseNumber}` : "";
+            const village = addr.village || addr.suburb || addr.neighbourhood || addr.quarter || "";
+            const district = addr.city_district || addr.district || addr.subdistrict || addr.municipality || "";
+            const city = addr.city || addr.town || addr.county || addr.regency || "";
+            const province = addr.state || addr.province || "";
+            const postalCode = addr.postcode || "";
+            const country = addr.country || "";
+            const parts = [streetName, village, district, city, province, postalCode, country].filter(Boolean);
+            const addressText = data.display_name || parts.join(", ");
+            setMilestoneGps({
+              ...base,
+              addressText,
+              streetName: streetName || undefined,
+              village: village || undefined,
+              district: district || undefined,
+              city: city || undefined,
+              province: province || undefined,
+              postalCode: postalCode || undefined,
+              country: country || undefined,
+              geocodeStatus: "success",
+            });
+          }
+        } catch {
+          // keep base (geocodeStatus: "failed") — coordinates still saved
+        }
+      },
+      () => setMilestoneGps({ status: "unavailable" }),
+      { timeout: 10000, maximumAge: 60000 },
+    );
+  };
+
+  const resetMilestoneEvidence = () => {
+    setMilestoneGps({ status: "idle" });
+    setMilestoneNote("");
+    setMilestonePhotos((prev) => {
+      prev.forEach((p) => URL.revokeObjectURL(p.preview));
+      return [];
+    });
+    setMilestoneManualLocation("");
+  };
+
   const appendTimelineEntry = async (
     missionId: string,
     message: string,
     category: "tracking" | "approval" | "system" = "system",
+    meta?: Record<string, any>,
   ) => {
     if (!firestore || !missionId) return;
     try {
@@ -1002,6 +1246,7 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
         createdAt: serverTimestamp(),
         byUid: userProfile?.uid || null,
         byName: userProfile?.fullName || null,
+        ...(meta ?? {}),
       });
     } catch (error) {
       console.warn("Gagal menambahkan timeline misi", error);
@@ -1197,8 +1442,10 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
       (m) => m.staffConfirmationStatus === "confirmed_by_staff",
     ).length;
 
-    const allApproved = totalMembers === 0 || managerApprovedCount === totalMembers;
-    const allConfirmed = totalMembers === 0 || staffConfirmedCount === totalMembers;
+    const allApproved =
+      totalMembers === 0 || managerApprovedCount === totalMembers;
+    const allConfirmed =
+      totalMembers === 0 || staffConfirmedCount === totalMembers;
     const anyOnDuty = activeMembers.some((m) => m.memberStatus === "on_duty");
     const allReturned =
       activeMembers.length > 0 &&
@@ -1214,7 +1461,12 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
     const currentStatus = missionSnap.data()?.status as MissionStatus;
 
     // Don't downgrade terminal statuses
-    const TERMINAL: string[] = ["on_duty", "returned_pending_report", "report_submitted", "completed"];
+    const TERMINAL: string[] = [
+      "on_duty",
+      "returned_pending_report",
+      "report_submitted",
+      "completed",
+    ];
     let nextStatus: string = currentStatus;
 
     if (allReported) {
@@ -1753,15 +2005,16 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
     try {
       const memberRef = getMissionMemberDoc(member.missionId, member.id);
       if (!memberRef) return;
-      const confirmResult = approved ? "confirmed_by_staff" : "declined_by_staff";
+      const confirmResult = approved
+        ? "confirmed_by_staff"
+        : "declined_by_staff";
+      console.log("updating member path", memberRef.path);
       await updateDoc(memberRef, {
         staffConfirmationStatus: confirmResult,
         confirmationStatus: confirmResult,
-        memberStatus: approved ? "ready_to_depart" : "declined_by_staff",
-        staffConfirmationNote: technicalForm.staffConfirmationNote,
-        contactDuringTrip: technicalForm.contactDuringTrip,
         confirmedAt: serverTimestamp(),
         confirmedByUid: userProfile.uid,
+        confirmedByName: userProfile.fullName || userProfile.email || null,
         updatedAt: serverTimestamp(),
       });
       await appendTimelineEntry(
@@ -1771,7 +2024,6 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
           : `${member.employeeName} menyatakan tidak bisa ikut misi.`,
         "approval",
       );
-      await syncMissionStatus(member.missionId);
       toast({ title: "Konfirmasi staff tersimpan." });
       setTechnicalForm({
         contactDuringTrip: "",
@@ -1898,7 +2150,12 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
 
   const handleTripMilestone = async (
     member: BusinessTripMissionMember,
-    milestone: "departed" | "arrived" | "activity_done" | "returned" | "issue_reported",
+    milestone:
+      | "departed"
+      | "arrived"
+      | "activity_done"
+      | "returned"
+      | "issue_reported",
     issueOpts?: {
       issueCategory?: string;
       issueUrgency?: string;
@@ -1946,13 +2203,18 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
         updateData.issueCategory = issueOpts?.issueCategory || "";
         updateData.issueUrgency = issueOpts?.issueUrgency || "";
         updateData.issueAt = serverTimestamp();
-        const urgencyLabel = issueOpts?.issueUrgency ? ` [urgensi: ${issueOpts.issueUrgency}]` : "";
-        const cat = issueOpts?.issueCategory ? ` — kategori: ${issueOpts.issueCategory}` : "";
+        const urgencyLabel = issueOpts?.issueUrgency
+          ? ` [urgensi: ${issueOpts.issueUrgency}]`
+          : "";
+        const cat = issueOpts?.issueCategory
+          ? ` — kategori: ${issueOpts.issueCategory}`
+          : "";
         timelineMsg = `${member.employeeName} melaporkan kendala${cat}${urgencyLabel}: ${issueOpts?.issueNote || "(tidak ada catatan)"}.`;
       }
 
       await updateDoc(memberRef, updateData);
-      if (timelineMsg) await appendTimelineEntry(member.missionId, timelineMsg, "tracking");
+      if (timelineMsg)
+        await appendTimelineEntry(member.missionId, timelineMsg, "tracking");
       // Do NOT call syncMissionStatus here — staff cannot update the parent mission doc.
       // Mission status is derived on the fly from member tracking data.
 
@@ -1977,8 +2239,40 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
   const handleGroupTripMilestone = async (
     missionId: string,
     members: BusinessTripMissionMember[],
-    milestone: "departed" | "arrived" | "activity_done" | "returned" | "issue_reported",
-    issueOpts?: { issueCategory?: string; issueUrgency?: string; issueNote?: string },
+    milestone:
+      | "departed"
+      | "arrived"
+      | "activity_done"
+      | "returned"
+      | "issue_reported",
+    issueOpts?: {
+      issueCategory?: string;
+      issueUrgency?: string;
+      issueNote?: string;
+    },
+    evidenceOpts?: {
+      latitude?: number;
+      longitude?: number;
+      locationAccuracy?: number;
+      locationCapturedAt?: Date;
+      locationStatus: "captured" | "unavailable" | "manual";
+      addressText?: string;
+      streetName?: string;
+      village?: string;
+      district?: string;
+      city?: string;
+      province?: string;
+      postalCode?: string;
+      country?: string;
+      geocodeStatus?: "success" | "failed";
+      locationTrustLevel?: "high" | "medium" | "low";
+      gpsPermissionStatus?: string;
+      deviceTimestamp?: string;
+      userAgent?: string;
+      manualLocationNote?: string;
+      note?: string;
+      photos?: File[];
+    },
   ) => {
     if (!firestore || !userProfile || members.length === 0) return;
     setIsSaving(true);
@@ -2026,8 +2320,83 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
         }),
       );
 
+      // Save milestone evidence (location + photos)
+      let savedPhotosCount = 0;
+      let savedEvidenceId: string | null = null;
+      let uploadedPhotos: Array<{
+        photoUrl: string | null;
+        photoPath: string | null;
+        originalFileName: string | null;
+        compressedSize: number | null;
+        uploadedAt: any;
+        expiresAt: any;
+      }> = [];
+      if (evidenceOpts && milestone !== "issue_reported") {
+
+        const expiresAt = Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
+        for (const photoFile of (evidenceOpts.photos ?? [])) {
+          try {
+            const compressed = await compressMilestoneImage(photoFile);
+            const storagePath = `milestone_evidence/${missionId}/${userProfile.uid}/${milestone}_${Date.now()}_${uploadedPhotos.length}.jpg`;
+            const result = await uploadFile(compressed, storagePath, userProfile.uid, { compress: false });
+            uploadedPhotos.push({
+              photoUrl: result.downloadUrl ?? null,
+              photoPath: storagePath,
+              originalFileName: photoFile.name,
+              compressedSize: compressed.size,
+              uploadedAt: serverTimestamp(),
+              expiresAt,
+            });
+          } catch (uploadErr) {
+            console.warn("Gagal upload foto bukti milestone:", uploadErr);
+          }
+        }
+        savedPhotosCount = uploadedPhotos.length;
+
+        try {
+          const evidenceCol = collection(firestore, "business_trip_missions", missionId, "milestone_evidences");
+          const evidenceDocRef = await addDoc(evidenceCol, {
+            milestoneType: milestone,
+            evidenceType: getEvidenceType(milestone),
+            confirmedByUid: userProfile.uid,
+            confirmedByName: updaterName,
+            targetMemberUids: members.map((m) => m.employeeUid),
+            targetMemberNames: members.map((m) => m.employeeName),
+            createdAt: serverTimestamp(),
+            latitude: evidenceOpts.latitude ?? null,
+            longitude: evidenceOpts.longitude ?? null,
+            locationAccuracy: evidenceOpts.locationAccuracy ?? null,
+            locationCapturedAt: evidenceOpts.locationCapturedAt
+              ? Timestamp.fromDate(evidenceOpts.locationCapturedAt)
+              : null,
+            locationStatus: evidenceOpts.locationStatus,
+            locationTrustLevel: evidenceOpts.locationTrustLevel ?? null,
+            gpsPermissionStatus: evidenceOpts.gpsPermissionStatus ?? null,
+            deviceTimestamp: evidenceOpts.deviceTimestamp ?? null,
+            userAgent: evidenceOpts.userAgent ?? null,
+            addressText: evidenceOpts.addressText || null,
+            streetName: evidenceOpts.streetName || null,
+            village: evidenceOpts.village || null,
+            district: evidenceOpts.district || null,
+            city: evidenceOpts.city || null,
+            province: evidenceOpts.province || null,
+            postalCode: evidenceOpts.postalCode || null,
+            country: evidenceOpts.country || null,
+            geocodeStatus: evidenceOpts.geocodeStatus || null,
+            manualLocationNote: evidenceOpts.manualLocationNote || null,
+            note: evidenceOpts.note || null,
+            photos: uploadedPhotos,
+          });
+          savedEvidenceId = evidenceDocRef.id;
+        } catch (evidenceErr) {
+          console.warn("Gagal menyimpan bukti milestone:", evidenceErr);
+        }
+      }
+
       // One consolidated timeline entry for the whole group
       let timelineMsg = "";
+      let timelineTrustLevel: "high" | "medium" | "low" | null = null;
+
       if (milestone === "departed") {
         timelineMsg = `${updaterName} mengonfirmasi keberangkatan untuk: ${memberNames} pada ${nowDate} pukul ${nowTime}.`;
       } else if (milestone === "arrived") {
@@ -2037,16 +2406,61 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
       } else if (milestone === "returned") {
         timelineMsg = `${updaterName} mengonfirmasi kembali untuk: ${memberNames} pada ${nowDate} pukul ${nowTime}.`;
       } else if (milestone === "issue_reported") {
-        const cat = issueOpts?.issueCategory ? ` — kategori: ${issueOpts.issueCategory}` : "";
-        const urgency = issueOpts?.issueUrgency ? ` [urgensi: ${issueOpts.issueUrgency}]` : "";
+        const cat = issueOpts?.issueCategory
+          ? ` — kategori: ${issueOpts.issueCategory}`
+          : "";
+        const urgency = issueOpts?.issueUrgency
+          ? ` [urgensi: ${issueOpts.issueUrgency}]`
+          : "";
         timelineMsg = `${updaterName} melaporkan kendala untuk: ${memberNames}${cat}${urgency}: ${issueOpts?.issueNote || "(tidak ada catatan)"} pada ${nowDate} pukul ${nowTime}.`;
       }
 
-      if (timelineMsg) await appendTimelineEntry(missionId, timelineMsg, "tracking");
+      // Build timeline metadata — location/photos stored as fields only, NOT in message text
+      if (evidenceOpts && milestone !== "issue_reported") {
+        timelineTrustLevel = evidenceOpts.locationTrustLevel ?? null;
+      }
 
-      toast({ title: "Status perjalanan diperbarui untuk semua anggota terpilih." });
+      if (timelineMsg) {
+        const timelineMeta: Record<string, any> = {
+          ...(timelineTrustLevel ? { trustLevel: timelineTrustLevel } : {}),
+          ...(savedEvidenceId ? { evidenceId: savedEvidenceId } : {}),
+        };
+
+        // Embed evidence data directly so HRD/Director can read without milestone_evidences access
+        if (evidenceOpts && milestone !== "issue_reported") {
+          timelineMeta.milestoneType = milestone;
+          timelineMeta.confirmedByName = updaterName;
+          timelineMeta.confirmedByUid = userProfile.uid;
+          timelineMeta.targetMemberNames = members.map((m) => m.employeeName);
+          timelineMeta.targetMemberUids = members.map((m) => m.employeeUid);
+          if (evidenceOpts.latitude != null) {
+            timelineMeta.evidenceLat = evidenceOpts.latitude;
+            timelineMeta.evidenceLng = evidenceOpts.longitude ?? null;
+            timelineMeta.evidenceAccuracy = evidenceOpts.locationAccuracy ?? null;
+            timelineMeta.evidenceAddress = evidenceOpts.addressText ?? null;
+          }
+          timelineMeta.evidenceLocationStatus = evidenceOpts.locationStatus;
+          timelineMeta.evidenceLocationTrust = evidenceOpts.locationTrustLevel ?? null;
+          if (evidenceOpts.manualLocationNote) {
+            timelineMeta.evidenceManualNote = evidenceOpts.manualLocationNote;
+          }
+          if (uploadedPhotos.length > 0) {
+            timelineMeta.evidencePhotos = uploadedPhotos.map((p) => ({
+              photoUrl: p.photoUrl ?? null,
+              expiresAt: p.expiresAt ?? null,
+            }));
+          }
+        }
+
+        await appendTimelineEntry(missionId, timelineMsg, "tracking", timelineMeta);
+      }
+
+      toast({
+        title: "Status perjalanan diperbarui untuk semua anggota terpilih.",
+      });
       setPendingMilestone(null);
       setGroupSelectedUids([]);
+      resetMilestoneEvidence();
       setShowIssueInput(false);
       setIssueForm({ category: "", urgency: "", note: "", attachment: null });
       refreshStaffTasks();
@@ -2132,7 +2546,10 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
   const handleSubmitTeamReport = async () => {
     if (!firestore || !userProfile || !selectedMission?.id) return;
     if (!teamReportForm.ringkasanKegiatan || !teamReportForm.hasilOutput) {
-      return toast({ variant: "destructive", title: "Ringkasan kegiatan dan hasil output wajib diisi." });
+      return toast({
+        variant: "destructive",
+        title: "Ringkasan kegiatan dan hasil output wajib diisi.",
+      });
     }
     setIsSubmittingFinalReport(true);
     try {
@@ -2147,27 +2564,37 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
         );
         lampiranUrl = res.downloadUrl ?? null;
       }
-      const reportMode = (selectedMission.reportMode as "team_report" | "individual_report") ?? "team_report";
-      const isResubmit = finalReport?.reportReviewStatus === "revision_requested";
-      const reportRef = doc(collection(firestore, "business_trip_missions", mId, "final_report"), "main");
-      await setDoc(reportRef, {
-        missionId: mId,
-        reportMode,
-        ringkasanKegiatan: teamReportForm.ringkasanKegiatan,
-        hasilOutput: teamReportForm.hasilOutput,
-        kendalaDanSolusi: teamReportForm.kendalaDanSolusi || null,
-        tindakLanjut: teamReportForm.tindakLanjut || null,
-        catatanUntukHRD: teamReportForm.catatanUntukHRD || null,
-        lampiranUrl,
-        dilaporkanOlehUid: userProfile.uid,
-        dilaporkanOlehName: userProfile.fullName || userProfile.email || "",
-        submittedAt: serverTimestamp(),
-        reportReviewStatus: isResubmit ? "resubmitted" : null,
-        revisionNote: isResubmit ? null : undefined,
-        totalMembers: missionMembers.length,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
+      const reportMode =
+        (selectedMission.reportMode as "team_report" | "individual_report") ??
+        "team_report";
+      const isResubmit =
+        finalReport?.reportReviewStatus === "revision_requested";
+      const reportRef = doc(
+        collection(firestore, "business_trip_missions", mId, "final_report"),
+        "main",
+      );
+      await setDoc(
+        reportRef,
+        {
+          missionId: mId,
+          reportMode,
+          ringkasanKegiatan: teamReportForm.ringkasanKegiatan,
+          hasilOutput: teamReportForm.hasilOutput,
+          kendalaDanSolusi: teamReportForm.kendalaDanSolusi || null,
+          tindakLanjut: teamReportForm.tindakLanjut || null,
+          catatanUntukHRD: teamReportForm.catatanUntukHRD || null,
+          lampiranUrl,
+          dilaporkanOlehUid: userProfile.uid,
+          dilaporkanOlehName: userProfile.fullName || userProfile.email || "",
+          submittedAt: serverTimestamp(),
+          reportReviewStatus: isResubmit ? "resubmitted" : null,
+          revisionNote: isResubmit ? null : undefined,
+          totalMembers: missionMembers.length,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
       const missionRef = getBusinessTripMissionDoc(mId);
       if (missionRef) {
         await updateDoc(missionRef, {
@@ -2178,15 +2605,34 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
           updatedAt: serverTimestamp(),
         });
       }
-      await appendTimelineEntry(mId, isResubmit
-        ? `${userProfile.fullName || userProfile.email} mengirim ulang laporan akhir tim.`
-        : `${userProfile.fullName || userProfile.email} membuat laporan akhir tim. Laporan akhir dikirim ke HRD.`, "system");
-      toast({ title: isResubmit ? "Laporan dikirim ulang." : "Laporan akhir tim berhasil dikirim." });
-      setTeamReportForm({ ringkasanKegiatan: "", hasilOutput: "", kendalaDanSolusi: "", tindakLanjut: "", catatanUntukHRD: "", lampiranFile: null });
+      await appendTimelineEntry(
+        mId,
+        isResubmit
+          ? `${userProfile.fullName || userProfile.email} mengirim ulang laporan akhir tim.`
+          : `${userProfile.fullName || userProfile.email} membuat laporan akhir tim. Laporan akhir dikirim ke HRD.`,
+        "system",
+      );
+      toast({
+        title: isResubmit
+          ? "Laporan dikirim ulang."
+          : "Laporan akhir tim berhasil dikirim.",
+      });
+      setTeamReportForm({
+        ringkasanKegiatan: "",
+        hasilOutput: "",
+        kendalaDanSolusi: "",
+        tindakLanjut: "",
+        catatanUntukHRD: "",
+        lampiranFile: null,
+      });
       setShowFinalReportPanel(false);
     } catch (error: any) {
       console.error(error);
-      toast({ variant: "destructive", title: "Gagal mengirim laporan", description: error?.message });
+      toast({
+        variant: "destructive",
+        title: "Gagal mengirim laporan",
+        description: error?.message,
+      });
     } finally {
       setIsSubmittingFinalReport(false);
     }
@@ -2195,7 +2641,10 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
   const handleSubmitMemberReport = async () => {
     if (!firestore || !userProfile || !selectedMission?.id) return;
     if (!memberReportForm.kegiatanDilakukan || !memberReportForm.hasilPribadi) {
-      return toast({ variant: "destructive", title: "Kegiatan dilakukan dan hasil pribadi wajib diisi." });
+      return toast({
+        variant: "destructive",
+        title: "Kegiatan dilakukan dan hasil pribadi wajib diisi.",
+      });
     }
     setIsSubmittingFinalReport(true);
     try {
@@ -2211,59 +2660,112 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
         lampiranUrl = res.downloadUrl ?? null;
       }
       const myExistingReport = memberFinalReports[userProfile.uid];
-      const isMemberResubmit = myExistingReport?.reportReviewStatus === "revision_requested";
-      await setDoc(doc(firestore, "business_trip_missions", mId, "member_final_reports", userProfile.uid), {
-        missionId: mId,
-        memberUid: userProfile.uid,
-        memberName: userProfile.fullName || userProfile.email || "",
-        kegiatanDilakukan: memberReportForm.kegiatanDilakukan,
-        hasilPribadi: memberReportForm.hasilPribadi,
-        kendalaPribadi: memberReportForm.kendalaPribadi || null,
-        solusiPribadi: memberReportForm.solusiPribadi || null,
-        catatanTambahan: memberReportForm.catatanTambahan || null,
-        lampiranUrl,
-        submittedAt: serverTimestamp(),
-        reportReviewStatus: isMemberResubmit ? "resubmitted" : null,
-        revisionNote: isMemberResubmit ? null : undefined,
-        createdAt: serverTimestamp(),
-      }, { merge: true });
+      const isMemberResubmit =
+        myExistingReport?.reportReviewStatus === "revision_requested";
+      await setDoc(
+        doc(
+          firestore,
+          "business_trip_missions",
+          mId,
+          "member_final_reports",
+          userProfile.uid,
+        ),
+        {
+          missionId: mId,
+          memberUid: userProfile.uid,
+          memberName: userProfile.fullName || userProfile.email || "",
+          kegiatanDilakukan: memberReportForm.kegiatanDilakukan,
+          hasilPribadi: memberReportForm.hasilPribadi,
+          kendalaPribadi: memberReportForm.kendalaPribadi || null,
+          solusiPribadi: memberReportForm.solusiPribadi || null,
+          catatanTambahan: memberReportForm.catatanTambahan || null,
+          lampiranUrl,
+          submittedAt: serverTimestamp(),
+          reportReviewStatus: isMemberResubmit ? "resubmitted" : null,
+          revisionNote: isMemberResubmit ? null : undefined,
+          createdAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
 
       // Check if all members have submitted
-      const membersSnap = await getDocs(collection(firestore, "business_trip_missions", mId, "member_final_reports"));
-      const activeMemberUids = missionMembers.filter((m) => m.memberTripStatus === "returned" || m.memberStatus === "returned").map((m) => m.employeeUid);
+      const membersSnap = await getDocs(
+        collection(
+          firestore,
+          "business_trip_missions",
+          mId,
+          "member_final_reports",
+        ),
+      );
+      const activeMemberUids = missionMembers
+        .filter(
+          (m) =>
+            m.memberTripStatus === "returned" || m.memberStatus === "returned",
+        )
+        .map((m) => m.employeeUid);
       const submittedUids = membersSnap.docs.map((d) => d.id);
-      const allSubmitted = activeMemberUids.length > 0 && activeMemberUids.every((uid) => submittedUids.includes(uid));
+      const allSubmitted =
+        activeMemberUids.length > 0 &&
+        activeMemberUids.every((uid) => submittedUids.includes(uid));
 
       if (allSubmitted && !isMemberResubmit) {
         const missionRef = getBusinessTripMissionDoc(mId);
         if (missionRef) {
           await updateDoc(missionRef, {
             status: "final_report_submitted",
-            reportMode: (selectedMission.reportMode as "team_report" | "individual_report") ?? "individual_report",
+            reportMode:
+              (selectedMission.reportMode as
+                | "team_report"
+                | "individual_report") ?? "individual_report",
             finalReportSubmittedAt: serverTimestamp(),
             finalReportSubmittedBy: userProfile.uid,
             updatedAt: serverTimestamp(),
           });
-          await appendTimelineEntry(mId, `Semua laporan individu terkumpul. Laporan akhir dikirim ke HRD.`, "system");
+          await appendTimelineEntry(
+            mId,
+            `Semua laporan individu terkumpul. Laporan akhir dikirim ke HRD.`,
+            "system",
+          );
         }
       } else {
-        await appendTimelineEntry(mId, isMemberResubmit
-          ? `${userProfile.fullName || userProfile.email} mengirim ulang laporan dinas individu.`
-          : `${userProfile.fullName || userProfile.email} mengirim laporan dinas individu.`, "system");
+        await appendTimelineEntry(
+          mId,
+          isMemberResubmit
+            ? `${userProfile.fullName || userProfile.email} mengirim ulang laporan dinas individu.`
+            : `${userProfile.fullName || userProfile.email} mengirim laporan dinas individu.`,
+          "system",
+        );
       }
 
-      toast({ title: isMemberResubmit ? "Laporan dikirim ulang." : "Laporan dinas individu berhasil dikirim." });
-      setMemberReportForm({ kegiatanDilakukan: "", hasilPribadi: "", kendalaPribadi: "", solusiPribadi: "", catatanTambahan: "", lampiranFile: null });
+      toast({
+        title: isMemberResubmit
+          ? "Laporan dikirim ulang."
+          : "Laporan dinas individu berhasil dikirim.",
+      });
+      setMemberReportForm({
+        kegiatanDilakukan: "",
+        hasilPribadi: "",
+        kendalaPribadi: "",
+        solusiPribadi: "",
+        catatanTambahan: "",
+        lampiranFile: null,
+      });
       setShowFinalReportPanel(false);
     } catch (error: any) {
       console.error(error);
-      toast({ variant: "destructive", title: "Gagal mengirim laporan", description: error?.message });
+      toast({
+        variant: "destructive",
+        title: "Gagal mengirim laporan",
+        description: error?.message,
+      });
     } finally {
       setIsSubmittingFinalReport(false);
     }
   };
 
-  const handleSetReportMode = async (mode: "team_report" | "individual_report") => {
+  const handleSetReportMode = async (
+    mode: "team_report" | "individual_report",
+  ) => {
     // Update local state immediately so UI responds without waiting for Firestore
     setLocalReportMode(mode);
     console.log("selected report mode", mode);
@@ -2271,10 +2773,17 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
     try {
       const missionRef = getBusinessTripMissionDoc(selectedMission.id);
       if (missionRef) {
-        await updateDoc(missionRef, { reportMode: mode, updatedAt: serverTimestamp() });
+        await updateDoc(missionRef, {
+          reportMode: mode,
+          updatedAt: serverTimestamp(),
+        });
       }
     } catch (error: any) {
-      toast({ variant: "destructive", title: "Gagal menyimpan mode laporan", description: error?.message });
+      toast({
+        variant: "destructive",
+        title: "Gagal menyimpan mode laporan",
+        description: error?.message,
+      });
     }
   };
 
@@ -2283,25 +2792,38 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
     setIsSubmittingFinalReport(true);
     try {
       const mId = selectedMission.id;
-      const reportMode = (selectedMission.reportMode as "team_report" | "individual_report") ?? "team_report";
-      const reportRef = doc(collection(firestore, "business_trip_missions", mId, "final_report"), "main");
-      await setDoc(reportRef, {
-        missionId: mId,
-        reportMode,
-        ringkasanKegiatan: teamReportForm.ringkasanKegiatan || null,
-        hasilOutput: teamReportForm.hasilOutput || null,
-        kendalaDanSolusi: teamReportForm.kendalaDanSolusi || null,
-        tindakLanjut: teamReportForm.tindakLanjut || null,
-        catatanUntukHRD: teamReportForm.catatanUntukHRD || null,
-        dilaporkanOlehUid: userProfile.uid,
-        dilaporkanOlehName: userProfile.fullName || userProfile.email || "",
-        submittedAt: null,
-        updatedAt: serverTimestamp(),
-        createdAt: serverTimestamp(),
-      }, { merge: true });
+      const reportMode =
+        (selectedMission.reportMode as "team_report" | "individual_report") ??
+        "team_report";
+      const reportRef = doc(
+        collection(firestore, "business_trip_missions", mId, "final_report"),
+        "main",
+      );
+      await setDoc(
+        reportRef,
+        {
+          missionId: mId,
+          reportMode,
+          ringkasanKegiatan: teamReportForm.ringkasanKegiatan || null,
+          hasilOutput: teamReportForm.hasilOutput || null,
+          kendalaDanSolusi: teamReportForm.kendalaDanSolusi || null,
+          tindakLanjut: teamReportForm.tindakLanjut || null,
+          catatanUntukHRD: teamReportForm.catatanUntukHRD || null,
+          dilaporkanOlehUid: userProfile.uid,
+          dilaporkanOlehName: userProfile.fullName || userProfile.email || "",
+          submittedAt: null,
+          updatedAt: serverTimestamp(),
+          createdAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
       toast({ title: "Draft laporan tim tersimpan." });
     } catch (error: any) {
-      toast({ variant: "destructive", title: "Gagal menyimpan draft", description: error?.message });
+      toast({
+        variant: "destructive",
+        title: "Gagal menyimpan draft",
+        description: error?.message,
+      });
     } finally {
       setIsSubmittingFinalReport(false);
     }
@@ -2312,22 +2834,36 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
     setIsSubmittingFinalReport(true);
     try {
       const mId = selectedMission.id;
-      await setDoc(doc(firestore, "business_trip_missions", mId, "member_final_reports", userProfile.uid), {
-        missionId: mId,
-        memberUid: userProfile.uid,
-        memberName: userProfile.fullName || userProfile.email || "",
-        kegiatanDilakukan: memberReportForm.kegiatanDilakukan || null,
-        hasilPribadi: memberReportForm.hasilPribadi || null,
-        kendalaPribadi: memberReportForm.kendalaPribadi || null,
-        solusiPribadi: memberReportForm.solusiPribadi || null,
-        catatanTambahan: memberReportForm.catatanTambahan || null,
-        submittedAt: null,
-        updatedAt: serverTimestamp(),
-        createdAt: serverTimestamp(),
-      }, { merge: true });
+      await setDoc(
+        doc(
+          firestore,
+          "business_trip_missions",
+          mId,
+          "member_final_reports",
+          userProfile.uid,
+        ),
+        {
+          missionId: mId,
+          memberUid: userProfile.uid,
+          memberName: userProfile.fullName || userProfile.email || "",
+          kegiatanDilakukan: memberReportForm.kegiatanDilakukan || null,
+          hasilPribadi: memberReportForm.hasilPribadi || null,
+          kendalaPribadi: memberReportForm.kendalaPribadi || null,
+          solusiPribadi: memberReportForm.solusiPribadi || null,
+          catatanTambahan: memberReportForm.catatanTambahan || null,
+          submittedAt: null,
+          updatedAt: serverTimestamp(),
+          createdAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
       toast({ title: "Draft laporan individu tersimpan." });
     } catch (error: any) {
-      toast({ variant: "destructive", title: "Gagal menyimpan draft", description: error?.message });
+      toast({
+        variant: "destructive",
+        title: "Gagal menyimpan draft",
+        description: error?.message,
+      });
     } finally {
       setIsSubmittingFinalReport(false);
     }
@@ -2371,7 +2907,8 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
         (item: any) =>
           item.staffConfirmationStatus === "declined_by_staff" ||
           (item.managerValidationStatus as string) === "rejected_by_manager" ||
-          (item.managerValidationStatus as string) === "replacement_requested" ||
+          (item.managerValidationStatus as string) ===
+            "replacement_requested" ||
           item.memberStatus === "rejected" ||
           item.memberStatus === "cancelled",
       ).length;
@@ -2390,7 +2927,10 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
           (item.managerValidationStatus as string) === "replacement_requested"
         )
           return false;
-        if (item.memberStatus === "rejected" || item.memberStatus === "cancelled")
+        if (
+          item.memberStatus === "rejected" ||
+          item.memberStatus === "cancelled"
+        )
           return false;
         return true;
       }).length;
@@ -2793,10 +3333,14 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                   <TableHead>Periode</TableHead>
                   <TableHead>Jumlah Anggota</TableHead>
                   <TableHead>
-                    {mode === "staff" ? "Status Approval Saya" : "Status Approval"}
+                    {mode === "staff"
+                      ? "Status Approval Saya"
+                      : "Status Approval"}
                   </TableHead>
                   <TableHead>
-                    {mode === "staff" ? "Status Konfirmasi Saya" : "Status Konfirmasi"}
+                    {mode === "staff"
+                      ? "Status Konfirmasi Saya"
+                      : "Status Konfirmasi"}
                   </TableHead>
                   <TableHead>Aksi</TableHead>
                 </TableRow>
@@ -2918,7 +3462,7 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
 
                     return (
                       <TableRow
-                        key={item.id || item.missionId}
+                        key={`${item.missionId ?? ""}-${item.id ?? item.employeeUid ?? ""}`}
                         className="hover:bg-muted cursor-pointer"
                         onClick={() => handleSelectItem(item)}
                       >
@@ -2950,9 +3494,11 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                         </TableCell>
                         <TableCell className="text-sm">
                           {(() => {
-                            const src = mode === "staff" && staffMissionDataById[item.missionId]
-                              ? staffMissionDataById[item.missionId]
-                              : item;
+                            const src =
+                              mode === "staff" &&
+                              staffMissionDataById[item.missionId]
+                                ? staffMissionDataById[item.missionId]
+                                : item;
                             return `${formatDate(src.startDate)} – ${formatDate(src.endDate)}`;
                           })()}
                         </TableCell>
@@ -3052,41 +3598,38 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
           </div>
 
           {/* Mission update alert for staff — show if recently modified */}
-          {mode === "staff" && selectedMission.updatedAt && (() => {
-            const updatedMs = (selectedMission.updatedAt as any)?.seconds
-              ? (selectedMission.updatedAt as any).seconds * 1000
-              : 0;
-            const createdMs = (selectedMission.createdAt as any)?.seconds
-              ? (selectedMission.createdAt as any).seconds * 1000
-              : 0;
-            const isUpdated = updatedMs > createdMs + 60_000; // updated at least 1 min after creation
-            if (!isUpdated) return null;
-            return (
-              <div className="mb-4 flex items-start gap-3 rounded-lg border border-amber-400/50 bg-amber-50/40 dark:bg-amber-900/10 p-4">
-                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
-                <div>
-                  <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
-                    Perjalanan dinas ini telah diperbarui oleh management.
-                  </p>
-                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                    Terakhir diubah: {formatDate(selectedMission.updatedAt)}. Periksa detail terbaru di bawah.
-                  </p>
+          {mode === "staff" &&
+            selectedMission.updatedAt &&
+            (() => {
+              const updatedMs = (selectedMission.updatedAt as any)?.seconds
+                ? (selectedMission.updatedAt as any).seconds * 1000
+                : 0;
+              const createdMs = (selectedMission.createdAt as any)?.seconds
+                ? (selectedMission.createdAt as any).seconds * 1000
+                : 0;
+              const isUpdated = updatedMs > createdMs + 60_000; // updated at least 1 min after creation
+              if (!isUpdated) return null;
+              return (
+                <div className="mb-4 flex items-start gap-3 rounded-lg border border-amber-400/50 bg-amber-50/40 dark:bg-amber-900/10 p-4">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                      Perjalanan dinas ini telah diperbarui oleh management.
+                    </p>
+                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                      Terakhir diubah: {formatDate(selectedMission.updatedAt)}.
+                      Periksa detail terbaru di bawah.
+                    </p>
+                  </div>
                 </div>
-              </div>
-            );
-          })()}
+              );
+            })()}
 
           {/* Summary Cards */}
           <div className="mb-6 grid gap-4 md:grid-cols-2 lg:grid-cols-5">
             {(() => {
-              const approvedCount = missionMembers.filter(
-                (m) =>
-                  m.approvalStatus === "approved" ||
-                  m.managerValidationStatus === "approved_by_manager",
-              ).length;
-              const confirmedCount = missionMembers.filter(
-                (m) => m.staffConfirmationStatus === "confirmed_by_staff",
-              ).length;
+              const approvedCount = missionMembers.filter(isMemberApproved).length;
+              const confirmedCount = missionMembers.filter(isMemberConfirmed).length;
               return (
                 <>
                   <div className="rounded-xl border border-border/50 bg-card p-4 shadow-sm hover:shadow-md transition-shadow">
@@ -3371,7 +3914,7 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                             {getMemberApprovalStatusBadge(member)}
                           </TableCell>
                           <TableCell className="text-center">
-                            {renderStatusLabel(member.staffConfirmationStatus)}
+                            {renderStatusLabel(normalizeConfirmationStatus(member))}
                           </TableCell>
                         </TableRow>
                       ))
@@ -3400,7 +3943,11 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                       onClick={() => setTimelineTab(tab)}
                       className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${timelineTab === tab ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
                     >
-                      {tab === "all" ? "Semua" : tab === "tracking" ? "Perjalanan" : "Sistem"}
+                      {tab === "all"
+                        ? "Semua"
+                        : tab === "tracking"
+                          ? "Perjalanan"
+                          : "Sistem"}
                     </button>
                   ))}
                 </div>
@@ -3409,7 +3956,9 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
             <CardContent>
               {(() => {
                 // Helper: infer category from message for old entries without category field
-                const getCategory = (entry: typeof missionTimeline[number]): "tracking" | "approval" | "system" => {
+                const getCategory = (
+                  entry: (typeof missionTimeline)[number],
+                ): "tracking" | "approval" | "system" => {
                   if (entry.category) return entry.category;
                   const msg = (entry.message || "").toLowerCase();
                   if (
@@ -3419,7 +3968,8 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                     msg.includes("kegiatan selesai") ||
                     msg.includes("kendala") ||
                     msg.includes("sudah kembali")
-                  ) return "tracking";
+                  )
+                    return "tracking";
                   if (
                     msg.includes("menyetujui") ||
                     msg.includes("meminta ganti") ||
@@ -3427,7 +3977,8 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                     msg.includes("mengkonfirmasi") ||
                     msg.includes("tidak bisa ikut") ||
                     msg.includes("hrd menyelesaikan")
-                  ) return "approval";
+                  )
+                    return "approval";
                   return "system";
                 };
 
@@ -3443,7 +3994,11 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                   return (
                     <div className="rounded-lg border border-dashed border-border bg-muted/20 p-8 text-center">
                       <p className="text-sm text-muted-foreground">
-                        {timelineTab === "all" ? "Belum ada riwayat aktivitas" : timelineTab === "tracking" ? "Belum ada log perjalanan" : "Belum ada log sistem"}
+                        {timelineTab === "all"
+                          ? "Belum ada riwayat aktivitas"
+                          : timelineTab === "tracking"
+                            ? "Belum ada log perjalanan"
+                            : "Belum ada log sistem"}
                       </p>
                     </div>
                   );
@@ -3461,7 +4016,9 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                           className={`flex gap-3 rounded-xl border bg-card p-4 transition-colors hover:bg-muted/30 ${isTracking ? "border-l-4 border-l-blue-500 border-t-border border-r-border border-b-border" : isApproval ? "border-l-4 border-l-green-500 border-t-border border-r-border border-b-border" : "border-l-4 border-l-border border-t-border border-r-border border-b-border"}`}
                         >
                           {/* Category icon */}
-                          <div className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full ${isTracking ? "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400" : isApproval ? "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400" : "bg-muted text-muted-foreground"}`}>
+                          <div
+                            className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full ${isTracking ? "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400" : isApproval ? "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400" : "bg-muted text-muted-foreground"}`}
+                          >
                             {isTracking ? (
                               <Navigation className="h-3.5 w-3.5" />
                             ) : isApproval ? (
@@ -3476,10 +4033,32 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                             <p className="text-sm leading-relaxed text-foreground">
                               {entry.message}
                             </p>
+                            {/* Trust level badge — only on tracking entries with evidence */}
+                            {isTracking && entry.trustLevel && (
+                              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                {entry.trustLevel === "high" && (
+                                  <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                                    GPS Valid
+                                  </span>
+                                )}
+                                {entry.trustLevel === "medium" && (
+                                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                                    GPS Lemah
+                                  </span>
+                                )}
+                                {entry.trustLevel === "low" && (
+                                  <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                                    Manual / Perlu Dicek
+                                  </span>
+                                )}
+                              </div>
+                            )}
                             <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
                               <span>
                                 {formatDate(entry.createdAt)}
-                                {formatTime(entry.createdAt) ? `, ${formatTime(entry.createdAt)}` : ""}
+                                {formatTime(entry.createdAt)
+                                  ? `, ${formatTime(entry.createdAt)}`
+                                  : ""}
                               </span>
                               {entry.byName && (
                                 <>
@@ -3492,8 +4071,14 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
 
                           {/* Category badge */}
                           <div className="flex-shrink-0 self-start pt-0.5">
-                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${isTracking ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" : isApproval ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-muted text-muted-foreground"}`}>
-                              {isTracking ? "Perjalanan" : isApproval ? "Approval" : "Sistem"}
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${isTracking ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" : isApproval ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-muted text-muted-foreground"}`}
+                            >
+                              {isTracking
+                                ? "Perjalanan"
+                                : isApproval
+                                  ? "Approval"
+                                  : "Sistem"}
                             </span>
                           </div>
                         </div>
@@ -3572,12 +4157,9 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
 
             {mode === "staff" &&
             selectedMember &&
-            selectedMember.staffConfirmationStatus !== "confirmed_by_staff" &&
-            selectedMember.staffConfirmationStatus !== "declined_by_staff" &&
-            (selectedMember.managerValidationStatus as string) !==
-              "rejected_by_manager" &&
-            (selectedMember.managerValidationStatus as string) !==
-              "replacement_requested" ? (
+            !isMemberConfirmed(selectedMember) &&
+            normalizeApprovalStatus(selectedMember) !== "rejected_by_manager" &&
+            normalizeApprovalStatus(selectedMember) !== "replacement_requested" ? (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">
@@ -3649,295 +4231,454 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
 
             {mode === "staff" &&
             selectedMember &&
-            selectedMember.staffConfirmationStatus === "confirmed_by_staff" &&
-            selectedMember.memberTripStatus !== "returned" ? (() => {
-              const tripStatus = selectedMember.memberTripStatus ?? "ready";
-              const isIssue = tripStatus === "issue_reported";
+            isMemberConfirmed(selectedMember) &&
+            selectedMember.memberTripStatus !== "returned"
+              ? (() => {
+                  const tripStatus = selectedMember.memberTripStatus ?? "ready";
+                  const isIssue = tripStatus === "issue_reported";
 
-              // Infer progress stage from timestamps when issue_reported overwrites the step
-              const effectiveStatus = isIssue
-                ? (selectedMember.activityDoneAt ? "activity_done" : selectedMember.arrivedAt ? "arrived" : "departed")
-                : tripStatus;
+                  // Infer progress stage from timestamps when issue_reported overwrites the step
+                  const effectiveStatus = isIssue
+                    ? selectedMember.activityDoneAt
+                      ? "activity_done"
+                      : selectedMember.arrivedAt
+                        ? "arrived"
+                        : "departed"
+                    : tripStatus;
 
-              const ORDER = ["ready", "departed", "arrived", "activity_done", "returned"];
-              const currentIdx = ORDER.indexOf(effectiveStatus);
+                  const selfApproved = isMemberApproved(selectedMember);
+                  const selfConfirmed = isMemberConfirmed(selectedMember);
+                  const allMembersApproved =
+                    missionMembers.length > 0 &&
+                    missionMembers.every(isMemberApproved);
+                  const allMembersConfirmed =
+                    missionMembers.length > 0 &&
+                    missionMembers.every(isMemberConfirmed);
+                  const trackingReady =
+                    selfApproved &&
+                    selfConfirmed &&
+                    allMembersApproved &&
+                    allMembersConfirmed;
 
-              type MilestoneDef = {
-                key: string;
-                label: string;
-                description: string;
-                icon: React.ElementType;
-                timestamp?: any;
-                actionLabel: string;
-                actionMilestone: "departed" | "arrived" | "activity_done" | "returned";
-              };
+                  const ORDER = [
+                    "ready",
+                    "departed",
+                    "arrived",
+                    "activity_done",
+                    "returned",
+                  ];
+                  const currentIdx = ORDER.indexOf(effectiveStatus);
 
-              const MILESTONES: MilestoneDef[] = [
-                {
-                  key: "departed",
-                  label: "Berangkat",
-                  description: "Mulai perjalanan menuju lokasi tujuan",
-                  icon: Navigation,
-                  timestamp: selectedMember.departedAt,
-                  actionLabel: "Saya sudah berangkat",
-                  actionMilestone: "departed",
-                },
-                {
-                  key: "arrived",
-                  label: "Sampai Lokasi",
-                  description: "Tiba di lokasi tujuan",
-                  icon: MapPin,
-                  timestamp: selectedMember.arrivedAt,
-                  actionLabel: "Saya sudah sampai lokasi",
-                  actionMilestone: "arrived",
-                },
-                {
-                  key: "activity_done",
-                  label: "Kegiatan Selesai",
-                  description: "Seluruh kegiatan di lokasi telah selesai",
-                  icon: CheckSquare,
-                  timestamp: selectedMember.activityDoneAt,
-                  actionLabel: "Kegiatan selesai",
-                  actionMilestone: "activity_done",
-                },
-                {
-                  key: "returned",
-                  label: "Kembali",
-                  description: "Perjalanan dinas selesai, sudah kembali",
-                  icon: Home,
-                  timestamp: selectedMember.returnedAt,
-                  actionLabel: "Saya sudah kembali",
-                  actionMilestone: "returned",
-                },
-              ];
+                  type MilestoneDef = {
+                    key: string;
+                    label: string;
+                    description: string;
+                    icon: React.ElementType;
+                    timestamp?: any;
+                    actionLabel: string;
+                    actionMilestone:
+                      | "departed"
+                      | "arrived"
+                      | "activity_done"
+                      | "returned";
+                  };
 
-              return (
-                <Card className="overflow-hidden border-2 border-teal-500/30 dark:border-teal-400/20">
-                  {/* Header */}
-                  <div className="flex items-center gap-3 border-b border-border px-5 py-4">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-teal-500/10">
-                      <Activity className="h-5 w-5 text-teal-600 dark:text-teal-400" />
-                    </div>
-                    <div>
-                      <p className="font-semibold leading-tight">Tracking Perjalanan Saya</p>
-                      <p className="text-xs text-muted-foreground">Perbarui status perjalanan Anda secara real-time</p>
-                    </div>
-                  </div>
+                  const MILESTONES: MilestoneDef[] = [
+                    {
+                      key: "departed",
+                      label: "Berangkat",
+                      description: "Mulai perjalanan menuju lokasi tujuan",
+                      icon: Navigation,
+                      timestamp: selectedMember.departedAt,
+                      actionLabel: "Saya sudah berangkat",
+                      actionMilestone: "departed",
+                    },
+                    {
+                      key: "arrived",
+                      label: "Sampai Lokasi",
+                      description: "Tiba di lokasi tujuan",
+                      icon: MapPin,
+                      timestamp: selectedMember.arrivedAt,
+                      actionLabel: "Saya sudah sampai lokasi",
+                      actionMilestone: "arrived",
+                    },
+                    {
+                      key: "activity_done",
+                      label: "Kegiatan Selesai",
+                      description: "Seluruh kegiatan di lokasi telah selesai",
+                      icon: CheckSquare,
+                      timestamp: selectedMember.activityDoneAt,
+                      actionLabel: "Kegiatan selesai",
+                      actionMilestone: "activity_done",
+                    },
+                    {
+                      key: "returned",
+                      label: "Kembali",
+                      description: "Perjalanan dinas selesai, sudah kembali",
+                      icon: Home,
+                      timestamp: selectedMember.returnedAt,
+                      actionLabel: "Saya sudah kembali",
+                      actionMilestone: "returned",
+                    },
+                  ];
 
-                  <CardContent className="space-y-3 px-5 py-5">
-                    {/* Journey milestone cards — vertical stack */}
-                    {MILESTONES.map((ms, idx) => {
-                      const msIdx = ORDER.indexOf(ms.key);
-                      const isDone = msIdx <= currentIdx;
-                      const isNext = msIdx === currentIdx + 1;
-                      const isPending = msIdx > currentIdx + 1;
-
-                      return (
-                        <div key={ms.key} className="relative">
-                          {/* Connector line between cards */}
-                          {idx < MILESTONES.length - 1 && (
-                            <div className={`absolute left-[27px] top-[60px] h-[calc(100%_-_8px)] w-0.5 ${isDone ? "bg-green-400" : "bg-border/60"}`} style={{ top: "60px", height: "calc(100% - 4px)" }} />
-                          )}
-
-                          <div className={`relative flex items-start gap-4 rounded-2xl p-4 transition-all ${
-                            isDone
-                              ? "border border-green-200/80 bg-green-50/60 dark:border-green-800/40 dark:bg-green-900/10"
-                              : isNext
-                              ? "border-2 border-teal-400/70 bg-teal-50/60 shadow-sm dark:border-teal-500/50 dark:bg-teal-900/15"
-                              : "border border-border/40 bg-muted/20 opacity-55"
-                          }`}>
-                            {/* Icon circle */}
-                            <div className={`flex h-[46px] w-[46px] flex-shrink-0 items-center justify-center rounded-full ${
-                              isDone
-                                ? "bg-green-500 text-white"
-                                : isNext
-                                ? "bg-teal-500 text-white"
-                                : "bg-muted text-muted-foreground"
-                            }`}>
-                              {isDone
-                                ? <CheckCircle2 className="h-5 w-5" />
-                                : <ms.icon className="h-5 w-5" />
-                              }
-                            </div>
-
-                            {/* Content */}
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="min-w-0">
-                                  <p className={`text-sm font-semibold leading-tight ${
-                                    isDone ? "text-green-800 dark:text-green-300"
-                                    : isNext ? "text-teal-800 dark:text-teal-300"
-                                    : "text-muted-foreground"
-                                  }`}>
-                                    {ms.label}
-                                  </p>
-                                  {isDone && ms.timestamp ? (
-                                    <p className="mt-0.5 text-xs font-medium text-green-700 dark:text-green-400">
-                                      {formatDate(ms.timestamp)}, {formatTime(ms.timestamp)}
-                                    </p>
-                                  ) : !isPending ? (
-                                    <p className="mt-0.5 text-xs text-muted-foreground">{ms.description}</p>
-                                  ) : null}
-                                </div>
-
-                                {/* Status badge */}
-                                <span className={`flex-shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${
-                                  isDone
-                                    ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400"
-                                    : isNext
-                                    ? "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400"
-                                    : "bg-muted text-muted-foreground"
-                                }`}>
-                                  {isDone ? "Selesai ✓" : isNext ? "Selanjutnya" : "Menunggu"}
-                                </span>
-                              </div>
-
-                              {/* Action button inside the "next" card */}
-                              {isNext && !isIssue && (
-                                <Button
-                                  className="mt-3 min-h-[44px] w-full bg-teal-600 font-semibold text-white hover:bg-teal-700"
-                                  onClick={() => {
-                                    const eligible = (missionMembers ?? []).filter((m) => {
-                                      const ms2 = m.memberTripStatus;
-                                      const eligible2 =
-                                        ms.actionMilestone === "departed" ? (!ms2 || ms2 === "ready")
-                                        : ms.actionMilestone === "arrived" ? ms2 === "departed"
-                                        : ms.actionMilestone === "activity_done" ? ms2 === "arrived"
-                                        : ms.actionMilestone === "returned" ? (ms2 === "activity_done" || ms2 === "arrived" || ms2 === "departed")
-                                        : false;
-                                      return eligible2;
-                                    });
-                                    const selfUid = userProfile?.uid;
-                                    setPendingMilestone({ milestone: ms.actionMilestone, eligible });
-                                    setGroupSelectedUids(selfUid ? [selfUid] : []);
-                                  }}
-                                  disabled={isSaving}
-                                >
-                                  <ms.icon className="mr-2 h-4 w-4" />
-                                  {ms.actionLabel}
-                                </Button>
-                              )}
-                            </div>
-                          </div>
+                  return (
+                    <Card className="overflow-hidden border-2 border-teal-500/30 dark:border-teal-400/20">
+                      {/* Header */}
+                      <div className="flex items-center gap-3 border-b border-border px-5 py-4">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-teal-500/10">
+                          <Activity className="h-5 w-5 text-teal-600 dark:text-teal-400" />
                         </div>
-                      );
-                    })}
-
-                    {/* Active issue banner */}
-                    {isIssue && (
-                      <div className="rounded-2xl border border-amber-400/50 bg-amber-50/50 p-4 dark:border-amber-700/40 dark:bg-amber-900/15">
-                        <div className="flex items-start gap-3">
-                          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/40">
-                            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-sm font-semibold text-amber-800 dark:text-amber-400">Kendala Dilaporkan</p>
-                            {selectedMember.issueCategory && (
-                              <p className="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-500">
-                                {selectedMember.issueCategory}
-                                {selectedMember.issueUrgency ? ` · Urgensi: ${selectedMember.issueUrgency}` : ""}
-                              </p>
-                            )}
-                            {selectedMember.issueNote && (
-                              <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">{selectedMember.issueNote}</p>
-                            )}
-                          </div>
+                        <div>
+                          <p className="font-semibold leading-tight">
+                            Tracking Perjalanan Saya
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Perbarui status perjalanan Anda secara real-time
+                          </p>
                         </div>
                       </div>
-                    )}
 
-                    {/* Laporkan Kendala — compact warning card */}
-                    {!isIssue && (
-                      !showIssueInput ? (
-                        <button
-                          type="button"
-                          className="flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-amber-300/60 bg-amber-50/40 px-4 py-3 text-left transition-colors hover:bg-amber-100/60 dark:border-amber-700/30 dark:bg-amber-900/10 dark:hover:bg-amber-900/20"
-                          onClick={() => setShowIssueInput(true)}
-                        >
-                          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/40">
-                            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-amber-800 dark:text-amber-400">Ada kendala dalam perjalanan?</p>
-                            <p className="text-xs text-amber-600 dark:text-amber-500">Tap untuk melaporkan kendala</p>
-                          </div>
-                          <ArrowRightCircle className="h-4 w-4 flex-shrink-0 text-amber-500" />
-                        </button>
-                      ) : (
-                        <div className="space-y-3 rounded-2xl border border-amber-400/50 bg-amber-50/30 p-4 dark:border-amber-700/40 dark:bg-amber-900/10">
-                          <div className="flex items-center gap-2">
-                            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                            <p className="text-sm font-semibold text-amber-800 dark:text-amber-400">Laporan Kendala</p>
-                          </div>
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <Label className="text-xs text-muted-foreground">Kategori</Label>
-                              <Select value={issueForm.category} onValueChange={(v) => setIssueForm((p) => ({ ...p, category: v }))}>
-                                <SelectTrigger className="mt-1 border-amber-300 dark:border-amber-700">
-                                  <SelectValue placeholder="Pilih..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {["Transportasi", "Jadwal", "Kesehatan", "Dokumen", "Lokasi", "Lainnya"].map((c) => (
-                                    <SelectItem key={c} value={c}>{c}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div>
-                              <Label className="text-xs text-muted-foreground">Urgensi</Label>
-                              <Select value={issueForm.urgency} onValueChange={(v) => setIssueForm((p) => ({ ...p, urgency: v }))}>
-                                <SelectTrigger className="mt-1 border-amber-300 dark:border-amber-700">
-                                  <SelectValue placeholder="Pilih..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="rendah">Rendah</SelectItem>
-                                  <SelectItem value="sedang">Sedang</SelectItem>
-                                  <SelectItem value="tinggi">Tinggi</SelectItem>
-                                </SelectContent>
-                              </Select>
+                      <CardContent className="space-y-3 px-5 py-5">
+                        {!trackingReady && (
+                          <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-600/30 dark:bg-amber-950/20 dark:text-amber-200">
+                            <div className="flex items-start gap-2">
+                              <AlertTriangle className="mt-0.5 h-4 w-4" />
+                              <p>
+                                Perjalanan belum bisa dimulai karena masih ada anggota yang menunggu persetujuan atau konfirmasi.
+                              </p>
                             </div>
                           </div>
-                          <div>
-                            <Label className="text-xs text-muted-foreground">Catatan Kendala</Label>
-                            <Textarea
-                              value={issueForm.note}
-                              onChange={(e) => setIssueForm((p) => ({ ...p, note: e.target.value }))}
-                              rows={3}
-                              className="mt-1 resize-none border-amber-300 dark:border-amber-700"
-                              placeholder="Tuliskan kendala yang dihadapi..."
-                            />
+                        )}
+                        {/* Journey milestone cards — vertical stack */}
+                        {MILESTONES.map((ms, idx) => {
+                          const msIdx = ORDER.indexOf(ms.key);
+                          const isDone = msIdx <= currentIdx;
+                          const isNext = msIdx === currentIdx + 1;
+                          const isPending = msIdx > currentIdx + 1;
+
+                          return (
+                            <div key={ms.key} className="relative">
+                              {/* Connector line between cards */}
+                              {idx < MILESTONES.length - 1 && (
+                                <div
+                                  className={`absolute left-[27px] top-[60px] h-[calc(100%_-_8px)] w-0.5 ${isDone ? "bg-green-400" : "bg-border/60"}`}
+                                  style={{
+                                    top: "60px",
+                                    height: "calc(100% - 4px)",
+                                  }}
+                                />
+                              )}
+
+                              <div
+                                className={`relative flex items-start gap-4 rounded-2xl p-4 transition-all ${
+                                  isDone
+                                    ? "border border-green-200/80 bg-green-50/60 dark:border-green-800/40 dark:bg-green-900/10"
+                                    : isNext
+                                      ? "border-2 border-teal-400/70 bg-teal-50/60 shadow-sm dark:border-teal-500/50 dark:bg-teal-900/15"
+                                      : "border border-border/40 bg-muted/20 opacity-55"
+                                }`}
+                              >
+                                {/* Icon circle */}
+                                <div
+                                  className={`flex h-[46px] w-[46px] flex-shrink-0 items-center justify-center rounded-full ${
+                                    isDone
+                                      ? "bg-green-500 text-white"
+                                      : isNext
+                                        ? "bg-teal-500 text-white"
+                                        : "bg-muted text-muted-foreground"
+                                  }`}
+                                >
+                                  {isDone ? (
+                                    <CheckCircle2 className="h-5 w-5" />
+                                  ) : (
+                                    <ms.icon className="h-5 w-5" />
+                                  )}
+                                </div>
+
+                                {/* Content */}
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                      <p
+                                        className={`text-sm font-semibold leading-tight ${
+                                          isDone
+                                            ? "text-green-800 dark:text-green-300"
+                                            : isNext
+                                              ? "text-teal-800 dark:text-teal-300"
+                                              : "text-muted-foreground"
+                                        }`}
+                                      >
+                                        {ms.label}
+                                      </p>
+                                      {isDone && ms.timestamp ? (
+                                        <p className="mt-0.5 text-xs font-medium text-green-700 dark:text-green-400">
+                                          {formatDate(ms.timestamp)},{" "}
+                                          {formatTime(ms.timestamp)}
+                                        </p>
+                                      ) : !isPending ? (
+                                        <p className="mt-0.5 text-xs text-muted-foreground">
+                                          {ms.description}
+                                        </p>
+                                      ) : null}
+                                    </div>
+
+                                    {/* Status badge */}
+                                    <span
+                                      className={`flex-shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${
+                                        isDone
+                                          ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400"
+                                          : isNext
+                                            ? "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400"
+                                            : "bg-muted text-muted-foreground"
+                                      }`}
+                                    >
+                                      {isDone
+                                        ? "Selesai ✓"
+                                        : isNext
+                                          ? "Selanjutnya"
+                                          : "Menunggu"}
+                                    </span>
+                                  </div>
+
+                                  {/* Action button inside the "next" card */}
+                                  {isNext && !isIssue && (
+                                    <Button
+                                      className="mt-3 min-h-[44px] w-full bg-teal-600 font-semibold text-white hover:bg-teal-700"
+                                      onClick={() => {
+                                        const eligible = (
+                                          missionMembers ?? []
+                                        ).filter((m) => {
+                                          const ms2 = m.memberTripStatus;
+                                          const eligible2 =
+                                            ms.actionMilestone === "departed"
+                                              ? !ms2 || ms2 === "ready"
+                                              : ms.actionMilestone === "arrived"
+                                                ? ms2 === "departed"
+                                                : ms.actionMilestone ===
+                                                    "activity_done"
+                                                  ? ms2 === "arrived"
+                                                  : ms.actionMilestone ===
+                                                      "returned"
+                                                    ? ms2 === "activity_done" ||
+                                                      ms2 === "arrived" ||
+                                                      ms2 === "departed"
+                                                    : false;
+                                          return eligible2;
+                                        });
+                                        const selfUid = userProfile?.uid;
+                                        resetMilestoneEvidence();
+                                        setPendingMilestone({
+                                          milestone: ms.actionMilestone,
+                                          eligible,
+                                        });
+                                        setGroupSelectedUids(
+                                          selfUid ? [selfUid] : [],
+                                        );
+                                        captureMilestoneGps();
+                                      }}
+                                      disabled={isSaving || !trackingReady}
+                                    >
+                                      <ms.icon className="mr-2 h-4 w-4" />
+                                      {ms.actionLabel}
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                        {/* Active issue banner */}
+                        {isIssue && (
+                          <div className="rounded-2xl border border-amber-400/50 bg-amber-50/50 p-4 dark:border-amber-700/40 dark:bg-amber-900/15">
+                            <div className="flex items-start gap-3">
+                              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/40">
+                                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-sm font-semibold text-amber-800 dark:text-amber-400">
+                                  Kendala Dilaporkan
+                                </p>
+                                {selectedMember.issueCategory && (
+                                  <p className="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-500">
+                                    {selectedMember.issueCategory}
+                                    {selectedMember.issueUrgency
+                                      ? ` · Urgensi: ${selectedMember.issueUrgency}`
+                                      : ""}
+                                  </p>
+                                )}
+                                {selectedMember.issueNote && (
+                                  <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
+                                    {selectedMember.issueNote}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                          <div className="flex gap-2 pt-1">
-                            <Button
-                              className="min-h-[44px] flex-1 bg-amber-600 font-semibold text-white hover:bg-amber-700"
-                              onClick={() => {
-                                const eligible = (missionMembers ?? []).filter((m) => {
-                                  const ts = m.memberTripStatus;
-                                  return ts === "departed" || ts === "arrived" || ts === "activity_done" || ts === "return_started";
-                                });
-                                const selfUid = userProfile?.uid;
-                                setPendingMilestone({ milestone: "issue_reported", eligible });
-                                setGroupSelectedUids(selfUid ? [selfUid] : []);
-                              }}
-                              disabled={isSaving || !issueForm.note.trim()}
+                        )}
+
+                        {/* Laporkan Kendala — compact warning card */}
+                        {!isIssue &&
+                          (!showIssueInput ? (
+                            <button
+                              type="button"
+                              className="flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-amber-300/60 bg-amber-50/40 px-4 py-3 text-left transition-colors hover:bg-amber-100/60 dark:border-amber-700/30 dark:bg-amber-900/10 dark:hover:bg-amber-900/20"
+                              onClick={() => setShowIssueInput(true)}
                             >
-                              Kirim Laporan Kendala
-                            </Button>
-                            <Button
-                              variant="outline"
-                              className="min-h-[44px] border-amber-300 px-4 dark:border-amber-700"
-                              onClick={() => { setShowIssueInput(false); setIssueForm({ category: "", urgency: "", note: "", attachment: null }); }}
-                            >
-                              Batal
-                            </Button>
-                          </div>
-                        </div>
-                      )
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })() : null}
+                              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/40">
+                                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-amber-800 dark:text-amber-400">
+                                  Ada kendala dalam perjalanan?
+                                </p>
+                                <p className="text-xs text-amber-600 dark:text-amber-500">
+                                  Tap untuk melaporkan kendala
+                                </p>
+                              </div>
+                              <ArrowRightCircle className="h-4 w-4 flex-shrink-0 text-amber-500" />
+                            </button>
+                          ) : (
+                            <div className="space-y-3 rounded-2xl border border-amber-400/50 bg-amber-50/30 p-4 dark:border-amber-700/40 dark:bg-amber-900/10">
+                              <div className="flex items-center gap-2">
+                                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                                <p className="text-sm font-semibold text-amber-800 dark:text-amber-400">
+                                  Laporan Kendala
+                                </p>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <Label className="text-xs text-muted-foreground">
+                                    Kategori
+                                  </Label>
+                                  <Select
+                                    value={issueForm.category}
+                                    onValueChange={(v) =>
+                                      setIssueForm((p) => ({
+                                        ...p,
+                                        category: v,
+                                      }))
+                                    }
+                                  >
+                                    <SelectTrigger className="mt-1 border-amber-300 dark:border-amber-700">
+                                      <SelectValue placeholder="Pilih..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {[
+                                        "Transportasi",
+                                        "Jadwal",
+                                        "Kesehatan",
+                                        "Dokumen",
+                                        "Lokasi",
+                                        "Lainnya",
+                                      ].map((c) => (
+                                        <SelectItem key={c} value={c}>
+                                          {c}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div>
+                                  <Label className="text-xs text-muted-foreground">
+                                    Urgensi
+                                  </Label>
+                                  <Select
+                                    value={issueForm.urgency}
+                                    onValueChange={(v) =>
+                                      setIssueForm((p) => ({
+                                        ...p,
+                                        urgency: v,
+                                      }))
+                                    }
+                                  >
+                                    <SelectTrigger className="mt-1 border-amber-300 dark:border-amber-700">
+                                      <SelectValue placeholder="Pilih..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="rendah">
+                                        Rendah
+                                      </SelectItem>
+                                      <SelectItem value="sedang">
+                                        Sedang
+                                      </SelectItem>
+                                      <SelectItem value="tinggi">
+                                        Tinggi
+                                      </SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              </div>
+                              <div>
+                                <Label className="text-xs text-muted-foreground">
+                                  Catatan Kendala
+                                </Label>
+                                <Textarea
+                                  value={issueForm.note}
+                                  onChange={(e) =>
+                                    setIssueForm((p) => ({
+                                      ...p,
+                                      note: e.target.value,
+                                    }))
+                                  }
+                                  rows={3}
+                                  className="mt-1 resize-none border-amber-300 dark:border-amber-700"
+                                  placeholder="Tuliskan kendala yang dihadapi..."
+                                />
+                              </div>
+                              <div className="flex gap-2 pt-1">
+                                <Button
+                                  className="min-h-[44px] flex-1 bg-amber-600 font-semibold text-white hover:bg-amber-700"
+                                  onClick={() => {
+                                    const eligible = (
+                                      missionMembers ?? []
+                                    ).filter((m) => {
+                                      const ts = m.memberTripStatus;
+                                      return (
+                                        ts === "departed" ||
+                                        ts === "arrived" ||
+                                        ts === "activity_done" ||
+                                        ts === "return_started"
+                                      );
+                                    });
+                                    const selfUid = userProfile?.uid;
+                                    resetMilestoneEvidence();
+                                    setPendingMilestone({
+                                      milestone: "issue_reported",
+                                      eligible,
+                                    });
+                                    setGroupSelectedUids(
+                                      selfUid ? [selfUid] : [],
+                                    );
+                                  }}
+                                  disabled={isSaving || !issueForm.note.trim()}
+                                >
+                                  Kirim Laporan Kendala
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  className="min-h-[44px] border-amber-300 px-4 dark:border-amber-700"
+                                  onClick={() => {
+                                    setShowIssueInput(false);
+                                    setIssueForm({
+                                      category: "",
+                                      urgency: "",
+                                      note: "",
+                                      attachment: null,
+                                    });
+                                  }}
+                                >
+                                  Batal
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                      </CardContent>
+                    </Card>
+                  );
+                })()
+              : null}
 
             {/* ── Group Milestone Selection Panel ──────────────────────────── */}
             {mode === "staff" && pendingMilestone && selectedMember && (
@@ -3948,46 +4689,73 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                   </div>
                   <div className="flex-1">
                     <p className="font-semibold leading-tight">
-                      {pendingMilestone.milestone === "departed" ? "Konfirmasi Keberangkatan"
-                        : pendingMilestone.milestone === "arrived" ? "Konfirmasi Tiba di Lokasi"
-                        : pendingMilestone.milestone === "activity_done" ? "Konfirmasi Kegiatan Selesai"
-                        : pendingMilestone.milestone === "returned" ? "Konfirmasi Kembali"
-                        : "Laporan Kendala"}
+                      {pendingMilestone.milestone === "departed"
+                        ? "Konfirmasi Keberangkatan"
+                        : pendingMilestone.milestone === "arrived"
+                          ? "Konfirmasi Tiba di Lokasi"
+                          : pendingMilestone.milestone === "activity_done"
+                            ? "Konfirmasi Kegiatan Selesai"
+                            : pendingMilestone.milestone === "returned"
+                              ? "Konfirmasi Kembali"
+                              : "Laporan Kendala"}
                     </p>
-                    <p className="text-xs text-muted-foreground">Pilih anggota yang akan diperbarui statusnya</p>
+                    <p className="text-xs text-muted-foreground">
+                      Pilih anggota yang akan diperbarui statusnya
+                    </p>
                   </div>
                   <button
                     type="button"
                     className="rounded-full p-1 hover:bg-muted"
-                    onClick={() => { setPendingMilestone(null); setGroupSelectedUids([]); }}
+                    onClick={() => {
+                      setPendingMilestone(null);
+                      setGroupSelectedUids([]);
+                      resetMilestoneEvidence();
+                    }}
                   >
                     <X className="h-4 w-4 text-muted-foreground" />
                   </button>
                 </div>
                 <CardContent className="px-5 py-4 space-y-3">
                   {pendingMilestone.eligible.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Tidak ada anggota yang dapat diperbarui untuk langkah ini.</p>
+                    <p className="text-sm text-muted-foreground">
+                      Tidak ada anggota yang dapat diperbarui untuk langkah ini.
+                    </p>
                   ) : (
                     <>
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs text-muted-foreground">{groupSelectedUids.length} dari {pendingMilestone.eligible.length} dipilih</span>
+                        <span className="text-xs text-muted-foreground">
+                          {groupSelectedUids.length} dari{" "}
+                          {pendingMilestone.eligible.length} dipilih
+                        </span>
                         <button
                           type="button"
                           className="text-xs text-teal-600 hover:underline dark:text-teal-400"
                           onClick={() => {
-                            if (groupSelectedUids.length === pendingMilestone.eligible.length) {
+                            if (
+                              groupSelectedUids.length ===
+                              pendingMilestone.eligible.length
+                            ) {
                               setGroupSelectedUids([]);
                             } else {
-                              setGroupSelectedUids(pendingMilestone.eligible.map((m) => m.employeeUid));
+                              setGroupSelectedUids(
+                                pendingMilestone.eligible.map(
+                                  (m) => m.employeeUid,
+                                ),
+                              );
                             }
                           }}
                         >
-                          {groupSelectedUids.length === pendingMilestone.eligible.length ? "Batalkan semua" : "Pilih semua"}
+                          {groupSelectedUids.length ===
+                          pendingMilestone.eligible.length
+                            ? "Batalkan semua"
+                            : "Pilih semua"}
                         </button>
                       </div>
                       <div className="space-y-2 max-h-60 overflow-y-auto">
                         {pendingMilestone.eligible.map((member) => {
-                          const checked = groupSelectedUids.includes(member.employeeUid);
+                          const checked = groupSelectedUids.includes(
+                            member.employeeUid,
+                          );
                           return (
                             <label
                               key={member.employeeUid}
@@ -3998,40 +4766,327 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                                 checked={checked}
                                 onChange={() => {
                                   setGroupSelectedUids((prev) =>
-                                    checked ? prev.filter((u) => u !== member.employeeUid) : [...prev, member.employeeUid],
+                                    checked
+                                      ? prev.filter(
+                                          (u) => u !== member.employeeUid,
+                                        )
+                                      : [...prev, member.employeeUid],
                                   );
                                 }}
                                 className="h-4 w-4 rounded accent-teal-600"
                               />
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium truncate">{member.employeeName}</p>
+                                <p className="text-sm font-medium truncate">
+                                  {member.employeeName}
+                                </p>
                                 {member.employeePosition && (
-                                  <p className="text-xs text-muted-foreground truncate">{member.employeePosition}</p>
+                                  <p className="text-xs text-muted-foreground truncate">
+                                    {member.employeePosition}
+                                  </p>
                                 )}
                               </div>
                               {member.employeeUid === userProfile?.uid && (
-                                <span className="text-[10px] font-semibold text-teal-600 dark:text-teal-400 flex-shrink-0">Saya</span>
+                                <span className="text-[10px] font-semibold text-teal-600 dark:text-teal-400 flex-shrink-0">
+                                  Saya
+                                </span>
                               )}
                             </label>
                           );
                         })}
                       </div>
+
+                      {/* ── Bukti Milestone (GPS + Foto + Catatan) ── */}
+                      {pendingMilestone.milestone !== "issue_reported" && (
+                        <div className="mt-1 space-y-3 rounded-xl border border-teal-300/50 bg-teal-50/30 p-4 dark:border-teal-700/30 dark:bg-teal-900/10">
+                          <p className="text-xs font-semibold text-teal-700 dark:text-teal-400 uppercase tracking-wide">
+                            Bukti Milestone
+                          </p>
+
+                          {/* ── GPS Lokasi ── */}
+                          <div className="space-y-2">
+                            {/* Header row */}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <MapPin className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400 flex-shrink-0" />
+                              <span className="text-xs font-medium text-foreground">Lokasi GPS</span>
+
+                              {milestoneGps.status === "capturing" && (
+                                <span className="text-[10px] text-amber-600 dark:text-amber-400 animate-pulse">
+                                  Mendeteksi…
+                                </span>
+                              )}
+                              {milestoneGps.status === "captured" && (
+                                <>
+                                  <span className="text-[10px] text-green-600 dark:text-green-400">Terdeteksi ✓</span>
+                                  {milestoneGps.trustLevel === "high" && (
+                                    <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                                      GPS Valid
+                                    </span>
+                                  )}
+                                  {milestoneGps.trustLevel === "medium" && (
+                                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                                      GPS Lemah
+                                    </span>
+                                  )}
+                                  {milestoneGps.trustLevel === "low" && (
+                                    <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                                      Akurasi Rendah
+                                    </span>
+                                  )}
+                                </>
+                              )}
+                              {milestoneGps.status === "unavailable" && (
+                                <span className="text-[10px] text-destructive">Tidak tersedia</span>
+                              )}
+
+                              {/* Retry — type="button" + stopPropagation agar tidak trigger confirm */}
+                              {milestoneGps.status !== "capturing" && (
+                                <button
+                                  type="button"
+                                  className="ml-auto text-[10px] font-medium text-teal-600 hover:underline dark:text-teal-400"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    void captureMilestoneGps();
+                                  }}
+                                >
+                                  Ulangi Ambil Lokasi
+                                </button>
+                              )}
+                            </div>
+
+                            {/* GPS captured detail */}
+                            {milestoneGps.status === "captured" && (
+                              <div className="pl-5 space-y-1.5">
+                                {(milestoneGps.trustLevel === "medium" || milestoneGps.trustLevel === "low") && (
+                                  <div className="flex items-start gap-1.5 rounded-lg border border-amber-300/60 bg-amber-50/50 px-3 py-2 dark:border-amber-700/30 dark:bg-amber-900/10">
+                                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+                                    <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                                      Akurasi lokasi rendah ({Math.round(milestoneGps.accuracy ?? 0)}m). Ulangi GPS atau tambah catatan lokasi.
+                                    </p>
+                                  </div>
+                                )}
+
+                                {milestoneGps.geocodeStatus === "success" && milestoneGps.addressText ? (
+                                  <p className="text-xs text-foreground leading-snug">{milestoneGps.addressText}</p>
+                                ) : milestoneGps.geocodeStatus === "failed" ? (
+                                  <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                                    Alamat tidak berhasil dibaca, koordinat tetap tersimpan.
+                                  </p>
+                                ) : (
+                                  <p className="text-[11px] text-muted-foreground animate-pulse">Membaca alamat…</p>
+                                )}
+
+                                <p className="text-[11px] font-mono text-muted-foreground">
+                                  {milestoneGps.latitude?.toFixed(6)}, {milestoneGps.longitude?.toFixed(6)}
+                                  {milestoneGps.accuracy != null && ` · ±${Math.round(milestoneGps.accuracy)}m`}
+                                </p>
+
+                                {milestoneGps.latitude != null && milestoneGps.longitude != null && (
+                                  <a
+                                    href={`https://www.google.com/maps?q=${milestoneGps.latitude},${milestoneGps.longitude}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-[11px] font-medium text-teal-600 hover:underline dark:text-teal-400"
+                                  >
+                                    <MapPin className="h-3 w-3" />
+                                    Buka Maps
+                                  </a>
+                                )}
+                              </div>
+                            )}
+
+                            {/* GPS unavailable warning */}
+                            {milestoneGps.status === "unavailable" && (
+                              <div className="pl-5">
+                                <div className="flex items-start gap-1.5 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2">
+                                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-destructive" />
+                                  <p className="text-[11px] text-destructive">
+                                    Lokasi otomatis gagal. Laporan akan ditandai sebagai input manual.
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* ── Catatan Lokasi (satu field, required jika GPS gagal) ── */}
+                          <div className="space-y-1">
+                            <Label className="text-[11px] text-muted-foreground">
+                              Catatan lokasi tambahan{" "}
+                              {milestoneGps.status === "unavailable" ? (
+                                <span className="text-destructive">*wajib</span>
+                              ) : (
+                                <span className="text-muted-foreground/60">
+                                  (opsional{milestoneGps.trustLevel === "medium" || milestoneGps.trustLevel === "low" ? ", disarankan" : ""})
+                                </span>
+                              )}
+                            </Label>
+                            <p className="text-[10px] text-muted-foreground/70">
+                              Isi jika GPS lemah/gagal atau lokasi perlu penjelasan tambahan, misalnya di basement, area parkir, pintu belakang, atau titik kumpul.
+                            </p>
+                            <Textarea
+                              value={milestoneManualLocation}
+                              onChange={(e) => setMilestoneManualLocation(e.target.value)}
+                              rows={2}
+                              className={`mt-0.5 text-sm resize-none ${milestoneGps.status === "unavailable" ? "border-destructive/50" : ""}`}
+                              placeholder="Contoh: Pintu gerbang depan PT ABC, dekat area parkir basement"
+                            />
+                          </div>
+
+                          {/* ── Foto Bukti Wajib ── */}
+                          <div className="space-y-2">
+                            <div>
+                              <p className="text-xs font-semibold text-foreground">
+                                {getEvidenceType(pendingMilestone.milestone)}{" "}
+                                <span className="text-destructive">*Wajib</span>
+                                {milestonePhotos.length > 0 && (
+                                  <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">
+                                    {milestonePhotos.length}/3 foto
+                                  </span>
+                                )}
+                              </p>
+                              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                {getMilestonePhotoHelper(pendingMilestone.milestone)}
+                              </p>
+                            </div>
+
+                            {/* Thumbnail grid */}
+                            {milestonePhotos.length > 0 && (
+                              <div className="flex flex-wrap gap-2">
+                                {milestonePhotos.map((p, idx) => (
+                                  <div key={idx} className="relative">
+                                    <div className="h-[72px] w-[72px] overflow-hidden rounded-lg border border-border">
+                                      <img
+                                        src={p.preview}
+                                        alt={`foto ${idx + 1}`}
+                                        className="h-full w-full object-cover"
+                                      />
+                                    </div>
+                                    <button
+                                      type="button"
+                                      className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive shadow"
+                                      onClick={() => {
+                                        URL.revokeObjectURL(p.preview);
+                                        setMilestonePhotos((prev) => prev.filter((_, i) => i !== idx));
+                                      }}
+                                    >
+                                      <X className="h-2.5 w-2.5 text-white" />
+                                    </button>
+                                    <p className="mt-0.5 max-w-[72px] truncate text-[9px] text-muted-foreground">
+                                      {Math.round(p.file.size / 1024)} KB
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Add photo button — disabled at 3 */}
+                            {milestonePhotos.length < 3 ? (
+                              <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-teal-400/60 px-4 py-3 text-sm text-teal-700 hover:bg-teal-50/50 dark:border-teal-600/40 dark:text-teal-400 dark:hover:bg-teal-900/20">
+                                <Upload className="h-4 w-4 flex-shrink-0" />
+                                <span>
+                                  {milestonePhotos.length === 0 ? "Pilih foto bukti" : "Tambah foto"}
+                                </span>
+                                <span className="ml-auto text-[10px] text-muted-foreground">
+                                  maks 3
+                                </span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="sr-only"
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0];
+                                    if (!f || milestonePhotos.length >= 3) return;
+                                    setMilestonePhotos((prev) => [
+                                      ...prev,
+                                      { file: f, preview: URL.createObjectURL(f) },
+                                    ]);
+                                    e.target.value = "";
+                                  }}
+                                />
+                              </label>
+                            ) : (
+                              <p className="text-[11px] text-muted-foreground">
+                                Maksimal 3 foto tercapai.
+                              </p>
+                            )}
+
+                            {/* Validation message */}
+                            {milestonePhotos.length === 0 && (
+                              <p className="text-[11px] text-destructive">
+                                Minimal 1 foto bukti wajib diunggah sebelum melanjutkan.
+                              </p>
+                            )}
+
+                            {/* Info */}
+                            <p className="text-[10px] text-muted-foreground/70">
+                              Dikompres maks 1200px · kualitas 70% · disimpan 7 hari
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
                       <Button
                         className="min-h-[44px] w-full bg-teal-600 font-semibold text-white hover:bg-teal-700 mt-2"
-                        disabled={isSaving || groupSelectedUids.length === 0}
+                        disabled={
+                          isSaving ||
+                          groupSelectedUids.length === 0 ||
+                          (pendingMilestone.milestone !== "issue_reported" && milestonePhotos.length === 0) ||
+                          (pendingMilestone.milestone !== "issue_reported" &&
+                            milestoneGps.status === "unavailable" &&
+                            !milestoneManualLocation.trim())
+                        }
                         onClick={() => {
-                          const targets = pendingMilestone.eligible.filter((m) => groupSelectedUids.includes(m.employeeUid));
+                          const targets = pendingMilestone.eligible.filter(
+                            (m) => groupSelectedUids.includes(m.employeeUid),
+                          );
                           handleGroupTripMilestone(
                             selectedMember!.missionId,
                             targets,
                             pendingMilestone.milestone,
                             pendingMilestone.milestone === "issue_reported"
-                              ? { issueCategory: issueForm.category, issueUrgency: issueForm.urgency, issueNote: issueForm.note }
+                              ? {
+                                  issueCategory: issueForm.category,
+                                  issueUrgency: issueForm.urgency,
+                                  issueNote: issueForm.note,
+                                }
+                              : undefined,
+                            pendingMilestone.milestone !== "issue_reported"
+                              ? {
+                                  latitude: milestoneGps.latitude,
+                                  longitude: milestoneGps.longitude,
+                                  locationAccuracy: milestoneGps.accuracy,
+                                  locationCapturedAt: milestoneGps.capturedAt,
+                                  locationStatus:
+                                    milestoneGps.status === "captured"
+                                      ? "captured"
+                                      : milestoneManualLocation.trim()
+                                        ? "manual"
+                                        : "unavailable",
+                                  addressText: milestoneGps.addressText,
+                                  streetName: milestoneGps.streetName,
+                                  village: milestoneGps.village,
+                                  district: milestoneGps.district,
+                                  city: milestoneGps.city,
+                                  province: milestoneGps.province,
+                                  postalCode: milestoneGps.postalCode,
+                                  country: milestoneGps.country,
+                                  geocodeStatus: milestoneGps.geocodeStatus,
+                                  locationTrustLevel: milestoneGps.trustLevel,
+                                  gpsPermissionStatus: milestoneGps.gpsPermissionStatus,
+                                  deviceTimestamp: new Date().toISOString(),
+                                  userAgent: typeof navigator !== "undefined" ? navigator.userAgent : undefined,
+                                  manualLocationNote:
+                                    milestoneGps.status !== "captured"
+                                      ? milestoneManualLocation
+                                      : milestoneManualLocation.trim() || undefined,
+                                  note: milestoneNote || undefined,
+                                  photos: milestonePhotos.map((p) => p.file),
+                                }
                               : undefined,
                           );
                         }}
                       >
-                        Konfirmasi untuk {groupSelectedUids.length} Anggota
+                        {isSaving ? "Menyimpan…" : `Konfirmasi untuk ${groupSelectedUids.length} Anggota`}
                       </Button>
                     </>
                   )}
@@ -4043,338 +5098,649 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
             {mode === "staff" &&
             selectedMember &&
             selectedMission &&
-            (selectedMember.memberTripStatus === "returned" || selectedMember.memberStatus === "returned") ? (() => {
-              const reportMode = localReportMode;
-              const isTeamReportSubmitted = !!(finalReport && finalReport.submittedAt);
-              const isTeamReportDraft = !!(finalReport && !finalReport.submittedAt);
-              const myMemberReport = memberFinalReports[userProfile?.uid ?? ""];
-              const isMyReportSubmitted = !!(myMemberReport && myMemberReport.submittedAt);
-              const isMyReportDraft = !!(myMemberReport && !myMemberReport.submittedAt);
-              const missionSubmitted = selectedMission.status === "final_report_submitted" || selectedMission.status === "completed";
-              const totalMembers = missionMembers.length;
-              const submittedIndividualCount = Object.values(memberFinalReports).filter((r) => !!r.submittedAt).length;
+            (selectedMember.memberTripStatus === "returned" ||
+              selectedMember.memberStatus === "returned")
+              ? (() => {
+                  const reportMode = localReportMode;
+                  const isTeamReportSubmitted = !!(
+                    finalReport && finalReport.submittedAt
+                  );
+                  const isTeamReportDraft = !!(
+                    finalReport && !finalReport.submittedAt
+                  );
+                  const myMemberReport =
+                    memberFinalReports[userProfile?.uid ?? ""];
+                  const isMyReportSubmitted = !!(
+                    myMemberReport && myMemberReport.submittedAt
+                  );
+                  const isMyReportDraft = !!(
+                    myMemberReport && !myMemberReport.submittedAt
+                  );
+                  const missionSubmitted =
+                    selectedMission.status === "final_report_submitted" ||
+                    selectedMission.status === "completed";
+                  const totalMembers = missionMembers.length;
+                  const submittedIndividualCount = Object.values(
+                    memberFinalReports,
+                  ).filter((r) => !!r.submittedAt).length;
 
-              return (
-                <Card className="overflow-hidden border-2 border-blue-500/30 dark:border-blue-400/20">
-                  <div className="flex items-center gap-3 border-b border-border px-5 py-4">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-500/10">
-                      <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold leading-tight">Laporan Akhir Dinas</p>
-                      <p className="text-xs text-muted-foreground">
-                        {reportMode === "team_report" ? "Laporan Tim" : "Laporan Individu"}
-                      </p>
-                    </div>
-                    {missionSubmitted && (
-                      <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700 dark:bg-green-900/30 dark:text-green-400">Terkirim</span>
-                    )}
-                  </div>
-
-                  <CardContent className="space-y-5 px-5 py-5">
-                    {/* ── Mode selector ── */}
-                    {!missionSubmitted && (
-                      <div className="space-y-2">
-                        <label htmlFor="report-mode-select" className="block text-sm font-semibold">
-                          Pilih Jenis Laporan
-                        </label>
-                        <select
-                          id="report-mode-select"
-                          value={reportMode}
-                          onChange={(e) => handleSetReportMode(e.target.value as "team_report" | "individual_report")}
-                          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                        >
-                          <option value="team_report">Laporan Tim</option>
-                          <option value="individual_report">Laporan Individu</option>
-                        </select>
-                        <p className="text-xs text-muted-foreground px-0.5">
-                          {reportMode === "team_report"
-                            ? "Satu laporan mewakili seluruh anggota tim dalam perjalanan dinas ini."
-                            : "Laporan ini hanya untuk pekerjaan dan catatan Anda sendiri."}
-                        </p>
-                      </div>
-                    )}
-
-                    {/* ── TEAM REPORT ── */}
-                    {reportMode === "team_report" && (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <p className="text-sm font-semibold text-foreground">Laporan Tim</p>
-                          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
-                            Mewakili {totalMembers} anggota
-                          </span>
+                  return (
+                    <Card className="overflow-hidden border-2 border-blue-500/30 dark:border-blue-400/20">
+                      <div className="flex items-center gap-3 border-b border-border px-5 py-4">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-500/10">
+                          <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                         </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold leading-tight">
+                            Laporan Akhir Dinas
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {reportMode === "team_report"
+                              ? "Laporan Tim"
+                              : "Laporan Individu"}
+                          </p>
+                        </div>
+                        {missionSubmitted && (
+                          <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                            Terkirim
+                          </span>
+                        )}
+                      </div>
 
-                        {isTeamReportSubmitted && finalReport!.reportReviewStatus === "revision_requested" && !showFinalReportPanel ? (
-                          // Revision requested — show revision card with re-edit button
-                          <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 space-y-2 dark:border-amber-700/30 dark:bg-amber-900/10">
-                            <div className="flex items-center gap-2">
-                              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                              <p className="text-sm font-medium text-amber-700 dark:text-amber-300">Direktur meminta revisi laporan</p>
-                            </div>
-                            {finalReport!.revisionNote && (
-                              <div className="rounded border border-amber-200 bg-amber-50/60 px-2.5 py-2 dark:border-amber-700/20 dark:bg-amber-900/20">
-                                <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-0.5">Catatan Revisi:</p>
-                                <p className="text-sm text-amber-800 dark:text-amber-300">{finalReport!.revisionNote}</p>
-                              </div>
-                            )}
-                            <Button size="sm" className="bg-amber-600 text-white hover:bg-amber-700 mt-1" onClick={handleOpenTeamReportForm}>
-                              Edit &amp; Kirim Ulang
-                            </Button>
+                      <CardContent className="space-y-5 px-5 py-5">
+                        {/* ── Mode selector ── */}
+                        {!missionSubmitted && (
+                          <div className="space-y-2">
+                            <label
+                              htmlFor="report-mode-select"
+                              className="block text-sm font-semibold"
+                            >
+                              Pilih Jenis Laporan
+                            </label>
+                            <select
+                              id="report-mode-select"
+                              value={reportMode}
+                              onChange={(e) =>
+                                handleSetReportMode(
+                                  e.target.value as
+                                    | "team_report"
+                                    | "individual_report",
+                                )
+                              }
+                              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                            >
+                              <option value="team_report">Laporan Tim</option>
+                              <option value="individual_report">
+                                Laporan Individu
+                              </option>
+                            </select>
+                            <p className="text-xs text-muted-foreground px-0.5">
+                              {reportMode === "team_report"
+                                ? "Satu laporan mewakili seluruh anggota tim dalam perjalanan dinas ini."
+                                : "Laporan ini hanya untuk pekerjaan dan catatan Anda sendiri."}
+                            </p>
                           </div>
-                        ) : isTeamReportSubmitted && finalReport!.reportReviewStatus !== "revision_requested" ? (
-                          // Submitted and not needing revision
-                          <div className={`rounded-xl border p-4 space-y-2 ${
-                            finalReport!.reportReviewStatus === "approved"
-                              ? "border-green-200 bg-green-50/50 dark:border-green-800/40 dark:bg-green-900/10"
-                              : finalReport!.reportReviewStatus === "resubmitted"
-                              ? "border-blue-200 bg-blue-50/50 dark:border-blue-800/40 dark:bg-blue-900/10"
-                              : "border-border/60 bg-muted/20"
-                          }`}>
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-2">
-                                <CheckCircle2 className={`h-4 w-4 ${finalReport!.reportReviewStatus === "approved" ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`} />
-                                <p className="text-sm font-medium">
-                                  {finalReport!.reportReviewStatus === "approved"
-                                    ? "Laporan disetujui"
-                                    : finalReport!.reportReviewStatus === "resubmitted"
-                                    ? "Laporan dikirim ulang — menunggu review"
-                                    : "Laporan sudah dikirim — menunggu review"}
+                        )}
+
+                        {/* ── TEAM REPORT ── */}
+                        {reportMode === "team_report" && (
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-semibold text-foreground">
+                                Laporan Tim
+                              </p>
+                              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                                Mewakili {totalMembers} anggota
+                              </span>
+                            </div>
+
+                            {isTeamReportSubmitted &&
+                            finalReport!.reportReviewStatus ===
+                              "revision_requested" &&
+                            !showFinalReportPanel ? (
+                              // Revision requested — show revision card with re-edit button
+                              <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 space-y-2 dark:border-amber-700/30 dark:bg-amber-900/10">
+                                <div className="flex items-center gap-2">
+                                  <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                                  <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                                    Direktur meminta revisi laporan
+                                  </p>
+                                </div>
+                                {finalReport!.revisionNote && (
+                                  <div className="rounded border border-amber-200 bg-amber-50/60 px-2.5 py-2 dark:border-amber-700/20 dark:bg-amber-900/20">
+                                    <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-0.5">
+                                      Catatan Revisi:
+                                    </p>
+                                    <p className="text-sm text-amber-800 dark:text-amber-300">
+                                      {finalReport!.revisionNote}
+                                    </p>
+                                  </div>
+                                )}
+                                <Button
+                                  size="sm"
+                                  className="bg-amber-600 text-white hover:bg-amber-700 mt-1"
+                                  onClick={handleOpenTeamReportForm}
+                                >
+                                  Edit &amp; Kirim Ulang
+                                </Button>
+                              </div>
+                            ) : isTeamReportSubmitted &&
+                              finalReport!.reportReviewStatus !==
+                                "revision_requested" ? (
+                              // Submitted and not needing revision
+                              <div
+                                className={`rounded-xl border p-4 space-y-2 ${
+                                  finalReport!.reportReviewStatus === "approved"
+                                    ? "border-green-200 bg-green-50/50 dark:border-green-800/40 dark:bg-green-900/10"
+                                    : finalReport!.reportReviewStatus ===
+                                        "resubmitted"
+                                      ? "border-blue-200 bg-blue-50/50 dark:border-blue-800/40 dark:bg-blue-900/10"
+                                      : "border-border/60 bg-muted/20"
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <CheckCircle2
+                                      className={`h-4 w-4 ${finalReport!.reportReviewStatus === "approved" ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}
+                                    />
+                                    <p className="text-sm font-medium">
+                                      {finalReport!.reportReviewStatus ===
+                                      "approved"
+                                        ? "Laporan disetujui"
+                                        : finalReport!.reportReviewStatus ===
+                                            "resubmitted"
+                                          ? "Laporan dikirim ulang — menunggu review"
+                                          : "Laporan sudah dikirim — menunggu review"}
+                                    </p>
+                                  </div>
+                                  {finalReport!.reportReviewStatus ===
+                                    "approved" && (
+                                    <span className="text-[10px] font-semibold text-green-600 dark:text-green-400">
+                                      Disetujui
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                  Dilaporkan oleh:{" "}
+                                  {finalReport!.dilaporkanOlehName}
                                 </p>
+                                {finalReport!.ringkasanKegiatan && (
+                                  <div className="pt-1">
+                                    <p className="text-xs font-medium text-muted-foreground">
+                                      Ringkasan:
+                                    </p>
+                                    <p className="text-sm">
+                                      {finalReport!.ringkasanKegiatan}
+                                    </p>
+                                  </div>
+                                )}
                               </div>
-                              {finalReport!.reportReviewStatus === "approved" && (
-                                <span className="text-[10px] font-semibold text-green-600 dark:text-green-400">Disetujui</span>
-                              )}
-                            </div>
-                            <p className="text-xs text-muted-foreground">Dilaporkan oleh: {finalReport!.dilaporkanOlehName}</p>
-                            {finalReport!.ringkasanKegiatan && (
-                              <div className="pt-1">
-                                <p className="text-xs font-medium text-muted-foreground">Ringkasan:</p>
-                                <p className="text-sm">{finalReport!.ringkasanKegiatan}</p>
+                            ) : showFinalReportPanel ? (
+                              <div className="space-y-3">
+                                {isTeamReportSubmitted &&
+                                  finalReport!.reportReviewStatus ===
+                                    "revision_requested" &&
+                                  finalReport!.revisionNote && (
+                                    <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 dark:border-amber-700/30 dark:bg-amber-900/10">
+                                      <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-0.5">
+                                        Catatan Revisi:
+                                      </p>
+                                      <p className="text-xs text-amber-800 dark:text-amber-300">
+                                        {finalReport!.revisionNote}
+                                      </p>
+                                    </div>
+                                  )}
+                                {isTeamReportDraft && (
+                                  <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-xs text-amber-700 dark:border-amber-700/30 dark:bg-amber-900/10 dark:text-amber-400">
+                                    <FileText className="h-3.5 w-3.5 flex-shrink-0" />
+                                    Draft tersimpan — lanjutkan mengisi atau
+                                    kirim laporan.
+                                  </div>
+                                )}
+                                <div className="space-y-1">
+                                  <Label htmlFor="fr-ringkasan">
+                                    Ringkasan kegiatan{" "}
+                                    <span className="text-destructive">*</span>
+                                  </Label>
+                                  <Textarea
+                                    id="fr-ringkasan"
+                                    rows={3}
+                                    placeholder="Deskripsikan kegiatan utama yang dilakukan selama dinas."
+                                    value={teamReportForm.ringkasanKegiatan}
+                                    onChange={(e) =>
+                                      setTeamReportForm((p) => ({
+                                        ...p,
+                                        ringkasanKegiatan: e.target.value,
+                                      }))
+                                    }
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label htmlFor="fr-hasil">
+                                    Hasil / Output{" "}
+                                    <span className="text-destructive">*</span>
+                                  </Label>
+                                  <Textarea
+                                    id="fr-hasil"
+                                    rows={3}
+                                    placeholder="Tuliskan hasil, output, atau pencapaian dari perjalanan dinas ini."
+                                    value={teamReportForm.hasilOutput}
+                                    onChange={(e) =>
+                                      setTeamReportForm((p) => ({
+                                        ...p,
+                                        hasilOutput: e.target.value,
+                                      }))
+                                    }
+                                  />
+                                </div>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                  <div className="space-y-1">
+                                    <Label htmlFor="fr-kendala">
+                                      Kendala &amp; Solusi
+                                    </Label>
+                                    <Textarea
+                                      id="fr-kendala"
+                                      rows={2}
+                                      placeholder="Kendala yang dihadapi dan bagaimana diselesaikan."
+                                      value={teamReportForm.kendalaDanSolusi}
+                                      onChange={(e) =>
+                                        setTeamReportForm((p) => ({
+                                          ...p,
+                                          kendalaDanSolusi: e.target.value,
+                                        }))
+                                      }
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label htmlFor="fr-tindaklanjut">
+                                      Tindak Lanjut
+                                    </Label>
+                                    <Textarea
+                                      id="fr-tindaklanjut"
+                                      rows={2}
+                                      placeholder="Rencana tindak lanjut setelah dinas ini."
+                                      value={teamReportForm.tindakLanjut}
+                                      onChange={(e) =>
+                                        setTeamReportForm((p) => ({
+                                          ...p,
+                                          tindakLanjut: e.target.value,
+                                        }))
+                                      }
+                                    />
+                                  </div>
+                                </div>
+                                <div className="space-y-1">
+                                  <Label htmlFor="fr-hrd">
+                                    Catatan untuk HRD
+                                  </Label>
+                                  <Textarea
+                                    id="fr-hrd"
+                                    rows={2}
+                                    placeholder="Informasi tambahan khusus untuk HRD (opsional)."
+                                    value={teamReportForm.catatanUntukHRD}
+                                    onChange={(e) =>
+                                      setTeamReportForm((p) => ({
+                                        ...p,
+                                        catatanUntukHRD: e.target.value,
+                                      }))
+                                    }
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label htmlFor="fr-lampiran">
+                                    Upload Lampiran
+                                  </Label>
+                                  <input
+                                    id="fr-lampiran"
+                                    type="file"
+                                    accept="image/*,.pdf,.doc,.docx"
+                                    onChange={(e) =>
+                                      setTeamReportForm((p) => ({
+                                        ...p,
+                                        lampiranFile:
+                                          e.target.files?.[0] ?? null,
+                                      }))
+                                    }
+                                    className="mt-1 block w-full text-sm"
+                                  />
+                                  <p className="text-[11px] text-muted-foreground">
+                                    Format: gambar, PDF, atau dokumen Word.
+                                    Maks. 10 MB.
+                                  </p>
+                                </div>
+                                <div className="flex gap-2 pt-1">
+                                  <Button
+                                    variant="outline"
+                                    className="flex-1"
+                                    onClick={handleSaveDraftTeamReport}
+                                    disabled={isSubmittingFinalReport}
+                                  >
+                                    <FileText className="mr-2 h-4 w-4" /> Simpan
+                                    Draft
+                                  </Button>
+                                  <Button
+                                    className="flex-1 bg-blue-600 text-white hover:bg-blue-700"
+                                    onClick={handleSubmitTeamReport}
+                                    disabled={isSubmittingFinalReport}
+                                  >
+                                    <FileCheck className="mr-2 h-4 w-4" /> Kirim
+                                    Laporan
+                                  </Button>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="w-full text-muted-foreground"
+                                  onClick={() => setShowFinalReportPanel(false)}
+                                >
+                                  Batal
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="rounded-xl border border-dashed border-border bg-muted/20 py-7 px-4 text-center space-y-3">
+                                <div className="flex justify-center">
+                                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted/60">
+                                    <FileText className="h-5 w-5 text-muted-foreground" />
+                                  </div>
+                                </div>
+                                <div className="space-y-1">
+                                  <p className="text-sm font-medium">
+                                    {isTeamReportDraft
+                                      ? "Draft laporan tim tersimpan"
+                                      : "Belum ada laporan tim"}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {isTeamReportDraft
+                                      ? "Lanjutkan mengisi laporan atau kirim sekarang."
+                                      : "Buat satu laporan utama yang mewakili hasil perjalanan dinas tim."}
+                                  </p>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  onClick={handleOpenTeamReportForm}
+                                >
+                                  <FileText className="mr-2 h-3.5 w-3.5" />
+                                  {isTeamReportDraft
+                                    ? "Lanjut Isi Laporan"
+                                    : "+ Buat Laporan Tim"}
+                                </Button>
                               </div>
                             )}
-                          </div>
-                        ) : showFinalReportPanel ? (
-                          <div className="space-y-3">
-                            {isTeamReportSubmitted && finalReport!.reportReviewStatus === "revision_requested" && finalReport!.revisionNote && (
-                              <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 dark:border-amber-700/30 dark:bg-amber-900/10">
-                                <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-0.5">Catatan Revisi:</p>
-                                <p className="text-xs text-amber-800 dark:text-amber-300">{finalReport!.revisionNote}</p>
-                              </div>
-                            )}
-                            {isTeamReportDraft && (
-                              <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-xs text-amber-700 dark:border-amber-700/30 dark:bg-amber-900/10 dark:text-amber-400">
-                                <FileText className="h-3.5 w-3.5 flex-shrink-0" />
-                                Draft tersimpan — lanjutkan mengisi atau kirim laporan.
-                              </div>
-                            )}
-                            <div className="space-y-1">
-                              <Label htmlFor="fr-ringkasan">Ringkasan kegiatan <span className="text-destructive">*</span></Label>
-                              <Textarea id="fr-ringkasan" rows={3} placeholder="Deskripsikan kegiatan utama yang dilakukan selama dinas." value={teamReportForm.ringkasanKegiatan}
-                                onChange={(e) => setTeamReportForm((p) => ({ ...p, ringkasanKegiatan: e.target.value }))} />
-                            </div>
-                            <div className="space-y-1">
-                              <Label htmlFor="fr-hasil">Hasil / Output <span className="text-destructive">*</span></Label>
-                              <Textarea id="fr-hasil" rows={3} placeholder="Tuliskan hasil, output, atau pencapaian dari perjalanan dinas ini." value={teamReportForm.hasilOutput}
-                                onChange={(e) => setTeamReportForm((p) => ({ ...p, hasilOutput: e.target.value }))} />
-                            </div>
-                            <div className="grid gap-3 sm:grid-cols-2">
-                              <div className="space-y-1">
-                                <Label htmlFor="fr-kendala">Kendala &amp; Solusi</Label>
-                                <Textarea id="fr-kendala" rows={2} placeholder="Kendala yang dihadapi dan bagaimana diselesaikan." value={teamReportForm.kendalaDanSolusi}
-                                  onChange={(e) => setTeamReportForm((p) => ({ ...p, kendalaDanSolusi: e.target.value }))} />
-                              </div>
-                              <div className="space-y-1">
-                                <Label htmlFor="fr-tindaklanjut">Tindak Lanjut</Label>
-                                <Textarea id="fr-tindaklanjut" rows={2} placeholder="Rencana tindak lanjut setelah dinas ini." value={teamReportForm.tindakLanjut}
-                                  onChange={(e) => setTeamReportForm((p) => ({ ...p, tindakLanjut: e.target.value }))} />
-                              </div>
-                            </div>
-                            <div className="space-y-1">
-                              <Label htmlFor="fr-hrd">Catatan untuk HRD</Label>
-                              <Textarea id="fr-hrd" rows={2} placeholder="Informasi tambahan khusus untuk HRD (opsional)." value={teamReportForm.catatanUntukHRD}
-                                onChange={(e) => setTeamReportForm((p) => ({ ...p, catatanUntukHRD: e.target.value }))} />
-                            </div>
-                            <div className="space-y-1">
-                              <Label htmlFor="fr-lampiran">Upload Lampiran</Label>
-                              <input id="fr-lampiran" type="file" accept="image/*,.pdf,.doc,.docx"
-                                onChange={(e) => setTeamReportForm((p) => ({ ...p, lampiranFile: e.target.files?.[0] ?? null }))}
-                                className="mt-1 block w-full text-sm" />
-                              <p className="text-[11px] text-muted-foreground">Format: gambar, PDF, atau dokumen Word. Maks. 10 MB.</p>
-                            </div>
-                            <div className="flex gap-2 pt-1">
-                              <Button variant="outline" className="flex-1" onClick={handleSaveDraftTeamReport} disabled={isSubmittingFinalReport}>
-                                <FileText className="mr-2 h-4 w-4" /> Simpan Draft
-                              </Button>
-                              <Button className="flex-1 bg-blue-600 text-white hover:bg-blue-700" onClick={handleSubmitTeamReport} disabled={isSubmittingFinalReport}>
-                                <FileCheck className="mr-2 h-4 w-4" /> Kirim Laporan
-                              </Button>
-                            </div>
-                            <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={() => setShowFinalReportPanel(false)}>Batal</Button>
-                          </div>
-                        ) : (
-                          <div className="rounded-xl border border-dashed border-border bg-muted/20 py-7 px-4 text-center space-y-3">
-                            <div className="flex justify-center">
-                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted/60">
-                                <FileText className="h-5 w-5 text-muted-foreground" />
-                              </div>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-sm font-medium">
-                                {isTeamReportDraft ? "Draft laporan tim tersimpan" : "Belum ada laporan tim"}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {isTeamReportDraft
-                                  ? "Lanjutkan mengisi laporan atau kirim sekarang."
-                                  : "Buat satu laporan utama yang mewakili hasil perjalanan dinas tim."}
-                              </p>
-                            </div>
-                            <Button size="sm" onClick={handleOpenTeamReportForm}>
-                              <FileText className="mr-2 h-3.5 w-3.5" />
-                              {isTeamReportDraft ? "Lanjut Isi Laporan" : "+ Buat Laporan Tim"}
-                            </Button>
                           </div>
                         )}
-                      </div>
-                    )}
 
-                    {/* ── INDIVIDUAL REPORT ── */}
-                    {reportMode === "individual_report" && (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <p className="text-sm font-semibold">Laporan Individu Saya</p>
-                          <span className="text-xs text-muted-foreground">
-                            {submittedIndividualCount}/{totalMembers} laporan individu terkumpul
-                          </span>
-                        </div>
-
-                        {isMyReportSubmitted && myMemberReport!.reportReviewStatus === "revision_requested" && !showFinalReportPanel ? (
-                          // Revision requested for individual report
-                          <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 space-y-2 dark:border-amber-700/30 dark:bg-amber-900/10">
-                            <div className="flex items-center gap-2">
-                              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                              <p className="text-sm font-medium text-amber-700 dark:text-amber-300">Direktur meminta revisi laporan Anda</p>
-                            </div>
-                            {myMemberReport!.revisionNote && (
-                              <div className="rounded border border-amber-200 bg-amber-50/60 px-2.5 py-2 dark:border-amber-700/20 dark:bg-amber-900/20">
-                                <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-0.5">Catatan Revisi:</p>
-                                <p className="text-sm text-amber-800 dark:text-amber-300">{myMemberReport!.revisionNote}</p>
-                              </div>
-                            )}
-                            <Button size="sm" className="bg-amber-600 text-white hover:bg-amber-700 mt-1" onClick={handleOpenMemberReportForm}>
-                              Edit &amp; Kirim Ulang
-                            </Button>
-                          </div>
-                        ) : isMyReportSubmitted && myMemberReport!.reportReviewStatus !== "revision_requested" ? (
-                          // Submitted normally
-                          <div className={`rounded-xl border p-4 space-y-1.5 ${
-                            myMemberReport!.reportReviewStatus === "approved"
-                              ? "border-green-200 bg-green-50/50 dark:border-green-800/40 dark:bg-green-900/10"
-                              : myMemberReport!.reportReviewStatus === "resubmitted"
-                              ? "border-blue-200 bg-blue-50/50 dark:border-blue-800/40 dark:bg-blue-900/10"
-                              : "border-border/60 bg-muted/20"
-                          }`}>
-                            <div className="flex items-center gap-2">
-                              <CheckCircle2 className={`h-4 w-4 ${myMemberReport!.reportReviewStatus === "approved" ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`} />
-                              <p className="text-sm font-medium">
-                                {myMemberReport!.reportReviewStatus === "approved"
-                                  ? "Laporan disetujui"
-                                  : myMemberReport!.reportReviewStatus === "resubmitted"
-                                  ? "Laporan dikirim ulang — menunggu review"
-                                  : "Laporan sudah dikirim — menunggu review"}
-                              </p>
-                            </div>
-                            {myMemberReport!.kegiatanDilakukan && (
-                              <p className="text-xs text-muted-foreground line-clamp-2">{myMemberReport!.kegiatanDilakukan}</p>
-                            )}
-                          </div>
-                        ) : showFinalReportPanel ? (
+                        {/* ── INDIVIDUAL REPORT ── */}
+                        {reportMode === "individual_report" && (
                           <div className="space-y-3">
-                            {isMyReportSubmitted && myMemberReport!.reportReviewStatus === "revision_requested" && myMemberReport!.revisionNote && (
-                              <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 dark:border-amber-700/30 dark:bg-amber-900/10">
-                                <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-0.5">Catatan Revisi:</p>
-                                <p className="text-xs text-amber-800 dark:text-amber-300">{myMemberReport!.revisionNote}</p>
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-semibold">
+                                Laporan Individu Saya
+                              </p>
+                              <span className="text-xs text-muted-foreground">
+                                {submittedIndividualCount}/{totalMembers}{" "}
+                                laporan individu terkumpul
+                              </span>
+                            </div>
+
+                            {isMyReportSubmitted &&
+                            myMemberReport!.reportReviewStatus ===
+                              "revision_requested" &&
+                            !showFinalReportPanel ? (
+                              // Revision requested for individual report
+                              <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 space-y-2 dark:border-amber-700/30 dark:bg-amber-900/10">
+                                <div className="flex items-center gap-2">
+                                  <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                                  <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                                    Direktur meminta revisi laporan Anda
+                                  </p>
+                                </div>
+                                {myMemberReport!.revisionNote && (
+                                  <div className="rounded border border-amber-200 bg-amber-50/60 px-2.5 py-2 dark:border-amber-700/20 dark:bg-amber-900/20">
+                                    <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-0.5">
+                                      Catatan Revisi:
+                                    </p>
+                                    <p className="text-sm text-amber-800 dark:text-amber-300">
+                                      {myMemberReport!.revisionNote}
+                                    </p>
+                                  </div>
+                                )}
+                                <Button
+                                  size="sm"
+                                  className="bg-amber-600 text-white hover:bg-amber-700 mt-1"
+                                  onClick={handleOpenMemberReportForm}
+                                >
+                                  Edit &amp; Kirim Ulang
+                                </Button>
+                              </div>
+                            ) : isMyReportSubmitted &&
+                              myMemberReport!.reportReviewStatus !==
+                                "revision_requested" ? (
+                              // Submitted normally
+                              <div
+                                className={`rounded-xl border p-4 space-y-1.5 ${
+                                  myMemberReport!.reportReviewStatus ===
+                                  "approved"
+                                    ? "border-green-200 bg-green-50/50 dark:border-green-800/40 dark:bg-green-900/10"
+                                    : myMemberReport!.reportReviewStatus ===
+                                        "resubmitted"
+                                      ? "border-blue-200 bg-blue-50/50 dark:border-blue-800/40 dark:bg-blue-900/10"
+                                      : "border-border/60 bg-muted/20"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <CheckCircle2
+                                    className={`h-4 w-4 ${myMemberReport!.reportReviewStatus === "approved" ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}
+                                  />
+                                  <p className="text-sm font-medium">
+                                    {myMemberReport!.reportReviewStatus ===
+                                    "approved"
+                                      ? "Laporan disetujui"
+                                      : myMemberReport!.reportReviewStatus ===
+                                          "resubmitted"
+                                        ? "Laporan dikirim ulang — menunggu review"
+                                        : "Laporan sudah dikirim — menunggu review"}
+                                  </p>
+                                </div>
+                                {myMemberReport!.kegiatanDilakukan && (
+                                  <p className="text-xs text-muted-foreground line-clamp-2">
+                                    {myMemberReport!.kegiatanDilakukan}
+                                  </p>
+                                )}
+                              </div>
+                            ) : showFinalReportPanel ? (
+                              <div className="space-y-3">
+                                {isMyReportSubmitted &&
+                                  myMemberReport!.reportReviewStatus ===
+                                    "revision_requested" &&
+                                  myMemberReport!.revisionNote && (
+                                    <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 dark:border-amber-700/30 dark:bg-amber-900/10">
+                                      <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-0.5">
+                                        Catatan Revisi:
+                                      </p>
+                                      <p className="text-xs text-amber-800 dark:text-amber-300">
+                                        {myMemberReport!.revisionNote}
+                                      </p>
+                                    </div>
+                                  )}
+                                {isMyReportDraft && (
+                                  <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-xs text-amber-700 dark:border-amber-700/30 dark:bg-amber-900/10 dark:text-amber-400">
+                                    <FileText className="h-3.5 w-3.5 flex-shrink-0" />
+                                    Draft tersimpan — lanjutkan mengisi atau
+                                    kirim laporan.
+                                  </div>
+                                )}
+                                <div className="space-y-1">
+                                  <Label htmlFor="mr-kegiatan">
+                                    Kegiatan yang dilakukan{" "}
+                                    <span className="text-destructive">*</span>
+                                  </Label>
+                                  <Textarea
+                                    id="mr-kegiatan"
+                                    rows={3}
+                                    placeholder="Deskripsikan pekerjaan yang Anda lakukan selama dinas."
+                                    value={memberReportForm.kegiatanDilakukan}
+                                    onChange={(e) =>
+                                      setMemberReportForm((p) => ({
+                                        ...p,
+                                        kegiatanDilakukan: e.target.value,
+                                      }))
+                                    }
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label htmlFor="mr-hasil">
+                                    Hasil / Pencapaian{" "}
+                                    <span className="text-destructive">*</span>
+                                  </Label>
+                                  <Textarea
+                                    id="mr-hasil"
+                                    rows={2}
+                                    placeholder="Hasil konkret yang Anda capai."
+                                    value={memberReportForm.hasilPribadi}
+                                    onChange={(e) =>
+                                      setMemberReportForm((p) => ({
+                                        ...p,
+                                        hasilPribadi: e.target.value,
+                                      }))
+                                    }
+                                  />
+                                </div>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                  <div className="space-y-1">
+                                    <Label htmlFor="mr-kendala">Kendala</Label>
+                                    <Textarea
+                                      id="mr-kendala"
+                                      rows={2}
+                                      placeholder="Hambatan atau masalah yang Anda hadapi."
+                                      value={memberReportForm.kendalaPribadi}
+                                      onChange={(e) =>
+                                        setMemberReportForm((p) => ({
+                                          ...p,
+                                          kendalaPribadi: e.target.value,
+                                        }))
+                                      }
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label htmlFor="mr-solusi">Solusi</Label>
+                                    <Textarea
+                                      id="mr-solusi"
+                                      rows={2}
+                                      placeholder="Cara Anda mengatasi kendala tersebut."
+                                      value={memberReportForm.solusiPribadi}
+                                      onChange={(e) =>
+                                        setMemberReportForm((p) => ({
+                                          ...p,
+                                          solusiPribadi: e.target.value,
+                                        }))
+                                      }
+                                    />
+                                  </div>
+                                </div>
+                                <div className="space-y-1">
+                                  <Label htmlFor="mr-catatan">
+                                    Catatan Tambahan
+                                  </Label>
+                                  <Textarea
+                                    id="mr-catatan"
+                                    rows={2}
+                                    placeholder="Informasi lain yang perlu disampaikan."
+                                    value={memberReportForm.catatanTambahan}
+                                    onChange={(e) =>
+                                      setMemberReportForm((p) => ({
+                                        ...p,
+                                        catatanTambahan: e.target.value,
+                                      }))
+                                    }
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label htmlFor="mr-lampiran">
+                                    Upload Lampiran
+                                  </Label>
+                                  <input
+                                    id="mr-lampiran"
+                                    type="file"
+                                    accept="image/*,.pdf,.doc,.docx"
+                                    onChange={(e) =>
+                                      setMemberReportForm((p) => ({
+                                        ...p,
+                                        lampiranFile:
+                                          e.target.files?.[0] ?? null,
+                                      }))
+                                    }
+                                    className="mt-1 block w-full text-sm"
+                                  />
+                                  <p className="text-[11px] text-muted-foreground">
+                                    Format: gambar, PDF, atau dokumen Word.
+                                    Maks. 10 MB.
+                                  </p>
+                                </div>
+                                <div className="flex gap-2 pt-1">
+                                  <Button
+                                    variant="outline"
+                                    className="flex-1"
+                                    onClick={handleSaveDraftMemberReport}
+                                    disabled={isSubmittingFinalReport}
+                                  >
+                                    <FileText className="mr-2 h-4 w-4" /> Simpan
+                                    Draft
+                                  </Button>
+                                  <Button
+                                    className="flex-1 bg-blue-600 text-white hover:bg-blue-700"
+                                    onClick={handleSubmitMemberReport}
+                                    disabled={isSubmittingFinalReport}
+                                  >
+                                    <FileCheck className="mr-2 h-4 w-4" /> Kirim
+                                    Laporan
+                                  </Button>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="w-full text-muted-foreground"
+                                  onClick={() => setShowFinalReportPanel(false)}
+                                >
+                                  Batal
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="rounded-xl border border-dashed border-border bg-muted/20 py-7 px-4 text-center space-y-3">
+                                <div className="flex justify-center">
+                                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted/60">
+                                    <FileText className="h-5 w-5 text-muted-foreground" />
+                                  </div>
+                                </div>
+                                <div className="space-y-1">
+                                  <p className="text-sm font-medium">
+                                    {isMyReportDraft
+                                      ? "Draft laporan Anda tersimpan"
+                                      : "Belum ada laporan individu"}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {isMyReportDraft
+                                      ? "Lanjutkan mengisi laporan atau kirim sekarang."
+                                      : "Isi laporan Anda untuk melengkapi pelaporan perjalanan dinas."}
+                                  </p>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  onClick={handleOpenMemberReportForm}
+                                >
+                                  <FileText className="mr-2 h-3.5 w-3.5" />
+                                  {isMyReportDraft
+                                    ? "Lanjut Isi Laporan"
+                                    : "+ Buat Laporan Individu"}
+                                </Button>
                               </div>
                             )}
-                            {isMyReportDraft && (
-                              <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-xs text-amber-700 dark:border-amber-700/30 dark:bg-amber-900/10 dark:text-amber-400">
-                                <FileText className="h-3.5 w-3.5 flex-shrink-0" />
-                                Draft tersimpan — lanjutkan mengisi atau kirim laporan.
-                              </div>
-                            )}
-                            <div className="space-y-1">
-                              <Label htmlFor="mr-kegiatan">Kegiatan yang dilakukan <span className="text-destructive">*</span></Label>
-                              <Textarea id="mr-kegiatan" rows={3} placeholder="Deskripsikan pekerjaan yang Anda lakukan selama dinas." value={memberReportForm.kegiatanDilakukan}
-                                onChange={(e) => setMemberReportForm((p) => ({ ...p, kegiatanDilakukan: e.target.value }))} />
-                            </div>
-                            <div className="space-y-1">
-                              <Label htmlFor="mr-hasil">Hasil / Pencapaian <span className="text-destructive">*</span></Label>
-                              <Textarea id="mr-hasil" rows={2} placeholder="Hasil konkret yang Anda capai." value={memberReportForm.hasilPribadi}
-                                onChange={(e) => setMemberReportForm((p) => ({ ...p, hasilPribadi: e.target.value }))} />
-                            </div>
-                            <div className="grid gap-3 sm:grid-cols-2">
-                              <div className="space-y-1">
-                                <Label htmlFor="mr-kendala">Kendala</Label>
-                                <Textarea id="mr-kendala" rows={2} placeholder="Hambatan atau masalah yang Anda hadapi." value={memberReportForm.kendalaPribadi}
-                                  onChange={(e) => setMemberReportForm((p) => ({ ...p, kendalaPribadi: e.target.value }))} />
-                              </div>
-                              <div className="space-y-1">
-                                <Label htmlFor="mr-solusi">Solusi</Label>
-                                <Textarea id="mr-solusi" rows={2} placeholder="Cara Anda mengatasi kendala tersebut." value={memberReportForm.solusiPribadi}
-                                  onChange={(e) => setMemberReportForm((p) => ({ ...p, solusiPribadi: e.target.value }))} />
-                              </div>
-                            </div>
-                            <div className="space-y-1">
-                              <Label htmlFor="mr-catatan">Catatan Tambahan</Label>
-                              <Textarea id="mr-catatan" rows={2} placeholder="Informasi lain yang perlu disampaikan." value={memberReportForm.catatanTambahan}
-                                onChange={(e) => setMemberReportForm((p) => ({ ...p, catatanTambahan: e.target.value }))} />
-                            </div>
-                            <div className="space-y-1">
-                              <Label htmlFor="mr-lampiran">Upload Lampiran</Label>
-                              <input id="mr-lampiran" type="file" accept="image/*,.pdf,.doc,.docx"
-                                onChange={(e) => setMemberReportForm((p) => ({ ...p, lampiranFile: e.target.files?.[0] ?? null }))}
-                                className="mt-1 block w-full text-sm" />
-                              <p className="text-[11px] text-muted-foreground">Format: gambar, PDF, atau dokumen Word. Maks. 10 MB.</p>
-                            </div>
-                            <div className="flex gap-2 pt-1">
-                              <Button variant="outline" className="flex-1" onClick={handleSaveDraftMemberReport} disabled={isSubmittingFinalReport}>
-                                <FileText className="mr-2 h-4 w-4" /> Simpan Draft
-                              </Button>
-                              <Button className="flex-1 bg-blue-600 text-white hover:bg-blue-700" onClick={handleSubmitMemberReport} disabled={isSubmittingFinalReport}>
-                                <FileCheck className="mr-2 h-4 w-4" /> Kirim Laporan
-                              </Button>
-                            </div>
-                            <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={() => setShowFinalReportPanel(false)}>Batal</Button>
-                          </div>
-                        ) : (
-                          <div className="rounded-xl border border-dashed border-border bg-muted/20 py-7 px-4 text-center space-y-3">
-                            <div className="flex justify-center">
-                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted/60">
-                                <FileText className="h-5 w-5 text-muted-foreground" />
-                              </div>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-sm font-medium">
-                                {isMyReportDraft ? "Draft laporan Anda tersimpan" : "Belum ada laporan individu"}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {isMyReportDraft
-                                  ? "Lanjutkan mengisi laporan atau kirim sekarang."
-                                  : "Isi laporan Anda untuk melengkapi pelaporan perjalanan dinas."}
-                              </p>
-                            </div>
-                            <Button size="sm" onClick={handleOpenMemberReportForm}>
-                              <FileText className="mr-2 h-3.5 w-3.5" />
-                              {isMyReportDraft ? "Lanjut Isi Laporan" : "+ Buat Laporan Individu"}
-                            </Button>
                           </div>
                         )}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })() : null}
+                      </CardContent>
+                    </Card>
+                  );
+                })()
+              : null}
 
             {mode === "hrd-monitor" &&
             selectedMission &&

@@ -70,6 +70,7 @@ import {
   ChevronRight,
   Check,
   CheckCircle2,
+  CheckSquare,
   MapPin,
   Calendar,
   FileText,
@@ -80,6 +81,7 @@ import {
   Navigation,
   Home,
   TrendingUp,
+  ExternalLink,
 } from "lucide-react";
 import {
   BusinessTripMission,
@@ -89,6 +91,7 @@ import {
   type FinalReport,
   type MemberFinalReport,
   type MemberNote,
+  type MilestoneEvidence,
   type ReportReviewStatus,
 } from "./types";
 import { determineApprovalTarget } from "@/lib/travel-utils";
@@ -264,6 +267,15 @@ const STATUS_PRIORITY: Record<string, number> = {
 // ── Timeline category inference ───────────────────────────────────────────────
 type TimelineCategory = "tracking" | "approval" | "changes" | "issues" | "system";
 
+function inferMilestoneTypeFromMsg(msg: string): MilestoneEvidence["milestoneType"] {
+  const lower = (msg ?? "").toLowerCase();
+  if (lower.includes("keberangkatan") || lower.includes("berangkat")) return "departed";
+  if (lower.includes("tiba di lokasi") || lower.includes("sampai lokasi")) return "arrived";
+  if (lower.includes("kegiatan selesai")) return "activity_done";
+  if (lower.includes("kembali")) return "returned";
+  return "departed";
+}
+
 function inferTimelineCategory(entry: { message?: string; category?: string }): TimelineCategory {
   if (entry.category === "tracking") return "tracking";
   if (entry.category === "approval") return "approval";
@@ -302,6 +314,63 @@ function inferTimelineCategory(entry: { message?: string; category?: string }): 
   return "system";
 }
 
+// Helper: Collect evidence from multiple sources (timeline + milestone_evidences + members)
+function collectEvidenceSources(
+  activeMissionTimeline: any[],
+  activeMissionEvidences: MilestoneEvidence[],
+  activeMissionMembers: BusinessTripMissionMember[],
+  missionId: string,
+): MilestoneEvidence[] {
+  // ─ Source 1: Built from timeline entries (has evidence metadata embedded)
+  const timelineEvidence: MilestoneEvidence[] = activeMissionTimeline
+    .filter((e: any) => {
+      const cat = inferTimelineCategory(e);
+      return cat === "tracking" && (e.milestoneType || inferMilestoneTypeFromMsg(e.message));
+    })
+    .map((e: any) => ({
+      id: e.evidenceId ?? e.id,
+      missionId,
+      milestoneType: (e.milestoneType ?? inferMilestoneTypeFromMsg(e.message ?? "")) as MilestoneEvidence["milestoneType"],
+      confirmedByUid: e.confirmedByUid ?? e.byUid ?? "",
+      confirmedByName: e.confirmedByName ?? e.byName ?? "",
+      targetMemberUids: e.targetMemberUids ?? [],
+      targetMemberNames: e.targetMemberNames ?? [],
+      createdAt: e.createdAt,
+      latitude: e.evidenceLat ?? null,
+      longitude: e.evidenceLng ?? null,
+      locationAccuracy: e.evidenceAccuracy ?? null,
+      locationStatus: (e.evidenceLocationStatus ?? "unavailable") as MilestoneEvidence["locationStatus"],
+      locationTrustLevel: (e.evidenceLocationTrust ?? e.trustLevel ?? null) as MilestoneEvidence["locationTrustLevel"],
+      addressText: e.evidenceAddress ?? null,
+      manualLocationNote: e.evidenceManualNote ?? null,
+      photos: (e.evidencePhotos ?? []) as MilestoneEvidence["photos"],
+    }));
+
+  console.log("📸 collectEvidenceSources debug:", {
+    timelineEntriesTotal: activeMissionTimeline.length,
+    timelineTrackingEntries: activeMissionTimeline.filter((e: any) => inferTimelineCategory(e) === "tracking").length,
+    timelineEvidenceBuilt: timelineEvidence.length,
+    timelineEvidenceWithPhotos: timelineEvidence.filter((e) => (e.photos?.length ?? 0) > 0).length,
+    milestone_evidencesCount: activeMissionEvidences.length,
+    milestone_evidencesWithPhotos: activeMissionEvidences.filter((e) => (e.photos?.length ?? 0) > 0).length,
+  });
+
+  // ─ Source 2: milestone_evidences from Firestore (primary collection)
+  const evidenceColIds = new Set(activeMissionEvidences.map((e) => e.id));
+
+  // ─ Combine: prefer milestone_evidences, supplement with timeline evidence for fallback
+  const allEvidence: MilestoneEvidence[] = [
+    ...activeMissionEvidences,
+    ...timelineEvidence.filter((e) => !evidenceColIds.has(e.id!)),
+  ];
+
+  console.log("milestone evidence", activeMissionEvidences);
+  console.log("timeline with evidence", timelineEvidence.filter((e) => (e.photos?.length ?? 0) > 0 || e.latitude != null || e.manualLocationNote));
+  console.log("members with evidence", activeMissionMembers.filter((m) => m.reportStatus === "submitted" || (m as any).trackingEvidence));
+
+  return allEvidence;
+}
+
 // ── Date overlap helper ───────────────────────────────────────────────────────
 function toTimestampSecs(ts: any): number {
   if (!ts) return 0;
@@ -323,6 +392,22 @@ function datesOverlap(
 }
 
 // ── Date-only helper (strips time, returns midnight Date) ─────────────────────
+function toSeconds(ts: any): number {
+  if (!ts) return 0;
+  if (ts instanceof Timestamp) return ts.seconds;
+  if (typeof ts === "object" && ts?.seconds) return ts.seconds;
+  try { return new Date(ts).getTime() / 1000; } catch { return 0; }
+}
+
+function toDate(ts: any): Date | null {
+  if (!ts) return null;
+  try {
+    if (ts instanceof Timestamp) return ts.toDate();
+    if (typeof ts === "object" && ts?.seconds) return new Date(ts.seconds * 1000);
+    return new Date(ts);
+  } catch { return null; }
+}
+
 function toDateOnly(ts: any): Date | null {
   if (!ts) return null;
   let d: Date;
@@ -1576,6 +1661,7 @@ export function ManagementDinasClient() {
   const [activeMissionFinalReport, setActiveMissionFinalReport] = useState<FinalReport | null>(null);
   const [activeMissionMemberReports, setActiveMissionMemberReports] = useState<Record<string, MemberFinalReport>>({});
   const [activeMissionMemberNotes, setActiveMissionMemberNotes] = useState<Record<string, MemberNote>>({});
+  const [activeMissionEvidences, setActiveMissionEvidences] = useState<MilestoneEvidence[]>([]);
   const [isArchivingMission, setIsArchivingMission] = useState(false);
   const [isReviewingReport, setIsReviewingReport] = useState(false);
   const [showRevisionForm, setShowRevisionForm] = useState(false);
@@ -2130,6 +2216,7 @@ export function ManagementDinasClient() {
       setActiveMissionFinalReport(null);
       setActiveMissionMemberReports({});
       setActiveMissionMemberNotes({});
+      setActiveMissionEvidences([]);
       return;
     }
     const mId = activeMission.id;
@@ -2159,7 +2246,12 @@ export function ManagementDinasClient() {
       },
       (err) => console.error("member_notes snapshot error:", err),
     );
-    return () => { unsubFinal(); unsubMemberReports(); unsubMemberNotes(); };
+    const unsubEvidences = onSnapshot(
+      query(collection(firestore, "business_trip_missions", mId, "milestone_evidences"), orderBy("createdAt", "asc")),
+      (snap) => { setActiveMissionEvidences(snap.docs.map((d) => ({ id: d.id, ...d.data() } as MilestoneEvidence))); },
+      (err) => console.error("milestone_evidences snapshot error:", err),
+    );
+    return () => { unsubFinal(); unsubMemberReports(); unsubMemberNotes(); unsubEvidences(); };
   }, [firestore, activeMission?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Filtered + sorted mission list ────────────────────────────────────────
@@ -3479,70 +3571,97 @@ export function ManagementDinasClient() {
                   </div>
                 </section>
 
-                {/* Progress Perjalanan — real-time tracking status */}
+                {/* ── Monitoring Perjalanan ── */}
                 {(() => {
                   const tracking = memberTrackingMap[activeMission.id ?? ""];
                   if (!tracking || tracking.total === 0) return null;
-                  const steps = [
-                    { label: "Berangkat", icon: Navigation, count: tracking.departed, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-900/20", border: "border-blue-200 dark:border-blue-800/40" },
-                    { label: "Sampai Lokasi", icon: MapPin, count: tracking.arrived, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-50 dark:bg-indigo-900/20", border: "border-indigo-200 dark:border-indigo-800/40" },
-                    { label: "Kegiatan Selesai", icon: Activity, count: tracking.activityDone, color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-50 dark:bg-purple-900/20", border: "border-purple-200 dark:border-purple-800/40" },
-                    { label: "Kembali", icon: Home, count: tracking.returned, color: "text-green-600 dark:text-green-400", bg: "bg-green-50 dark:bg-green-900/20", border: "border-green-200 dark:border-green-800/40" },
-                  ];
-                  // Per-step member names from activeMissionMembers
-                  const membersByStep = {
-                    departed: activeMissionMembers.filter(m => ["departed","arrived","activity_done","return_started","returned"].includes(m.memberTripStatus ?? "")).map(m => m.employeeName),
-                    arrived: activeMissionMembers.filter(m => ["arrived","activity_done","return_started","returned"].includes(m.memberTripStatus ?? "")).map(m => m.employeeName),
-                    activityDone: activeMissionMembers.filter(m => ["activity_done","return_started","returned"].includes(m.memberTripStatus ?? "")).map(m => m.employeeName),
-                    returned: activeMissionMembers.filter(m => m.memberTripStatus === "returned").map(m => m.employeeName),
+                  const activeMembers = activeMissionMembers.filter(
+                    (m) => !["archived", "declined_by_staff", "rejected_by_manager"].includes(m.memberStatus as string),
+                  );
+
+                  type StepDef = {
+                    key: string; label: string; icon: React.ElementType; count: number;
+                    doneNames: string[]; notDoneNames: string[]; lastAt: any;
+                    color: string; bg: string; border: string;
                   };
-                  const namesByStep = [membersByStep.departed, membersByStep.arrived, membersByStep.activityDone, membersByStep.returned];
+                  const stepsData: StepDef[] = [
+                    {
+                      key: "departed", label: "Berangkat", icon: Navigation, count: tracking.departed,
+                      doneNames: activeMembers.filter(m => ["departed","arrived","activity_done","return_started","returned"].includes(m.memberTripStatus ?? "")).map(m => m.employeeName),
+                      notDoneNames: activeMembers.filter(m => !["departed","arrived","activity_done","return_started","returned"].includes(m.memberTripStatus ?? "")).map(m => m.employeeName),
+                      lastAt: activeMembers.filter(m => m.departedAt).reduce((best, m) => toSeconds(m.departedAt) > toSeconds(best) ? m.departedAt : best, null as any),
+                      color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50/60 dark:bg-blue-900/20", border: "border-blue-200/60 dark:border-blue-800/40",
+                    },
+                    {
+                      key: "arrived", label: "Sampai Lokasi", icon: MapPin, count: tracking.arrived,
+                      doneNames: activeMembers.filter(m => ["arrived","activity_done","return_started","returned"].includes(m.memberTripStatus ?? "")).map(m => m.employeeName),
+                      notDoneNames: activeMembers.filter(m => !["arrived","activity_done","return_started","returned"].includes(m.memberTripStatus ?? "")).map(m => m.employeeName),
+                      lastAt: activeMembers.filter(m => m.arrivedAt).reduce((best, m) => toSeconds(m.arrivedAt) > toSeconds(best) ? m.arrivedAt : best, null as any),
+                      color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-50/60 dark:bg-indigo-900/20", border: "border-indigo-200/60 dark:border-indigo-800/40",
+                    },
+                    {
+                      key: "activity_done", label: "Kegiatan Selesai", icon: CheckSquare, count: tracking.activityDone,
+                      doneNames: activeMembers.filter(m => ["activity_done","return_started","returned"].includes(m.memberTripStatus ?? "")).map(m => m.employeeName),
+                      notDoneNames: activeMembers.filter(m => !["activity_done","return_started","returned"].includes(m.memberTripStatus ?? "")).map(m => m.employeeName),
+                      lastAt: activeMembers.filter(m => m.activityDoneAt).reduce((best, m) => toSeconds(m.activityDoneAt) > toSeconds(best) ? m.activityDoneAt : best, null as any),
+                      color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-50/60 dark:bg-purple-900/20", border: "border-purple-200/60 dark:border-purple-800/40",
+                    },
+                    {
+                      key: "returned", label: "Kembali", icon: Home, count: tracking.returned,
+                      doneNames: activeMembers.filter(m => m.memberTripStatus === "returned").map(m => m.employeeName),
+                      notDoneNames: activeMembers.filter(m => m.memberTripStatus !== "returned").map(m => m.employeeName),
+                      lastAt: activeMembers.filter(m => m.returnedAt).reduce((best, m) => toSeconds(m.returnedAt) > toSeconds(best) ? m.returnedAt : best, null as any),
+                      color: "text-green-600 dark:text-green-400", bg: "bg-green-50/60 dark:bg-green-900/20", border: "border-green-200/60 dark:border-green-800/40",
+                    },
+                  ];
+
                   return (
-                    <section className="space-y-4">
-                      <SectionHeader
-                        icon={Navigation}
-                        title="Progress Perjalanan"
-                        description="Status tracking anggota secara real-time."
-                      />
-                      <div className="rounded-lg border border-border p-4 space-y-4">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                          {steps.map((step, idx) => {
-                            const Icon = step.icon;
-                            const names = namesByStep[idx] ?? [];
-                            return (
-                              <div
-                                key={step.label}
-                                className={`rounded-xl border p-3 text-center space-y-1 transition-all ${
-                                  step.count > 0
-                                    ? `${step.bg} ${step.border}`
-                                    : "border-border/40 bg-muted/5 opacity-50"
-                                }`}
-                              >
-                                <Icon className={`h-5 w-5 mx-auto ${step.count > 0 ? step.color : "text-muted-foreground"}`} />
-                                <p className="text-xs font-medium text-muted-foreground">{step.label}</p>
-                                <p className={`text-xl font-bold tabular-nums ${step.count > 0 ? step.color : "text-muted-foreground"}`}>
-                                  {step.count}<span className="text-xs font-normal text-muted-foreground">/{tracking.total}</span>
-                                </p>
-                                {names.length > 0 && (
-                                  <p className="text-[10px] text-muted-foreground leading-tight" title={names.join(", ")}>
-                                    {names.slice(0, 2).join(", ")}{names.length > 2 ? ` +${names.length - 2}` : ""}
-                                  </p>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                        {tracking.lastUpdateAt && (
-                          <p className="text-xs text-muted-foreground">
-                            Update terakhir:{tracking.lastUpdateByName ? ` ${tracking.lastUpdateByName} ·` : ""} {formatDateTime(tracking.lastUpdateAt)}
-                          </p>
-                        )}
+                    <section className="space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="text-lg font-semibold">Monitoring Perjalanan</h3>
                         {tracking.issues > 0 && (
-                          <div className="flex items-center gap-2 rounded-lg border border-red-200 dark:border-red-800/30 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-sm text-red-700 dark:text-red-400">
-                            <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-                            <span>{tracking.issues} anggota melaporkan kendala.</span>
-                          </div>
+                          <span className="flex items-center gap-1 rounded-full border border-red-200/60 bg-red-50/60 px-2.5 py-0.5 text-sm font-semibold text-red-700 dark:border-red-800/30 dark:bg-red-900/20 dark:text-red-400">
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            {tracking.issues} kendala
+                          </span>
                         )}
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        {stepsData.map((step) => {
+                          const Icon = step.icon;
+                          const allDone = step.count >= tracking.total;
+                          const partDone = step.count > 0 && !allDone;
+                          return (
+                            <div key={step.key} className={`rounded-xl border p-4 space-y-2 ${allDone ? `${step.bg} ${step.border}` : partDone ? "border-border/60 bg-muted/10" : "border-border/40 bg-muted/5 opacity-60"}`}>
+                              <div className="flex items-center gap-2">
+                                <Icon className={`h-5 w-5 flex-shrink-0 ${step.count > 0 ? step.color : "text-muted-foreground/40"}`} />
+                                <span className="text-sm font-semibold text-foreground">{step.label}</span>
+                                <span className={`ml-auto text-lg font-bold tabular-nums ${step.count > 0 ? step.color : "text-muted-foreground/40"}`}>
+                                  {step.count}<span className="text-xs font-normal text-muted-foreground">/{tracking.total}</span>
+                                </span>
+                              </div>
+                              {step.doneNames.length > 0 && (
+                                <div>
+                                  <p className="text-xs font-semibold uppercase text-muted-foreground/60 mb-0.5">Sudah</p>
+                                  <p className="text-sm text-foreground leading-snug">
+                                    {step.doneNames.slice(0, 3).join(", ")}{step.doneNames.length > 3 && ` +${step.doneNames.length - 3}`}
+                                  </p>
+                                </div>
+                              )}
+                              {step.notDoneNames.length > 0 && step.count > 0 && (
+                                <div>
+                                  <p className="text-xs font-semibold uppercase text-muted-foreground/60 mb-0.5">Belum</p>
+                                  <p className="text-sm text-muted-foreground leading-snug">
+                                    {step.notDoneNames.slice(0, 2).join(", ")}{step.notDoneNames.length > 2 && ` +${step.notDoneNames.length - 2}`}
+                                  </p>
+                                </div>
+                              )}
+                              {step.lastAt && (
+                                <p className="text-xs text-muted-foreground/70">Update: {formatDateTime(step.lastAt)}</p>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </section>
                   );
@@ -3863,68 +3982,183 @@ export function ManagementDinasClient() {
                   </div>
                 </section>
 
+                {/* ── Detail Anggota ── */}
+                {activeMembers.length > 0 && (
+                  <section className="space-y-3">
+                    <h3 className="text-lg font-semibold">Detail Anggota</h3>
+                    <div className="overflow-x-auto rounded-lg border border-border">
+                      <table className="w-full text-sm border-collapse">
+                        <thead>
+                          <tr className="border-b border-border bg-muted/40">
+                            <th className="text-left py-2.5 px-3 font-medium text-muted-foreground">Nama</th>
+                            <th className="text-left py-2.5 px-3 font-medium text-muted-foreground hidden sm:table-cell">Posisi / Divisi</th>
+                            <th className="text-center py-2.5 px-3 font-medium text-muted-foreground">Status</th>
+                            <th className="text-center py-2.5 px-3 font-medium text-muted-foreground">Berangkat</th>
+                            <th className="text-center py-2.5 px-3 font-medium text-muted-foreground hidden md:table-cell">Sampai</th>
+                            <th className="text-center py-2.5 px-3 font-medium text-muted-foreground hidden lg:table-cell">Selesai</th>
+                            <th className="text-center py-2.5 px-3 font-medium text-muted-foreground">Kembali</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {activeMembers.map((m) => {
+                            const tripStatusLabels: Record<string, { label: string; color: string }> = {
+                              ready: { label: "Siap", color: "text-teal-600 dark:text-teal-400" },
+                              departed: { label: "Berangkat", color: "text-blue-600 dark:text-blue-400" },
+                              arrived: { label: "Sampai Lokasi", color: "text-indigo-600 dark:text-indigo-400" },
+                              activity_done: { label: "Kegiatan Selesai", color: "text-purple-600 dark:text-purple-400" },
+                              returned: { label: "Sudah Kembali", color: "text-green-600 dark:text-green-400" },
+                              issue_reported: { label: "Ada Kendala", color: "text-red-600 dark:text-red-400" },
+                            };
+                            const { label, color } = tripStatusLabels[m.memberTripStatus ?? ""] ?? { label: m.memberTripStatus ?? "–", color: "text-muted-foreground" };
+                            return (
+                              <tr key={m.id} className="border-b border-border/30 hover:bg-muted/20">
+                                <td className="py-3 px-3">
+                                  <p className="font-medium">{m.employeeName}</p>
+                                </td>
+                                <td className="py-3 px-3 hidden sm:table-cell text-muted-foreground">
+                                  <p>{m.employeePosition ?? "–"}</p>
+                                  {m.divisionName && <p className="text-xs">{m.divisionName}</p>}
+                                </td>
+                                <td className="py-3 px-3 text-center">
+                                  <span className={`font-semibold ${color}`}>{label}</span>
+                                  {m.memberTripStatus === "issue_reported" && m.issueCategory && (
+                                    <p className="text-xs text-red-500 mt-0.5">{m.issueCategory}</p>
+                                  )}
+                                </td>
+                                <td className="py-3 px-3 text-center text-muted-foreground text-sm">
+                                  {m.departedAt ? formatDateTime(m.departedAt) : "–"}
+                                </td>
+                                <td className="py-3 px-3 text-center text-muted-foreground text-sm hidden md:table-cell">
+                                  {m.arrivedAt ? formatDateTime(m.arrivedAt) : "–"}
+                                </td>
+                                <td className="py-3 px-3 text-center text-muted-foreground text-sm hidden lg:table-cell">
+                                  {m.activityDoneAt ? formatDateTime(m.activityDoneAt) : "–"}
+                                </td>
+                                <td className="py-3 px-3 text-center text-muted-foreground text-sm">
+                                  {m.returnedAt ? formatDateTime(m.returnedAt) : "–"}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                )}
+
+                {/* ── Bukti Perjalanan ── */}
                 {(() => {
-                  const tripMembers = activeMembers.filter(
-                    (m) => m.staffConfirmationStatus === "confirmed_by_staff",
+                  const tracking = memberTrackingMap[activeMission.id ?? ""];
+                  if (!tracking || tracking.total === 0) return null;
+
+                  // Collect evidence from multiple sources (timeline + milestone_evidences)
+                  const allEvidence: MilestoneEvidence[] = collectEvidenceSources(
+                    activeMissionTimeline,
+                    activeMissionEvidences,
+                    activeMissionMembers,
+                    activeMission.id!,
                   );
-                  if (tripMembers.length === 0) return null;
-                  const departedCount = tripMembers.filter((m) =>
-                    ["departed", "arrived", "activity_done", "returned"].includes(
-                      m.memberTripStatus ?? "",
-                    ),
-                  ).length;
-                  const arrivedCount = tripMembers.filter((m) =>
-                    ["arrived", "activity_done", "returned"].includes(
-                      m.memberTripStatus ?? "",
-                    ),
-                  ).length;
-                  const returnedCount = tripMembers.filter(
-                    (m) => m.memberTripStatus === "returned",
-                  ).length;
-                  const issueCount = tripMembers.filter(
-                    (m) => m.memberTripStatus === "issue_reported",
-                  ).length;
-                  const hasAnyUpdate = tripMembers.some((m) => m.memberTripStatus);
-                  if (!hasAnyUpdate) return null;
-                  return (
-                    <section className="space-y-4">
-                      <SectionHeader
-                        icon={Activity}
-                        title="Tracking Perjalanan"
-                        description="Progress perjalanan peserta yang sudah konfirmasi."
-                      />
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <div className="rounded-lg border border-border p-3 text-center">
-                          <p className="text-2xl font-bold text-primary">{departedCount}/{tripMembers.length}</p>
-                          <p className="text-xs text-muted-foreground mt-1">Sudah berangkat</p>
+
+                  const milestoneOrder = ["departed", "arrived", "activity_done", "returned"] as const;
+                  const evidenceTypeLabel: Record<string, string> = {
+                    departed: "Bukti Keberangkatan", arrived: "Bukti Tiba di Lokasi",
+                    activity_done: "Bukti Kegiatan Selesai", returned: "Bukti Kepulangan",
+                  };
+                  const milestoneIcon: Record<string, React.ElementType> = {
+                    departed: Navigation, arrived: MapPin, activity_done: CheckSquare, returned: Home,
+                  };
+                  const milestoneColor: Record<string, string> = {
+                    departed: "text-blue-600 dark:text-blue-400", arrived: "text-indigo-600 dark:text-indigo-400",
+                    activity_done: "text-purple-600 dark:text-purple-400", returned: "text-green-600 dark:text-green-400",
+                  };
+                  function mkTrustBadge(ev: MilestoneEvidence) {
+                    if (ev.locationTrustLevel === "high") return <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700 dark:bg-green-900/30 dark:text-green-400">GPS Valid</span>;
+                    if (ev.locationTrustLevel === "medium") return <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">GPS Lemah</span>;
+                    if (ev.locationStatus === "manual") return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800/60 dark:text-slate-400">Manual</span>;
+                    if (ev.locationTrustLevel === "low") return <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-900/30 dark:text-red-400">Akurasi Rendah</span>;
+                    return null;
+                  }
+                  function EvidenceCard({ ev }: { ev: MilestoneEvidence }) {
+                    const photos = (ev.photos ?? []).slice(0, 3);
+                    const isExpired = photos[0]?.expiresAt && toDate(photos[0].expiresAt) && (toDate(photos[0].expiresAt) as Date) < new Date();
+                    return (
+                      <div className="rounded-xl border border-border/60 bg-muted/10 p-4 space-y-3">
+                        <div className="flex flex-wrap items-start gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-semibold text-foreground">Dikonfirmasi oleh {ev.confirmedByName}</p>
+                              {mkTrustBadge(ev)}
+                            </div>
+                            <p className="text-sm text-muted-foreground mt-0.5">
+                              Untuk: {(ev.targetMemberNames ?? []).join(", ")} · {formatDateTime(ev.createdAt)}
+                            </p>
+                          </div>
                         </div>
-                        <div className="rounded-lg border border-border p-3 text-center">
-                          <p className="text-2xl font-bold text-primary">{arrivedCount}/{tripMembers.length}</p>
-                          <p className="text-xs text-muted-foreground mt-1">Sampai lokasi</p>
-                        </div>
-                        <div className="rounded-lg border border-border p-3 text-center">
-                          <p className="text-2xl font-bold text-primary">{returnedCount}/{tripMembers.length}</p>
-                          <p className="text-xs text-muted-foreground mt-1">Sudah kembali</p>
-                        </div>
-                        <div className={`rounded-lg border p-3 text-center ${issueCount > 0 ? "border-amber-500/40 bg-amber-500/5" : "border-border"}`}>
-                          <p className={`text-2xl font-bold ${issueCount > 0 ? "text-amber-600" : "text-muted-foreground"}`}>{issueCount}</p>
-                          <p className="text-xs text-muted-foreground mt-1">Kendala</p>
+                        {photos.length > 0 && (
+                          isExpired ? (
+                            <p className="text-sm text-muted-foreground italic">Foto bukti sudah kedaluwarsa, metadata tetap tersimpan.</p>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              {photos.map((photo, idx) =>
+                                photo.photoUrl ? (
+                                  <a key={idx} href={photo.photoUrl} target="_blank" rel="noreferrer"
+                                    className="group relative h-24 w-24 overflow-hidden rounded-xl border border-border/60 hover:border-primary/60 transition-colors flex-shrink-0">
+                                    <img src={photo.photoUrl} alt={`bukti ${idx + 1}`} className="h-full w-full object-cover" />
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/25 transition-colors">
+                                      <ExternalLink className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    </div>
+                                  </a>
+                                ) : null
+                              )}
+                              {(ev.photos?.length ?? 0) > 3 && (
+                                <div className="h-24 w-24 rounded-xl border border-border/60 bg-muted/40 flex items-center justify-center flex-shrink-0">
+                                  <span className="text-sm font-medium text-muted-foreground">+{(ev.photos?.length ?? 0) - 3}</span>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        )}
+                        <div className="space-y-1">
+                          {ev.addressText && <p className="text-sm text-foreground leading-snug">{ev.addressText}</p>}
+                          {ev.manualLocationNote && <p className="text-sm text-muted-foreground">Catatan: {ev.manualLocationNote}</p>}
+                          {ev.latitude != null && (
+                            <div className="flex items-center gap-3 flex-wrap">
+                              <p className="text-xs font-mono text-muted-foreground">
+                                {(ev.latitude as number).toFixed(6)}, {(ev.longitude as number ?? 0).toFixed(6)}
+                                {ev.locationAccuracy != null && ` · ±${Math.round(ev.locationAccuracy as number)}m`}
+                              </p>
+                              <a href={`https://www.google.com/maps?q=${ev.latitude},${ev.longitude}`} target="_blank" rel="noreferrer"
+                                className="inline-flex items-center gap-1 text-sm font-medium text-teal-600 hover:underline dark:text-teal-400">
+                                <MapPin className="h-3.5 w-3.5" />
+                                Buka Maps
+                              </a>
+                            </div>
+                          )}
                         </div>
                       </div>
-                      {issueCount > 0 && (
-                        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-1">
-                          {tripMembers
-                            .filter((m) => m.memberTripStatus === "issue_reported")
-                            .map((m) => (
-                              <div key={m.id} className="text-sm">
-                                <span className="font-medium">{m.employeeName}</span>
-                                {(m as any).issueNote && (
-                                  <span className="text-muted-foreground">: {(m as any).issueNote}</span>
-                                )}
+                    );
+                  }
+
+                  return (
+                    <section id="bukti-perjalanan" className="space-y-4 scroll-mt-4">
+                      <h3 className="text-lg font-semibold">Bukti Perjalanan</h3>
+                      <div className="space-y-5">
+                        {milestoneOrder.map((key) => {
+                          const Icon = milestoneIcon[key];
+                          const items = allEvidence.filter((e) => e.milestoneType === key);
+                          return (
+                            <div key={key} className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <Icon className={`h-5 w-5 ${milestoneColor[key]}`} />
+                                <p className="text-base font-semibold">{evidenceTypeLabel[key]}</p>
                               </div>
-                            ))}
-                        </div>
-                      )}
+                              {items.length === 0 ? (
+                                <p className="text-sm text-muted-foreground pl-7">Belum ada bukti untuk milestone ini.</p>
+                              ) : items.map((ev) => <EvidenceCard key={ev.id} ev={ev} />)}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </section>
                   );
                 })()}
@@ -3984,7 +4218,24 @@ export function ManagementDinasClient() {
                         message: e.message ?? "",
                         category: inferTimelineCategory(e),
                         byName: e.byName ?? null,
+                        byUid: e.byUid ?? null,
                         createdAt: e.createdAt,
+                        // Evidence metadata embedded in timeline
+                        trustLevel: e.trustLevel ?? null,
+                        evidenceId: e.evidenceId ?? null,
+                        milestoneType: e.milestoneType ?? null,
+                        confirmedByName: e.confirmedByName ?? null,
+                        confirmedByUid: e.confirmedByUid ?? null,
+                        targetMemberNames: e.targetMemberNames ?? null,
+                        targetMemberUids: e.targetMemberUids ?? null,
+                        evidenceLat: e.evidenceLat ?? null,
+                        evidenceLng: e.evidenceLng ?? null,
+                        evidenceAccuracy: e.evidenceAccuracy ?? null,
+                        evidenceAddress: e.evidenceAddress ?? null,
+                        evidenceLocationStatus: e.evidenceLocationStatus ?? null,
+                        evidenceLocationTrust: e.evidenceLocationTrust ?? null,
+                        evidenceManualNote: e.evidenceManualNote ?? null,
+                        evidencePhotos: e.evidencePhotos ?? null,
                       })),
                       ...staffChangeEntries,
                     ].sort((a, b) => {
@@ -4006,48 +4257,69 @@ export function ManagementDinasClient() {
                     }
 
                     const borderColors: Record<string, string> = {
-                      tracking: "border-l-blue-500",
-                      approval: "border-l-green-500",
-                      changes: "border-l-purple-500",
-                      issues: "border-l-amber-500",
-                      system: "border-l-border",
-                    };
-                    const catLabels: Record<string, string> = {
-                      tracking: "Perjalanan",
-                      approval: "Approval",
-                      changes: "Perubahan",
-                      issues: "Kendala",
-                      system: "Sistem",
+                      tracking: "border-l-blue-500", approval: "border-l-green-500",
+                      changes: "border-l-purple-500", issues: "border-l-amber-500", system: "border-l-border",
                     };
                     const catColors: Record<string, string> = {
-                      tracking: "text-blue-500",
-                      approval: "text-green-600",
-                      changes: "text-purple-500",
-                      issues: "text-amber-600",
-                      system: "text-muted-foreground",
+                      tracking: "text-blue-500", approval: "text-green-600",
+                      changes: "text-purple-500", issues: "text-amber-600", system: "text-muted-foreground",
+                    };
+                    const catLabels: Record<string, string> = {
+                      tracking: "Perjalanan", approval: "Approval",
+                      changes: "Perubahan", issues: "Kendala", system: "Sistem",
                     };
 
+                    function summariseTracking(msg: string): { title: string; sub: string } {
+                      const lower = msg.toLowerCase();
+                      let title = msg;
+                      if (lower.includes("keberangkatan") || lower.includes("berangkat")) title = "Konfirmasi Keberangkatan";
+                      else if (lower.includes("tiba di lokasi") || lower.includes("sampai lokasi")) title = "Konfirmasi Tiba di Lokasi";
+                      else if (lower.includes("kegiatan selesai")) title = "Konfirmasi Kegiatan Selesai";
+                      else if (lower.includes("kembali")) title = "Konfirmasi Kembali";
+                      const forMatch = msg.match(/untuk:\s*([^.]+?)\s+pada\s/i);
+                      const names = forMatch ? forMatch[1].trim() : "";
+                      const dateMatch = msg.match(/pada\s+(.+?)\s+pukul\s+(.+?)\./i);
+                      const when = dateMatch ? `${dateMatch[1]}, ${dateMatch[2]}` : "";
+                      return { title, sub: [names, when].filter(Boolean).join(" · ") };
+                    }
+
                     return (
-                      <div className="space-y-2">
-                        {filtered.map((entry) => (
-                          <div
-                            key={entry.id}
-                            className={`rounded-lg border-l-4 border border-border/50 bg-card px-3 py-2.5 ${borderColors[entry.category] ?? "border-l-border"}`}
-                          >
-                            <p className="text-sm leading-relaxed">{entry.message}</p>
-                            <div className="mt-1 flex items-center justify-between gap-2 flex-wrap">
-                              <span className="text-xs text-muted-foreground">
-                                {entry.byName ? `${entry.byName} · ` : ""}
-                                {formatDate((entry.createdAt as any)?.toDate?.() ?? entry.createdAt)}
-                              </span>
-                              {detailTimelineTab === "all" && (
-                                <span className={`text-[10px] font-semibold uppercase tracking-wide ${catColors[entry.category] ?? "text-muted-foreground"}`}>
-                                  {catLabels[entry.category] ?? "Sistem"}
+                      <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                        {filtered.map((entry) => {
+                          const isTracking = entry.category === "tracking";
+                          if (isTracking) {
+                            // Strip any evidence indicator text for clean timeline display
+                            const cleanMsg = (entry.message ?? "").replace(/\s*\[\d+\s*bukti\s*foto\]/gi, "").trim();
+                            const { title, sub } = summariseTracking(cleanMsg);
+                            return (
+                              <div key={entry.id} className={`rounded-lg border-l-4 border border-border/50 bg-card px-3 py-3 ${borderColors.tracking}`}>
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-semibold text-foreground leading-tight">{title}</p>
+                                    {sub && <p className="text-sm text-muted-foreground mt-0.5">{sub}</p>}
+                                  </div>
+                                  <span className="text-xs text-muted-foreground flex-shrink-0">{formatDateTime(entry.createdAt)}</span>
+                                </div>
+                              </div>
+                            );
+                          }
+                          return (
+                            <div key={entry.id} className={`rounded-lg border-l-4 border border-border/50 bg-card px-3 py-2.5 ${borderColors[entry.category] ?? "border-l-border"}`}>
+                              <p className="text-sm leading-relaxed">{entry.message}</p>
+                              <div className="mt-1 flex items-center justify-between gap-2 flex-wrap">
+                                <span className="text-sm text-muted-foreground">
+                                  {entry.byName ? `${entry.byName} · ` : ""}
+                                  {formatDateTime(entry.createdAt)}
                                 </span>
-                              )}
+                                {detailTimelineTab === "all" && (
+                                  <span className={`text-xs font-semibold uppercase tracking-wide ${catColors[entry.category] ?? "text-muted-foreground"}`}>
+                                    {catLabels[entry.category] ?? "Sistem"}
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     );
                   })()}

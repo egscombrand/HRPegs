@@ -281,6 +281,54 @@ export type BusinessTripMissionMember = {
   updatedAt?: any;
 };
 
+export type MilestoneType = "departed" | "arrived" | "activity_done" | "returned";
+export type MilestoneLocationStatus = "captured" | "unavailable" | "manual";
+export type MilestoneLocationTrustLevel = "high" | "medium" | "low";
+export type MilestoneEvidencePhotoType = "temporary_milestone_evidence" | "archive_report";
+
+export type MilestoneEvidencePhoto = {
+  photoUrl?: string | null;
+  photoPath?: string | null;
+  originalFileName?: string | null;
+  compressedSize?: number | null;
+  uploadedAt?: any;
+  expiresAt?: any;
+};
+
+export type MilestoneEvidence = {
+  id?: string;
+  missionId: string;
+  milestoneType: MilestoneType;
+  confirmedByUid: string;
+  confirmedByName: string;
+  targetMemberUids: string[];
+  targetMemberNames: string[];
+  createdAt?: any;
+  latitude?: number | null;
+  longitude?: number | null;
+  locationAccuracy?: number | null;
+  locationCapturedAt?: any;
+  locationStatus: MilestoneLocationStatus;
+  // Reverse-geocoded address fields
+  addressText?: string | null;
+  streetName?: string | null;
+  village?: string | null;
+  district?: string | null;
+  city?: string | null;
+  province?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
+  geocodeStatus?: "success" | "failed" | null;
+  locationTrustLevel?: MilestoneLocationTrustLevel | null;
+  gpsPermissionStatus?: string | null;
+  deviceTimestamp?: string | null;
+  userAgent?: string | null;
+  manualLocationNote?: string | null;
+  note?: string | null;
+  evidenceType?: string | null;
+  photos?: MilestoneEvidencePhoto[];
+};
+
 export type BusinessTripApprovalRequest = {
   id?: string;
   missionId: string;
