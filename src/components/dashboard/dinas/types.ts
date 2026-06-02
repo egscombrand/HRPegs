@@ -304,6 +304,7 @@ export type MilestoneEvidence = {
   targetMemberUids: string[];
   targetMemberNames: string[];
   createdAt?: any;
+  updatedAt?: any;
   latitude?: number | null;
   longitude?: number | null;
   locationAccuracy?: number | null;
@@ -327,6 +328,16 @@ export type MilestoneEvidence = {
   note?: string | null;
   evidenceType?: string | null;
   photos?: MilestoneEvidencePhoto[];
+  // Repair/Upload Ulang fields
+  repairStatus?: "requested" | "resolved" | null;
+  evidenceRepairRequested?: boolean;
+  repairRequestedByUid?: string | null;
+  repairRequestedByName?: string | null;
+  repairRequestedAt?: any;
+  repairReason?: string | null;
+  repairedByUid?: string | null;
+  repairedByName?: string | null;
+  repairedAt?: any;
 };
 
 export type BusinessTripApprovalRequest = {
