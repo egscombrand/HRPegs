@@ -69,6 +69,9 @@ import {
   CheckSquare,
   X,
   Users,
+  ExternalLink,
+  ZoomIn,
+  Eye,
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import {
@@ -795,6 +798,30 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
     loadRepairRequests(selectedMission.id, selectedMember.employeeUid, selectedMember.employeeName);
   }, [firestore, selectedMission?.id, selectedMember?.employeeUid, selectedMember?.employeeName]);
 
+  // Subscribe to all milestone_evidences for current mission
+  useEffect(() => {
+    if (!firestore || !selectedMission?.id) {
+      setMissionEvidences([]);
+      return;
+    }
+    const evidencesRef = collection(
+      firestore,
+      "business_trip_missions",
+      selectedMission.id,
+      "milestone_evidences",
+    );
+    const unsub = onSnapshot(
+      query(evidencesRef, orderBy("createdAt", "asc")),
+      (snap) => {
+        setMissionEvidences(
+          snap.docs.map((d) => ({ id: d.id, ...d.data() } as MilestoneEvidence)),
+        );
+      },
+      (err) => console.error("milestone_evidences snapshot error:", err),
+    );
+    return () => unsub();
+  }, [firestore, selectedMission?.id]);
+
   // Subscribe to final report subcollections when a mission is selected
   useEffect(() => {
     if (!firestore || !selectedMission?.id) {
@@ -915,6 +942,17 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
   const [repairUploadPhotos, setRepairUploadPhotos] = useState<{ file: File; preview: string }[]>([]);
   const [repairGps, setRepairGps] = useState<MilestoneGps>({ status: "idle" });
   const [repairManualLocation, setRepairManualLocation] = useState("");
+  // Uploaded photo previews after repair submit (driveFileId[])
+  const [lastRepairDriveIds, setLastRepairDriveIds] = useState<string[]>([]);
+
+  // All milestone evidences for current mission (for "Bukti yang Sudah Dikirim" section)
+  const [missionEvidences, setMissionEvidences] = useState<MilestoneEvidence[]>([]);
+  // Photo preview modal for evidence section
+  const [evidencePhotoModal, setEvidencePhotoModal] = useState<{
+    isOpen: boolean;
+    photos: Array<{ proxySrc: string | null }>;
+    activeIdx: number;
+  }>({ isOpen: false, photos: [], activeIdx: 0 });
 
   // Group milestone modal state
   type PendingMilestone = {
@@ -2297,7 +2335,7 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
       // Do NOT call syncMissionStatus here — staff cannot update the parent mission doc.
       // Mission status is derived on the fly from member tracking data.
 
-      toast({ title: "Status perjalanan diperbarui." });
+      toast({ title: "Bukti berhasil dikirim dan tersimpan." });
       setShowIssueInput(false);
       setIssueForm({ category: "", urgency: "", note: "", attachment: null });
       refreshStaffTasks();
@@ -2703,6 +2741,23 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
     if (!firestore || !userProfile) return;
     setIsSaving(true);
     try {
+      // Read old evidence first — needed for milestoneType fallback and data preservation
+      const evidenceRef = doc(firestore, "business_trip_missions", missionId, "milestone_evidences", evidenceId);
+      const oldEvidenceSnap = await getDoc(evidenceRef);
+      const oldEvidence = oldEvidenceSnap.data() as MilestoneEvidence | undefined;
+      console.log("REPAIR oldEvidence", oldEvidence);
+
+      // Validate milestoneType — fallback chain: param → activeRepairRequest → oldEvidence
+      let finalMilestoneType = milestoneType || activeRepairRequest?.milestoneType || oldEvidence?.milestoneType;
+      console.log("REPAIR final milestoneType", finalMilestoneType);
+      if (!finalMilestoneType) {
+        return toast({
+          variant: "destructive",
+          title: "Tipe milestone tidak ditemukan",
+          description: "Dokumen evidence tidak memiliki tipe milestone yang valid. Hubungi HRD.",
+        });
+      }
+
       const photosToUpload = evidenceOpts.photos ?? [];
 
       // Validate: photo wajib ada untuk repair
@@ -2721,7 +2776,7 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
       for (const photoFile of photosToUpload) {
         try {
           const compressed = await compressMilestoneImage(photoFile);
-          const storagePath = `milestone_evidence/${missionId}/${userProfile.uid}/${milestoneType}_repair_${Date.now()}_${uploadedPhotos.length}.jpg`;
+          const storagePath = `milestone_evidence/${missionId}/${userProfile.uid}/${finalMilestoneType}_repair_${Date.now()}_${uploadedPhotos.length}.jpg`;
           const result = await uploadFile(compressed, storagePath, userProfile.uid, {
             compress: false,
             category: "business_trip_spd",
@@ -2759,20 +2814,25 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
         });
       }
 
-      // Read old evidence to preserve targetMembers
-      const evidenceRef = doc(firestore, "business_trip_missions", missionId, "milestone_evidences", evidenceId);
-      const oldEvidenceSnap = await getDoc(evidenceRef);
-      const oldEvidence = oldEvidenceSnap.data() as MilestoneEvidence | undefined;
-
-      console.log("repair evidence id", evidenceId);
-      console.log("old evidence", oldEvidence);
-      console.log("uploaded repair photos", uploadedPhotos);
+      console.log("REQUEST REPAIR evidence source", { oldEvidence });
+      console.log("REQUEST REPAIR final evidenceId", evidenceId);
+      console.log("REPAIR uploadedPhotos", uploadedPhotos);
 
       // Update existing evidence document (merge mode)
       const updatePayload = {
-        // Preserve target members from old evidence
-        targetMemberUids: oldEvidence?.targetMemberUids || [],
-        targetMemberNames: oldEvidence?.targetMemberNames || [],
+        // Mission and milestone info (required)
+        missionId: missionId,
+        milestoneType: finalMilestoneType,
+
+        // Preserve original confirmedBy info and target members (fallback to current staff if not set)
+        confirmedByUid: oldEvidence?.confirmedByUid || userProfile?.uid || null,
+        confirmedByName: oldEvidence?.confirmedByName || userProfile?.fullName || userProfile?.email || null,
+        targetMemberUids: (oldEvidence?.targetMemberUids ?? []).length > 0
+          ? oldEvidence!.targetMemberUids
+          : targetMembers.map((m) => m.employeeUid),
+        targetMemberNames: (oldEvidence?.targetMemberNames ?? []).length > 0
+          ? oldEvidence!.targetMemberNames
+          : targetMembers.map((m) => m.employeeName),
 
         // Update location fields
         latitude: evidenceOpts.latitude ?? null,
@@ -2781,7 +2841,7 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
         locationCapturedAt: evidenceOpts.locationCapturedAt
           ? Timestamp.fromDate(evidenceOpts.locationCapturedAt)
           : null,
-        locationStatus: evidenceOpts.locationStatus,
+        locationStatus: evidenceOpts.locationStatus || oldEvidence?.locationStatus || "captured",
         locationTrustLevel: evidenceOpts.locationTrustLevel ?? null,
         addressText: evidenceOpts.addressText || null,
         streetName: evidenceOpts.streetName || null,
@@ -2804,14 +2864,18 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
         repairedByUid: userProfile?.uid || null,
         repairedByName: userProfile?.fullName || userProfile?.email || null,
         repairedAt: serverTimestamp(),
+
+        // Preserve creation timestamp, update modification timestamp
+        createdAt: oldEvidence?.createdAt || serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
 
-      console.log("repair payload", updatePayload);
+      console.log("REPAIR updatePayload", updatePayload);
 
       await setDoc(evidenceRef, updatePayload, { merge: true });
 
       console.log("repair success", evidenceId);
+      console.log("✅ REPAIR COMPLETE for evidence", evidenceId);
       console.log("✅ Milestone evidence repaired:", { evidenceId, photosCount: uploadedPhotos.length });
 
       const getMilestoneLabel = (type: string | undefined): string => {
@@ -2831,7 +2895,7 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
         };
         return mapping[type.toLowerCase()] || "Bukti Perjalanan";
       };
-      const milestoneLabel = getMilestoneLabel(milestoneType);
+      const milestoneLabel = getMilestoneLabel(finalMilestoneType);
 
       await appendTimelineEntry(
         missionId,
@@ -2839,9 +2903,13 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
         "system",
       );
 
-      toast({
-        title: "Bukti milestone berhasil di-update",
-      });
+      // Store driveFileIds for post-upload preview
+      const driveIds = uploadedPhotos
+        .map((p) => p.driveFileId ?? (p.photoPath && !p.photoPath.includes("/") ? p.photoPath : null))
+        .filter(Boolean) as string[];
+      setLastRepairDriveIds(driveIds);
+
+      toast({ title: "Bukti berhasil dikirim dan tersimpan." });
 
       // Reload mission detail
       await loadMissionDetail(missionId);
@@ -5060,6 +5128,192 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                 })()
               : null}
 
+            {/* ── Bukti yang Sudah Dikirim ─────────────────────────── */}
+            {mode === "staff" && selectedMission && missionEvidences.length > 0 && (() => {
+              const MILESTONE_ORDER = ["departed", "arrived", "activity_done", "returned"] as const;
+              const MILESTONE_LABELS: Record<string, string> = {
+                departed: "Bukti Keberangkatan",
+                arrived: "Bukti Tiba di Lokasi",
+                activity_done: "Bukti Kegiatan Selesai",
+                returned: "Bukti Kepulangan",
+              };
+
+              // Photo helper functions
+              function getEvDriveId(photo: any): string | null {
+                return photo?.driveFileId ?? photo?.fileId ?? photo?.id
+                  ?? (photo?.photoPath && !photo.photoPath.includes("/") ? photo.photoPath : null)
+                  ?? null;
+              }
+              function getEvPhotoSrc(photo: any): string | null {
+                const id = getEvDriveId(photo);
+                if (id) return `/api/storage/google-drive-preview?fileId=${id}`;
+                return photo?.photoUrl ?? null;
+              }
+
+              // Normalize photos from evidence
+              function getEvPhotos(ev: MilestoneEvidence): Array<{ proxySrc: string | null }> {
+                const raw: any[] = ev.photos ?? [];
+                return raw
+                  .filter((p: any) => p && (p.driveFileId || p.fileId || p.id || p.photoPath || p.photoUrl))
+                  .map((p: any) => ({ proxySrc: getEvPhotoSrc(p) }));
+              }
+
+              const evidenceByMilestone: Record<string, MilestoneEvidence[]> = {};
+              for (const ev of missionEvidences) {
+                if (!ev.milestoneType) continue;
+                if (!evidenceByMilestone[ev.milestoneType]) evidenceByMilestone[ev.milestoneType] = [];
+                evidenceByMilestone[ev.milestoneType].push(ev);
+              }
+
+              // Only show milestones that have at least one evidence
+              const usedMilestones = MILESTONE_ORDER.filter((m) => (evidenceByMilestone[m]?.length ?? 0) > 0);
+              if (usedMilestones.length === 0) return null;
+
+              return (
+                <Card className="border-border/60">
+                  <div className="flex items-center gap-3 border-b border-border px-5 py-4">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-500/10">
+                      <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                      <p className="font-semibold leading-tight">Bukti yang Sudah Dikirim</p>
+                      <p className="text-xs text-muted-foreground">Foto dan lokasi yang tercatat di sistem</p>
+                    </div>
+                  </div>
+                  <CardContent className="px-5 py-4 space-y-5">
+                    {usedMilestones.map((milestoneKey) => {
+                      const evList = evidenceByMilestone[milestoneKey] ?? [];
+                      // Prioritize: resolved > with photos > all
+                      const resolved = evList.filter((e) => e.repairStatus === "resolved");
+                      const withPhotos = evList.filter((e) => (e.photos?.length ?? 0) > 0);
+                      const items = resolved.length > 0 ? resolved : withPhotos.length > 0 ? withPhotos : evList;
+
+                      return (
+                        <div key={milestoneKey} className="space-y-2">
+                          <p className="text-sm font-semibold text-foreground">{MILESTONE_LABELS[milestoneKey]}</p>
+                          {items.map((ev) => {
+                            const photos = getEvPhotos(ev);
+                            const hasPhotos = photos.length > 0;
+                            const hasAddress = !!ev.addressText;
+                            const hasCoords = ev.latitude != null && ev.longitude != null;
+                            const hasLocation = hasAddress || hasCoords || !!ev.manualLocationNote;
+                            const displayMembers = (ev.targetMemberNames ?? []).filter(Boolean).join(", ");
+
+                            const repairBadge = () => {
+                              if (ev.repairStatus === "requested") return (
+                                <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">Perlu Upload Ulang</span>
+                              );
+                              if (ev.repairStatus === "resolved") return (
+                                <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700 dark:bg-green-900/30 dark:text-green-400">Sudah Diperbaiki</span>
+                              );
+                              if (hasPhotos && hasLocation) return (
+                                <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">Lengkap</span>
+                              );
+                              return null;
+                            };
+
+                            return (
+                              <div key={ev.id} className="rounded-xl border border-border/60 bg-card p-3">
+                                <div className="flex gap-3">
+                                  {/* Left: thumbnail */}
+                                  {hasPhotos && (
+                                    <div className="flex-shrink-0 flex flex-col gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => setEvidencePhotoModal({ isOpen: true, photos, activeIdx: 0 })}
+                                        className="relative w-[90px] h-[90px] rounded-lg overflow-hidden border border-border/60 bg-muted/40 group flex-shrink-0"
+                                      >
+                                        <img
+                                          src={photos[0].proxySrc ?? ""}
+                                          alt="bukti"
+                                          className="w-full h-full object-cover"
+                                        />
+                                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/35 rounded-lg">
+                                          <ZoomIn className="h-5 w-5 text-white" />
+                                        </div>
+                                      </button>
+                                      {photos.length > 1 && (
+                                        <p className="text-[10px] text-center text-muted-foreground">{photos.length} foto</p>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Right: info */}
+                                  <div className="flex-1 min-w-0 space-y-1.5">
+                                    <div className="flex flex-wrap gap-1.5">{repairBadge()}</div>
+                                    {ev.confirmedByName && (
+                                      <p className="text-xs font-semibold text-foreground truncate">{ev.confirmedByName}</p>
+                                    )}
+                                    {displayMembers && (
+                                      <p className="text-xs text-muted-foreground">Untuk: <span className="font-medium text-foreground/80">{displayMembers}</span></p>
+                                    )}
+                                    <p className="text-xs text-muted-foreground">{formatDateTime(ev.createdAt)}</p>
+                                    {ev.addressText && (
+                                      <div className="flex items-start gap-1">
+                                        <MapPin className="h-3 w-3 text-muted-foreground flex-shrink-0 mt-0.5" />
+                                        <p className="text-xs text-foreground/80 leading-snug">{ev.addressText}</p>
+                                      </div>
+                                    )}
+                                    {ev.manualLocationNote && (
+                                      <p className="text-xs text-muted-foreground italic">Catatan: {ev.manualLocationNote}</p>
+                                    )}
+                                    {ev.latitude != null && (
+                                      <p className="text-[11px] font-mono text-muted-foreground">
+                                        {(ev.latitude as number).toFixed(5)}, {(ev.longitude as number ?? 0).toFixed(5)}
+                                        {ev.locationAccuracy != null && <> · ±{Math.round(ev.locationAccuracy as number)}m</>}
+                                      </p>
+                                    )}
+                                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                                      {hasPhotos && (
+                                        <button
+                                          type="button"
+                                          onClick={() => setEvidencePhotoModal({ isOpen: true, photos, activeIdx: 0 })}
+                                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md border border-border bg-muted/50 hover:bg-muted transition-colors"
+                                        >
+                                          <Eye className="h-3.5 w-3.5" />
+                                          Lihat Foto{photos.length > 1 ? ` (${photos.length})` : ""}
+                                        </button>
+                                      )}
+                                      {hasCoords && (
+                                        <a
+                                          href={`https://www.google.com/maps?q=${ev.latitude},${ev.longitude}`}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md border border-teal-300 bg-teal-50 text-teal-700 hover:bg-teal-100 dark:border-teal-700/40 dark:bg-teal-900/20 dark:text-teal-400 transition-colors"
+                                        >
+                                          <MapPin className="h-3.5 w-3.5" />
+                                          Buka Maps
+                                        </a>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                                {/* Repair pending notice */}
+                                {ev.repairStatus === "requested" && (
+                                  <div className="mt-2 rounded-lg border border-amber-200/50 bg-amber-50/60 dark:border-amber-800/30 dark:bg-amber-900/10 p-2.5">
+                                    <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                                      HRD/Direktur meminta upload ulang bukti ini.
+                                    </p>
+                                    {ev.repairReason && (
+                                      <p className="text-xs text-amber-600 dark:text-amber-400/80 mt-0.5">Alasan: {ev.repairReason}</p>
+                                    )}
+                                  </div>
+                                )}
+                                {/* No photos/location */}
+                                {!hasPhotos && !hasLocation && (
+                                  <p className="mt-2 text-xs text-muted-foreground italic">Belum ada foto atau lokasi yang tercatat.</p>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              );
+            })()}
+
             {/* ── Repair Requests Panel ──────────────────────────── */}
             {mode === "staff" && repairRequests.length > 0 && selectedMember && (
               <Card className="border-2 border-amber-400/50 dark:border-amber-500/30 bg-amber-50/50 dark:bg-amber-900/10">
@@ -5439,6 +5693,36 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                     >
                       {isSaving ? "Mengupload..." : "Upload Bukti"}
                     </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* ── Post-Repair Preview (after successful upload) ────────────────────── */}
+            {mode === "staff" && !activeRepairRequest && lastRepairDriveIds.length > 0 && (
+              <Card className="border border-green-400/50 dark:border-green-600/30 bg-green-50/50 dark:bg-green-900/10">
+                <CardContent className="px-4 py-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-green-700 dark:text-green-400">
+                      ✅ Foto berhasil diupload
+                    </p>
+                    <button
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                      onClick={() => setLastRepairDriveIds([])}
+                    >
+                      Tutup
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {lastRepairDriveIds.map((driveId, idx) => (
+                      <div key={idx} className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg border border-border/60">
+                        <img
+                          src={`/api/storage/google-drive-preview?fileId=${driveId}`}
+                          alt={`foto ${idx + 1}`}
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                    ))}
                   </div>
                 </CardContent>
               </Card>
@@ -6531,6 +6815,92 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
           </div>
         </>
       ) : null}
+
+      {/* ── Evidence Photo Preview Modal ─────────────────────────────────── */}
+      {evidencePhotoModal.isOpen && evidencePhotoModal.photos.length > 0 && (
+        <div
+          className="fixed inset-0 z-[300] flex items-center justify-center bg-black/85 p-4"
+          onClick={() => setEvidencePhotoModal((p) => ({ ...p, isOpen: false }))}
+        >
+          <div
+            className="relative flex flex-col items-center gap-3 w-full max-w-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close */}
+            <button
+              type="button"
+              className="absolute -top-2 -right-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white/15 hover:bg-white/25 transition-colors"
+              onClick={() => setEvidencePhotoModal((p) => ({ ...p, isOpen: false }))}
+            >
+              <X className="h-4 w-4 text-white" />
+            </button>
+
+            {/* Main image */}
+            <div className="relative w-full bg-black rounded-xl overflow-hidden flex items-center justify-center min-h-[200px] max-h-[65vh]">
+              {evidencePhotoModal.photos[evidencePhotoModal.activeIdx]?.proxySrc ? (
+                <img
+                  key={evidencePhotoModal.activeIdx}
+                  src={evidencePhotoModal.photos[evidencePhotoModal.activeIdx].proxySrc!}
+                  alt={`Foto bukti ${evidencePhotoModal.activeIdx + 1}`}
+                  className="max-h-[65vh] max-w-full object-contain"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12 text-center px-4">
+                  <FileText className="h-10 w-10 text-white/40 mb-2" />
+                  <p className="text-white/50 text-sm">Preview foto belum tersedia</p>
+                </div>
+              )}
+            </div>
+
+            {/* Navigation (only if multiple photos) */}
+            {evidencePhotoModal.photos.length > 1 && (
+              <div className="flex items-center justify-between w-full px-1">
+                <button
+                  type="button"
+                  disabled={evidencePhotoModal.activeIdx === 0}
+                  onClick={() => setEvidencePhotoModal((p) => ({ ...p, activeIdx: p.activeIdx - 1 }))}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-white/20 bg-white/10 text-white hover:bg-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  ← Sebelumnya
+                </button>
+                <span className="text-xs text-white/60">
+                  {evidencePhotoModal.activeIdx + 1} / {evidencePhotoModal.photos.length}
+                </span>
+                <button
+                  type="button"
+                  disabled={evidencePhotoModal.activeIdx >= evidencePhotoModal.photos.length - 1}
+                  onClick={() => setEvidencePhotoModal((p) => ({ ...p, activeIdx: p.activeIdx + 1 }))}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-white/20 bg-white/10 text-white hover:bg-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  Berikutnya →
+                </button>
+              </div>
+            )}
+
+            {/* Thumbnail strip */}
+            {evidencePhotoModal.photos.length > 1 && (
+              <div className="flex gap-1.5 justify-center flex-wrap">
+                {evidencePhotoModal.photos.map((p, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setEvidencePhotoModal((prev) => ({ ...prev, activeIdx: idx }))}
+                    className={`w-10 h-10 rounded-md overflow-hidden border-2 transition-colors flex-shrink-0 ${idx === evidencePhotoModal.activeIdx ? "border-white" : "border-white/20 hover:border-white/50"}`}
+                  >
+                    {p.proxySrc ? (
+                      <img src={p.proxySrc} alt={`thumb ${idx + 1}`} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-white/10 flex items-center justify-center">
+                        <FileText className="h-4 w-4 text-white/40" />
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

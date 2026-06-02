@@ -58,6 +58,9 @@ import {
   ExternalLink,
   Filter,
   Upload,
+  Eye,
+  ZoomIn,
+  ImageOff,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import type { BusinessTripMission, BusinessTripMissionMember, FinalReport, MemberFinalReport, MemberNote, MilestoneEvidence } from "./types";
@@ -343,11 +346,12 @@ function normalizeEvidence(raw: any): MilestoneEvidence {
     photos = photoSource
       .filter((p: any) => p != null)
       .map((p: any) => {
-        // Handle different photo object formats
         if (typeof p === "string") {
           return {
             photoUrl: p,
             photoPath: null,
+            driveFileId: null,
+            storageProvider: null,
             originalFileName: null,
             compressedSize: null,
             uploadedAt: null,
@@ -355,8 +359,10 @@ function normalizeEvidence(raw: any): MilestoneEvidence {
           };
         }
         return {
-          photoUrl: p?.photoUrl ?? p?.url ?? (typeof p === "string" ? p : null),
+          photoUrl: p?.photoUrl ?? p?.url ?? null,
           photoPath: p?.photoPath ?? p?.path ?? null,
+          driveFileId: p?.driveFileId ?? p?.googleDriveFileId ?? p?.fileId ?? p?.id ?? null,
+          storageProvider: p?.storageProvider ?? null,
           originalFileName: p?.originalFileName ?? p?.name ?? p?.filename ?? null,
           compressedSize: p?.compressedSize ?? p?.size ?? null,
           uploadedAt: p?.uploadedAt ?? null,
@@ -367,16 +373,19 @@ function normalizeEvidence(raw: any): MilestoneEvidence {
     photos = [{
       photoUrl: photoSource,
       photoPath: null,
+      driveFileId: null,
+      storageProvider: null,
       originalFileName: null,
       compressedSize: null,
       uploadedAt: null,
       expiresAt: null,
     }];
   } else if (photoSource && typeof photoSource === "object") {
-    // Handle single photo object
     photos = [{
       photoUrl: photoSource.photoUrl ?? photoSource.url ?? null,
       photoPath: photoSource.photoPath ?? photoSource.path ?? null,
+      driveFileId: photoSource.driveFileId ?? photoSource.googleDriveFileId ?? photoSource.fileId ?? photoSource.id ?? null,
+      storageProvider: photoSource.storageProvider ?? null,
       originalFileName: photoSource.originalFileName ?? photoSource.name ?? null,
       compressedSize: photoSource.compressedSize ?? photoSource.size ?? null,
       uploadedAt: photoSource.uploadedAt ?? null,
@@ -446,95 +455,23 @@ function normalizeEvidence(raw: any): MilestoneEvidence {
   return normalized;
 }
 
-// Helper: Collect evidence from multiple sources (timeline + milestone_evidences + members)
+// Helper: Collect evidence — only from milestone_evidences collection (never from timeline)
 function collectEvidenceSources(
   detailTimeline: TimelineEntry[],
   detailEvidences: MilestoneEvidence[],
   detailMembers: BusinessTripMissionMember[],
   missionId: string,
 ): MilestoneEvidence[] {
-  // ─ Source 1: Built from timeline entries (ONLY if has substantive data)
-  const timelineEvidence: MilestoneEvidence[] = detailTimeline
-    .filter((e) => {
-      // Exclude repair request or upload ulang messages
-      const msg = (e.message ?? "").toLowerCase();
-      if (msg.includes("meminta upload ulang") || msg.includes("mengupload ulang bukti")) {
-        return false;
-      }
-
-      // Only include if has real evidence data
-      const hasPhotos = (e.evidencePhotos?.length ?? 0) > 0 ||
-                       (e.photos?.length ?? 0) > 0 ||
-                       (e.photoUrl ?? null) !== null;
-      const hasLocation = (e.evidenceLat ?? null) !== null ||
-                         (e.latitude ?? null) !== null ||
-                         (e.evidenceAddress ?? null) !== null;
-
-      if (!hasPhotos && !hasLocation) {
-        return false; // Skip timeline without photo/location
-      }
-
-      const cat = inferCategory(e);
-      const milestoneType = e.milestoneType ?? inferMilestoneTypeFromMsg(e.message);
-
-      return cat === "tracking" && milestoneType !== null;
-    })
-    .map((e) => normalizeEvidence({
-      id: e.evidenceId ?? e.id,
-      missionId,
-      milestoneType: e.milestoneType ?? inferMilestoneTypeFromMsg(e.message),
-      confirmedByUid: e.confirmedByUid ?? e.byUid,
-      confirmedByName: e.confirmedByName ?? e.byName,
-      targetMemberUids: e.targetMemberUids,
-      targetMemberNames: e.targetMemberNames,
-      createdAt: e.createdAt,
-      evidenceLat: e.evidenceLat,
-      evidenceLng: e.evidenceLng,
-      evidenceAccuracy: e.evidenceAccuracy,
-      evidenceAddress: e.evidenceAddress,
-      evidenceLocationStatus: e.evidenceLocationStatus,
-      evidenceLocationTrust: e.evidenceLocationTrust,
-      evidenceManualNote: e.evidenceManualNote,
-      evidencePhotos: e.evidencePhotos,
-      trustLevel: e.trustLevel,
-      message: e.message,
-    }));
-
-  // ─ Source 2: milestone_evidences from Firestore (normalize + prefer these)
-  const normalizedMilestoneEvidence = detailEvidences.map((e) => normalizeEvidence({ ...e, missionId }));
-
-  console.log("📸 collectEvidenceSources debug:", {
-    timelineEntriesTotal: detailTimeline.length,
-    timelineTrackingEntries: detailTimeline.filter((e) => inferCategory(e) === "tracking").length,
-    timelineEvidenceBuilt: timelineEvidence.length,
-    timelineEvidenceWithPhotos: timelineEvidence.filter((e) => (e.photos?.length ?? 0) > 0).length,
+  // Only use milestone_evidences from Firestore — timeline is never an evidence source
+  const normalized = detailEvidences.map((e) => normalizeEvidence({ ...e, missionId }));
+  // Only return records with a valid milestoneType
+  const valid = normalized.filter((e) => !!e.milestoneType);
+  console.log("📸 collectEvidenceSources:", {
     milestone_evidencesCount: detailEvidences.length,
-    milestone_evidencesWithPhotos: normalizedMilestoneEvidence.filter((e) => (e.photos?.length ?? 0) > 0).length,
+    validCount: valid.length,
+    withPhotos: valid.filter((e) => (e.photos?.length ?? 0) > 0).length,
   });
-
-  const evidenceColIds = new Set(normalizedMilestoneEvidence.map((e) => e.id));
-
-  // ─ Combine: prefer milestone_evidences, supplement with timeline evidence for fallback
-  const allEvidence: MilestoneEvidence[] = [
-    ...normalizedMilestoneEvidence,
-    ...timelineEvidence.filter((e) => !evidenceColIds.has(e.id!)),
-  ];
-
-  // Detailed logging for debugging
-  console.log("normalized evidence detail", JSON.stringify(allEvidence, null, 2));
-  allEvidence.forEach((ev, idx) => {
-    console.log(`Evidence ${idx}:`, {
-      id: ev.id,
-      milestoneType: ev.milestoneType,
-      confirmedBy: ev.confirmedByName,
-      photosCount: ev.photos?.length ?? 0,
-      hasAddress: !!ev.addressText,
-      hasCoordinates: ev.latitude != null,
-      accuracy: ev.locationAccuracy,
-    });
-  });
-
-  return allEvidence;
+  return valid;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -544,6 +481,7 @@ function collectEvidenceSources(
 export function HRDMonitoringClient() {
   const firestore = useFirestore();
   const { userProfile } = useAuth();
+  const { toast } = useToast();
 
   // ── Data state ───────────────────────────────────────────────────────────
   const [missions, setMissions] = useState<BusinessTripMission[]>([]);
@@ -580,6 +518,13 @@ export function HRDMonitoringClient() {
   }>({ isOpen: false, missionId: null, evidenceId: null, milestoneType: null });
   const [repairReason, setRepairReason] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+
+  // Photo preview modal
+  const [photoPreviewModal, setPhotoPreviewModal] = useState<{
+    isOpen: boolean;
+    photos: Array<{ proxySrc: string | null }>;
+    activeIdx: number;
+  }>({ isOpen: false, photos: [], activeIdx: 0 });
 
   // ── Subscriptions ─────────────────────────────────────────────────────────
 
@@ -1148,6 +1093,19 @@ export function HRDMonitoringClient() {
             selectedMission.id!,
           );
 
+          // Helper: resolve Google Drive photo via internal proxy (avoids cross-account login)
+          type PhotoItem = { driveFileId?: string | null; fileId?: string | null; id?: string | null; photoPath?: string | null; photoUrl?: string | null };
+          function resolveDriveId(photo: PhotoItem): string | null {
+            return photo.driveFileId ?? photo.fileId ?? photo.id
+              ?? (photo.photoPath && !photo.photoPath.includes("/") ? photo.photoPath : null)
+              ?? null;
+          }
+          function getPhotoSrc(photo: PhotoItem): string | null {
+            const driveId = resolveDriveId(photo);
+            if (driveId) return `/api/storage/google-drive-preview?fileId=${driveId}`;
+            return photo.photoUrl ?? null;
+          }
+
           const milestoneOrder = ["departed", "arrived", "activity_done", "returned"] as const;
           const evidenceTypeLabel: Record<string, string> = {
             departed: "Bukti Keberangkatan", arrived: "Bukti Tiba di Lokasi",
@@ -1168,171 +1126,165 @@ export function HRDMonitoringClient() {
             return null;
           }
           function EvidenceCard({ ev }: { ev: MilestoneEvidence }) {
-            const allPhotos = (ev.photos ?? []).filter((p) => p && (p.photoUrl || p.photoPath));
-            const photos = allPhotos.slice(0, 3);
+            const allPhotos = (ev.photos ?? []).filter((p) => p && (p.photoUrl || p.photoPath || p.driveFileId));
             const hasPhotos = allPhotos.length > 0;
-            const isExpired = hasPhotos && photos[0]?.expiresAt && toDate(photos[0].expiresAt) && (toDate(photos[0].expiresAt) as Date) < new Date();
+            const isExpired = hasPhotos && allPhotos[0]?.expiresAt && toDate(allPhotos[0].expiresAt) && (toDate(allPhotos[0].expiresAt) as Date) < new Date();
             const hasAddress = !!ev.addressText;
             const hasCoordinates = ev.latitude != null && ev.longitude != null;
             const hasLocation = hasAddress || hasCoordinates || !!ev.manualLocationNote;
-            const displayMembers = (ev.targetMemberNames ?? []).filter(Boolean).join(", ") || "–";
+            const displayMembers = (ev.targetMemberNames ?? []).filter(Boolean).join(", ");
 
-            // Debug: if evidence found but no photos/location, show warning
-            const missingPhotoLocation = !hasPhotos && !hasLocation;
-            if (missingPhotoLocation) {
-              console.warn("Evidence card render: found evidence but no photos/location", {
-                evidenceId: ev.id,
-                milestoneType: ev.milestoneType,
-                photosLength: ev.photos?.length,
-                addressText: ev.addressText,
-                latitude: ev.latitude,
+            const openPhotoModal = (idx: number) => {
+              setPhotoPreviewModal({
+                isOpen: true,
+                photos: allPhotos.map((p) => ({ proxySrc: getPhotoSrc(p) })),
+                activeIdx: idx,
               });
-            }
+            };
 
-            // Repair status badge
             const getRepairStatusBadge = () => {
               if (ev.repairStatus === "requested") {
-                return <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">Perlu Upload Ulang</Badge>;
+                return <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-[10px]">Perlu Upload Ulang</Badge>;
               } else if (ev.repairStatus === "resolved") {
-                return <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Sudah Diperbaiki</Badge>;
+                return <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-[10px]">Sudah Diperbaiki</Badge>;
               } else if (hasPhotos && hasLocation) {
-                return <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">Lengkap</Badge>;
+                return <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 text-[10px]">Lengkap</Badge>;
               }
               return null;
             };
 
             return (
-              <div className="rounded-xl border border-border/50 bg-muted/10 p-4 space-y-3">
-                {/* Header: Dikonfirmasi oleh + Trust badge + Repair status badge + Tanggal */}
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-semibold text-foreground">{ev.confirmedByName}</p>
+              <div className="rounded-xl border border-border/60 bg-card p-3">
+                <div className="flex gap-3">
+                  {/* Left: Photo area */}
+                  {hasPhotos && (
+                    <div className="flex-shrink-0 flex flex-col gap-1.5">
+                      {isExpired ? (
+                        <div className="w-[90px] h-[90px] rounded-lg border border-amber-200/60 bg-amber-50/60 dark:bg-amber-900/10 flex flex-col items-center justify-center text-center p-1">
+                          <FileText className="h-5 w-5 text-amber-500 mb-0.5" />
+                          <p className="text-[9px] text-amber-600 leading-tight">Kedaluwarsa</p>
+                        </div>
+                      ) : (
+                        <>
+                          <button type="button" onClick={() => openPhotoModal(0)}
+                            className="relative w-[110px] h-[110px] rounded-lg overflow-hidden border border-border/60 bg-muted/40 flex-shrink-0 group">
+                            {(() => {
+                              const src = getPhotoSrc(allPhotos[0]);
+                              const driveId = resolveDriveId(allPhotos[0]);
+                              return src ? (
+                                <img src={src} alt="bukti 1" className="w-full h-full object-cover" />
+                              ) : driveId === null ? (
+                                <div className="w-full h-full flex flex-col items-center justify-center text-center p-1">
+                                  <FileText className="h-5 w-5 text-muted-foreground mb-0.5" />
+                                  <span className="text-[9px] text-muted-foreground leading-tight">File ID tidak tersedia</span>
+                                </div>
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center">
+                                  <FileText className="h-8 w-8 text-muted-foreground" />
+                                </div>
+                              );
+                            })()}
+                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/35 rounded-lg">
+                              <ZoomIn className="h-5 w-5 text-white" />
+                            </div>
+                          </button>
+                          {allPhotos.length > 1 && (
+                            <div className="flex gap-1">
+                              {allPhotos.slice(1, 3).map((photo, idx) => {
+                                const src = getPhotoSrc(photo);
+                                return (
+                                  <button key={idx} type="button" onClick={() => openPhotoModal(idx + 1)}
+                                    className="relative w-[53px] h-[53px] rounded-md overflow-hidden border border-border/60 bg-muted/40 flex-shrink-0 hover:opacity-90 transition-opacity">
+                                    {src ? (
+                                      <img src={src} alt={`bukti ${idx + 2}`} className="w-full h-full object-cover" />
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center">
+                                        <FileText className="h-4 w-4 text-muted-foreground" />
+                                      </div>
+                                    )}
+                                  </button>
+                                );
+                              })}
+                              {allPhotos.length > 3 && (
+                                <button type="button" onClick={() => openPhotoModal(3)}
+                                  className="w-[53px] h-[53px] rounded-md border border-border/60 bg-muted/40 flex items-center justify-center flex-shrink-0 hover:bg-muted/60 transition-colors">
+                                  <span className="text-xs font-bold text-muted-foreground">+{allPhotos.length - 3}</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Right: Info */}
+                  <div className="flex-1 min-w-0 space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       {mkTrustBadge(ev)}
                       {getRepairStatusBadge()}
                     </div>
-                    <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                      <div>Untuk: <span className="text-foreground font-medium">{displayMembers}</span></div>
-                      <div>{formatDateTime(ev.createdAt)}</div>
+                    {ev.confirmedByName && <p className="text-sm font-semibold text-foreground truncate">{ev.confirmedByName}</p>}
+                    {displayMembers && (
+                      <p className="text-xs text-muted-foreground">Untuk: <span className="font-medium text-foreground/80">{displayMembers}</span></p>
+                    )}
+                    <p className="text-xs text-muted-foreground">{formatDateTime(ev.createdAt)}</p>
+                    {ev.addressText && (
+                      <div className="flex items-start gap-1">
+                        <MapPin className="h-3 w-3 text-muted-foreground flex-shrink-0 mt-0.5" />
+                        <p className="text-xs text-foreground/80 leading-snug">{ev.addressText}</p>
+                      </div>
+                    )}
+                    {ev.manualLocationNote && (
+                      <p className="text-xs text-muted-foreground italic">Catatan: {ev.manualLocationNote}</p>
+                    )}
+                    {ev.latitude != null && (
+                      <p className="text-[11px] font-mono text-muted-foreground">
+                        {(ev.latitude as number).toFixed(5)}, {(ev.longitude as number ?? 0).toFixed(5)}
+                        {ev.locationAccuracy != null && <> · ±{Math.round(ev.locationAccuracy as number)}m</>}
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                      {hasPhotos && !isExpired && (
+                        <button type="button" onClick={() => openPhotoModal(0)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md border border-border bg-muted/50 hover:bg-muted transition-colors">
+                          <Eye className="h-3.5 w-3.5" />
+                          Lihat Foto{allPhotos.length > 1 ? ` (${allPhotos.length})` : ""}
+                        </button>
+                      )}
+                      {ev.latitude != null && (
+                        <a href={`https://www.google.com/maps?q=${ev.latitude},${ev.longitude}`} target="_blank" rel="noreferrer"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md border border-teal-300 bg-teal-50 text-teal-700 hover:bg-teal-100 dark:border-teal-700/40 dark:bg-teal-900/20 dark:text-teal-400 transition-colors">
+                          <MapPin className="h-3.5 w-3.5" />
+                          Buka Maps
+                        </a>
+                      )}
                     </div>
                   </div>
                 </div>
 
-                {/* Photo thumbnails */}
-                {hasPhotos && (
-                  isExpired ? (
-                    <div className="rounded-lg bg-amber-50/80 dark:bg-amber-900/10 p-3 border border-amber-200/50 dark:border-amber-800/30">
-                      <p className="text-xs text-amber-700 dark:text-amber-400 italic">Foto bukti sudah kedaluwarsa, metadata tetap tersimpan.</p>
-                    </div>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {photos.map((photo, idx) =>
-                        photo?.photoUrl ? (
-                          <a key={idx} href={photo.photoUrl} target="_blank" rel="noreferrer"
-                            className="group relative h-24 w-24 overflow-hidden rounded-lg border border-border/60 hover:border-primary/60 transition-colors flex-shrink-0 bg-muted/40">
-                            <img src={photo.photoUrl} alt={`bukti ${idx + 1}`} className="h-full w-full object-cover" />
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-colors">
-                              <ExternalLink className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                            </div>
-                          </a>
-                        ) : null
-                      )}
-                      {allPhotos.length > 3 && (
-                        <div className="h-24 w-24 rounded-lg border border-border/60 bg-muted/40 flex items-center justify-center flex-shrink-0">
-                          <span className="text-xs font-semibold text-muted-foreground">+{allPhotos.length - 3}</span>
-                        </div>
-                      )}
-                    </div>
-                  )
-                )}
-
-                {/* Tombol Lihat Foto jika ada foto tapi tidak tampil (expired) */}
-                {hasPhotos && isExpired && (
-                  <button onClick={() => { /* open photo modal */ }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-700/40 dark:bg-amber-900/20 dark:text-amber-400 dark:hover:bg-amber-900/30 transition-colors">
-                    <FileText className="h-3.5 w-3.5" />
-                    Lihat {allPhotos.length} Foto
-                  </button>
-                )}
-
-                {/* Address + Location details */}
-                <div className="space-y-2">
-                  {/* Alamat lengkap */}
-                  {ev.addressText && (
-                    <div className="text-sm text-foreground leading-snug bg-muted/50 dark:bg-muted/20 px-3 py-2 rounded-lg">
-                      <p className="text-xs font-semibold text-muted-foreground mb-1">Lokasi</p>
-                      <p>{ev.addressText}</p>
-                    </div>
-                  )}
-
-                  {/* Catatan manual */}
-                  {ev.manualLocationNote && (
-                    <div className="text-sm text-muted-foreground">
-                      <span className="font-medium">Catatan:</span> {ev.manualLocationNote}
-                    </div>
-                  )}
-
-                  {/* Koordinat + Akurasi */}
-                  {ev.latitude != null && (
-                    <div className="text-xs font-mono text-muted-foreground bg-muted/50 dark:bg-muted/20 px-3 py-2 rounded-lg space-y-1">
-                      <div>
-                        <span className="font-semibold">Koordinat:</span> {(ev.latitude as number).toFixed(6)}, {(ev.longitude as number ?? 0).toFixed(6)}
-                      </div>
-                      {ev.locationAccuracy != null && (
-                        <div><span className="font-semibold">Akurasi:</span> ±{Math.round(ev.locationAccuracy as number)}m</div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Tombol Buka Maps jika ada koordinat */}
-                  {ev.latitude != null && (
-                    <a href={`https://www.google.com/maps?q=${ev.latitude},${ev.longitude}`} target="_blank" rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-teal-300 bg-teal-50 text-teal-700 hover:bg-teal-100 dark:border-teal-700/40 dark:bg-teal-900/20 dark:text-teal-400 dark:hover:bg-teal-900/30 transition-colors">
-                      <MapPin className="h-3.5 w-3.5" />
-                      Buka di Maps
-                    </a>
-                  )}
-                </div>
-
-                {/* Empty state / Request repair button */}
+                {/* Empty state */}
                 {!hasPhotos && !hasLocation && (
-                  <div className="rounded-lg border border-amber-200/50 bg-amber-50/60 dark:border-amber-800/30 dark:bg-amber-900/10 p-3 space-y-2.5">
-                    <div>
-                      <p className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-1">⚠️ Evidence kosong atau belum lengkap</p>
-                      <p className="text-[11px] text-amber-600 dark:text-amber-400/80">
-                        Foto dan lokasi belum diupload untuk milestone ini. Minta staff untuk upload ulang bukti.
-                      </p>
-                    </div>
+                  <div className="mt-2 rounded-lg border border-amber-200/50 bg-amber-50/60 dark:border-amber-800/30 dark:bg-amber-900/10 p-3 space-y-2.5">
+                    <p className="text-xs font-medium text-amber-700 dark:text-amber-400">⚠️ Foto dan lokasi belum diupload untuk milestone ini.</p>
                     <button
                       onClick={() => {
                         if (ev.id && selectedMission?.id) {
-                          setRepairRequestModal({
-                            isOpen: true,
-                            missionId: selectedMission.id,
-                            evidenceId: ev.id,
-                            milestoneType: ev.milestoneType,
-                          });
+                          setRepairRequestModal({ isOpen: true, missionId: selectedMission.id, evidenceId: ev.id, milestoneType: ev.milestoneType });
                         }
                       }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-400 bg-amber-100 text-amber-700 hover:bg-amber-200 dark:border-amber-700/50 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/40 transition-colors">
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-400 bg-amber-100 text-amber-700 hover:bg-amber-200 dark:border-amber-700/50 dark:bg-amber-900/30 dark:text-amber-300 transition-colors">
                       <Upload className="h-3.5 w-3.5" />
                       Minta Upload Ulang Bukti
                     </button>
                   </div>
                 )}
-
-                {/* Repair status indicator for ongoing/completed repair */}
+                {/* Repair status */}
                 {ev.repairStatus === "requested" && (
-                  <div className="rounded-lg border border-amber-200/50 bg-amber-50/60 dark:border-amber-800/30 dark:bg-amber-900/10 p-3 space-y-2">
-                    <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
-                      Permintaan upload ulang bukti menunggu respon staff.
-                    </p>
-                    {ev.repairReason && (
-                      <p className="text-xs text-amber-600 dark:text-amber-400/80">Alasan: {ev.repairReason}</p>
-                    )}
-                    {ev.repairRequestedAt && (
-                      <p className="text-[10px] text-amber-500 dark:text-amber-400/70">Diminta pada: {formatDateTime(ev.repairRequestedAt)}</p>
-                    )}
+                  <div className="mt-2 rounded-lg border border-amber-200/50 bg-amber-50/60 dark:border-amber-800/30 dark:bg-amber-900/10 p-3 space-y-1.5">
+                    <p className="text-xs font-medium text-amber-700 dark:text-amber-400">Menunggu upload ulang dari staff.</p>
+                    {ev.repairReason && <p className="text-xs text-amber-600 dark:text-amber-400/80">Alasan: {ev.repairReason}</p>}
+                    {ev.repairRequestedAt && <p className="text-[10px] text-amber-500">Diminta: {formatDateTime(ev.repairRequestedAt)}</p>}
                   </div>
                 )}
               </div>
@@ -1370,7 +1322,15 @@ export function HRDMonitoringClient() {
                         <p className="text-sm font-semibold">{evidenceTypeLabel[key]}</p>
                       </div>
                       {items.length === 0 ? (
-                        <p className="text-sm text-muted-foreground pl-6">Belum ada bukti untuk milestone ini.</p>
+                        <div className="pl-6 space-y-2">
+                          <p className="text-sm text-muted-foreground">Belum ada bukti untuk milestone ini.</p>
+                          <button
+                            onClick={() => setRepairRequestModal({ isOpen: true, missionId: selectedMission.id!, evidenceId: null, milestoneType: key })}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-400 bg-amber-100 text-amber-700 hover:bg-amber-200 dark:border-amber-700/50 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/40 transition-colors">
+                            <Upload className="h-3.5 w-3.5" />
+                            Minta Upload Ulang Bukti
+                          </button>
+                        </div>
                       ) : items.map((ev) => <EvidenceCard key={ev.id} ev={ev} />)}
                     </div>
                   );
@@ -2049,24 +2009,22 @@ export function HRDMonitoringClient() {
                 Batal
               </Button>
               <Button
-                disabled={isSaving || !repairRequestModal.missionId || !repairRequestModal.evidenceId}
+                disabled={isSaving || !repairRequestModal.missionId || !repairRequestModal.milestoneType}
                 onClick={async () => {
-                  if (!repairRequestModal.missionId || !repairRequestModal.evidenceId || !repairRequestModal.milestoneType) return;
+                  if (!repairRequestModal.missionId || !repairRequestModal.milestoneType) return;
                   if (!firestore || !userProfile) return;
+
+                  const mId = repairRequestModal.missionId;
+                  const mType = repairRequestModal.milestoneType;
 
                   setIsSaving(true);
                   try {
-                    const evidenceRef = doc(
-                      firestore,
-                      "business_trip_missions",
-                      repairRequestModal.missionId,
-                      "milestone_evidences",
-                      repairRequestModal.evidenceId,
-                    );
+                    const evidencesCol = collection(firestore, "business_trip_missions", mId, "milestone_evidences");
 
-                    await setDoc(
-                      evidenceRef,
-                      {
+                    if (repairRequestModal.evidenceId) {
+                      // Update existing evidence document
+                      const evidenceRef = doc(evidencesCol, repairRequestModal.evidenceId);
+                      await setDoc(evidenceRef, {
                         repairStatus: "requested",
                         evidenceRepairRequested: true,
                         repairRequestedByUid: userProfile.uid,
@@ -2074,9 +2032,32 @@ export function HRDMonitoringClient() {
                         repairRequestedAt: serverTimestamp(),
                         repairReason: repairReason || null,
                         updatedAt: serverTimestamp(),
-                      },
-                      { merge: true },
-                    );
+                      }, { merge: true });
+                    } else {
+                      // Create baseline evidence doc for milestone with no existing evidence
+                      const targetUids = detailMembers.map((m) => m.employeeUid);
+                      const targetNames = detailMembers.map((m) => m.employeeName);
+                      const newRef = doc(evidencesCol);
+                      await setDoc(newRef, {
+                        missionId: mId,
+                        milestoneType: mType,
+                        evidenceType: "manual_request",
+                        targetMemberUids: targetUids,
+                        targetMemberNames: targetNames,
+                        confirmedByUid: "",
+                        confirmedByName: "",
+                        photos: [],
+                        locationStatus: "unavailable",
+                        repairStatus: "requested",
+                        evidenceRepairRequested: true,
+                        repairRequestedByUid: userProfile.uid,
+                        repairRequestedByName: userProfile.fullName || userProfile.email || "Unknown",
+                        repairRequestedAt: serverTimestamp(),
+                        repairReason: repairReason || null,
+                        createdAt: serverTimestamp(),
+                        updatedAt: serverTimestamp(),
+                      });
+                    }
 
                     const milestoneLabelMap: Record<string, string> = {
                       departed: "Keberangkatan",
@@ -2084,13 +2065,13 @@ export function HRDMonitoringClient() {
                       activity_done: "Penyelesaian Aktivitas",
                       returned: "Kepulangan",
                     };
-                    const milestoneLabel = milestoneLabelMap[repairRequestModal.milestoneType] || repairRequestModal.milestoneType;
+                    const milestoneLabel = milestoneLabelMap[mType] || mType;
 
                     // Add timeline entry
                     const timelineRef = doc(
                       firestore,
                       "business_trip_missions",
-                      repairRequestModal.missionId,
+                      mId,
                       "timeline",
                       `timeline_${Date.now()}`,
                     );
@@ -2102,9 +2083,7 @@ export function HRDMonitoringClient() {
                       createdAt: serverTimestamp(),
                     });
 
-                    toast({
-                      title: "Permintaan upload ulang bukti dikirim",
-                    });
+                    toast({ title: "Permintaan upload ulang bukti dikirim" });
 
                     setRepairRequestModal({ isOpen: false, missionId: null, evidenceId: null, milestoneType: null });
                     setRepairReason("");
@@ -2126,6 +2105,75 @@ export function HRDMonitoringClient() {
             </div>
           </div>
         </AppModal>
+
+        {/* ── Photo Preview Modal ──────────────────────────────────────────── */}
+        {photoPreviewModal.isOpen && photoPreviewModal.photos.length > 0 && (
+          <div
+            className="fixed inset-0 z-[300] flex items-center justify-center bg-black/85 p-4"
+            onClick={() => setPhotoPreviewModal((p) => ({ ...p, isOpen: false }))}
+          >
+            <div className="relative flex flex-col items-center gap-3 w-full max-w-2xl"
+              onClick={(e) => e.stopPropagation()}>
+              <button type="button"
+                className="absolute -top-2 -right-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white/15 hover:bg-white/25 transition-colors"
+                onClick={() => setPhotoPreviewModal((p) => ({ ...p, isOpen: false }))}>
+                <X className="h-4 w-4 text-white" />
+              </button>
+              {(() => {
+                const active = photoPreviewModal.photos[photoPreviewModal.activeIdx];
+                if (!active) return null;
+                return (
+                  <>
+                    <div className="relative w-full bg-black rounded-xl overflow-hidden flex items-center justify-center min-h-[200px] max-h-[65vh]">
+                      {active.proxySrc ? (
+                        <img key={photoPreviewModal.activeIdx} src={active.proxySrc}
+                          alt={`Foto ${photoPreviewModal.activeIdx + 1}`}
+                          className="max-h-[65vh] max-w-full object-contain" />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center py-12 text-center px-4">
+                          <FileText className="h-10 w-10 text-white/40 mb-2" />
+                          <p className="text-white/50 text-sm">Preview foto belum tersedia</p>
+                        </div>
+                      )}
+                    </div>
+                    {photoPreviewModal.photos.length > 1 && (
+                      <div className="flex items-center justify-between w-full px-1">
+                        <button type="button" disabled={photoPreviewModal.activeIdx === 0}
+                          onClick={() => setPhotoPreviewModal((p) => ({ ...p, activeIdx: p.activeIdx - 1 }))}
+                          className="px-3 py-1.5 text-xs font-medium rounded-lg border border-white/20 bg-white/10 text-white hover:bg-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                          ← Sebelumnya
+                        </button>
+                        <span className="text-xs text-white/60">{photoPreviewModal.activeIdx + 1} / {photoPreviewModal.photos.length}</span>
+                        <button type="button" disabled={photoPreviewModal.activeIdx >= photoPreviewModal.photos.length - 1}
+                          onClick={() => setPhotoPreviewModal((p) => ({ ...p, activeIdx: p.activeIdx + 1 }))}
+                          className="px-3 py-1.5 text-xs font-medium rounded-lg border border-white/20 bg-white/10 text-white hover:bg-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                          Berikutnya →
+                        </button>
+                      </div>
+                    )}
+                    {photoPreviewModal.photos.length > 1 && (
+                      <div className="flex gap-1.5 justify-center flex-wrap">
+                        {photoPreviewModal.photos.map((p, idx) => (
+                          <button key={idx} type="button"
+                            onClick={() => setPhotoPreviewModal((prev) => ({ ...prev, activeIdx: idx }))}
+                            className={`w-10 h-10 rounded-md overflow-hidden border-2 transition-colors flex-shrink-0 ${idx === photoPreviewModal.activeIdx ? "border-white" : "border-white/20 hover:border-white/50"}`}>
+                            {p.proxySrc ? (
+                              <img src={p.proxySrc} alt={`thumb ${idx + 1}`} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full bg-white/10 flex items-center justify-center">
+                                <FileText className="h-4 w-4 text-white/40" />
+                              </div>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

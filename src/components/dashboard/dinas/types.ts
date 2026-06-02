@@ -289,6 +289,8 @@ export type MilestoneEvidencePhotoType = "temporary_milestone_evidence" | "archi
 export type MilestoneEvidencePhoto = {
   photoUrl?: string | null;
   photoPath?: string | null;
+  driveFileId?: string | null;
+  storageProvider?: string | null;
   originalFileName?: string | null;
   compressedSize?: number | null;
   uploadedAt?: any;
