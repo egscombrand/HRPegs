@@ -84,6 +84,7 @@ import type {
   EmployeeProfile,
   UserProfile,
 } from "@/lib/types";
+import type { MilestoneEvidence } from "./types";
 
 const MISSION_STATUSES = [
   "draft_mission",
@@ -736,6 +737,15 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
     return () => unsubscribe();
   }, [firestore, selectedMission?.id]);
 
+  // Subscribe to repair requests for current member
+  useEffect(() => {
+    if (!firestore || !selectedMission?.id || !selectedMember?.employeeUid) {
+      setRepairRequests([]);
+      return;
+    }
+    loadRepairRequests(selectedMission.id, selectedMember.employeeUid);
+  }, [firestore, selectedMission?.id, selectedMember?.employeeUid]);
+
   // Subscribe to final report subcollections when a mission is selected
   useEffect(() => {
     if (!firestore || !selectedMission?.id) {
@@ -849,6 +859,13 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
   const [milestoneNote, setMilestoneNote] = useState("");
   const [milestonePhotos, setMilestonePhotos] = useState<{ file: File; preview: string }[]>([]);
   const [milestoneManualLocation, setMilestoneManualLocation] = useState("");
+
+  // Repair requests state
+  const [repairRequests, setRepairRequests] = useState<MilestoneEvidence[]>([]);
+  const [activeRepairRequest, setActiveRepairRequest] = useState<MilestoneEvidence | null>(null);
+  const [repairUploadPhotos, setRepairUploadPhotos] = useState<{ file: File; preview: string }[]>([]);
+  const [repairGps, setRepairGps] = useState<MilestoneGps>({ status: "idle" });
+  const [repairManualLocation, setRepairManualLocation] = useState("");
 
   // Group milestone modal state
   type PendingMilestone = {
@@ -1411,6 +1428,29 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
       setSelectedMission(null);
       setMissionMembers([]);
       setMissionTimeline([]);
+    }
+  };
+
+  const loadRepairRequests = async (missionId: string, memberUid: string) => {
+    if (!firestore || !missionId || !memberUid) return;
+    try {
+      const evidencesRef = collection(firestore, "business_trip_missions", missionId, "milestone_evidences");
+      const q = query(
+        evidencesRef,
+        where("targetMemberUids", "array-contains", memberUid),
+        where("repairStatus", "==", "requested"),
+      );
+      const snapshotUnsubscribe = onSnapshot(q, (snap) => {
+        const repairs = snap.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        } as MilestoneEvidence));
+        setRepairRequests(repairs);
+      });
+      return snapshotUnsubscribe;
+    } catch (error) {
+      console.error("Gagal load repair requests:", error);
+      setRepairRequests([]);
     }
   };
 
@@ -4935,6 +4975,315 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                   );
                 })()
               : null}
+
+            {/* ── Repair Requests Panel ──────────────────────────── */}
+            {mode === "staff" && repairRequests.length > 0 && selectedMember && (
+              <Card className="border-2 border-amber-400/50 dark:border-amber-500/30 bg-amber-50/50 dark:bg-amber-900/10">
+                <div className="flex items-center gap-3 border-b border-amber-200/40 dark:border-amber-800/40 px-5 py-4">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-500/10">
+                    <Upload className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold leading-tight text-amber-700 dark:text-amber-300">
+                      Upload Ulang Bukti Perjalanan
+                    </p>
+                    <p className="text-xs text-amber-600/80 dark:text-amber-400/70">
+                      HRD/Direktur meminta Anda untuk mengupload ulang bukti yang belum lengkap
+                    </p>
+                  </div>
+                </div>
+                <CardContent className="px-5 py-4 space-y-3">
+                  {repairRequests.map((repair) => {
+                    const milestoneLabelMap: Record<string, string> = {
+                      departed: "Keberangkatan",
+                      arrived: "Kedatangan",
+                      activity_done: "Penyelesaian Aktivitas",
+                      returned: "Kepulangan",
+                    };
+                    const milestoneLabel = milestoneLabelMap[repair.milestoneType] || repair.milestoneType;
+
+                    return (
+                      <div
+                        key={repair.id}
+                        className="rounded-lg border border-amber-200/60 dark:border-amber-800/40 bg-white dark:bg-muted/20 p-3"
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <p className="text-sm font-semibold text-foreground">{milestoneLabel}</p>
+                            {repair.repairReason && (
+                              <p className="text-xs text-muted-foreground mt-0.5">Alasan: {repair.repairReason}</p>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => {
+                              setActiveRepairRequest(repair);
+                              setRepairUploadPhotos([]);
+                              setRepairGps({ status: "idle" });
+                              setRepairManualLocation("");
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-300 bg-amber-100 text-amber-700 hover:bg-amber-200 dark:border-amber-700/40 dark:bg-amber-900/20 dark:text-amber-400 dark:hover:bg-amber-900/30 transition-colors"
+                          >
+                            <Upload className="h-3.5 w-3.5" />
+                            Upload Sekarang
+                          </button>
+                        </div>
+                        {repair.repairRequestedAt && (
+                          <p className="text-[10px] text-muted-foreground">
+                            Diminta pada: {formatDateTime(repair.repairRequestedAt)}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* ── Repair Upload Panel (when activeRepairRequest is set) ──────────────────────────── */}
+            {mode === "staff" && activeRepairRequest && selectedMember && (
+              <Card className="border-2 border-amber-400/50 dark:border-amber-500/30">
+                <div className="flex items-center gap-3 border-b border-border px-5 py-4">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-500/10">
+                    <Upload className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-semibold leading-tight">
+                      Upload Ulang Bukti
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {Object.fromEntries(Object.entries({
+                        departed: "Keberangkatan",
+                        arrived: "Kedatangan",
+                        activity_done: "Penyelesaian Aktivitas",
+                        returned: "Kepulangan",
+                      }))[activeRepairRequest.milestoneType]}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="rounded-full p-1 hover:bg-muted"
+                    onClick={() => {
+                      setActiveRepairRequest(null);
+                      setRepairUploadPhotos([]);
+                      setRepairGps({ status: "idle" });
+                      setRepairManualLocation("");
+                    }}
+                  >
+                    <X className="h-4 w-4 text-muted-foreground" />
+                  </button>
+                </div>
+                <CardContent className="px-5 py-4 space-y-3">
+                  {/* GPS Lokasi */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <MapPin className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                      <span className="text-xs font-medium text-foreground">Lokasi GPS</span>
+
+                      {repairGps.status === "capturing" && (
+                        <span className="text-[10px] text-amber-600 dark:text-amber-400 animate-pulse">
+                          Mendeteksi…
+                        </span>
+                      )}
+                      {repairGps.status === "captured" && (
+                        <>
+                          <span className="text-[10px] text-green-600 dark:text-green-400">Terdeteksi ✓</span>
+                          {repairGps.trustLevel === "high" && (
+                            <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                              GPS Valid
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+
+                    {repairGps.status === "captured" && (
+                      <div className="text-xs font-mono text-muted-foreground bg-muted/50 dark:bg-muted/20 px-3 py-2 rounded-lg">
+                        {repairGps.latitude?.toFixed(6)}, {repairGps.longitude?.toFixed(6)}
+                      </div>
+                    )}
+
+                    {repairGps.status === "unavailable" && (
+                      <div className="flex items-start gap-1.5 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2">
+                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-destructive" />
+                        <p className="text-[11px] text-destructive">
+                          Lokasi otomatis gagal. Laporan akan ditandai sebagai input manual.
+                        </p>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      disabled={repairGps.status === "capturing"}
+                      onClick={async () => {
+                        setRepairGps({ status: "capturing" });
+                        try {
+                          const position = await new Promise<GeolocationCoordinates>((resolve, reject) => {
+                            navigator.geolocation.getCurrentPosition(
+                              (pos) => resolve(pos.coords),
+                              (err) => reject(err),
+                              { timeout: 30000, maximumAge: 0 },
+                            );
+                          });
+
+                          setRepairGps({
+                            status: "captured",
+                            latitude: position.latitude,
+                            longitude: position.longitude,
+                            accuracy: position.accuracy,
+                            trustLevel: position.accuracy <= 15 ? "high" : position.accuracy <= 50 ? "medium" : "low",
+                          });
+                        } catch (error: any) {
+                          console.error("GPS capture error:", error);
+                          setRepairGps({ status: "unavailable" });
+                        }
+                      }}
+                      className="text-xs text-amber-600 hover:underline dark:text-amber-400"
+                    >
+                      {repairGps.status === "capturing" ? "Mendeteksi..." : repairGps.status === "captured" ? "Deteksi Ulang" : "Deteksi Lokasi"}
+                    </button>
+                  </div>
+
+                  {/* Catatan Lokasi */}
+                  <div className="space-y-1">
+                    <Label className="text-[11px] text-muted-foreground">
+                      Catatan lokasi tambahan (opsional)
+                    </Label>
+                    <Textarea
+                      value={repairManualLocation}
+                      onChange={(e) => setRepairManualLocation(e.target.value)}
+                      rows={2}
+                      className="text-sm resize-none"
+                      placeholder="Contoh: Pintu gerbang depan, basement"
+                    />
+                  </div>
+
+                  {/* Foto */}
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-foreground">
+                      Foto Bukti <span className="text-destructive">*Wajib</span>
+                      {repairUploadPhotos.length > 0 && (
+                        <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">
+                          {repairUploadPhotos.length}/3 foto
+                        </span>
+                      )}
+                    </p>
+
+                    {repairUploadPhotos.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {repairUploadPhotos.map((p, idx) => (
+                          <div key={idx} className="relative">
+                            <div className="h-[72px] w-[72px] overflow-hidden rounded-lg border border-border">
+                              <img src={p.preview} alt={`foto ${idx + 1}`} className="h-full w-full object-cover" />
+                            </div>
+                            <button
+                              type="button"
+                              className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive shadow"
+                              onClick={() => {
+                                URL.revokeObjectURL(p.preview);
+                                setRepairUploadPhotos((prev) => prev.filter((_, i) => i !== idx));
+                              }}
+                            >
+                              <X className="h-2.5 w-2.5 text-white" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {repairUploadPhotos.length < 3 ? (
+                      <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-amber-400/60 px-4 py-3 text-sm text-amber-700 hover:bg-amber-50/50 dark:border-amber-600/40 dark:text-amber-400 dark:hover:bg-amber-900/20">
+                        <Upload className="h-4 w-4 flex-shrink-0" />
+                        <span>
+                          {repairUploadPhotos.length === 0 ? "Pilih foto bukti" : "Tambah foto"}
+                        </span>
+                        <span className="ml-auto text-[10px] text-muted-foreground">
+                          maks 3
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="sr-only"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (!f || repairUploadPhotos.length >= 3) return;
+                            setRepairUploadPhotos((prev) => [
+                              ...prev,
+                              { file: f, preview: URL.createObjectURL(f) },
+                            ]);
+                            e.target.value = "";
+                          }}
+                        />
+                      </label>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground">
+                        Maksimal 3 foto tercapai.
+                      </p>
+                    )}
+
+                    {repairUploadPhotos.length === 0 && (
+                      <p className="text-[11px] text-destructive">
+                        Minimal 1 foto bukti wajib diunggah.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Submit Repair */}
+                  <div className="flex gap-2 pt-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setActiveRepairRequest(null);
+                        setRepairUploadPhotos([]);
+                        setRepairGps({ status: "idle" });
+                        setRepairManualLocation("");
+                      }}
+                    >
+                      Batal
+                    </Button>
+                    <Button
+                      className="flex-1 bg-amber-600 hover:bg-amber-700 text-white"
+                      disabled={isSaving || repairUploadPhotos.length === 0}
+                      onClick={async () => {
+                        if (!selectedMission?.id || !activeRepairRequest.id) return;
+                        await handleRepairMilestoneEvidence(
+                          selectedMission.id,
+                          activeRepairRequest.id,
+                          activeRepairRequest.milestoneType,
+                          selectedMember.employeeName,
+                          [selectedMember],
+                          {
+                            latitude: repairGps.latitude,
+                            longitude: repairGps.longitude,
+                            locationAccuracy: repairGps.accuracy,
+                            locationCapturedAt: new Date(),
+                            locationStatus: repairGps.status === "captured" ? "captured" : "manual",
+                            locationTrustLevel: repairGps.trustLevel,
+                            addressText: activeRepairRequest.addressText,
+                            streetName: activeRepairRequest.streetName,
+                            village: activeRepairRequest.village,
+                            district: activeRepairRequest.district,
+                            city: activeRepairRequest.city,
+                            province: activeRepairRequest.province,
+                            postalCode: activeRepairRequest.postalCode,
+                            country: activeRepairRequest.country,
+                            geocodeStatus: activeRepairRequest.geocodeStatus,
+                            manualLocationNote: repairManualLocation,
+                            note: activeRepairRequest.note,
+                            photos: repairUploadPhotos.map((p) => p.file),
+                          },
+                        );
+                        setActiveRepairRequest(null);
+                        setRepairUploadPhotos([]);
+                        setRepairGps({ status: "idle" });
+                        setRepairManualLocation("");
+                      }}
+                    >
+                      {isSaving ? "Mengupload..." : "Upload Bukti"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* ── Group Milestone Selection Panel ──────────────────────────── */}
             {mode === "staff" && pendingMilestone && selectedMember && (
