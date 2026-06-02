@@ -321,6 +321,67 @@ function inferMilestoneTypeFromMsg(msg: string): MilestoneEvidence["milestoneTyp
   return "departed";
 }
 
+// Helper: Normalize evidence fields from multiple possible sources
+function normalizeEvidence(raw: any): MilestoneEvidence {
+  // ─ Photos: try multiple field names
+  let photos: MilestoneEvidence["photos"] = [];
+  const photoSource = raw.photos || raw.evidencePhotos || raw.photoUrl || [];
+  if (Array.isArray(photoSource)) {
+    photos = photoSource.map((p: any) => ({
+      photoUrl: p?.photoUrl ?? (typeof p === "string" ? p : null),
+      photoPath: p?.photoPath ?? null,
+      originalFileName: p?.originalFileName ?? null,
+      compressedSize: p?.compressedSize ?? null,
+      uploadedAt: p?.uploadedAt ?? null,
+      expiresAt: p?.expiresAt ?? null,
+    }));
+  } else if (typeof photoSource === "string") {
+    photos = [{ photoUrl: photoSource, photoPath: null, originalFileName: null, compressedSize: null, uploadedAt: null, expiresAt: null }];
+  }
+
+  // ─ Address: try multiple field names
+  const addressText = raw.addressText || raw.locationAddress || null;
+
+  // ─ Target members: fallback to message parsing if empty
+  let targetMemberNames = raw.targetMemberNames || [];
+  let targetMemberUids = raw.targetMemberUids || [];
+  if ((!targetMemberNames || targetMemberNames.length === 0) && raw.message) {
+    const forMatch = (raw.message as string).match(/untuk:\s*([^.]+?)\s+pada\s/i);
+    if (forMatch) {
+      targetMemberNames = [forMatch[1].trim()];
+    }
+  }
+
+  return {
+    id: raw.id ?? "",
+    missionId: raw.missionId ?? "",
+    milestoneType: raw.milestoneType ?? "departed",
+    confirmedByUid: raw.confirmedByUid ?? raw.byUid ?? "",
+    confirmedByName: raw.confirmedByName ?? raw.byName ?? "",
+    targetMemberUids,
+    targetMemberNames,
+    createdAt: raw.createdAt,
+    latitude: raw.latitude ?? raw.evidenceLat ?? null,
+    longitude: raw.longitude ?? raw.evidenceLng ?? null,
+    locationAccuracy: raw.locationAccuracy ?? raw.evidenceAccuracy ?? null,
+    locationCapturedAt: raw.locationCapturedAt ?? null,
+    locationStatus: raw.locationStatus ?? raw.evidenceLocationStatus ?? "unavailable",
+    locationTrustLevel: raw.locationTrustLevel ?? raw.evidenceLocationTrust ?? raw.trustLevel ?? null,
+    addressText,
+    streetName: raw.streetName ?? null,
+    village: raw.village ?? null,
+    district: raw.district ?? null,
+    city: raw.city ?? null,
+    province: raw.province ?? null,
+    postalCode: raw.postalCode ?? null,
+    country: raw.country ?? null,
+    geocodeStatus: raw.geocodeStatus ?? null,
+    manualLocationNote: raw.manualLocationNote ?? null,
+    note: raw.note ?? null,
+    photos,
+  };
+}
+
 // Helper: Collect evidence from multiple sources (timeline + milestone_evidences + members)
 function collectEvidenceSources(
   detailTimeline: TimelineEntry[],
@@ -334,24 +395,29 @@ function collectEvidenceSources(
       const cat = inferCategory(e);
       return cat === "tracking" && (e.milestoneType || inferMilestoneTypeFromMsg(e.message));
     })
-    .map((e) => ({
+    .map((e) => normalizeEvidence({
       id: e.evidenceId ?? e.id,
       missionId,
-      milestoneType: (e.milestoneType ?? inferMilestoneTypeFromMsg(e.message)) as MilestoneEvidence["milestoneType"],
-      confirmedByUid: e.confirmedByUid ?? e.byUid ?? "",
-      confirmedByName: e.confirmedByName ?? e.byName ?? "",
-      targetMemberUids: e.targetMemberUids ?? [],
-      targetMemberNames: e.targetMemberNames ?? [],
+      milestoneType: e.milestoneType ?? inferMilestoneTypeFromMsg(e.message),
+      confirmedByUid: e.confirmedByUid ?? e.byUid,
+      confirmedByName: e.confirmedByName ?? e.byName,
+      targetMemberUids: e.targetMemberUids,
+      targetMemberNames: e.targetMemberNames,
       createdAt: e.createdAt,
-      latitude: e.evidenceLat ?? null,
-      longitude: e.evidenceLng ?? null,
-      locationAccuracy: e.evidenceAccuracy ?? null,
-      locationStatus: (e.evidenceLocationStatus ?? "unavailable") as MilestoneEvidence["locationStatus"],
-      locationTrustLevel: (e.evidenceLocationTrust ?? e.trustLevel ?? null) as MilestoneEvidence["locationTrustLevel"],
-      addressText: e.evidenceAddress ?? null,
-      manualLocationNote: e.evidenceManualNote ?? null,
-      photos: (e.evidencePhotos ?? []) as MilestoneEvidence["photos"],
+      evidenceLat: e.evidenceLat,
+      evidenceLng: e.evidenceLng,
+      evidenceAccuracy: e.evidenceAccuracy,
+      evidenceAddress: e.evidenceAddress,
+      evidenceLocationStatus: e.evidenceLocationStatus,
+      evidenceLocationTrust: e.evidenceLocationTrust,
+      evidenceManualNote: e.evidenceManualNote,
+      evidencePhotos: e.evidencePhotos,
+      trustLevel: e.trustLevel,
+      message: e.message,
     }));
+
+  // ─ Source 2: milestone_evidences from Firestore (normalize + prefer these)
+  const normalizedMilestoneEvidence = detailEvidences.map((e) => normalizeEvidence({ ...e, missionId }));
 
   console.log("📸 collectEvidenceSources debug:", {
     timelineEntriesTotal: detailTimeline.length,
@@ -359,21 +425,18 @@ function collectEvidenceSources(
     timelineEvidenceBuilt: timelineEvidence.length,
     timelineEvidenceWithPhotos: timelineEvidence.filter((e) => (e.photos?.length ?? 0) > 0).length,
     milestone_evidencesCount: detailEvidences.length,
-    milestone_evidencesWithPhotos: detailEvidences.filter((e) => (e.photos?.length ?? 0) > 0).length,
+    milestone_evidencesWithPhotos: normalizedMilestoneEvidence.filter((e) => (e.photos?.length ?? 0) > 0).length,
   });
 
-  // ─ Source 2: milestone_evidences from Firestore (primary collection)
-  const evidenceColIds = new Set(detailEvidences.map((e) => e.id));
+  const evidenceColIds = new Set(normalizedMilestoneEvidence.map((e) => e.id));
 
   // ─ Combine: prefer milestone_evidences, supplement with timeline evidence for fallback
   const allEvidence: MilestoneEvidence[] = [
-    ...detailEvidences,
+    ...normalizedMilestoneEvidence,
     ...timelineEvidence.filter((e) => !evidenceColIds.has(e.id!)),
   ];
 
-  console.log("milestone evidence", detailEvidences);
-  console.log("timeline with evidence", timelineEvidence.filter((e) => (e.photos?.length ?? 0) > 0 || e.latitude != null || e.manualLocationNote));
-  console.log("members with evidence", detailMembers.filter((m) => m.reportStatus === "submitted" || (m as any).trackingEvidence));
+  console.log("normalized evidence", allEvidence);
 
   return allEvidence;
 }
@@ -1000,61 +1063,110 @@ export function HRDMonitoringClient() {
           }
           function EvidenceCard({ ev }: { ev: MilestoneEvidence }) {
             const photos = (ev.photos ?? []).slice(0, 3);
-            const isExpired = photos[0]?.expiresAt && toDate(photos[0].expiresAt) && (toDate(photos[0].expiresAt) as Date) < new Date();
+            const allPhotos = ev.photos ?? [];
+            const hasPhotos = allPhotos.length > 0;
+            const isExpired = hasPhotos && photos[0]?.expiresAt && toDate(photos[0].expiresAt) && (toDate(photos[0].expiresAt) as Date) < new Date();
+            const hasLocation = ev.latitude != null || ev.addressText || ev.manualLocationNote;
+            const displayMembers = (ev.targetMemberNames ?? []).filter(Boolean).join(", ") || "–";
+
             return (
-              <div className="rounded-xl border border-border/50 bg-muted/10 p-3 space-y-2.5">
-                <div className="flex flex-wrap items-start gap-1.5">
+              <div className="rounded-xl border border-border/50 bg-muted/10 p-4 space-y-3">
+                {/* Header: Dikonfirmasi oleh + Trust badge + Tanggal */}
+                <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <p className="text-sm font-semibold text-foreground">Dikonfirmasi oleh {ev.confirmedByName}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-semibold text-foreground">{ev.confirmedByName}</p>
                       {mkTrustBadge(ev)}
                     </div>
-                    <p className="text-sm text-muted-foreground mt-0.5">
-                      Untuk: {(ev.targetMemberNames ?? []).join(", ")} · {formatDateTime(ev.createdAt)}
-                    </p>
+                    <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                      <div>Untuk: <span className="text-foreground font-medium">{displayMembers}</span></div>
+                      <div>{formatDateTime(ev.createdAt)}</div>
+                    </div>
                   </div>
                 </div>
-                {photos.length > 0 && (
+
+                {/* Photo thumbnails */}
+                {hasPhotos && (
                   isExpired ? (
-                    <p className="text-sm text-muted-foreground italic">Foto bukti sudah kedaluwarsa, metadata tetap tersimpan.</p>
+                    <div className="rounded-lg bg-amber-50/80 dark:bg-amber-900/10 p-3 border border-amber-200/50 dark:border-amber-800/30">
+                      <p className="text-xs text-amber-700 dark:text-amber-400 italic">Foto bukti sudah kedaluwarsa, metadata tetap tersimpan.</p>
+                    </div>
                   ) : (
                     <div className="flex flex-wrap gap-2">
                       {photos.map((photo, idx) =>
-                        photo.photoUrl ? (
+                        photo?.photoUrl ? (
                           <a key={idx} href={photo.photoUrl} target="_blank" rel="noreferrer"
-                            className="group relative h-20 w-20 overflow-hidden rounded-xl border border-border/60 hover:border-primary/60 transition-colors flex-shrink-0">
+                            className="group relative h-24 w-24 overflow-hidden rounded-lg border border-border/60 hover:border-primary/60 transition-colors flex-shrink-0 bg-muted/40">
                             <img src={photo.photoUrl} alt={`bukti ${idx + 1}`} className="h-full w-full object-cover" />
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/25 transition-colors">
-                              <ExternalLink className="h-3.5 w-3.5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-colors">
+                              <ExternalLink className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                             </div>
                           </a>
                         ) : null
                       )}
-                      {(ev.photos?.length ?? 0) > 3 && (
-                        <div className="h-20 w-20 rounded-xl border border-border/60 bg-muted/40 flex items-center justify-center flex-shrink-0">
-                          <span className="text-sm font-medium text-muted-foreground">+{(ev.photos?.length ?? 0) - 3}</span>
+                      {allPhotos.length > 3 && (
+                        <div className="h-24 w-24 rounded-lg border border-border/60 bg-muted/40 flex items-center justify-center flex-shrink-0">
+                          <span className="text-xs font-semibold text-muted-foreground">+{allPhotos.length - 3}</span>
                         </div>
                       )}
                     </div>
                   )
                 )}
-                <div className="space-y-1">
-                  {ev.addressText && <p className="text-sm text-foreground leading-snug">{ev.addressText}</p>}
-                  {ev.manualLocationNote && <p className="text-sm text-muted-foreground">Catatan: {ev.manualLocationNote}</p>}
-                  {ev.latitude != null && (
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-xs font-mono text-muted-foreground">
-                        {(ev.latitude as number).toFixed(6)}, {(ev.longitude as number ?? 0).toFixed(6)}
-                        {ev.locationAccuracy != null && ` · ±${Math.round(ev.locationAccuracy as number)}m`}
-                      </p>
-                      <a href={`https://www.google.com/maps?q=${ev.latitude},${ev.longitude}`} target="_blank" rel="noreferrer"
-                        className="inline-flex items-center gap-0.5 text-sm font-medium text-teal-600 hover:underline dark:text-teal-400">
-                        <MapPin className="h-3 w-3" />
-                        Buka Maps
-                      </a>
+
+                {/* Tombol Lihat Foto jika ada foto tapi tidak tampil (expired) */}
+                {hasPhotos && isExpired && (
+                  <button onClick={() => { /* open photo modal */ }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-700/40 dark:bg-amber-900/20 dark:text-amber-400 dark:hover:bg-amber-900/30 transition-colors">
+                    <FileText className="h-3.5 w-3.5" />
+                    Lihat {allPhotos.length} Foto
+                  </button>
+                )}
+
+                {/* Address + Location details */}
+                <div className="space-y-2">
+                  {/* Alamat lengkap */}
+                  {ev.addressText && (
+                    <div className="text-sm text-foreground leading-snug bg-muted/50 dark:bg-muted/20 px-3 py-2 rounded-lg">
+                      <p className="text-xs font-semibold text-muted-foreground mb-1">Lokasi</p>
+                      <p>{ev.addressText}</p>
                     </div>
                   )}
+
+                  {/* Catatan manual */}
+                  {ev.manualLocationNote && (
+                    <div className="text-sm text-muted-foreground">
+                      <span className="font-medium">Catatan:</span> {ev.manualLocationNote}
+                    </div>
+                  )}
+
+                  {/* Koordinat + Akurasi */}
+                  {ev.latitude != null && (
+                    <div className="text-xs font-mono text-muted-foreground bg-muted/50 dark:bg-muted/20 px-3 py-2 rounded-lg space-y-1">
+                      <div>
+                        <span className="font-semibold">Koordinat:</span> {(ev.latitude as number).toFixed(6)}, {(ev.longitude as number ?? 0).toFixed(6)}
+                      </div>
+                      {ev.locationAccuracy != null && (
+                        <div><span className="font-semibold">Akurasi:</span> ±{Math.round(ev.locationAccuracy as number)}m</div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Tombol Buka Maps jika ada koordinat */}
+                  {ev.latitude != null && (
+                    <a href={`https://www.google.com/maps?q=${ev.latitude},${ev.longitude}`} target="_blank" rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-teal-300 bg-teal-50 text-teal-700 hover:bg-teal-100 dark:border-teal-700/40 dark:bg-teal-900/20 dark:text-teal-400 dark:hover:bg-teal-900/30 transition-colors">
+                      <MapPin className="h-3.5 w-3.5" />
+                      Buka di Maps
+                    </a>
+                  )}
                 </div>
+
+                {/* Empty state jika tidak ada lokasi atau foto */}
+                {!hasPhotos && !hasLocation && (
+                  <div className="text-xs text-muted-foreground italic py-2">
+                    Tidak ada data foto atau lokasi untuk evidence ini.
+                  </div>
+                )}
               </div>
             );
           }
