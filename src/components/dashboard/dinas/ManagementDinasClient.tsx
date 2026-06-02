@@ -6743,7 +6743,7 @@ export function ManagementDinasClient() {
                       repairStatus: "requested",
                       evidenceRepairRequested: true,
                       repairRequestedByUid: userProfile.uid,
-                      repairRequestedByName: userProfile.displayName || userProfile.email || "Unknown",
+                      repairRequestedByName: userProfile.fullName || userProfile.email || "Unknown",
                       repairRequestedAt: serverTimestamp(),
                       repairReason: repairReason || null,
                       updatedAt: serverTimestamp(),
@@ -6770,7 +6770,7 @@ export function ManagementDinasClient() {
                   await setDoc(timelineRef, {
                     timestamp: serverTimestamp(),
                     type: "system",
-                    message: `${userProfile.displayName || "HRD/Direktur"} meminta upload ulang bukti ${milestoneLabel}${repairReason ? `: ${repairReason}` : ''}`,
+                    message: `${userProfile.fullName || "HRD/Direktur"} meminta upload ulang bukti ${milestoneLabel}${repairReason ? `: ${repairReason}` : ''}`,
                     createdBy: userProfile.uid,
                     createdAt: serverTimestamp(),
                   });

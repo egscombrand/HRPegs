@@ -351,6 +351,16 @@ function formatDate(value: any) {
   }
 }
 
+function formatDateTime(value: any) {
+  try {
+    if (!value) return "-";
+    const date = value instanceof Timestamp ? value.toDate() : new Date(value);
+    return format(date, "dd MMM yyyy, HH:mm", { locale: idLocale });
+  } catch {
+    return "-";
+  }
+}
+
 function formatTime(value: any) {
   try {
     if (!value) return "";
@@ -2582,7 +2592,7 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
         repairStatus: "requested",
         evidenceRepairRequested: true,
         repairRequestedByUid: userProfile.uid,
-        repairRequestedByName: userProfile.displayName || userProfile.email || "Unknown",
+        repairRequestedByName: userProfile.fullName || userProfile.email || "Unknown",
         repairRequestedAt: serverTimestamp(),
         repairReason: reason || null,
         updatedAt: serverTimestamp(),
@@ -2598,7 +2608,7 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
 
       await appendTimelineEntry(
         missionId,
-        `${userProfile.displayName || "HRD/Direktur"} meminta upload ulang bukti ${milestoneLabel}${reason ? `: ${reason}` : ''}`,
+        `${userProfile.fullName || "HRD/Direktur"} meminta upload ulang bukti ${milestoneLabel}${reason ? `: ${reason}` : ''}`,
         "system",
       );
 
@@ -5265,17 +5275,17 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                             locationCapturedAt: new Date(),
                             locationStatus: repairGps.status === "captured" ? "captured" : "manual",
                             locationTrustLevel: repairGps.trustLevel,
-                            addressText: activeRepairRequest.addressText,
-                            streetName: activeRepairRequest.streetName,
-                            village: activeRepairRequest.village,
-                            district: activeRepairRequest.district,
-                            city: activeRepairRequest.city,
-                            province: activeRepairRequest.province,
-                            postalCode: activeRepairRequest.postalCode,
-                            country: activeRepairRequest.country,
-                            geocodeStatus: activeRepairRequest.geocodeStatus,
+                            addressText: activeRepairRequest.addressText || undefined,
+                            streetName: activeRepairRequest.streetName || undefined,
+                            village: activeRepairRequest.village || undefined,
+                            district: activeRepairRequest.district || undefined,
+                            city: activeRepairRequest.city || undefined,
+                            province: activeRepairRequest.province || undefined,
+                            postalCode: activeRepairRequest.postalCode || undefined,
+                            country: activeRepairRequest.country || undefined,
+                            geocodeStatus: activeRepairRequest.geocodeStatus || undefined,
                             manualLocationNote: repairManualLocation,
-                            note: activeRepairRequest.note,
+                            note: activeRepairRequest.note || undefined,
                             photos: repairUploadPhotos.map((p) => p.file),
                           },
                         );
