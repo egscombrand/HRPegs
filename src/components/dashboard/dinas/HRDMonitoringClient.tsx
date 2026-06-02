@@ -318,13 +318,13 @@ function inferCategory(entry: TimelineEntry): HrdTimelineCategory {
   return "system";
 }
 
-function inferMilestoneTypeFromMsg(msg: string): MilestoneEvidence["milestoneType"] {
+function inferMilestoneTypeFromMsg(msg: string): MilestoneEvidence["milestoneType"] | null {
   const lower = (msg ?? "").toLowerCase();
   if (lower.includes("keberangkatan") || lower.includes("berangkat")) return "departed";
   if (lower.includes("tiba di lokasi") || lower.includes("sampai lokasi")) return "arrived";
   if (lower.includes("kegiatan selesai")) return "activity_done";
-  if (lower.includes("kembali")) return "returned";
-  return "departed";
+  if (lower.includes("kembali") || lower.includes("kepulangan")) return "returned";
+  return null;
 }
 
 // Helper: Normalize evidence fields from multiple possible sources
@@ -412,7 +412,7 @@ function normalizeEvidence(raw: any): MilestoneEvidence {
   const normalized = {
     id: raw.id ?? "",
     missionId: raw.missionId ?? "",
-    milestoneType: raw.milestoneType ?? "departed",
+    milestoneType: raw.milestoneType || null,
     confirmedByUid: raw.confirmedByUid ?? raw.byUid ?? "",
     confirmedByName: raw.confirmedByName ?? raw.byName ?? "",
     targetMemberUids,
@@ -453,11 +453,31 @@ function collectEvidenceSources(
   detailMembers: BusinessTripMissionMember[],
   missionId: string,
 ): MilestoneEvidence[] {
-  // ─ Source 1: Built from timeline entries (has evidence metadata embedded)
+  // ─ Source 1: Built from timeline entries (ONLY if has substantive data)
   const timelineEvidence: MilestoneEvidence[] = detailTimeline
     .filter((e) => {
+      // Exclude repair request or upload ulang messages
+      const msg = (e.message ?? "").toLowerCase();
+      if (msg.includes("meminta upload ulang") || msg.includes("mengupload ulang bukti")) {
+        return false;
+      }
+
+      // Only include if has real evidence data
+      const hasPhotos = (e.evidencePhotos?.length ?? 0) > 0 ||
+                       (e.photos?.length ?? 0) > 0 ||
+                       (e.photoUrl ?? null) !== null;
+      const hasLocation = (e.evidenceLat ?? null) !== null ||
+                         (e.latitude ?? null) !== null ||
+                         (e.evidenceAddress ?? null) !== null;
+
+      if (!hasPhotos && !hasLocation) {
+        return false; // Skip timeline without photo/location
+      }
+
       const cat = inferCategory(e);
-      return cat === "tracking" && (e.milestoneType || inferMilestoneTypeFromMsg(e.message));
+      const milestoneType = e.milestoneType ?? inferMilestoneTypeFromMsg(e.message);
+
+      return cat === "tracking" && milestoneType !== null;
     })
     .map((e) => normalizeEvidence({
       id: e.evidenceId ?? e.id,

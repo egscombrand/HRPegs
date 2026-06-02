@@ -268,13 +268,13 @@ const STATUS_PRIORITY: Record<string, number> = {
 // ── Timeline category inference ───────────────────────────────────────────────
 type TimelineCategory = "tracking" | "approval" | "changes" | "issues" | "system";
 
-function inferMilestoneTypeFromMsg(msg: string): MilestoneEvidence["milestoneType"] {
+function inferMilestoneTypeFromMsg(msg: string): MilestoneEvidence["milestoneType"] | null {
   const lower = (msg ?? "").toLowerCase();
   if (lower.includes("keberangkatan") || lower.includes("berangkat")) return "departed";
   if (lower.includes("tiba di lokasi") || lower.includes("sampai lokasi")) return "arrived";
   if (lower.includes("kegiatan selesai")) return "activity_done";
-  if (lower.includes("kembali")) return "returned";
-  return "departed";
+  if (lower.includes("kembali") || lower.includes("kepulangan")) return "returned";
+  return null;
 }
 
 function inferTimelineCategory(entry: { message?: string; category?: string }): TimelineCategory {
@@ -400,7 +400,7 @@ function normalizeEvidence(raw: any): MilestoneEvidence {
   const normalized = {
     id: raw.id ?? "",
     missionId: raw.missionId ?? "",
-    milestoneType: raw.milestoneType ?? "departed",
+    milestoneType: raw.milestoneType || null,
     confirmedByUid: raw.confirmedByUid ?? raw.byUid ?? "",
     confirmedByName: raw.confirmedByName ?? raw.byName ?? "",
     targetMemberUids,
@@ -441,11 +441,31 @@ function collectEvidenceSources(
   activeMissionMembers: BusinessTripMissionMember[],
   missionId: string,
 ): MilestoneEvidence[] {
-  // ─ Source 1: Built from timeline entries (has evidence metadata embedded)
+  // ─ Source 1: Built from timeline entries (ONLY if has substantive data)
   const timelineEvidence: MilestoneEvidence[] = activeMissionTimeline
     .filter((e: any) => {
+      // Exclude repair request or upload ulang messages
+      const msg = (e.message ?? "").toLowerCase();
+      if (msg.includes("meminta upload ulang") || msg.includes("mengupload ulang bukti")) {
+        return false;
+      }
+
+      // Only include if has real evidence data
+      const hasPhotos = (e.evidencePhotos?.length ?? 0) > 0 ||
+                       (e.photos?.length ?? 0) > 0 ||
+                       (e.photoUrl ?? null) !== null;
+      const hasLocation = (e.evidenceLat ?? null) !== null ||
+                         (e.latitude ?? null) !== null ||
+                         (e.evidenceAddress ?? null) !== null;
+
+      if (!hasPhotos && !hasLocation) {
+        return false; // Skip timeline without photo/location
+      }
+
       const cat = inferTimelineCategory(e);
-      return cat === "tracking" && (e.milestoneType || inferMilestoneTypeFromMsg(e.message));
+      const milestoneType = e.milestoneType ?? inferMilestoneTypeFromMsg(e.message ?? "");
+
+      return cat === "tracking" && milestoneType !== null;
     })
     .map((e: any) => normalizeEvidence({
       id: e.evidenceId ?? e.id,
