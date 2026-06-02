@@ -361,6 +361,45 @@ function formatDateTime(value: any) {
   }
 }
 
+async function reverseGeocode(latitude: number, longitude: number) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=id`,
+      { headers: { "User-Agent": "HRPEnvironesia/1.0" } },
+    );
+    if (!res.ok) return { geocodeStatus: "failed" as const };
+
+    const data = await res.json();
+    const addr = data.address ?? {};
+    const road = addr.road || addr.pedestrian || addr.footway || addr.path || "";
+    const houseNumber = addr.house_number ? ` No. ${addr.house_number}` : "";
+    const streetName = road ? `${road}${houseNumber}` : "";
+    const village = addr.village || addr.suburb || addr.neighbourhood || addr.quarter || "";
+    const district = addr.city_district || addr.district || addr.subdistrict || addr.municipality || "";
+    const city = addr.city || addr.town || addr.county || addr.regency || "";
+    const province = addr.state || addr.province || "";
+    const postalCode = addr.postcode || "";
+    const country = addr.country || "";
+    const parts = [streetName, village, district, city, province, postalCode, country].filter(Boolean);
+    const addressText = data.display_name || parts.join(", ");
+
+    return {
+      geocodeStatus: "success" as const,
+      addressText,
+      streetName: streetName || undefined,
+      village: village || undefined,
+      district: district || undefined,
+      city: city || undefined,
+      province: province || undefined,
+      postalCode: postalCode || undefined,
+      country: country || undefined,
+    };
+  } catch (error) {
+    console.error("Reverse geocode error:", error);
+    return { geocodeStatus: "failed" as const };
+  }
+}
+
 function formatTime(value: any) {
   try {
     if (!value) return "";
@@ -1207,37 +1246,11 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
 
         // Reverse geocode via Nominatim (no API key required)
         try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=id`,
-            { headers: { "User-Agent": "HRPEnvironesia/1.0" } },
-          );
-          if (res.ok) {
-            const data = await res.json();
-            const addr = data.address ?? {};
-            const road = addr.road || addr.pedestrian || addr.footway || addr.path || "";
-            const houseNumber = addr.house_number ? ` No. ${addr.house_number}` : "";
-            const streetName = road ? `${road}${houseNumber}` : "";
-            const village = addr.village || addr.suburb || addr.neighbourhood || addr.quarter || "";
-            const district = addr.city_district || addr.district || addr.subdistrict || addr.municipality || "";
-            const city = addr.city || addr.town || addr.county || addr.regency || "";
-            const province = addr.state || addr.province || "";
-            const postalCode = addr.postcode || "";
-            const country = addr.country || "";
-            const parts = [streetName, village, district, city, province, postalCode, country].filter(Boolean);
-            const addressText = data.display_name || parts.join(", ");
-            setMilestoneGps({
-              ...base,
-              addressText,
-              streetName: streetName || undefined,
-              village: village || undefined,
-              district: district || undefined,
-              city: city || undefined,
-              province: province || undefined,
-              postalCode: postalCode || undefined,
-              country: country || undefined,
-              geocodeStatus: "success",
-            });
-          }
+          const geocodeResult = await reverseGeocode(lat, lng);
+          setMilestoneGps({
+            ...base,
+            ...geocodeResult,
+          });
         } catch {
           // keep base (geocodeStatus: "failed") — coordinates still saved
         }
@@ -5141,8 +5154,44 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                     </div>
 
                     {repairGps.status === "captured" && (
-                      <div className="text-xs font-mono text-muted-foreground bg-muted/50 dark:bg-muted/20 px-3 py-2 rounded-lg">
-                        {repairGps.latitude?.toFixed(6)}, {repairGps.longitude?.toFixed(6)}
+                      <div className="space-y-2">
+                        {/* Alamat Lengkap */}
+                        {repairGps.geocodeStatus === "success" && repairGps.addressText ? (
+                          <div className="text-sm text-foreground leading-snug bg-amber-50 dark:bg-amber-900/10 px-3 py-2 rounded-lg border border-amber-200/50 dark:border-amber-800/30">
+                            <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-1">📍 Lokasi Terdeteksi</p>
+                            <p>{repairGps.addressText}</p>
+                          </div>
+                        ) : repairGps.geocodeStatus === "failed" ? (
+                          <div className="rounded-lg border border-amber-200/50 bg-amber-50/60 dark:border-amber-800/30 dark:bg-amber-900/10 p-3">
+                            <p className="text-xs text-amber-700 dark:text-amber-400 font-medium mb-1">⚠️ Alamat lengkap gagal dideteksi</p>
+                            <p className="text-[11px] text-amber-600 dark:text-amber-400/80">Koordinat sudah tertangkap. Tambahkan catatan lokasi untuk informasi lengkap.</p>
+                          </div>
+                        ) : null}
+
+                        {/* Koordinat */}
+                        <div className="text-xs font-mono text-muted-foreground bg-muted/50 dark:bg-muted/20 px-3 py-2 rounded-lg space-y-1">
+                          <div>
+                            <span className="font-semibold">Koordinat:</span> {repairGps.latitude?.toFixed(6)}, {repairGps.longitude?.toFixed(6)}
+                          </div>
+                          {repairGps.accuracy != null && (
+                            <div>
+                              <span className="font-semibold">Akurasi:</span> ±{Math.round(repairGps.accuracy)}m
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Tombol Buka Maps */}
+                        {repairGps.latitude != null && repairGps.longitude != null && (
+                          <a
+                            href={`https://www.google.com/maps?q=${repairGps.latitude},${repairGps.longitude}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-700/40 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/30 transition-colors"
+                          >
+                            <MapPin className="h-3.5 w-3.5" />
+                            Buka di Maps
+                          </a>
+                        )}
                       </div>
                     )}
 
@@ -5169,12 +5218,27 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                             );
                           });
 
+                          const trustLevel = position.accuracy <= 15 ? "high" : position.accuracy <= 50 ? "medium" : "low";
+
+                          // Reverse geocode
+                          const geocodeResult = await reverseGeocode(position.latitude, position.longitude);
+                          console.log("repair reverse geocode result", geocodeResult);
+
                           setRepairGps({
                             status: "captured",
                             latitude: position.latitude,
                             longitude: position.longitude,
                             accuracy: position.accuracy,
-                            trustLevel: position.accuracy <= 15 ? "high" : position.accuracy <= 50 ? "medium" : "low",
+                            trustLevel,
+                            addressText: geocodeResult.addressText || undefined,
+                            streetName: geocodeResult.streetName,
+                            village: geocodeResult.village,
+                            district: geocodeResult.district,
+                            city: geocodeResult.city,
+                            province: geocodeResult.province,
+                            postalCode: geocodeResult.postalCode,
+                            country: geocodeResult.country,
+                            geocodeStatus: geocodeResult.geocodeStatus,
                           });
                         } catch (error: any) {
                           console.error("GPS capture error:", error);
@@ -5302,15 +5366,15 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                             locationCapturedAt: new Date(),
                             locationStatus: repairGps.status === "captured" ? "captured" : "manual",
                             locationTrustLevel: repairGps.trustLevel,
-                            addressText: activeRepairRequest.addressText || undefined,
-                            streetName: activeRepairRequest.streetName || undefined,
-                            village: activeRepairRequest.village || undefined,
-                            district: activeRepairRequest.district || undefined,
-                            city: activeRepairRequest.city || undefined,
-                            province: activeRepairRequest.province || undefined,
-                            postalCode: activeRepairRequest.postalCode || undefined,
-                            country: activeRepairRequest.country || undefined,
-                            geocodeStatus: activeRepairRequest.geocodeStatus || undefined,
+                            addressText: repairGps.addressText || undefined,
+                            streetName: repairGps.streetName || undefined,
+                            village: repairGps.village || undefined,
+                            district: repairGps.district || undefined,
+                            city: repairGps.city || undefined,
+                            province: repairGps.province || undefined,
+                            postalCode: repairGps.postalCode || undefined,
+                            country: repairGps.country || undefined,
+                            geocodeStatus: repairGps.geocodeStatus || undefined,
                             manualLocationNote: repairManualLocation,
                             note: activeRepairRequest.note || undefined,
                             photos: repairUploadPhotos.map((p) => p.file),
