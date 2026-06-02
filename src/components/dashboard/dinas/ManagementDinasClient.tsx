@@ -4399,7 +4399,24 @@ export function ManagementDinasClient() {
                       <div className="space-y-5">
                         {milestoneOrder.map((key) => {
                           const Icon = milestoneIcon[key];
-                          const items = allEvidence.filter((e) => e.milestoneType === key);
+                          const allItemsForMilestone = allEvidence.filter((e) => e.milestoneType === key);
+
+                          // Prioritize: resolved > with photos > latest
+                          const resolved = allItemsForMilestone.filter((e) => e.repairStatus === "resolved");
+                          const withPhotos = allItemsForMilestone.filter((e) => (e.photos?.length ?? 0) > 0);
+
+                          let items: typeof allItemsForMilestone;
+                          if (resolved.length > 0) {
+                            // Show only resolved if available
+                            items = resolved;
+                          } else if (withPhotos.length > 0) {
+                            // Show only with photos if no resolved
+                            items = withPhotos;
+                          } else {
+                            // Show all (including empty)
+                            items = allItemsForMilestone;
+                          }
+
                           return (
                             <div key={key} className="space-y-2">
                               <div className="flex items-center gap-2">

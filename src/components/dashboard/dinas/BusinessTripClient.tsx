@@ -2627,13 +2627,24 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
         updatedAt: serverTimestamp(),
       }, { merge: true });
 
-      const milestoneLabelMap: Record<string, string> = {
-        departed: "Keberangkatan",
-        arrived: "Kedatangan",
-        activity_done: "Penyelesaian Aktivitas",
-        returned: "Kepulangan",
+      const getMilestoneLabel = (type: string | undefined): string => {
+        if (!type) return "Bukti Perjalanan";
+        const mapping: Record<string, string> = {
+          departed: "Keberangkatan",
+          departure: "Keberangkatan",
+          berangkat: "Keberangkatan",
+          arrived: "Tiba di Lokasi",
+          arrival: "Tiba di Lokasi",
+          sampai_lokasi: "Tiba di Lokasi",
+          activity_done: "Penyelesaian Aktivitas",
+          kegiatan_selesai: "Penyelesaian Aktivitas",
+          returned: "Kepulangan",
+          return: "Kepulangan",
+          kembali: "Kepulangan",
+        };
+        return mapping[type.toLowerCase()] || "Bukti Perjalanan";
       };
-      const milestoneLabel = milestoneLabelMap[milestoneType] || milestoneType;
+      const milestoneLabel = getMilestoneLabel(milestoneType);
 
       await appendTimelineEntry(
         missionId,
@@ -2748,9 +2759,22 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
         });
       }
 
-      // Update existing evidence document (merge mode)
+      // Read old evidence to preserve targetMembers
       const evidenceRef = doc(firestore, "business_trip_missions", missionId, "milestone_evidences", evidenceId);
+      const oldEvidenceSnap = await getDoc(evidenceRef);
+      const oldEvidence = oldEvidenceSnap.data() as MilestoneEvidence | undefined;
+
+      console.log("repair evidence id", evidenceId);
+      console.log("old evidence", oldEvidence);
+      console.log("uploaded repair photos", uploadedPhotos);
+
+      // Update existing evidence document (merge mode)
       const updatePayload = {
+        // Preserve target members from old evidence
+        targetMemberUids: oldEvidence?.targetMemberUids || [],
+        targetMemberNames: oldEvidence?.targetMemberNames || [],
+
+        // Update location fields
         latitude: evidenceOpts.latitude ?? null,
         longitude: evidenceOpts.longitude ?? null,
         locationAccuracy: evidenceOpts.locationAccuracy ?? null,
@@ -2770,27 +2794,44 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
         geocodeStatus: evidenceOpts.geocodeStatus || null,
         manualLocationNote: evidenceOpts.manualLocationNote || null,
         note: evidenceOpts.note || null,
+
+        // Photos from upload
         photos: uploadedPhotos,
+
+        // Mark repair as resolved
         repairStatus: "resolved",
+        evidenceRepairRequested: false,
         repairedByUid: userProfile?.uid || null,
         repairedByName: userProfile?.fullName || userProfile?.email || null,
         repairedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
 
-      console.log("repair milestone evidence payload", updatePayload);
+      console.log("repair payload", updatePayload);
 
       await setDoc(evidenceRef, updatePayload, { merge: true });
 
+      console.log("repair success", evidenceId);
       console.log("✅ Milestone evidence repaired:", { evidenceId, photosCount: uploadedPhotos.length });
 
-      const milestoneLabelMap: Record<string, string> = {
-        departed: "Keberangkatan",
-        arrived: "Kedatangan",
-        activity_done: "Penyelesaian Aktivitas",
-        returned: "Kepulangan",
+      const getMilestoneLabel = (type: string | undefined): string => {
+        if (!type) return "Bukti Perjalanan";
+        const mapping: Record<string, string> = {
+          departed: "Keberangkatan",
+          departure: "Keberangkatan",
+          berangkat: "Keberangkatan",
+          arrived: "Tiba di Lokasi",
+          arrival: "Tiba di Lokasi",
+          sampai_lokasi: "Tiba di Lokasi",
+          activity_done: "Penyelesaian Aktivitas",
+          kegiatan_selesai: "Penyelesaian Aktivitas",
+          returned: "Kepulangan",
+          return: "Kepulangan",
+          kembali: "Kepulangan",
+        };
+        return mapping[type.toLowerCase()] || "Bukti Perjalanan";
       };
-      const milestoneLabel = milestoneLabelMap[milestoneType] || milestoneType;
+      const milestoneLabel = getMilestoneLabel(milestoneType);
 
       await appendTimelineEntry(
         missionId,
@@ -5037,13 +5078,23 @@ export function BusinessTripClient({ mode }: BusinessTripClientProps) {
                 </div>
                 <CardContent className="px-5 py-4 space-y-3">
                   {repairRequests.map((repair) => {
-                    const milestoneLabelMap: Record<string, string> = {
-                      departed: "Keberangkatan",
-                      arrived: "Kedatangan",
-                      activity_done: "Penyelesaian Aktivitas",
-                      returned: "Kepulangan",
-                    };
-                    const milestoneLabel = milestoneLabelMap[repair.milestoneType] || repair.milestoneType;
+                    const milestoneLabel = (() => {
+                      if (!repair.milestoneType) return "Bukti Perjalanan";
+                      const mapping: Record<string, string> = {
+                        departed: "Keberangkatan",
+                        departure: "Keberangkatan",
+                        berangkat: "Keberangkatan",
+                        arrived: "Tiba di Lokasi",
+                        arrival: "Tiba di Lokasi",
+                        sampai_lokasi: "Tiba di Lokasi",
+                        activity_done: "Penyelesaian Aktivitas",
+                        kegiatan_selesai: "Penyelesaian Aktivitas",
+                        returned: "Kepulangan",
+                        return: "Kepulangan",
+                        kembali: "Kepulangan",
+                      };
+                      return mapping[repair.milestoneType.toLowerCase()] || "Bukti Perjalanan";
+                    })();
 
                     return (
                       <div
