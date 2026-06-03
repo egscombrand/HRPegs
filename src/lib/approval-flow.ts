@@ -7,11 +7,21 @@ export type ApprovalLevel =
   | "unknown";
 
 export type DivisionMasterOrganization = {
+  // Primary manager fields
   managerId?: string | null;
+  managerUid?: string | null;
   managerName?: string | null;
+  supervisorUid?: string | null;
+  supervisorName?: string | null;
+  directSupervisorUid?: string | null;
+  directSupervisorName?: string | null;
+  // Manager's own supervisor (for division manager role)
   managerDirectSupervisorId?: string | null;
+  managerDirectSupervisorUid?: string | null;
   managerDirectSupervisorName?: string | null;
   managerDirectSupervisorTitle?: string | null;
+  directorUid?: string | null;
+  directorName?: string | null;
 };
 
 export type ApprovalTarget = {
@@ -58,9 +68,14 @@ export function resolveApprovalTarget(
 
   if (structuralPosition === "division_manager") {
     const managerDirectSupervisorId =
-      masterOrganization?.managerDirectSupervisorId || null;
+      masterOrganization?.managerDirectSupervisorId ||
+      masterOrganization?.managerDirectSupervisorUid ||
+      masterOrganization?.directorUid ||
+      null;
     const managerDirectSupervisorName =
-      masterOrganization?.managerDirectSupervisorName || null;
+      masterOrganization?.managerDirectSupervisorName ||
+      masterOrganization?.directorName ||
+      null;
 
     if (managerDirectSupervisorId) {
       if (invalidSelf(managerDirectSupervisorId)) {
@@ -137,12 +152,21 @@ export function resolveApprovalTarget(
     };
   }
 
-  // Default: staff
-  const managerId = masterOrganization?.managerId || null;
-  const managerName = masterOrganization?.managerName || null;
+  // Default: staff — try all known manager fields from masterOrganization
+  const masterManagerUid =
+    masterOrganization?.managerId ||
+    masterOrganization?.managerUid ||
+    masterOrganization?.supervisorUid ||
+    masterOrganization?.directSupervisorUid ||
+    null;
+  const masterManagerName =
+    masterOrganization?.managerName ||
+    masterOrganization?.supervisorName ||
+    masterOrganization?.directSupervisorName ||
+    null;
 
-  if (managerId) {
-    if (invalidSelf(managerId)) {
+  if (masterManagerUid) {
+    if (invalidSelf(masterManagerUid)) {
       return {
         approvalTargetUid: null,
         approvalTargetName: null,
@@ -153,8 +177,8 @@ export function resolveApprovalTarget(
     }
 
     return {
-      approvalTargetUid: managerId,
-      approvalTargetName: managerName || null,
+      approvalTargetUid: masterManagerUid,
+      approvalTargetName: masterManagerName || null,
       approvalLevel: "staff_to_manager",
     };
   }
@@ -175,7 +199,7 @@ export function resolveApprovalTarget(
       approvalTargetName: directSupervisorName || null,
       approvalLevel: "staff_to_manager",
       reason:
-        "Fallback ke directSupervisorUid karena master organisasi belum lengkap.",
+        "Fallback ke directSupervisorUid dari employee profile karena master organisasi belum lengkap.",
     };
   }
 
@@ -228,8 +252,8 @@ export function resolvePermissionManager(
       role: "manager",
     },
     {
-      uid: employeeProfile?.directManagerUid || null,
-      name: employeeProfile?.directManagerName || null,
+      uid: (employeeProfile as any)?.directManagerUid || null,
+      name: (employeeProfile as any)?.directManagerName || null,
       role: "manager",
     },
     {
@@ -293,8 +317,8 @@ export function getDirectManagerForEmployee(
       role: "manager",
     },
     {
-      uid: employeeProfile.directManagerUid || null,
-      name: employeeProfile.directManagerName || null,
+      uid: (employeeProfile as any).directManagerUid || null,
+      name: (employeeProfile as any).directManagerName || null,
       role: "manager",
     },
     {

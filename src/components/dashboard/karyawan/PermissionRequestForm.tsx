@@ -35,6 +35,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Loader2,
   FileUp,
+  FileText,
   Info,
   CheckCircle2,
   AlertCircle,
@@ -52,6 +53,7 @@ import { useAuth } from "@/providers/auth-provider";
 import {
   useFirestore,
   useDoc,
+  useCollection,
   useMemoFirebase,
   setDocumentNonBlocking,
 } from "@/firebase";
@@ -60,6 +62,8 @@ import {
   serverTimestamp,
   Timestamp,
   collection,
+  query,
+  where,
 } from "firebase/firestore";
 import {
   resolveApprovalTarget,
@@ -98,6 +102,26 @@ import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { compressAndResizeImage } from "@/lib/image-compression";
+
+/** Recursively remove all undefined values from an object/array so Firestore doesn't reject. */
+function removeUndefinedDeep(obj: any): any {
+  if (Array.isArray(obj)) {
+    return obj.map(removeUndefinedDeep).filter((v) => v !== undefined);
+  }
+  if (
+    obj !== null &&
+    typeof obj === "object" &&
+    !(obj instanceof Date) &&
+    !("seconds" in obj && "nanoseconds" in obj)
+  ) {
+    return Object.fromEntries(
+      Object.entries(obj)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, removeUndefinedDeep(v)]),
+    );
+  }
+  return obj;
+}
 
 const PERMISSION_TYPE_LABELS: Record<PermissionType, string> = {
   sakit: "Izin Sakit",
@@ -337,34 +361,63 @@ export function PermissionRequestForm({
   const { toast } = useToast();
 
   const staffBrandId = useMemo(() => {
-    if (!employeeProfile?.brandId) return "";
-    return Array.isArray(employeeProfile.brandId)
-      ? employeeProfile.brandId[0]
-      : employeeProfile.brandId;
-  }, [employeeProfile?.brandId]);
+    if (!employeeProfile) return "";
+    const ep = employeeProfile as any;
+    const raw =
+      ep.brandId ||
+      ep.companyId ||
+      ep.hrdEmploymentInfo?.brandId ||
+      ep.hrdEmploymentInfo?.companyId ||
+      ep.brand ||
+      ep.companyName ||
+      "";
+    return Array.isArray(raw) ? raw[0] : raw;
+  }, [employeeProfile]);
 
   const staffDivisionId = useMemo(() => {
+    const ep = employeeProfile as any;
+    // Priority mirrors LeaveSubmissionClient: employeeProfile.division first
     return (
-      employeeProfile?.hrdEmploymentInfo?.divisionId ||
-      (employeeProfile as any)?.divisionId ||
-      employeeProfile?.division ||
-      employeeProfile?.hrdEmploymentInfo?.divisionName ||
+      ep?.division ||
+      ep?.hrdEmploymentInfo?.divisionId ||
+      ep?.divisionId ||
+      ep?.hrdEmploymentInfo?.divisionName ||
+      ep?.hrdEmploymentInfo?.divisi ||
       ""
     );
-  }, [
-    employeeProfile?.hrdEmploymentInfo?.divisionId,
-    (employeeProfile as any)?.divisionId,
-    employeeProfile?.division,
-    employeeProfile?.hrdEmploymentInfo?.divisionName,
-  ]);
+  }, [employeeProfile]);
 
+  // Layer 1: getDoc by ID — brands/{brandId}/divisions/{divisionId}
   const divisionDocRef = useMemoFirebase(() => {
     if (!firestore || !staffBrandId || !staffDivisionId) return null;
     return doc(firestore, "brands", staffBrandId, "divisions", staffDivisionId);
   }, [firestore, staffBrandId, staffDivisionId]);
-
-  const { data: divisionMaster } =
+  const { data: divisionDocById } =
     useDoc<DivisionMasterOrganization>(divisionDocRef);
+
+  // Layer 2: query by name — in case the doc ID is different from the division name/value
+  const divisionNameQuery = useMemoFirebase(() => {
+    if (!firestore || !staffBrandId || !staffDivisionId) return null;
+    return query(
+      collection(firestore, "brands", staffBrandId, "divisions"),
+      where("name", "==", staffDivisionId),
+    );
+  }, [firestore, staffBrandId, staffDivisionId]);
+  const { data: divisionsByName } =
+    useCollection<DivisionMasterOrganization>(divisionNameQuery);
+
+  // Merge: prefer name-query result, fallback to doc-by-ID (same as OvertimeSubmissionForm)
+  const divisionMaster = useMemo(
+    () => divisionsByName?.[0] || divisionDocById || null,
+    [divisionsByName, divisionDocById],
+  );
+
+  // Layer 3: users collection fallback (identical to Lembur)
+  const allUsersQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, "users"));
+  }, [firestore]);
+  const { data: allUsers } = useCollection<any>(allUsersQuery);
   const isEditing =
     !!submission &&
     (submission.status === "draft" || submission.status.startsWith("revision"));
@@ -514,17 +567,90 @@ export function PermissionRequestForm({
     !blockSickNoAttachment &&
     !blockKeluarOver4;
 
-  // Determine direct manager for preview and validation using centralized resolver
-  const approvalTargetPreview = resolveApprovalTarget(
+  // Resolve manager using same 3-layer fallback as OvertimeSubmissionForm
+  const directManager = useMemo(() => {
+    // Layer 1: from divisionMaster document
+    const divDoc = divisionMaster as any;
+    const divMgrUid =
+      divDoc?.managerId ||
+      divDoc?.managerUid ||
+      divDoc?.supervisorUid ||
+      divDoc?.directSupervisorUid ||
+      divDoc?.headUid ||
+      divDoc?.leadUid ||
+      null;
+    const divMgrName =
+      divDoc?.managerName ||
+      divDoc?.supervisorName ||
+      divDoc?.directSupervisorName ||
+      divDoc?.headName ||
+      divDoc?.leadName ||
+      null;
+
+    // Layer 2: from users collection — find isDivisionManager matching brand+division
+    let fallbackUser: any = null;
+    if (!divMgrUid && allUsers && staffDivisionId) {
+      fallbackUser = allUsers.find((u: any) => {
+        const brandMatch =
+          !staffBrandId ||
+          u.managedBrandId === staffBrandId ||
+          (Array.isArray(u.brandId)
+            ? u.brandId.includes(staffBrandId)
+            : u.brandId === staffBrandId);
+        const divisionMatch =
+          u.managedDivision === staffDivisionId ||
+          u.managedDivisionName === staffDivisionId ||
+          u.division === staffDivisionId ||
+          u.divisionId === staffDivisionId ||
+          u.managedDivisionId === staffDivisionId;
+        const isManager =
+          u.isDivisionManager === true ||
+          u.structuralLevel === "division_manager" ||
+          u.role === "manager" ||
+          (u.positionTitle || "").toLowerCase().includes("manager divisi");
+        return isManager && divisionMatch && brandMatch;
+      });
+    }
+
+    // Layer 3: from resolveApprovalTarget (uses employee profile fields)
+    const resolved = resolveApprovalTarget(
+      employeeProfile,
+      userProfile,
+      divisionMaster,
+    );
+
+    // Layer 4: raw profile fields
+    const ep = employeeProfile as any;
+    const profileUid =
+      ep?.directSupervisorUid || ep?.supervisorUid || ep?.managerUid || null;
+    const profileName =
+      ep?.directSupervisorName || ep?.supervisorName || ep?.managerName || null;
+
+    const finalUid =
+      divMgrUid ||
+      fallbackUser?.uid ||
+      resolved.approvalTargetUid ||
+      profileUid ||
+      null;
+    const finalName =
+      divMgrName ||
+      (fallbackUser
+        ? fallbackUser.fullName || fallbackUser.displayName
+        : null) ||
+      resolved.approvalTargetName ||
+      profileName ||
+      null;
+
+    return { uid: finalUid, name: finalName, role: resolved.approvalLevel };
+  }, [
+    divisionMaster,
+    allUsers,
+    staffBrandId,
+    staffDivisionId,
     employeeProfile,
     userProfile,
-    divisionMaster,
-  );
-  const directManager = {
-    uid: approvalTargetPreview.approvalTargetUid,
-    name: approvalTargetPreview.approvalTargetName || null,
-    role: approvalTargetPreview.approvalLevel || null,
-  };
+  ]);
+
   const managerValid = !!directManager.uid;
 
   // include manager validity in final submit enable
@@ -609,7 +735,13 @@ export function PermissionRequestForm({
           },
         );
 
-        attachmentUrl = result.webViewLink || result.downloadUrl || "";
+        // Use internal proxy URL so file is accessible cross-account without Google login
+        if (result.fileId) {
+          attachmentUrl = `/api/storage/google-drive-preview?fileId=${result.fileId}`;
+        } else {
+          attachmentUrl =
+            result.viewUrl || result.downloadUrl || result.webViewLink || "";
+        }
       } else if (typeof values.attachment === "string") {
         attachmentUrl = values.attachment; // Keep existing URL if file not changed
       }
@@ -637,22 +769,15 @@ export function PermissionRequestForm({
         finalStartDate,
       );
 
-      const resolved = resolveApprovalTarget(
-        employeeProfile,
-        userProfile,
-        divisionMaster,
-      );
-
-      // Use centralized approval target (same as Cuti/Lembur/Dinas)
-      const managerUid = resolved.approvalTargetUid;
-      const managerName = resolved.approvalTargetName || null;
-      const managerRole = resolved.approvalLevel || null;
+      // Use the same 3-layer resolved manager (same as preview in UI)
+      const managerUid = directManager.uid;
+      const managerName = directManager.name || null;
 
       if (!managerUid) {
         toast({
           variant: "destructive",
-          title: "Atasan Tidak Valid",
-          description: `Atasan belum ditemukan dari struktur organisasi terbaru. Periksa mapping divisi/brand karyawan.`,
+          title: "Atasan Tidak Ditemukan",
+          description: `Atasan belum ditemukan. Brand: ${staffBrandId || "—"}, Divisi: ${staffDivisionId || "belum terisi"}. Periksa mapping divisi/brand karyawan.`,
         });
         setIsSaving(false);
         return;
@@ -684,9 +809,10 @@ export function PermissionRequestForm({
               ? initialStatus
               : submission.status,
           managerUid: managerUid,
+          managerName: managerName || "",
           waitingForUid: managerUid,
           waitingForName: managerName || "",
-          approvalLevel: resolved.approvalLevel,
+          approvalLevel: directManager.role || "staff_to_manager",
           currentApprovalStep: "manager",
           requesterStructuralPosition:
             employeeProfile?.hrdEmploymentInfo?.structuralPosition ||
@@ -698,15 +824,65 @@ export function PermissionRequestForm({
               ? "verification_needed"
               : "not_provided",
           dynamicFields: getSpecificFields(values),
-          timeline: [],
+          timeline: [
+            {
+              event: "Pengajuan dibuat",
+              by: userProfile.fullName,
+              byUid: userProfile.uid,
+              at: Timestamp.now(),
+              note: null,
+            },
+            {
+              event: `Pengajuan dikirim ke ${managerName || "atasan"}`,
+              by: userProfile.fullName,
+              byUid: userProfile.uid,
+              at: Timestamp.now(),
+              note: null,
+            },
+          ],
         };
+
+      // Applicant snapshot fields — use prioritized sources (employeeProfile, divisionMaster, brands list)
+      const applicantBrandId = staffBrandId || null;
+      const brandObj = brands?.find((b) => b.id === applicantBrandId) || null;
+      const applicantBrandName =
+        brandObj?.name || employeeProfile?.brandName || null;
+
+      const applicantDivisionId = staffDivisionId || null;
+      const applicantDivisionName =
+        employeeProfile?.division ||
+        (employeeProfile?.hrdEmploymentInfo &&
+          (employeeProfile.hrdEmploymentInfo.divisionName ||
+            employeeProfile.hrdEmploymentInfo.divisionId)) ||
+        null;
+
+      const applicantPosition =
+        employeeProfile?.positionTitle ||
+        employeeProfile?.hrdEmploymentInfo?.jabatan ||
+        userProfile?.positionTitle ||
+        "Staf";
+
+      // Merge snapshot into payload
+      (payload as any).applicantUid = userProfile.uid;
+      (payload as any).applicantName = userProfile.fullName;
+      (payload as any).applicantPosition = applicantPosition;
+      (payload as any).applicantDivisionId =
+        applicantDivisionId || staffDivisionId || null;
+      (payload as any).applicantDivisionName = applicantDivisionName || null;
+      (payload as any).applicantBrandId = applicantBrandId || null;
+      (payload as any).applicantBrandName = applicantBrandName || null;
+      (payload as any).applicantCompanyName =
+        employeeProfile?.brandName || null;
+      (payload as any).managerUid = managerUid;
+      (payload as any).managerName = managerName || null;
+      (payload as any).managerRole = directManager.role || null;
 
       await setDocumentNonBlocking(
         docRef,
-        {
+        removeUndefinedDeep({
           ...payload,
           [isCreating ? "createdAt" : "updatedAt"]: serverTimestamp(),
-        },
+        }),
         { merge: true },
       );
 
@@ -724,50 +900,51 @@ export function PermissionRequestForm({
     }
   };
 
-  const getSpecificFields = (values: FormValues) => {
-    const specificFields: Partial<PermissionRequest> = {};
+  const getSpecificFields = (
+    values: FormValues,
+  ): Record<string, string | null> => {
     const sf = values.formType;
     const rt = values.reasonType;
+    const fields: Record<string, string | null> = {};
 
-    // Reason-specific fields
+    // Only include fields relevant to the selected types — use null instead of undefined
     if (rt === "sakit") {
-      specificFields.sicknessDescription = values.sicknessDescription;
+      fields.sicknessDescription =
+        values.sicknessDescription || values.reasonDetail || null;
     }
     if (rt === "duka") {
-      specificFields.familyRelation = values.familyRelation;
-      specificFields.familyName = values.familyName;
-      specificFields.location = values.location;
+      fields.familyRelation = values.familyRelation || null;
+      fields.familyName = values.familyName || null;
+      fields.location = values.location || null;
     }
     if (rt === "akademik") {
-      specificFields.academicActivityName = values.academicActivityName;
-      specificFields.academicInstitution = values.academicInstitution;
+      fields.academicActivityName = values.academicActivityName || null;
+      fields.academicInstitution = values.academicInstitution || null;
     }
     if (rt === "lainnya") {
-      specificFields.otherTitle = values.otherLeaveTitle;
-      specificFields.detailedReason = values.detailedReason;
+      fields.otherTitle = values.otherLeaveTitle || null;
+      fields.detailedReason = values.detailedReason || null;
     }
     if (rt === "administrasi_resmi") {
-      specificFields.officialAffairType = values.officialAffairType;
-      specificFields.location = values.location;
-      specificFields.estimatedFinishTime = values.estimatedFinishTime;
+      fields.officialAffairType = values.officialAffairType || null;
+      fields.location = values.location || null;
+      fields.estimatedFinishTime = values.estimatedFinishTime || null;
     }
-
-    // Form-specific fields
     if (sf === "datang_terlambat") {
-      specificFields.scheduledWorkTime = values.scheduledWorkTime;
-      specificFields.estimatedArrivalTime = values.estimatedArrivalTime;
+      fields.scheduledWorkTime = values.scheduledWorkTime || null;
+      fields.estimatedArrivalTime = values.estimatedArrivalTime || null;
     }
     if (sf === "pulang_awal") {
-      specificFields.scheduledEndTime = values.scheduledEndTime;
-      specificFields.proposedLeaveTime = values.proposedLeaveTime;
-      specificFields.detailedReason = values.detailedReason;
+      fields.scheduledEndTime = values.scheduledEndTime || null;
+      fields.proposedLeaveTime = values.proposedLeaveTime || null;
+      fields.detailedReason = values.detailedReason || null;
     }
     if (sf === "keluar_kantor") {
-      specificFields.destination = values.destination;
-      specificFields.contactInfo = values.contactInfo;
+      fields.destination = values.destination || null;
+      fields.contactInfo = values.contactInfo || null;
     }
 
-    return specificFields;
+    return fields;
   };
 
   // ... (rest of the component JSX, which is quite large and complex)
@@ -932,22 +1109,103 @@ export function PermissionRequestForm({
                   </Alert>
                 )}
 
-                {/* Manager preview */}
-                <div className="text-sm mb-2">
+                {/* Alur Persetujuan Card */}
+                <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3 mb-2">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Alur Persetujuan
+                  </p>
+
                   {directManager?.uid ? (
-                    <div>
-                      Akan diajukan ke:{" "}
-                      <span className="font-medium">{directManager.name}</span>
-                    </div>
+                    <>
+                      {/* Step indicator */}
+                      <div className="flex items-center gap-2 text-sm flex-wrap">
+                        <div className="flex items-center gap-1.5">
+                          <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary border border-primary/20">
+                            1
+                          </div>
+                          <span className="font-medium text-foreground">
+                            {userProfile?.fullName || "Anda"}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">
+                            (Pengaju)
+                          </span>
+                        </div>
+                        <ArrowRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                        <div className="flex items-center gap-1.5">
+                          <div className="h-5 w-5 rounded-full bg-amber-500/10 flex items-center justify-center text-[10px] font-bold text-amber-600 dark:text-amber-400 border border-amber-400/30">
+                            2
+                          </div>
+                          <span className="font-semibold text-foreground">
+                            {directManager.name || "Atasan Langsung"}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">
+                            (Atasan)
+                          </span>
+                        </div>
+                        <ArrowRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                        <div className="flex items-center gap-1.5">
+                          <div className="h-5 w-5 rounded-full bg-blue-500/10 flex items-center justify-center text-[10px] font-bold text-blue-600 dark:text-blue-400 border border-blue-400/30">
+                            3
+                          </div>
+                          <span className="text-muted-foreground">HRD</span>
+                        </div>
+                      </div>
+
+                      {/* Info rows */}
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm border-t border-border/50 pt-3">
+                        <p className="text-muted-foreground text-xs">Pengaju</p>
+                        <p className="font-medium text-xs text-right">
+                          {userProfile?.fullName || "—"}
+                        </p>
+                        <p className="text-muted-foreground text-xs">
+                          Atasan langsung
+                        </p>
+                        <p className="font-medium text-xs text-right">
+                          {directManager.name || "—"}
+                        </p>
+                        <p className="text-muted-foreground text-xs">
+                          Tahap berikutnya
+                        </p>
+                        <p className="font-medium text-xs text-right">
+                          HRD (setelah disetujui atasan)
+                        </p>
+                        <p className="text-muted-foreground text-xs">
+                          Status awal
+                        </p>
+                        <p className="font-medium text-xs text-right text-amber-600 dark:text-amber-400">
+                          Menunggu persetujuan atasan
+                        </p>
+                      </div>
+
+                      <p className="text-xs text-muted-foreground border-t border-border/50 pt-2">
+                        Pengajuan ini akan dikirim terlebih dahulu ke atasan
+                        langsung, lalu diteruskan ke HRD setelah disetujui.
+                      </p>
+                      <div className="rounded-lg bg-blue-50/60 dark:bg-blue-900/10 border border-blue-200/50 dark:border-blue-800/30 px-3 py-2 text-xs text-blue-700 dark:text-blue-300">
+                        Setelah dikirim, status pengajuan akan menjadi:{" "}
+                        <strong>
+                          Menunggu persetujuan {directManager.name}
+                        </strong>
+                      </div>
+                    </>
                   ) : (
-                    <Alert>
-                      <AlertTitle>Atasan Tidak Ditemukan</AlertTitle>
-                      <AlertDescription>
-                        Atasan langsung belum ditemukan untuk{" "}
-                        {userProfile?.fullName || "karyawan"}. Periksa Data
-                        Karyawan &gt; Struktur Organisasi/Manager.
-                      </AlertDescription>
-                    </Alert>
+                    <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 space-y-1.5">
+                      <p className="text-sm font-semibold text-destructive">
+                        Atasan belum ditemukan
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Periksa struktur organisasi karyawan di Data Karyawan ›
+                        Info Kepegawaian.
+                      </p>
+                      <div className="text-xs text-muted-foreground/70 font-mono space-y-0.5">
+                        <p>Brand: {staffBrandId || "—"}</p>
+                        <p>Divisi: {staffDivisionId || "belum terisi"}</p>
+                        <p>
+                          Dok divisi:{" "}
+                          {divisionMaster ? "✓ ditemukan" : "✗ tidak ditemukan"}
+                        </p>
+                      </div>
+                    </div>
                   )}
                 </div>
 
@@ -1379,25 +1637,49 @@ export function PermissionRequestForm({
                         </p>
                       )}
                       {isViewing && value && (
-                        <div className="flex items-center gap-3">
+                        <div className="space-y-2">
                           {typeof value === "string" &&
-                            (value.match(/\.(jpg|jpeg|png)$/i) ? (
-                              <img
-                                src={value}
-                                alt="preview"
-                                className="h-20 rounded-md border"
-                              />
-                            ) : (
-                              <Button variant="outline" asChild>
-                                <a
-                                  href={value}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                >
-                                  Lihat / Unduh
-                                </a>
-                              </Button>
-                            ))}
+                            (() => {
+                              // Resolve to internal proxy URL
+                              const proxySrc = value.startsWith("/api/")
+                                ? value
+                                : (() => {
+                                    const m =
+                                      value.match(/[?&]fileId=([^&]+)/) ||
+                                      value.match(/\/d\/([a-zA-Z0-9-_]+)/) ||
+                                      value.match(/id=([a-zA-Z0-9-_]+)/);
+                                    return m
+                                      ? `/api/storage/google-drive-preview?fileId=${m[1]}`
+                                      : value;
+                                  })();
+                              const isImg =
+                                /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(
+                                  value,
+                                ) || value.includes("image");
+                              return isImg ? (
+                                <img
+                                  src={proxySrc}
+                                  alt="preview lampiran"
+                                  className="h-28 rounded-lg border object-cover"
+                                />
+                              ) : (
+                                <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/20 px-3 py-2">
+                                  <FileText className="h-6 w-6 text-muted-foreground" />
+                                  <span className="text-sm text-muted-foreground flex-1">
+                                    Dokumen lampiran
+                                  </span>
+                                  <Button size="sm" variant="outline" asChild>
+                                    <a
+                                      href={proxySrc}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                    >
+                                      Lihat
+                                    </a>
+                                  </Button>
+                                </div>
+                              );
+                            })()}
                         </div>
                       )}
                       {!isViewing && (

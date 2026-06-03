@@ -1825,7 +1825,22 @@ export type OvertimeSubmission = {
   workLocation?: string;
   workLocationLabel?: string;
   employeeNotes?: string | null;
-  attachments?: string[];
+  // Attachments may be legacy string URLs or richer objects from upload APIs
+  attachments?: Array<
+    | string
+    | {
+        id?: string;
+        name?: string;
+        fileName?: string;
+        fileUrl?: string;
+        url?: string;
+        fileId?: string;
+        driveFileId?: string;
+        googleDriveFileId?: string;
+        mimeType?: string;
+        contentType?: string;
+      }
+  >;
   status: OvertimeSubmissionStatus;
   approvalStatus?: string;
 
@@ -1967,6 +1982,17 @@ export type PermissionRequest = {
     decisionNotes?: string | null;
     decisionAt?: Timestamp | null;
   } | null;
+  // Applicant snapshot captured at submit time (for reliable review data)
+  applicantUid?: string | null;
+  applicantName?: string | null;
+  applicantPosition?: string | null;
+  applicantDivisionId?: string | null;
+  applicantDivisionName?: string | null;
+  applicantBrandId?: string | null;
+  applicantBrandName?: string | null;
+  applicantCompanyName?: string | null;
+  // Manager snapshot (manager fields already exist but include role for clarity)
+  managerRole?: string | null;
   // New separation: bentuk izin (form) and alasan izin (reason)
   formType?:
     | "tidak_masuk"
