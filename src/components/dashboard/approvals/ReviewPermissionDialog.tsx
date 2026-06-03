@@ -177,6 +177,7 @@ function getApplicantInfo(submission: any) {
 
   // Priority: snapshot fields on submission -> employeeProfile -> approvalFlow -> fallbacks
   const position =
+    clean(submission._resolvedApplicantPosition) ||
     clean(submission.applicantPosition) ||
     clean(ep?.positionTitle) ||
     clean(ep?.hrdEmploymentInfo?.positionName) ||
@@ -190,6 +191,7 @@ function getApplicantInfo(submission: any) {
     null;
 
   const division =
+    clean(submission._resolvedApplicantDivision) ||
     clean(submission.applicantDivisionName) ||
     clean(ep?.division) ||
     clean(ep?.divisionName) ||
@@ -200,6 +202,7 @@ function getApplicantInfo(submission: any) {
     null;
 
   const brand =
+    clean(submission._resolvedApplicantBrand) ||
     clean(submission.applicantBrandName) ||
     clean(submission.applicantCompanyName) ||
     clean(ep?.brandName) ||
@@ -274,23 +277,36 @@ const PERMISSION_TYPE_LABELS = {
   lainnya: "Izin Lainnya",
 };
 
+function isHrdValidationPhase(s: PermissionRequest): boolean {
+  const isHrdStep = s.currentApprovalStep === "hrd" || s.waitingForRole === "hrd" || s.waitingForName === "HRD";
+  const isHrdStatus = [
+    "pending_hrd",
+    "pending_hrd_validation",
+    "approved_by_manager",
+    "verified_manager",
+    "revision_hrd"
+  ].includes(s.status);
+  
+  return isHrdStep || isHrdStatus;
+}
+
 const HUMAN_STATUS_LABELS: Record<
   string,
   (submission: PermissionRequest) => string
 > = {
   draft: () => "Draft",
-  pending_manager: (s) => `Menunggu persetujuan ${s.managerName || "Atasan"}`,
-  rejected_manager: () => "Ditolak (Manager)",
-  revision_manager: () => "Perlu revisi (Manager)",
-  approved_by_manager: () => "Disetujui oleh Atasan",
+  pending_manager: (s) => `Menunggu persetujuan ${s.waitingForName || s.managerName || "Manager"}`,
+  rejected_manager: () => "Ditolak",
+  revision_manager: () => "Perlu Revisi",
+  approved_by_manager: () => "Menunggu validasi HRD",
   pending_hrd: () => "Menunggu validasi HRD",
-  rejected_hrd: () => "Ditolak (HRD)",
-  revision_hrd: () => "Perlu revisi (HRD)",
+  rejected_hrd: () => "Ditolak",
+  revision_hrd: () => "Perlu Revisi",
   approved: () => "Disetujui",
-  reported: () => "Laporan Keluar Dibuat",
+  reported: () => "Dilaporkan Keluar",
   returned: () => "Sudah Kembali",
-  verified_manager: () => "Diverifikasi Manager",
-  closed: () => "Selesai",
+  verified_manager: () => "Menunggu validasi HRD",
+  closed: () => "Disetujui",
 };
 
 const buildTimeline = (submission: PermissionRequest) => {
@@ -302,128 +318,99 @@ const buildTimeline = (submission: PermissionRequest) => {
     icon?: "ok" | "warn" | "info";
   }[] = [];
 
-  // From stored timeline array (source of truth if populated)
-  if (Array.isArray(submission.timeline) && submission.timeline.length > 0) {
-    for (const t of submission.timeline) {
+  // 1. Pengajuan dibuat
+  if (submission.createdAt) {
+    items.push({
+      label: "Pengajuan dibuat",
+      date: safeToDate(submission.createdAt),
+      by: getApplicantName(submission),
+      icon: "info",
+    });
+  }
+
+  // 2. Dikirim ke manager
+  if (submission.createdAt) {
+    items.push({
+      label: `Dikirim ke manager (${submission.managerName || "Atasan"})`,
+      date: safeToDate(submission.createdAt),
+      icon: "info",
+    });
+  }
+
+  // 3. Manager action
+  if (submission.managerDecisionAt) {
+    const decDate = safeToDate(submission.managerDecisionAt);
+    const mName = submission.managerName || "Manager";
+    let eventLabel = `Manager ${mName} menyetujui pengajuan`;
+    let icon: "ok" | "warn" = "ok";
+    if (submission.status === "rejected_manager") {
+      eventLabel = `Manager ${mName} menolak pengajuan`;
+      icon = "warn";
+    } else if (submission.status === "revision_manager") {
+      eventLabel = `Manager ${mName} meminta revisi`;
+      icon = "warn";
+    }
+    items.push({
+      label: eventLabel,
+      date: decDate,
+      by: mName,
+      notes: submission.managerNotes || undefined,
+      icon,
+    });
+
+    // 4. Masuk validasi HRD (immediately after manager approval)
+    if (
+      ![
+        "pending_manager",
+        "rejected_manager",
+        "revision_manager",
+        "draft",
+      ].includes(submission.status)
+    ) {
       items.push({
-        label: t.event || "Aktivitas",
-        date: t.at
-          ? (t.at as any).toDate?.() || new Date(t.at as any)
-          : undefined,
-        by: t.by || undefined,
-        notes: t.note || undefined,
+        label: "Masuk validasi HRD",
+        date: decDate,
         icon: "info",
       });
     }
-  } else {
-    // Fallback: derive from status fields
-    if (submission.createdAt)
-      items.push({
-        label: "Pengajuan dibuat",
-        date: safeToDate(submission.createdAt),
-        by: submission.fullName,
-        icon: "info",
-      });
-    if (submission.createdAt)
-      items.push({
-        label: `Dikirim ke ${submission.managerName || "atasan"}`,
-        date: safeToDate(submission.createdAt),
-        by: submission.fullName,
-        icon: "info",
-      });
   }
 
-  // Manager decision events (always from Firestore fields)
-  if (submission.managerDecisionAt) {
-    const decisionDate = safeToDate(submission.managerDecisionAt);
-    const by = submission.managerName || undefined;
-    if (
-      submission.status === "approved_by_manager" ||
-      submission.status === "pending_hrd" ||
-      submission.status === "closed" ||
-      submission.status === "approved"
-    )
-      items.push({
-        label: "Disetujui atasan",
-        date: decisionDate,
-        by,
-        notes: submission.managerNotes || undefined,
-        icon: "ok",
-      });
-    else if (submission.status === "rejected_manager")
-      items.push({
-        label: "Ditolak atasan",
-        date: decisionDate,
-        by,
-        notes: submission.managerNotes || undefined,
-        icon: "warn",
-      });
-    else if (submission.status === "revision_manager")
-      items.push({
-        label: "Revisi diminta atasan",
-        date: decisionDate,
-        by,
-        notes: submission.managerNotes || undefined,
-        icon: "warn",
-      });
-    else if (submission.status === "verified_manager")
-      items.push({
-        label: "Diverifikasi atasan",
-        date: decisionDate,
-        by,
-        icon: "ok",
-      });
-  }
-
-  // HRD decision events
+  // 5. HRD action
   if (submission.hrdDecisionAt) {
-    const decisionDate = safeToDate(submission.hrdDecisionAt);
-    if (submission.status === "approved" || submission.status === "closed")
-      items.push({
-        label: "HRD memvalidasi pengajuan",
-        date: decisionDate,
-        notes: submission.hrdNotes || undefined,
-        icon: "ok",
-      });
-    else if (submission.status === "rejected_hrd")
-      items.push({
-        label: "Ditolak HRD",
-        date: decisionDate,
-        notes: submission.hrdNotes || undefined,
-        icon: "warn",
-      });
-    else if (submission.status === "revision_hrd")
-      items.push({
-        label: "HRD meminta revisi",
-        date: decisionDate,
-        notes: submission.hrdNotes || undefined,
-        icon: "warn",
-      });
+    const decDate = safeToDate(submission.hrdDecisionAt);
+    let eventLabel = "HRD menyetujui pengajuan";
+    let icon: "ok" | "warn" = "ok";
+    if (submission.status === "rejected_hrd") {
+      eventLabel = "HRD menolak pengajuan";
+      icon = "warn";
+    } else if (submission.status === "revision_hrd") {
+      eventLabel = "HRD meminta revisi";
+      icon = "warn";
+    }
+    items.push({
+      label: eventLabel,
+      date: decDate,
+      notes: submission.hrdNotes || undefined,
+      icon,
+    });
   }
 
-  if (submission.status === "returned")
-    items.push({
-      label: "Karyawan sudah kembali",
-      date: safeToDate(submission.actualReturnAt),
-      icon: "ok",
-    });
-  if (submission.status === "reported" && submission.reportedExitAt)
-    items.push({
-      label: "Laporan keluar dibuat",
-      date: safeToDate(submission.reportedExitAt),
-      icon: "info",
-    });
-
-  // Sort by date ascending, filter duplicates by label
-  const seen = new Set<string>();
-  return items
-    .filter((t) => {
-      const key = t.label;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
+  // Deduplicate and sort by date
+  const uniqueItems: typeof items = [];
+  const labelsSeen = new Set<string>();
+  
+  const sortedRaw = items
+    .filter(item => item.date)
     .sort((a, b) => (a.date?.getTime() || 0) - (b.date?.getTime() || 0));
+
+  for (const item of sortedRaw) {
+    if (!labelsSeen.has(item.label)) {
+      labelsSeen.add(item.label);
+      uniqueItems.push(item);
+    }
+  }
+  
+  return uniqueItems;
 };
 
 type FormValues = z.infer<typeof reviewSchema>;
@@ -474,13 +461,30 @@ export function ReviewPermissionDialog({
   // We'll open attachments in a new tab via internal preview endpoint.
 
   const isFinal = isFinalStatus(submission.status);
-  const canAct = isActionableStatus(submission.status, mode);
-  const canShowActions =
-    submission.waitingForUid &&
-    userProfile &&
-    submission.waitingForUid === userProfile.uid &&
-    submission.status === "pending_manager" &&
-    !isFinal;
+  const canAct = useMemo(() => {
+    if (isFinal) return false;
+    if (mode === "manager") {
+      return isActionableStatus(submission.status, "manager");
+    }
+    if (mode === "hrd") {
+      return isHrdValidationPhase(submission);
+    }
+    return false;
+  }, [submission, mode, isFinal]);
+
+  const canShowActions = useMemo(() => {
+    if (isFinal) return false;
+    if (mode === "manager") {
+      return (
+        submission.waitingForUid === userProfile?.uid &&
+        submission.status === "pending_manager"
+      );
+    }
+    if (mode === "hrd") {
+      return isHrdValidationPhase(submission);
+    }
+    return false;
+  }, [submission, userProfile, mode, isFinal]);
   const isOfficeExit =
     submission.type === "keluar_kantor" ||
     submission.formType === "keluar_kantor";
@@ -644,6 +648,7 @@ export function ReviewPermissionDialog({
         payload = {
           status,
           managerReviewNote: note || null,
+          managerNotes: note || null,
           managerDecisionAt: serverTimestamp() as any,
           timeline: updatedTimeline,
           // Update approval routing when manager approves (non-office-exit)
@@ -681,6 +686,7 @@ export function ReviewPermissionDialog({
         payload = {
           status,
           hrdReviewNote: note || null,
+          hrdNotes: note || null,
           hrdDecisionAt: serverTimestamp() as any,
           timeline: updatedTimeline,
           ...(decision === "approve"

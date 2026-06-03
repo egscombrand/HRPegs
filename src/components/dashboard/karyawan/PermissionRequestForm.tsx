@@ -844,23 +844,43 @@ export function PermissionRequestForm({
 
       // Applicant snapshot fields — use prioritized sources (employeeProfile, divisionMaster, brands list)
       const applicantBrandId = staffBrandId || null;
-      const brandObj = brands?.find((b) => b.id === applicantBrandId) || null;
+      const brandObj =
+        brands?.find(
+          (b) =>
+            b.id === applicantBrandId ||
+            b.name === applicantBrandId ||
+            (b as any).companyName === applicantBrandId,
+        ) || null;
       const applicantBrandName =
-        brandObj?.name || employeeProfile?.brandName || null;
+        brandObj?.name ||
+        (brandObj as any)?.companyName ||
+        (employeeProfile as any)?.hrdEmploymentInfo?.brandName ||
+        employeeProfile?.brandName ||
+        null;
 
       const applicantDivisionId = staffDivisionId || null;
       const applicantDivisionName =
+        (divisionMaster as any)?.name ||
+        (divisionMaster as any)?.divisionName ||
+        (divisionMaster as any)?.title ||
+        (employeeProfile as any)?.hrdEmploymentInfo?.divisionName ||
         employeeProfile?.division ||
-        (employeeProfile?.hrdEmploymentInfo &&
-          (employeeProfile.hrdEmploymentInfo.divisionName ||
-            employeeProfile.hrdEmploymentInfo.divisionId)) ||
+        (employeeProfile?.division &&
+        !/^[A-Za-z0-9_-]{6,}$/.test(employeeProfile.division)
+          ? employeeProfile.division
+          : null) ||
         null;
 
       const applicantPosition =
         employeeProfile?.positionTitle ||
-        employeeProfile?.hrdEmploymentInfo?.jabatan ||
+        (employeeProfile as any)?.position ||
+        (employeeProfile as any)?.jobTitle ||
+        (employeeProfile as any)?.roleName ||
+        (employeeProfile as any)?.hrdEmploymentInfo?.jabatan ||
         userProfile?.positionTitle ||
-        "Staf";
+        userProfile?.jobTitle ||
+        userProfile?.workRole ||
+        null;
 
       // Merge snapshot into payload
       (payload as any).applicantUid = userProfile.uid;

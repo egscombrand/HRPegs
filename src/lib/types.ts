@@ -2054,6 +2054,7 @@ export type PermissionRequest = {
   // Approval routing helpers (who is currently waiting for approval)
   waitingForUid?: string | null;
   waitingForName?: string | null;
+  waitingForRole?: string | null;
   currentApprovalStep?: "manager" | "hrd" | "done" | null;
   approvalLevel?: string | null;
   requesterStructuralPosition?: string | null;
