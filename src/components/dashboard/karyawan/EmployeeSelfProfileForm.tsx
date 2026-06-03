@@ -35,7 +35,11 @@ import {
   compressImage,
   handleStorageError,
 } from "@/lib/storage-utils";
-import { normalizeGoogleDriveImageUrl } from "@/lib/profile-photo";
+import {
+  normalizeGoogleDriveImageUrl,
+  extractFileId,
+  getDocumentPreviewUrl,
+} from "@/lib/profile-photo";
 import { uploadFile } from "@/lib/storage/storage-adapter";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -96,6 +100,7 @@ import {
   Award,
   Info,
   Camera,
+  BookOpen,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
@@ -261,6 +266,87 @@ const SIBLING_ACTIVITY_OPTIONS = [
   "Belum Bekerja",
 ];
 
+// Document configuration for internship vs regular employee
+type DocumentConfig = {
+  key: string;
+  label: string;
+  required: boolean;
+  icon: any;
+  description?: string;
+  fieldName: string; // Form field name
+};
+
+const INTERNSHIP_DOCUMENTS: DocumentConfig[] = [
+  // Required documents for internship
+  {
+    key: "cv",
+    label: "CV",
+    required: true,
+    icon: FileText,
+    description: "Curriculum Vitae",
+    fieldName: "pendidikanDanPengembangan.cvUrl",
+  },
+  // Optional documents for internship
+  {
+    key: "internship_letter",
+    label: "Surat Pengantar Magang",
+    required: false,
+    icon: FileText,
+    description: "Surat dari institusi pendidikan",
+    fieldName: "pendidikanDanPengembangan.internshipLetterUrl",
+  },
+  {
+    key: "internship_agreement",
+    label: "Surat Penerimaan/Kontrak Magang",
+    required: false,
+    icon: FileText,
+    description: "Kontrak atau surat penerimaan magang",
+    fieldName: "pendidikanDanPengembangan.internshipAgreementUrl",
+  },
+  {
+    key: "portfolio",
+    label: "Portofolio",
+    required: false,
+    icon: Briefcase,
+    description: "Portfolio karya atau proyek",
+    fieldName: "pendidikanDanPengembangan.portfolioUrl",
+  },
+  {
+    key: "certificate",
+    label: "Sertifikat Pendukung",
+    required: false,
+    icon: Award,
+    description: "Sertifikat atau penghargaan",
+    fieldName: "pendidikanDanPengembangan.certificateUrl",
+  },
+];
+
+const EMPLOYEE_DOCUMENTS: DocumentConfig[] = [
+  // These are the standard administrative documents for regular employees
+  // Already handled in existing UI, listed here for config consistency
+  {
+    key: "npwp",
+    label: "NPWP",
+    required: true,
+    icon: CreditCard,
+    fieldName: "dokumenAdministratif.npwpPhotoUrl",
+  },
+  {
+    key: "bpjs_kesehatan",
+    label: "BPJS Kesehatan",
+    required: true,
+    icon: ShieldCheck,
+    fieldName: "dokumenAdministratif.bpjsKesehatanPhotoUrl",
+  },
+  {
+    key: "bpjs_ketenagakerjaan",
+    label: "BPJS Ketenagakerjaan",
+    required: true,
+    icon: ShieldCheck,
+    fieldName: "dokumenAdministratif.bpjsKetenagakerjaanPhotoUrl",
+  },
+];
+
 const EMERGENCY_RELATION_OPTIONS = [
   "Ayah",
   "Ibu",
@@ -353,7 +439,7 @@ const selfFormSchema = z.object({
       profilePhotoUrl: z.string().min(1, "Foto Diri harus diunggah."),
       profilePhotoFile: z
         .object({
-          fileId: z.string().min(1, "FileId Foto Diri harus tersedia."),
+          fileId: z.string().optional(),
           fileName: z.string().optional(),
           fileType: z.string().optional(),
           finalSize: z.number().optional(),
@@ -364,7 +450,7 @@ const selfFormSchema = z.object({
       ktpPhotoUrl: z.string().min(1, "Foto KTP harus diunggah."),
       ktpPhotoFile: z
         .object({
-          fileId: z.string().min(1, "FileId Foto KTP harus tersedia."),
+          fileId: z.string().optional(),
           fileName: z.string().optional(),
           fileType: z.string().optional(),
           finalSize: z.number().optional(),
@@ -559,7 +645,10 @@ const selfFormSchema = z.object({
     bankAccountHolderName: z.string().optional(),
     bankDocumentUrl: z
       .string()
-      .url("URL bukti rekening tidak valid.")
+      .refine(
+        (val) => !val || val.startsWith("/") || val.startsWith("http"),
+        "URL bukti rekening tidak valid."
+      )
       .optional(),
     buktiRekeningUrl: z.string().optional(),
   }),
@@ -628,6 +717,11 @@ const selfFormSchema = z.object({
           }),
         )
         .optional(),
+      // School/Campus advisor fields (for internship)
+      schoolName: z.string().optional(),
+      majorName: z.string().optional(),
+      advisorName: z.string().optional(),
+      advisorContact: z.string().optional(),
     })
     .optional(),
   pendidikanDanPengembangan: z
@@ -663,6 +757,12 @@ const selfFormSchema = z.object({
           }),
         )
         .optional(),
+      // Internship-specific documents (optional for now, made required via custom validation if isMagang)
+      cvUrl: z.string().optional(),
+      internshipLetterUrl: z.string().optional(),
+      internshipAgreementUrl: z.string().optional(),
+      portfolioUrl: z.string().optional(),
+      certificateUrl: z.string().optional(),
     })
     .optional(),
   kontakDarurat: z
@@ -809,11 +909,11 @@ const INDONESIAN_BANKS = [
 
 type FileMetadata = {
   fileId?: string;
-  fileName: string;
-  fileType: string;
+  fileName?: string;
+  fileType?: string;
   finalSize?: number;
   uploadedAt?: any;
-  viewUrl: string;
+  viewUrl?: string;
 };
 
 type FileUploadFieldProps = {
@@ -838,21 +938,42 @@ type UploadStateContextValue = {
 const UploadStateContext = createContext<UploadStateContextValue | null>(null);
 
 function extractFileIdFromViewUrl(viewUrl?: string) {
-  if (!viewUrl) return null;
-  try {
-    const url = new URL(
-      viewUrl,
-      typeof window === "undefined"
-        ? "http://localhost"
-        : window.location.origin,
-    );
-    const fileId = url.searchParams.get("fileId");
-    if (fileId) return fileId;
-  } catch {
-    // ignore invalid URL format
+  // Use the robust helper function that handles various formats
+  return extractFileId(viewUrl);
+}
+
+/**
+ * Get bank proof/bukti rekening value from rekening data.
+ * Support multiple possible field names and nested objects.
+ */
+function getBankProofValue(rek: any): string | null {
+  if (!rek) return null;
+
+  // Check various possible field names in priority order
+  const possibleFields = [
+    rek.bankDocumentUrl,
+    rek.buktiRekeningUrl,
+    rek.bankProofUrl,
+    rek.bankAccountProofUrl,
+    rek.bankBookUrl,
+    rek.bankProofDriveUrl,
+    rek.bankDocumentFileId,
+    rek.bankProofFileId,
+    rek.bankProofDriveFileId,
+    rek.bankProofGoogleDriveFileId,
+    rek.bankProof?.url,
+    rek.bankProof?.fileId,
+    rek.bankProof?.driveFileId,
+  ];
+
+  // Return first non-empty value
+  for (const field of possibleFields) {
+    if (field && typeof field === "string" && field.trim().length > 0) {
+      return field;
+    }
   }
-  const match = viewUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
-  return match?.[1] ?? null;
+
+  return null;
 }
 
 function DocumentUploadCard({
@@ -976,47 +1097,65 @@ function DocumentUploadCard({
     if (!fileId) {
       toast({
         variant: "destructive",
-        title: "Dokumen tidak dapat dibuka",
-        description: "FileId tidak tersedia untuk dokumen ini.",
+        title: "File belum memiliki ID preview",
+        description: "FileId tidak tersedia untuk dokumen ini. Dokumen mungkin perlu diupload ulang.",
       });
       return;
     }
 
-    const newWindow = window.open("", "_blank");
-    if (newWindow) {
-      newWindow.document.title = "Memuat Dokumen...";
-    }
-
     try {
+      // Gunakan endpoint preview internal HRP yang lebih robust
+      const previewUrl = getDocumentPreviewUrl(fileId);
+
+      const newWindow = window.open("", "_blank");
+      if (!newWindow) {
+        throw new Error("Tidak dapat membuka window baru. Periksa pengaturan popup blocker Anda.");
+      }
+
+      newWindow.document.title = "Memuat Dokumen...";
+
+      // Fetch dokumen dengan authenticated request
       const auth = getAuth();
       const currentUser = auth.currentUser;
+
       if (!currentUser) {
-        if (newWindow) newWindow.close();
-        throw new Error("Autentikasi tidak ditemukan.");
+        newWindow.close();
+        throw new Error("Sesi Anda telah berakhir. Silakan login kembali.");
       }
+
       const token = await currentUser.getIdToken();
-      const response = await fetch(`/api/storage/view?fileId=${fileId}`, {
+      const response = await fetch(previewUrl, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
+
       if (!response.ok) {
-        if (newWindow) newWindow.close();
-        throw new Error("Gagal mengambil dokumen.");
+        newWindow.close();
+
+        if (response.status === 404) {
+          throw new Error("File tidak ditemukan di storage. Silakan upload ulang.");
+        } else if (response.status === 401) {
+          throw new Error("Anda tidak memiliki akses ke file ini.");
+        } else {
+          throw new Error(`Gagal memuat dokumen (Error: ${response.status})`);
+        }
       }
+
       const blob = await response.blob();
       const objectUrl = URL.createObjectURL(blob);
-      if (newWindow) {
-        newWindow.location.href = objectUrl;
-      }
+      newWindow.location.href = objectUrl;
+
+      // Cleanup object URL setelah 1 detik
+      setTimeout(() => {
+        URL.revokeObjectURL(objectUrl);
+      }, 1000);
     } catch (error: any) {
-      if (newWindow) newWindow.close();
       console.error("openSecureFile error:", error);
       toast({
         variant: "destructive",
         title: "Gagal membuka dokumen",
-        description:
-          error?.message || "Tidak dapat membuka dokumen. Silakan coba lagi.",
+        description: error?.message || "Tidak dapat membuka dokumen. Silakan coba lagi atau hubungi admin.",
       });
     }
   };
@@ -1436,15 +1575,36 @@ function normalizeEmployeeProfileToFormValues(initialProfile: any): any {
         "",
       phone: dd.phone || initialProfile.phone || "",
       // ── Dropdown fields — use canonicalizers so legacy values map correctly ──
-      gender: canonicalGender(dd.gender || initialProfile.gender),
+      // Support both standard and legacy field names with fallback
+      gender: canonicalGender(
+        dd.gender ||
+          initialProfile.gender ||
+          dd.jenisKelamin ||
+          initialProfile.jenisKelamin ||
+          "",
+      ),
       birthPlace: dd.birthPlace || initialProfile.birthPlace || "",
       birthDate: dd.birthDate || formattedBirthDate,
       maritalStatus: canonicalMaritalStatus(
-        dd.maritalStatus || initialProfile.maritalStatus,
+        dd.maritalStatus ||
+          initialProfile.maritalStatus ||
+          dd.statusPernikahan ||
+          initialProfile.statusPernikahan ||
+          "",
       ),
-      religion: canonicalReligion(dd.religion || initialProfile.religion),
+      religion: canonicalReligion(
+        dd.religion ||
+          initialProfile.religion ||
+          dd.agama ||
+          initialProfile.agama ||
+          "",
+      ),
       nationality: canonicalNationality(
-        dd.nationality || initialProfile.nationality,
+        dd.nationality ||
+          initialProfile.nationality ||
+          dd.kewarganegaraan ||
+          initialProfile.kewarganegaraan ||
+          "WNI",
       ),
       countryOfOrigin:
         dd.countryOfOrigin ||
@@ -1453,8 +1613,11 @@ function normalizeEmployeeProfileToFormValues(initialProfile: any): any {
         "",
       golonganDarah: canonicalGolonganDarah(
         dd.golonganDarah ||
+          dd.bloodType ||
           initialProfile.additionalFields?.golonganDarah ||
-          initialProfile.bloodType,
+          initialProfile.bloodType ||
+          initialProfile.golonganDarah ||
+          "",
       ),
       tinggiBadan:
         dd.tinggiBadan ||
@@ -1469,7 +1632,9 @@ function normalizeEmployeeProfileToFormValues(initialProfile: any): any {
       hasPhysicalCondition: canonicalHasPhysicalCondition(
         dd.hasPhysicalCondition ??
           initialProfile.additionalFields?.hasPhysicalCondition ??
+          dd.adaKelainanFisik ??
           initialProfile.hasPhysicalCondition ??
+          initialProfile.adaKelainanFisik ??
           "Tidak",
       ),
       physicalConditionDetails:
@@ -1556,7 +1721,7 @@ function normalizeEmployeeProfileToFormValues(initialProfile: any): any {
         rek.bankDocumentUrl || initialProfile.bankDocumentUrl || "",
       buktiRekeningUrl:
         rek.buktiRekeningUrl || (initialProfile as any)?.buktiRekeningUrl || "",
-    },
+    } as any,
     kontakDarurat:
       Array.isArray(kd) && kd.length > 0
         ? kd.map((k: any) => ({
@@ -1635,6 +1800,11 @@ function normalizeEmployeeProfileToFormValues(initialProfile: any): any {
         status: t.status || "",
         address: t.address || "",
       })),
+      // School/Campus advisor fields (for internship)
+      schoolName: dk.schoolName || "",
+      majorName: dk.majorName || "",
+      advisorName: dk.advisorName || "",
+      advisorContact: dk.advisorContact || "",
     },
     pendidikanDanPengembangan: {
       pendidikanTerakhir: {
@@ -1660,6 +1830,11 @@ function normalizeEmployeeProfileToFormValues(initialProfile: any): any {
         tahunExpired: s.tahunExpired || "",
         buktiUrl: s.buktiUrl || "",
       })),
+      cvUrl: pp.cvUrl || "",
+      internshipLetterUrl: pp.internshipLetterUrl || "",
+      internshipAgreementUrl: pp.internshipAgreementUrl || "",
+      portfolioUrl: pp.portfolioUrl || "",
+      certificateUrl: pp.certificateUrl || "",
     },
     familyDocuments: {
       kk: {
@@ -1797,6 +1972,43 @@ export function EmployeeSelfProfileForm({
     );
   }, [initialProfile]);
 
+  // Determine if this is an internship/magang profile
+  const isMagang = useMemo(() => {
+    const employmentType = (initialProfile as any).employmentType || "";
+    return (
+      employmentType.toLowerCase() === "magang" ||
+      employmentType.toLowerCase() === "training"
+    );
+  }, [initialProfile]);
+
+  // Helper to determine if a document is required based on employment type
+  const isDocumentRequired = (docType: string): boolean => {
+    // Documents required for all employment types
+    const alwaysRequired = [
+      "fotoDiri",
+      "ktp",
+      "cv",
+      "kontak_darurat",
+      "rekening_bank",
+    ];
+
+    if (alwaysRequired.includes(docType)) return true;
+
+    // For Magang/Training: NPWP and BPJS are optional
+    if (isMagang) {
+      const magangOptional = [
+        "npwp",
+        "bpjs_kesehatan",
+        "bpjs_ketenagakerjaan",
+      ];
+      return !magangOptional.includes(docType);
+    }
+
+    // For Karyawan: NPWP and BPJS are required
+    const karyawanRequired = ["npwp", "bpjs_kesehatan", "bpjs_ketenagakerjaan"];
+    return karyawanRequired.includes(docType) || alwaysRequired.includes(docType);
+  };
+
   const isIdentityVerified =
     initialProfile.verificationStatus?.identity === "approved";
   const isTaxVerified = initialProfile.verificationStatus?.tax === "approved";
@@ -1905,6 +2117,11 @@ export function EmployeeSelfProfileForm({
         },
         saudaraKandung: [],
         tanggungan: [],
+        // School/Campus advisor fields (for internship)
+        schoolName: "",
+        majorName: "",
+        advisorName: "",
+        advisorContact: "",
       },
       pendidikanDanPengembangan: {
         pendidikanTerakhir: {
@@ -1916,6 +2133,11 @@ export function EmployeeSelfProfileForm({
         },
         riwayatPendidikan: [],
         sertifikasiPelatihan: [],
+        cvUrl: "",
+        internshipLetterUrl: "",
+        internshipAgreementUrl: "",
+        portfolioUrl: "",
+        certificateUrl: "",
       },
       kontakDarurat: [
         {
@@ -1938,6 +2160,15 @@ export function EmployeeSelfProfileForm({
       },
     },
   });
+
+  // Set default values for internship: mark NPWP and BPJS as not required
+  useEffect(() => {
+    if (isMagang) {
+      form.setValue("dokumenAdministratif.noNpwp", true);
+      form.setValue("dokumenAdministratif.noBpjsKesehatan", true);
+      form.setValue("dokumenAdministratif.noBpjsKetenagakerjaan", true);
+    }
+  }, [isMagang, form]);
 
   const {
     fields: saudaraFields,
@@ -2360,9 +2591,21 @@ export function EmployeeSelfProfileForm({
       })),
     ].filter((doc) => doc.url);
 
+    // Ensure dropdown values are preserved and not lost during save
+    const dataDiriWithDropdowns = {
+      ...values.dataDiriIdentitas,
+      // Explicitly preserve dropdown values to prevent loss
+      gender: values.dataDiriIdentitas.gender || "",
+      maritalStatus: values.dataDiriIdentitas.maritalStatus || "",
+      religion: values.dataDiriIdentitas.religion || "",
+      nationality: values.dataDiriIdentitas.nationality || "",
+      golonganDarah: values.dataDiriIdentitas.golonganDarah || "",
+      hasPhysicalCondition: values.dataDiriIdentitas.hasPhysicalCondition || "",
+    };
+
     const employeePayload = cleanUndefinedValues({
       uid: firebaseUser.uid,
-      dataDiriIdentitas: values.dataDiriIdentitas,
+      dataDiriIdentitas: dataDiriWithDropdowns,
       alamat: {
         ...values.alamat,
         ktp: {
@@ -2503,6 +2746,57 @@ export function EmployeeSelfProfileForm({
       });
       return;
     }
+
+    // Validate internship documents
+    if (isMagang) {
+      // Check Foto Diri from Step 1
+      if (!values.dataDiriIdentitas?.profilePhotoUrl) {
+        toast({
+          variant: "destructive",
+          title: "Foto Diri Belum Diunggah",
+          description: "Foto Diri belum diunggah di bagian Data Diri & Identitas. Silakan kembali ke Step 1 dan lengkapi dokumen tersebut.",
+        });
+        setCurrentStep(0);
+        return;
+      }
+
+      // Check KTP/KTM from Step 1
+      if (!values.dataDiriIdentitas?.ktpPhotoUrl) {
+        toast({
+          variant: "destructive",
+          title: "KTP/KTM Belum Diunggah",
+          description: "KTP/KTM belum diunggah di bagian Data Diri & Identitas. Silakan kembali ke Step 1 dan lengkapi dokumen tersebut.",
+        });
+        setCurrentStep(0);
+        return;
+      }
+
+      // Check CV from Step 3
+      if (!values.pendidikanDanPengembangan?.cvUrl) {
+        toast({
+          variant: "destructive",
+          title: "CV Belum Diunggah",
+          description: "CV belum diunggah. Silakan lengkapi CV di bagian Dokumen Magang.",
+        });
+        return;
+      }
+    }
+
+    // Validate bank document/bukti rekening for non-magang users
+    if (!isMagang && values.dataRekening?.bankName) {
+      // If bank name is filled, bukti rekening should also be provided
+      const bankProof = getBankProofValue(values.dataRekening);
+      if (!bankProof) {
+        toast({
+          variant: "destructive",
+          title: "Bukti Rekening Belum Diunggah",
+          description: "Bukti rekening / buku tabungan belum diunggah. Silakan lengkapi bukti rekening di bagian Data Rekening & Finansial.",
+        });
+        setCurrentStep(3);
+        return;
+      }
+    }
+
     setIsSaving(true);
     try {
       await saveEmployeeProfile(values, false);
@@ -3502,27 +3796,124 @@ export function EmployeeSelfProfileForm({
             <div className="space-y-2">
               <h4 className="text-xl font-bold text-slate-100 flex items-center gap-3 tracking-tight">
                 <div className="h-2 w-2 rounded-full bg-primary" />
-                Dokumen Administratif
+                {isMagang ? "Dokumen Magang" : "Dokumen Administratif Karyawan"}
               </h4>
               <p className="text-sm text-slate-400 max-w-2xl leading-relaxed">
-                Silahkan lengkapi dokumen administratif di bawah ini. Dokumen
-                ini sangat penting untuk proses penggajian (payroll), pajak, dan
-                asuransi kesehatan Anda.
+                {isMagang
+                  ? "Silahkan lengkapi dokumen magang di bawah ini. Dokumen ini diperlukan untuk proses pendataan peserta magang dan keperluan administratif."
+                  : "Silahkan lengkapi dokumen administratif di bawah ini. Dokumen ini sangat penting untuk proses penggajian (payroll), pajak, dan asuransi kesehatan Anda."}
               </p>
             </div>
 
-            <VerificationAlert
-              status={initialProfile.verificationStatus?.tax}
-              note={initialProfile.verificationNotes?.tax}
-              title="NPWP"
-            />
-            <VerificationAlert
-              status={initialProfile.verificationStatus?.bpjs}
-              note={initialProfile.verificationNotes?.bpjs}
-              title="BPJS"
-            />
+            {!isMagang && (
+              <>
+                <VerificationAlert
+                  status={initialProfile.verificationStatus?.tax}
+                  note={initialProfile.verificationNotes?.tax}
+                  title="NPWP"
+                />
+                <VerificationAlert
+                  status={initialProfile.verificationStatus?.bpjs}
+                  note={initialProfile.verificationNotes?.bpjs}
+                  title="BPJS"
+                />
+              </>
+            )}
+
+            {/* Section Dokumen Magang */}
+            {isMagang && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 gap-8">
+                  {/* Info box untuk dokumen magang */}
+                  <div className="space-y-4 p-4 border border-blue-500/20 rounded-lg bg-blue-500/5">
+                    <p className="text-sm text-slate-300 font-medium">
+                      ℹ️ Status Dokumen Identitas & Dokumen Tambahan Magang
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      Foto Diri dan KTP/KTM di-upload di bagian Data Diri. Di bawah ini adalah ringkasan status dan dokumen tambahan yang dibutuhkan.
+                    </p>
+                  </div>
+
+                  {/* Status read-only untuk Foto Diri dan KTP/KTM */}
+                  <div className="space-y-4 bg-slate-800/20 rounded-lg border border-slate-700/50 p-4">
+                    <p className="text-xs font-medium text-slate-300 uppercase tracking-widest">Status Dokumen dari Data Diri</p>
+
+                    <div className="space-y-3">
+                      {/* Foto Diri Status */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <User className="h-4 w-4 text-slate-400" />
+                          <span className="text-sm text-slate-100">Foto Diri</span>
+                        </div>
+                        {form.watch("dataDiriIdentitas.profilePhotoUrl") ? (
+                          <Badge className="bg-emerald-500/20 text-emerald-400">✓ Sudah Upload</Badge>
+                        ) : (
+                          <Badge className="bg-slate-500/20 text-slate-400">Belum Upload</Badge>
+                        )}
+                      </div>
+
+                      {/* KTP/KTM Status */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <CreditCard className="h-4 w-4 text-slate-400" />
+                          <span className="text-sm text-slate-100">KTP atau KTM/Kartu Pelajar</span>
+                        </div>
+                        {form.watch("dataDiriIdentitas.ktpPhotoUrl") ? (
+                          <Badge className="bg-emerald-500/20 text-emerald-400">✓ Sudah Upload</Badge>
+                        ) : (
+                          <Badge className="bg-slate-500/20 text-slate-400">Belum Upload</Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Render internship document upload cards (CV dan dokumen tambahan) */}
+                  {INTERNSHIP_DOCUMENTS.map((doc) => {
+                    const fieldValue = form.watch(doc.fieldName as any);
+                    const isRequired = doc.required;
+
+                    return (
+                      <div key={doc.key} className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <doc.icon className="h-4 w-4 text-slate-400" />
+                          <span className="text-sm font-medium text-slate-100">{doc.label}</span>
+                          <Badge className={isRequired ? "bg-rose-500/20 text-rose-400" : "bg-amber-500/20 text-amber-400"}>
+                            {isRequired ? "Wajib" : "Opsional"}
+                          </Badge>
+                          {fieldValue && (
+                            <Badge className="bg-emerald-500/20 text-emerald-400">
+                              ✓ Sudah Upload
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-400">{doc.description}</p>
+
+                        <FormField
+                          control={form.control}
+                          name={doc.fieldName as any}
+                          render={({ field }) => (
+                            <FileUploadField
+                              label={doc.label}
+                              description={doc.description || ""}
+                              userId={firebaseUser?.uid || ""}
+                              fieldKey={doc.key}
+                              value={field.value}
+                              onChange={(url: string) => field.onChange(url)}
+                              icon={doc.icon}
+                              status={field.value ? "Sudah Upload" : "Belum Upload"}
+                            />
+                          )}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 gap-8">
+              {/* NPWP - Only for Karyawan, not for Magang */}
+              {!isMagang && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between px-2">
                   <div className="flex flex-col gap-1">
@@ -3543,6 +3934,7 @@ export function EmployeeSelfProfileForm({
                           >
                             Saya belum memiliki NPWP
                           </Label>
+                          <Badge className="ml-auto bg-rose-500/20 text-rose-400 border-0">Wajib</Badge>
                         </div>
                       )}
                     />
@@ -3633,7 +4025,10 @@ export function EmployeeSelfProfileForm({
                   </div>
                 )}
               </div>
+              )}
 
+              {/* BPJS Kesehatan - Only for Karyawan, not for Magang */}
+              {!isMagang && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between px-2">
                   <FormField
@@ -3653,6 +4048,7 @@ export function EmployeeSelfProfileForm({
                         >
                           Saya belum memiliki BPJS Kesehatan
                         </Label>
+                        <Badge className="ml-auto bg-blue-500/20 text-blue-400 border-0">Wajib</Badge>
                       </div>
                     )}
                   />
@@ -3736,7 +4132,10 @@ export function EmployeeSelfProfileForm({
                   </div>
                 )}
               </div>
+              )}
 
+              {/* BPJS Ketenagakerjaan - Only for Karyawan, not for Magang */}
+              {!isMagang && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between px-2">
                   <FormField
@@ -3756,6 +4155,7 @@ export function EmployeeSelfProfileForm({
                         >
                           Saya belum memiliki BPJS Ketenagakerjaan
                         </Label>
+                        <Badge className="ml-auto bg-green-500/20 text-green-400 border-0">Wajib</Badge>
                       </div>
                     )}
                   />
@@ -3841,6 +4241,7 @@ export function EmployeeSelfProfileForm({
                   </div>
                 )}
               </div>
+              )}
 
               {requiresSim && (
                 <div className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-500">
@@ -3909,11 +4310,12 @@ export function EmployeeSelfProfileForm({
                   </div>
                   <div>
                     <h4 className="text-xl font-bold text-slate-100 tracking-tight">
-                      Rekening Payroll
+                      {isMagang ? "Rekening Penerimaan Uang Saku" : "Rekening Payroll"}
                     </h4>
                     <p className="text-sm text-slate-400 mt-1">
-                      Data rekening yang digunakan untuk pengiriman gaji bulanan
-                      Anda.
+                      {isMagang
+                        ? "Data rekening ini digunakan untuk pengiriman uang saku, insentif magang, atau reimburse jika berlaku."
+                        : "Data rekening yang digunakan untuk pengiriman gaji bulanan Anda."}
                     </p>
                   </div>
                 </div>
@@ -3932,10 +4334,7 @@ export function EmployeeSelfProfileForm({
                     !!form.watch("dataRekening.bankName") &&
                     !!form.watch("dataRekening.bankAccountNumber") &&
                     !!form.watch("dataRekening.bankAccountHolderName") &&
-                    !!(
-                      form.watch("dataRekening.bankDocumentUrl") ||
-                      form.watch("dataRekening.buktiRekeningUrl")
-                    ) && (
+                    !!getBankProofValue(form.watch("dataRekening")) && (
                       <Button
                         type="button"
                         variant="outline"
@@ -3949,6 +4348,14 @@ export function EmployeeSelfProfileForm({
                 </div>
               </div>
             </div>
+
+            {isMagang && (
+              <div className="p-4 border border-amber-500/20 rounded-lg bg-amber-500/5">
+                <p className="text-xs text-amber-400/80">
+                  💡 Isi rekening jika program magang Anda memiliki uang saku, insentif, atau reimburse. Jika tidak ada, Anda dapat mengosongkan bagian ini.
+                </p>
+              </div>
+            )}
 
             <div className="bg-slate-900/30 border border-slate-800/60 rounded-[2.5rem] p-8 md:p-10 shadow-xl space-y-10">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -4037,12 +4444,23 @@ export function EmployeeSelfProfileForm({
                     render={({ field }) => (
                       <FileUploadField
                         label="Bukti Rekening / Buku Tabungan"
-                        description="Foto halaman depan buku tabungan atau screenshot detail rekening dari m-banking. Pastikan Nama dan Nomor Rekening terlihat jelas."
+                        description={
+                          isMagang
+                            ? "Unggah foto halaman depan buku tabungan atau screenshot detail rekening dari mobile banking. Pastikan nama pemilik dan nomor rekening terlihat jelas."
+                            : "Foto halaman depan buku tabungan atau screenshot detail rekening dari m-banking. Pastikan Nama dan Nomor Rekening terlihat jelas."
+                        }
                         userId={firebaseUser?.uid || ""}
                         fieldKey="bank_proof"
                         value={field.value}
                         disabled={!!pendingBankRequest}
-                        onChange={field.onChange}
+                        onChange={(url: string, metadata?: FileMetadata) => {
+                          // Save the URL to form field
+                          field.onChange(url);
+                          // Also store fileId for later validation if available
+                          if (metadata?.fileId) {
+                            form.setValue("dataRekening.buktiRekeningUrl", metadata.fileId);
+                          }
+                        }}
                         icon={Wallet}
                         status={field.value ? "Sudah Upload" : "Belum Upload"}
                       />
@@ -4074,6 +4492,429 @@ export function EmployeeSelfProfileForm({
           </div>
         );
       case 4:
+        // Return simplified form for internship participants
+        if (isMagang) {
+          return (
+            <div
+              key="step-keluarga-magang"
+              className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700"
+            >
+              {/* Section Orang Tua/Wali - Ringkas */}
+              <Card className="border-slate-800 bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-2xl shadow-blue-500/5">
+                <CardHeader className="bg-slate-900/40 border-b border-slate-800/60 p-8">
+                  <div className="flex items-center gap-5">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-500 shadow-inner">
+                      <Users className="h-7 w-7" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-2xl font-black text-slate-100 tracking-tight">
+                        Data Orang Tua / Wali
+                      </CardTitle>
+                      <CardDescription className="text-slate-400 mt-1 text-sm font-medium">
+                        Informasi singkat orang tua atau wali Anda.
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-8 space-y-8">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {/* Ayah / Wali */}
+                    <FormField
+                      control={form.control}
+                      name="dataKeluarga.orangTua.ayah.name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+                            Nama Ayah / Wali
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={field.value || ""}
+                              placeholder="Nama lengkap"
+                              className="bg-slate-900/40 h-12 rounded-xl border-slate-800/80"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="dataKeluarga.orangTua.ayah.phone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+                            No HP Ayah / Wali
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={field.value || ""}
+                              placeholder="08xxx..."
+                              inputMode="tel"
+                              className="bg-slate-900/40 h-12 rounded-xl border-slate-800/80"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    {/* Ibu / Wali */}
+                    <FormField
+                      control={form.control}
+                      name="dataKeluarga.orangTua.ibu.name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+                            Nama Ibu / Wali
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={field.value || ""}
+                              placeholder="Nama lengkap"
+                              className="bg-slate-900/40 h-12 rounded-xl border-slate-800/80"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="dataKeluarga.orangTua.ibu.phone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+                            No HP Ibu / Wali
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={field.value || ""}
+                              placeholder="08xxx..."
+                              inputMode="tel"
+                              className="bg-slate-900/40 h-12 rounded-xl border-slate-800/80"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  {/* Alamat Orang Tua / Wali */}
+                  <FormField
+                    control={form.control}
+                    name="dataKeluarga.orangTua.ayah.address"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+                          Alamat Orang Tua / Wali
+                        </FormLabel>
+                        <FormControl>
+                          <Textarea
+                            {...field}
+                            value={field.value || ""}
+                            placeholder="Jl. ... No. ... RT/RW... Kelurahan... Kecamatan... Kabupaten... Provinsi..."
+                            className="bg-slate-900/40 rounded-xl border-slate-800/80 min-h-24"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </CardContent>
+              </Card>
+
+              {/* Section Kontak Darurat */}
+              <Card className="border-slate-800 bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-2xl shadow-blue-500/5">
+                <CardHeader className="bg-slate-900/40 border-b border-slate-800/60 p-8">
+                  <div className="flex items-center gap-5">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-500 shadow-inner">
+                      <Phone className="h-7 w-7" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-2xl font-black text-slate-100 tracking-tight">
+                        Kontak Darurat
+                      </CardTitle>
+                      <CardDescription className="text-slate-400 mt-1 text-sm font-medium">
+                        Minimal 1 kontak darurat yang dapat dihubungi dalam keadaan darurat.
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-8 space-y-6">
+                  {daruratFields.map((field, index) => (
+                    <div key={field.id} className="space-y-4 p-4 border border-slate-700/50 rounded-lg bg-slate-800/20">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-semibold text-sm text-slate-200">
+                          Kontak Darurat {index + 1}
+                        </h4>
+                        {index > 0 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeDarurat(index)}
+                            className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name={`kontakDarurat.${index}.name`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+                                Nama Lengkap*
+                              </FormLabel>
+                              <FormControl>
+                                <Input
+                                  {...field}
+                                  value={field.value || ""}
+                                  placeholder="Nama lengkap"
+                                  className="bg-slate-900/40 h-10 rounded-lg border-slate-800/80"
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name={`kontakDarurat.${index}.relation`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+                                Hubungan*
+                              </FormLabel>
+                              <Select
+                                onValueChange={field.onChange}
+                                value={field.value || ""}
+                              >
+                                <FormControl>
+                                  <SelectTrigger className="bg-slate-900/40 h-10 rounded-lg border-slate-800/80">
+                                    <SelectValue placeholder="Pilih hubungan" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent className="bg-slate-900 border-slate-800">
+                                  <SelectItem value="Orang Tua">Orang Tua</SelectItem>
+                                  <SelectItem value="Saudara">Saudara</SelectItem>
+                                  <SelectItem value="Kerabat">Kerabat</SelectItem>
+                                  <SelectItem value="Lainnya">Lainnya</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name={`kontakDarurat.${index}.phone`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+                                No HP*
+                              </FormLabel>
+                              <FormControl>
+                                <Input
+                                  {...field}
+                                  value={field.value || ""}
+                                  placeholder="08xxx..."
+                                  inputMode="tel"
+                                  className="bg-slate-900/40 h-10 rounded-lg border-slate-800/80"
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name={`kontakDarurat.${index}.priority`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+                                Prioritas
+                              </FormLabel>
+                              <Select
+                                onValueChange={field.onChange}
+                                value={field.value || ""}
+                              >
+                                <FormControl>
+                                  <SelectTrigger className="bg-slate-900/40 h-10 rounded-lg border-slate-800/80">
+                                    <SelectValue placeholder="Pilih prioritas" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent className="bg-slate-900 border-slate-800">
+                                  <SelectItem value="Utama">Utama</SelectItem>
+                                  <SelectItem value="Sekunder">Sekunder</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      <FormField
+                        control={form.control}
+                        name={`kontakDarurat.${index}.address`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+                              Alamat
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                {...field}
+                                value={field.value || ""}
+                                placeholder="Alamat singkat"
+                                className="bg-slate-900/40 h-10 rounded-lg border-slate-800/80"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  ))}
+
+                  {daruratFields.length < 5 && (
+                    <Button
+                      type="button"
+                      onClick={() => appendDarurat({ id: crypto.randomUUID(), name: "", relation: "", phone: "", address: "", priority: "Utama", relationOther: "" })}
+                      variant="outline"
+                      className="w-full border-slate-700 hover:bg-slate-800/50"
+                    >
+                      <Plus className="h-4 w-4 mr-2" /> Tambah Kontak Darurat
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Section Pembimbing Kampus/Sekolah */}
+              <Card className="border-slate-800 bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-2xl shadow-purple-500/5">
+                <CardHeader className="bg-slate-900/40 border-b border-slate-800/60 p-8">
+                  <div className="flex items-center gap-5">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-purple-500/10 text-purple-500 shadow-inner">
+                      <BookOpen className="h-7 w-7" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-2xl font-black text-slate-100 tracking-tight">
+                        Pembimbing Kampus / Sekolah
+                      </CardTitle>
+                      <CardDescription className="text-slate-400 mt-1 text-sm font-medium">
+                        Data pembimbing dari institusi pendidikan Anda (opsional).
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-8 space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <FormField
+                      control={form.control}
+                      name="dataKeluarga.schoolName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+                            Asal Kampus / Sekolah
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={field.value || ""}
+                              placeholder="Nama institusi"
+                              className="bg-slate-900/40 h-12 rounded-xl border-slate-800/80"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="dataKeluarga.majorName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+                            Program Studi / Jurusan
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={field.value || ""}
+                              placeholder="Program studi / jurusan"
+                              className="bg-slate-900/40 h-12 rounded-xl border-slate-800/80"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="dataKeluarga.advisorName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+                            Nama Pembimbing
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={field.value || ""}
+                              placeholder="Nama pembimbing / dosen"
+                              className="bg-slate-900/40 h-12 rounded-xl border-slate-800/80"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="dataKeluarga.advisorContact"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+                            No HP / Email Pembimbing
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={field.value || ""}
+                              placeholder="08xxx... atau email@..."
+                              className="bg-slate-900/40 h-12 rounded-xl border-slate-800/80"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          );
+        }
+
+        // Regular form for employees
         return (
           <div
             key="step-keluarga"

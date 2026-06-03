@@ -216,6 +216,11 @@ export type DataKeluarga = {
   };
   saudaraKandung?: FamilyMember[];
   tanggungan?: FamilyMember[]; // Changed to FamilyMember based on earlier code
+  // Internship-specific fields
+  schoolName?: string;
+  majorName?: string;
+  advisorName?: string;
+  advisorContact?: string;
 };
 
 export type RegionData = {
@@ -650,6 +655,25 @@ export type HrdEmploymentInfo = {
     historyDescription?: string;
     historyDate?: string;
   };
+
+  // Internship-specific fields
+  internId?: string;
+  internshipBrandId?: string;
+  internshipBrandName?: string;
+  internshipDivisionId?: string;
+  internshipDivisionName?: string;
+  internshipRole?: string;
+  internshipMentorUid?: string;
+  internshipMentorName?: string;
+  internshipLocation?: string;
+  internshipProgramType?: string; // PKL, Kampus Merdeka, Mandiri, Internal, Lainnya
+  internshipStartDate?: string;
+  internshipEndDate?: string;
+  internshipStatus?: string; // Draft, Aktif, Selesai, Diperpanjang, Dihentikan
+  internshipNotes?: string;
+  internshipChangeReason?: string;
+  internshipEffectiveDate?: string;
+
   updatedAt?: Timestamp;
   updatedBy?: string;
 };

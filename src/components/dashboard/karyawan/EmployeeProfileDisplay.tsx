@@ -274,6 +274,10 @@ export function EmployeeProfileDisplay({
   const contacts = employeeProfile?.kontakDarurat || [];
   const pp = employeeProfile?.pendidikanDanPengembangan || ({} as any);
 
+  // Determine if this is an internship profile
+  const isMagang = (employeeProfile?.employmentType || "").toLowerCase() === "magang" ||
+    (employeeProfile?.employmentType || "").toLowerCase() === "training";
+
   const totalSiblings = family.saudaraKandung?.length || 0;
   const totalDependents = family.tanggungan?.length || 0;
 
@@ -683,9 +687,54 @@ export function EmployeeProfileDisplay({
           </Card>
         </div>
 
+        {/* Internship Documents Section - Only for internship profiles */}
+        {isMagang && (
+          <>
+            <Card className="border-slate-800 bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-xl border-t-4 border-t-amber-500/20">
+              <CardContent className="p-8">
+                <SectionTitle
+                  icon={<FileText className="h-5 w-5" />}
+                  description="Dokumen Magang"
+                >
+                  Dokumen & Surat
+                </SectionTitle>
+                <div className="space-y-0.5">
+                  <FileStatus label="Foto Diri" url={iden.profilePhotoUrl} />
+                  <FileStatus label="KTP / KTM" url={iden.ktpPhotoUrl} />
+                  <FileStatus label="CV" url={pp.cvUrl} />
+                  {pp.internshipLetterUrl && <FileStatus label="Surat Pengantar Magang" url={pp.internshipLetterUrl} />}
+                  {pp.internshipAgreementUrl && <FileStatus label="Surat Penerimaan/Kontrak" url={pp.internshipAgreementUrl} />}
+                  {pp.portfolioUrl && <FileStatus label="Portofolio" url={pp.portfolioUrl} />}
+                  {pp.certificateUrl && <FileStatus label="Sertifikat Pendukung" url={pp.certificateUrl} />}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Pembimbing Kampus/Sekolah Section - For internship profiles */}
+            <Card className="border-slate-800 bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-xl border-t-4 border-t-indigo-500/20">
+              <CardContent className="p-8">
+                <SectionTitle
+                  icon={<GraduationCap className="h-5 w-5" />}
+                  description="Institusi & Pembimbing"
+                >
+                  Pembimbing Magang
+                </SectionTitle>
+                <div className="space-y-1">
+                  {family.schoolName && <DataRow label="Kampus/Sekolah" value={family.schoolName} />}
+                  {family.majorName && <DataRow label="Program Studi/Jurusan" value={family.majorName} />}
+                  {family.advisorName && <DataRow label="Nama Pembimbing" value={family.advisorName} />}
+                  {family.advisorContact && <DataRow label="No HP/Email" value={family.advisorContact} />}
+                  {!family.schoolName && !family.advisorName && <p className="text-xs text-slate-500 italic">Belum diisi</p>}
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
+
         {/* Right Column (Sidebar Cards) */}
         <div className="space-y-8">
-          {/* Section: Dokumen Administratif */}
+          {/* Section: Dokumen Administratif - Hidden for internship profiles */}
+          {!isMagang && (
           <Card className="border-slate-800 bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-xl border-t-4 border-t-amber-500/20">
             <CardContent className="p-8">
               <SectionTitle
@@ -736,8 +785,10 @@ export function EmployeeProfileDisplay({
               </div>
             </CardContent>
           </Card>
+          )}
 
-          {/* Section: Keuangan */}
+          {/* Section: Keuangan - Hidden for internship profiles */}
+          {!isMagang && (
           <Card className="border-slate-800 bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-xl border-t-4 border-t-rose-500/20">
             <CardContent className="p-8">
               <SectionTitle
@@ -755,8 +806,31 @@ export function EmployeeProfileDisplay({
               <FileStatus label="Bukti Rekening" url={rek.bankDocumentUrl} />
             </CardContent>
           </Card>
+          )}
+
+          {/* Section: Rekening Uang Saku for internship OR Finansial for employees */}
+          {isMagang ? (
+            // Internship: Simplified bank account section
+            <Card className="border-slate-800 bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-xl border-t-4 border-t-rose-500/20">
+              <CardContent className="p-8">
+                <SectionTitle
+                  icon={<Banknote className="h-5 w-5" />}
+                  description="Uang Saku & Insentif"
+                >
+                  Rekening
+                </SectionTitle>
+                <div className="space-y-1">
+                  {rek.bankName && <DataRow label="Nama Bank" value={rek.bankName} />}
+                  {rek.bankAccountNumber && <DataRow label="Nomor Rekening" value={rek.bankAccountNumber} />}
+                  {rek.bankAccountHolderName && <DataRow label="Atas Nama" value={rek.bankAccountHolderName} />}
+                  {!rek.bankName && !rek.bankAccountNumber && <p className="text-xs text-slate-500 italic">Belum diisi</p>}
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
 
           {/* Section: Data Keluarga */}
+          {!isMagang && (
           <Card className="border-slate-800 bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-xl border-t-4 border-t-purple-500/20">
             <CardContent className="p-8 md:p-10">
               <SectionTitle
@@ -849,6 +923,52 @@ export function EmployeeProfileDisplay({
               </div>
             </CardContent>
           </Card>
+          )}
+
+          {/* Section: Kontak Darurat & Informasi Wali for internship */}
+          {isMagang && (
+            <Card className="border-slate-800 bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-xl border-t-4 border-t-purple-500/20">
+              <CardContent className="p-8 md:p-10">
+                <SectionTitle
+                  icon={<Users className="h-5 w-5" />}
+                  description="Wali & Kontak Darurat"
+                >
+                  Kontak Darurat & Wali
+                </SectionTitle>
+
+                {/* Data Ayah/Wali */}
+                <div className="space-y-4 mb-8">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-2">
+                    <User className="h-3 w-3" /> Ayah / Wali
+                  </h4>
+                  <div className="space-y-1 bg-slate-900/20 p-5 rounded-[2rem] border border-slate-800/40">
+                    {family.orangTua?.ayah?.name && <DataRow label="Nama" value={family.orangTua?.ayah?.name} className="py-2" />}
+                    {family.orangTua?.ayah?.phone && <DataRow label="No HP" value={family.orangTua?.ayah?.phone} className="py-2 border-0" />}
+                    {!family.orangTua?.ayah?.name && !family.orangTua?.ayah?.phone && <p className="text-xs text-slate-500 italic">Belum diisi</p>}
+                  </div>
+                </div>
+
+                {/* Data Ibu/Wali */}
+                <div className="space-y-4 mb-8">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-2">
+                    <User className="h-3 w-3" /> Ibu / Wali
+                  </h4>
+                  <div className="space-y-1 bg-slate-900/20 p-5 rounded-[2rem] border border-slate-800/40">
+                    {family.orangTua?.ibu?.name && <DataRow label="Nama" value={family.orangTua?.ibu?.name} className="py-2" />}
+                    {family.orangTua?.ibu?.phone && <DataRow label="No HP" value={family.orangTua?.ibu?.phone} className="py-2 border-0" />}
+                    {!family.orangTua?.ibu?.name && !family.orangTua?.ibu?.phone && <p className="text-xs text-slate-500 italic">Belum diisi</p>}
+                  </div>
+                </div>
+
+                {/* Alamat Wali */}
+                {family.orangTua?.ayah?.address && (
+                  <div className="space-y-2">
+                    <DataRow label="Alamat Orang Tua / Wali" value={family.orangTua?.ayah?.address} />
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Section: Kontak Darurat */}
           <Card className="border-slate-800 bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-xl border-t-4 border-t-cyan-500/20">

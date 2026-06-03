@@ -89,6 +89,9 @@ import {
   AlertCircle,
   Info,
   FileX,
+  Calendar,
+  DollarSign,
+  BarChart3,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useToast } from "@/hooks/use-toast";
@@ -178,6 +181,18 @@ function formatAddress(addr?: any): string | null {
     addr.kodePos,
   ].filter(Boolean);
   return parts.length > 0 ? parts.join(", ") : null;
+}
+
+function formatCurrency(value: string | number): string {
+  if (!value && value !== 0) return "";
+  const numValue = typeof value === "string" ? value.replace(/\D/g, "") : String(value);
+  if (!numValue) return "";
+  return `Rp ${parseInt(numValue, 10).toLocaleString("id-ID")}`;
+}
+
+function parseCurrency(value: string): number {
+  const numValue = value.replace(/\D/g, "");
+  return numValue ? parseInt(numValue, 10) : 0;
 }
 
 const DataRow = ({
@@ -690,6 +705,23 @@ export default function EmployeeDetailPage({
       leaveQuotaAnnual: hrdInfo.leaveQuotaAnnual ?? hrdInfo.jatahCuti ?? 0,
       workLocation: hrdInfo.workLocation || hrdInfo.lokasiKerja || "",
       contractNotes: hrdInfo.contractNotes || hrdInfo.catatanKontrak || "",
+
+      // Internship-specific fields
+      internId: hrdInfo.internId || "",
+      internshipBrandId: hrdInfo.internshipBrandId || normalizedData?.brandId || "",
+      internshipBrandName: hrdInfo.internshipBrandName || hrdInfo.brandName || normalizedData?.brandName || "",
+      internshipDivisionId: hrdInfo.internshipDivisionId || normalizedData?.divisionId || "",
+      internshipDivisionName: hrdInfo.internshipDivisionName || hrdInfo.divisionName || normalizedData?.divisi || "",
+      internshipRole: hrdInfo.internshipRole || hrdInfo.workRole || "",
+      internshipMentorUid: hrdInfo.internshipMentorUid || normalizedData?.directSupervisorUid || "",
+      internshipMentorName: hrdInfo.internshipMentorName || hrdInfo.directSupervisorName || "",
+      internshipLocation: hrdInfo.internshipLocation || hrdInfo.workLocation || "",
+      internshipProgramType: hrdInfo.internshipProgramType || "",
+      internshipStartDate: hrdInfo.internshipStartDate || hrdInfo.contractStartDate || "",
+      internshipEndDate: hrdInfo.internshipEndDate || hrdInfo.contractEndDate || "",
+      internshipStatus: hrdInfo.internshipStatus || hrdInfo.employmentStatus || "",
+      internshipNotes: hrdInfo.internshipNotes || "",
+      internshipChangeReason: hrdInfo.internshipChangeReason || "",
 
       additionalFields: {
         historyType: "promotion",
@@ -1603,6 +1635,8 @@ export default function EmployeeDetailPage({
   else if (_lowerType.includes("probation") || _lowerType === "percobaan")
     employeeTypeBadgeLabel = "Probation";
   else if (_lowerType.includes("magang")) employeeTypeBadgeLabel = "Magang";
+
+  const isMagang = _lowerType.includes("magang") || _lowerType.includes("training");
 
   const rawEmploymentStatus =
     hrdInfo.employmentStatus ||
@@ -2590,20 +2624,187 @@ export default function EmployeeDetailPage({
               </TabsContent>
 
               <TabsContent value="hrd" className="space-y-8">
-                {/* Header Dashboard HRD */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div>
-                    <h3 className="text-2xl font-bold text-white tracking-tight">
-                      Administrasi Kepegawaian
-                    </h3>
-                    <p className="text-sm text-slate-500">
-                      Pusat data kepegawaian, payroll, dan riwayat karier
-                      karyawan.
-                    </p>
-                  </div>
-                </div>
+                {isMagang ? (
+                  <>
+                    {/* MAGANG LAYOUT */}
+                    {/* Header Dashboard Magang */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div>
+                        <h3 className="text-2xl font-bold text-white tracking-tight">
+                          Administrasi Magang
+                        </h3>
+                        <p className="text-sm text-slate-500">
+                          Penempatan, periode, dan monitoring magang.
+                        </p>
+                      </div>
+                    </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                      {/* 1. Penempatan Magang */}
+                      <Card className="border-slate-800 bg-slate-950/40 backdrop-blur-xl group hover:border-amber-500/30 transition-all duration-300">
+                        <CardHeader className="border-b border-slate-800/50 flex flex-row items-center justify-between pb-4">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-500 border border-amber-500/20">
+                              <MapPin className="h-5 w-5" />
+                            </div>
+                            <CardTitle className="text-base font-bold text-white">
+                              Penempatan Magang
+                            </CardTitle>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-lg text-slate-500 hover:text-amber-400 hover:bg-amber-500/10"
+                            onClick={() => setEditingSection("struktur")}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                        </CardHeader>
+                        <CardContent className="pt-6">
+                          <div className="grid grid-cols-1 gap-y-2">
+                            <DataRow label="Nomor Induk Magang" value={hrdInfo.internId || "Belum diisi"} />
+                            <DataRow label="Brand / Unit" value={brandLabel} />
+                            <DataRow label="Divisi" value={divisionLabel} />
+                            <DataRow label="Role / Posisi Magang" value={hrdInfo.workRole || hrdInfo.internshipRole || "Belum diisi"} />
+                            <DataRow label="PIC / Pembimbing Internal" value={supervisorLabel} />
+                            <DataRow label="Lokasi Penempatan" value={hrdInfo.internshipLocation || hrdInfo.workLocation || "Belum diisi"} />
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* 2. Periode Magang */}
+                      <Card className="border-slate-800 bg-slate-950/40 backdrop-blur-xl group hover:border-blue-500/30 transition-all duration-300">
+                        <CardHeader className="border-b border-slate-800/50 flex flex-row items-center justify-between pb-4">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500 border border-blue-500/20">
+                              <Calendar className="h-5 w-5" />
+                            </div>
+                            <CardTitle className="text-base font-bold text-white">
+                              Periode Magang
+                            </CardTitle>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-blue-500/10"
+                            onClick={() => setEditingSection("kontrak")}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                        </CardHeader>
+                        <CardContent className="pt-6">
+                          <div className="grid grid-cols-1 gap-y-2">
+                            <DataRow label="Jenis Program Magang" value={hrdInfo.internshipProgramType || "Belum diisi"} />
+                            <DataRow label="Tanggal Mulai Magang" value={hrdInfo.internshipStartDate || hrdInfo.contractStartDate || "-"} />
+                            <DataRow label="Tanggal Selesai Magang" value={hrdInfo.internshipEndDate || hrdInfo.contractEndDate || "-"} />
+                            {hrdInfo.internshipStartDate && hrdInfo.internshipEndDate && (
+                              <DataRow
+                                label="Durasi Magang"
+                                value={(() => {
+                                  const start = new Date(hrdInfo.internshipStartDate);
+                                  const end = new Date(hrdInfo.internshipEndDate);
+                                  const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                                  return `${days} Hari`;
+                                })()}
+                              />
+                            )}
+                            <DataRow label="Status Magang" value={hrdInfo.internshipStatus || hrdInfo.employmentStatus || "Aktif"} />
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* 3. Uang Saku / Insentif */}
+                      <Card className="border-slate-800 bg-slate-950/40 backdrop-blur-xl group hover:border-emerald-500/30 transition-all duration-300">
+                        <CardHeader className="border-b border-slate-800/50 flex flex-row items-center justify-between pb-4">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 border border-emerald-500/20">
+                              <DollarSign className="h-5 w-5" />
+                            </div>
+                            <CardTitle className="text-base font-bold text-white">
+                              Uang Saku / Insentif
+                            </CardTitle>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="pt-6">
+                          <div className="grid grid-cols-1 gap-y-2">
+                            {hrdInfo.gajiPokok && hrdInfo.gajiPokok > 0 ? (
+                              <>
+                                <DataRow label="Ada/Tidak Uang Saku" value="Ada" />
+                                <DataRow label="Nominal Uang Saku" value={`Rp ${hrdInfo.gajiPokok.toLocaleString("id-ID")}`} />
+                              </>
+                            ) : (
+                              <DataRow label="Ada/Tidak Uang Saku" value="Tidak ada uang saku" />
+                            )}
+                            <div className="bg-slate-900/40 p-3 rounded-lg border border-slate-800/50 mt-2">
+                              <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">
+                                Rekening Uang Saku
+                              </p>
+                              {rek.bankName ? (
+                                <div className="space-y-1">
+                                  <p className="text-xs font-bold text-white">{rek.bankName}</p>
+                                  <p className="text-xs text-slate-400 font-mono">{rek.bankAccountNumber || "-"}</p>
+                                  <p className="text-[10px] text-slate-500 italic">a.n. {rek.bankAccountHolderName || "-"}</p>
+                                </div>
+                              ) : (
+                                <p className="text-xs text-slate-400">Belum diisi</p>
+                              )}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* 4. Monitoring Magang */}
+                      <Card className="border-slate-800 bg-slate-950/40 backdrop-blur-xl group hover:border-purple-500/30 transition-all duration-300">
+                        <CardHeader className="border-b border-slate-800/50 flex flex-row items-center justify-between pb-4">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-500 border border-purple-500/20">
+                              <BarChart3 className="h-5 w-5" />
+                            </div>
+                            <CardTitle className="text-base font-bold text-white">
+                              Monitoring Magang
+                            </CardTitle>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="pt-6">
+                          <div className="space-y-3">
+                            <div className="p-3 bg-slate-900/40 rounded-lg border border-slate-800/50">
+                              <p className="text-xs font-bold text-slate-300 mb-1">Laporan Harian</p>
+                              <p className="text-[10px] text-slate-500">Belum tersedia</p>
+                            </div>
+                            <div className="p-3 bg-slate-900/40 rounded-lg border border-slate-800/50">
+                              <p className="text-xs font-bold text-slate-300 mb-1">Rekap Kehadiran</p>
+                              <p className="text-[10px] text-slate-500">Belum tersedia</p>
+                            </div>
+                            <div className="p-3 bg-slate-900/40 rounded-lg border border-slate-800/50">
+                              <p className="text-xs font-bold text-slate-300 mb-1">Evaluasi Pembimbing</p>
+                              <p className="text-[10px] text-slate-500">Belum tersedia</p>
+                            </div>
+                            <div className="p-3 bg-slate-900/40 rounded-lg border border-slate-800/50">
+                              <p className="text-xs font-bold text-slate-300 mb-1">Feedback Akhir</p>
+                              <p className="text-[10px] text-slate-500">Belum tersedia</p>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* KARYAWAN LAYOUT */}
+                    {/* Header Dashboard HRD */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div>
+                        <h3 className="text-2xl font-bold text-white tracking-tight">
+                          Administrasi Kepegawaian
+                        </h3>
+                        <p className="text-sm text-slate-500">
+                          Pusat data kepegawaian, payroll, dan riwayat karier
+                          karyawan.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
                   {/* 1. Struktur & Status Kerja */}
                   <Card className="border-slate-800 bg-slate-950/40 backdrop-blur-xl group hover:border-emerald-500/30 transition-all duration-300">
                     <CardHeader className="border-b border-slate-800/50 flex flex-row items-center justify-between pb-4">
@@ -3034,13 +3235,323 @@ export default function EmployeeDetailPage({
                       </div>
                     </CardContent>
                   </Card>
-                </div>
+                    </div>
+                  </>
+                )}
 
                 {/* Editing Dialogs */}
-                <Dialog
-                  open={!!editingSection}
-                  onOpenChange={(open) => !open && setEditingSection(null)}
-                >
+                {isMagang ? (
+                  <Dialog
+                    open={!!editingSection}
+                    onOpenChange={(open) => !open && setEditingSection(null)}
+                  >
+                    <DialogContent className="w-[95vw] md:w-[90vw] max-w-4xl h-[95vh] md:h-[90vh] bg-slate-950 border-slate-800 text-slate-100 flex flex-col p-0 overflow-hidden">
+                      {/* Header */}
+                      <div className="shrink-0 bg-slate-900/50 backdrop-blur-xl border-b border-slate-800/60 px-6 py-5">
+                        <DialogHeader>
+                          <DialogTitle className="text-xl font-bold text-white flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-500 border border-amber-500/20">
+                              <Pencil className="h-5 w-5" />
+                            </div>
+                            Edit Administrasi Magang
+                          </DialogTitle>
+                          <DialogDescription className="text-sm text-slate-400 mt-2">
+                            Update informasi penempatan dan periode magang.
+                          </DialogDescription>
+                        </DialogHeader>
+                      </div>
+
+                      {/* Form Content */}
+                      <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+                        <Form {...form}>
+                          <form
+                            onSubmit={form.handleSubmit((data) => {
+                              // Validate catatan if important fields changed
+                              const importantFieldsChanged =
+                                (data.brandId !== hrdInfo.internshipBrandId && data.brandId !== hrdInfo.brandId) ||
+                                (data.divisionId !== hrdInfo.internshipDivisionId && data.divisionId !== hrdInfo.divisionId) ||
+                                (data.workRole !== hrdInfo.internshipRole) ||
+                                (data.directSupervisorUid !== hrdInfo.internshipMentorUid && data.directSupervisorUid !== hrdInfo.directSupervisorUid) ||
+                                (data.contractStartDate !== hrdInfo.internshipStartDate && data.contractStartDate !== hrdInfo.contractStartDate) ||
+                                (data.contractEndDate !== hrdInfo.internshipEndDate && data.contractEndDate !== hrdInfo.contractEndDate) ||
+                                (data.employmentStatus !== hrdInfo.internshipStatus && data.employmentStatus !== hrdInfo.employmentStatus) ||
+                                (data.gajiPokok !== hrdInfo.gajiPokok && data.gajiPokok !== 0);
+
+                              if (importantFieldsChanged && !data.structureChangeReason?.trim()) {
+                                toast({
+                                  variant: "destructive",
+                                  title: "Catatan / Alasan Perubahan Wajib Diisi",
+                                  description:
+                                    "Mohon isi catatan atau alasan perubahan untuk setiap perubahan data penting.",
+                                });
+                                return;
+                              }
+
+                              handleSaveHrd(data);
+                            })}
+                            className="space-y-6"
+                          >
+                            {/* Penempatan Magang */}
+                            <div>
+                              <h3 className="text-sm font-bold text-slate-300 uppercase mb-4">Penempatan Magang</h3>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <FormField
+                                  control={form.control}
+                                  name="internId"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-xs font-bold uppercase text-slate-500">Nomor Induk Magang</FormLabel>
+                                      <FormControl>
+                                        <Input {...field} className="bg-slate-900/50 border-slate-800" placeholder="INT-2024-001" />
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name="brandId"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-xs font-bold uppercase text-slate-500">Brand / Unit *</FormLabel>
+                                      <Select onValueChange={field.onChange} value={field.value}>
+                                        <FormControl>
+                                          <SelectTrigger className="bg-slate-900/50 border-slate-800">
+                                            <SelectValue placeholder="Pilih Brand" />
+                                          </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent className="bg-slate-900 border-slate-800">
+                                          {brands?.map((b) => (
+                                            <SelectItem key={b.id} value={b.id || ""}>
+                                              {b.name}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name="divisionId"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-xs font-bold uppercase text-slate-500">Divisi *</FormLabel>
+                                      <Select onValueChange={field.onChange} value={field.value} disabled={!form.watch("brandId")}>
+                                        <FormControl>
+                                          <SelectTrigger className="bg-slate-900/50 border-slate-800">
+                                            <SelectValue placeholder="Pilih Divisi" />
+                                          </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent className="bg-slate-900 border-slate-800">
+                                          {divisions.map((d) => (
+                                            <SelectItem key={d.id} value={d.id}>
+                                              {d.name}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name="workRole"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-xs font-bold uppercase text-slate-500">Role / Posisi Magang *</FormLabel>
+                                      <FormControl>
+                                        <Input {...field} className="bg-slate-900/50 border-slate-800" placeholder="Web Developer Intern" />
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name="directSupervisorUid"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-xs font-bold uppercase text-slate-500">PIC / Pembimbing Internal *</FormLabel>
+                                      <Select onValueChange={field.onChange} value={field.value} disabled={!form.watch("divisionId")}>
+                                        <FormControl>
+                                          <SelectTrigger className="bg-slate-900/50 border-slate-800">
+                                            <SelectValue placeholder="Pilih PIC" />
+                                          </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent className="bg-slate-900 border-slate-800">
+                                          {managers.map((m) => (
+                                            <SelectItem key={m.uid} value={m.uid}>
+                                              {m.fullName}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name="workLocation"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-xs font-bold uppercase text-slate-500">Lokasi Penempatan</FormLabel>
+                                      <FormControl>
+                                        <Input {...field} className="bg-slate-900/50 border-slate-800" placeholder="Jakarta Office" />
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Periode Magang */}
+                            <div>
+                              <h3 className="text-sm font-bold text-slate-300 uppercase mb-4">Periode Magang</h3>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <FormField
+                                  control={form.control}
+                                  name="internshipProgramType"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-xs font-bold uppercase text-slate-500">Jenis Program Magang</FormLabel>
+                                      <Select onValueChange={field.onChange} value={field.value || ""}>
+                                        <FormControl>
+                                          <SelectTrigger className="bg-slate-900/50 border-slate-800">
+                                            <SelectValue placeholder="Pilih Jenis Program" />
+                                          </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent className="bg-slate-900 border-slate-800">
+                                          <SelectItem value="PKL">PKL (Praktik Kerja Lapangan)</SelectItem>
+                                          <SelectItem value="Kampus Merdeka">Kampus Merdeka</SelectItem>
+                                          <SelectItem value="Mandiri">Mandiri</SelectItem>
+                                          <SelectItem value="Internal">Internal</SelectItem>
+                                          <SelectItem value="Lainnya">Lainnya</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name="contractStartDate"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-xs font-bold uppercase text-slate-500">Tanggal Mulai Magang *</FormLabel>
+                                      <FormControl>
+                                        <Input type="date" {...field} className="bg-slate-900/50 border-slate-800" />
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name="contractEndDate"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-xs font-bold uppercase text-slate-500">Tanggal Selesai Magang *</FormLabel>
+                                      <FormControl>
+                                        <Input type="date" {...field} className="bg-slate-900/50 border-slate-800" />
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name="employmentStatus"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-xs font-bold uppercase text-slate-500">Status Magang *</FormLabel>
+                                      <Select onValueChange={field.onChange} value={field.value || ""}>
+                                        <FormControl>
+                                          <SelectTrigger className="bg-slate-900/50 border-slate-800">
+                                            <SelectValue placeholder="Pilih Status" />
+                                          </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent className="bg-slate-900 border-slate-800">
+                                          <SelectItem value="Draft">Draft</SelectItem>
+                                          <SelectItem value="Aktif">Aktif</SelectItem>
+                                          <SelectItem value="Selesai">Selesai</SelectItem>
+                                          <SelectItem value="Diperpanjang">Diperpanjang</SelectItem>
+                                          <SelectItem value="Dihentikan">Dihentikan</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </FormItem>
+                                  )}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Uang Saku */}
+                            <div>
+                              <h3 className="text-sm font-bold text-slate-300 uppercase mb-4">Uang Saku / Insentif</h3>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <FormField
+                                  control={form.control}
+                                  name="gajiPokok"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-xs font-bold uppercase text-slate-500">Nominal Uang Saku</FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          type="text"
+                                          inputMode="numeric"
+                                          value={formatCurrency(field.value)}
+                                          onChange={(e) => {
+                                            const parsed = parseCurrency(e.target.value);
+                                            field.onChange(parsed);
+                                          }}
+                                          className="bg-slate-900/50 border-slate-800"
+                                          placeholder="Rp 0"
+                                        />
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Catatan / Alasan Perubahan */}
+                            <div>
+                              <h3 className="text-sm font-bold text-slate-300 uppercase mb-4">Catatan & Alasan Perubahan</h3>
+                              <FormField
+                                control={form.control}
+                                name="structureChangeReason"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs font-bold uppercase text-slate-500">Catatan / Alasan Perubahan *</FormLabel>
+                                    <FormControl>
+                                      <Textarea
+                                        {...field}
+                                        className="bg-slate-900/50 border-slate-800"
+                                        placeholder="Contoh: Penyesuaian periode magang, perubahan PIC, atau update nominal uang saku."
+                                        rows={4}
+                                      />
+                                    </FormControl>
+                                    <p className="text-xs text-slate-500 mt-2">Wajib diisi jika ada perubahan pada data penempatan, periode, status, atau nominal uang saku.</p>
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="flex gap-3 pt-4 border-t border-slate-800">
+                              <Button type="submit" className="flex-1 bg-emerald-600 hover:bg-emerald-700">
+                                <Save className="h-4 w-4 mr-2" />
+                                Simpan Perubahan
+                              </Button>
+                              <Button type="button" variant="outline" className="flex-1" onClick={() => setEditingSection(null)}>
+                                Batal
+                              </Button>
+                            </div>
+                          </form>
+                        </Form>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                ) : (
+                  <Dialog
+                    open={!!editingSection}
+                    onOpenChange={(open) => !open && setEditingSection(null)}
+                  >
                   <DialogContent className="w-[95vw] md:w-[90vw] max-w-5xl h-[95vh] md:h-[90vh] bg-slate-950 border-slate-800 text-slate-100 flex flex-col p-0 overflow-hidden shadow-2xl">
                     {/* Sticky Header */}
                     <div className="shrink-0 z-50 bg-slate-900/50 backdrop-blur-xl border-b border-slate-800/60 px-6 py-5 md:px-10 md:py-7">
@@ -4649,6 +5160,7 @@ export default function EmployeeDetailPage({
                     </Form>
                   </DialogContent>
                 </Dialog>
+                )}
               </TabsContent>
 
               <TabsContent value="lembur">

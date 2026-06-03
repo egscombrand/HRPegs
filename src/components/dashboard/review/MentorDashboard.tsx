@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useCollection, useFirestore, useMemoFirebase, updateDocumentNonBlocking, useDoc } from '@/firebase';
-import { collection, query, where, doc, serverTimestamp, Timestamp, getDoc, writeBatch } from 'firebase/firestore';
+import { collection, query, where, doc, serverTimestamp, Timestamp, getDoc, writeBatch, getDocs } from 'firebase/firestore';
 import type { DailyReport, UserProfile, MonthlyEvaluation } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

@@ -296,15 +296,18 @@ function getWaitingInfo(s: PermissionRequest, uid: string): WaitingInfo {
 }
 
 function isHrdValidationPhase(s: PermissionRequest): boolean {
-  const isHrdStep = s.currentApprovalStep === "hrd" || s.waitingForRole === "hrd" || s.waitingForName === "HRD";
+  const isHrdStep =
+    s.currentApprovalStep === "hrd" ||
+    s.waitingForRole === "hrd" ||
+    s.waitingForName === "HRD";
   const isHrdStatus = [
     "pending_hrd",
     "pending_hrd_validation",
     "approved_by_manager",
     "verified_manager",
-    "revision_hrd"
+    "revision_hrd",
   ].includes(s.status);
-  
+
   return isHrdStep || isHrdStatus;
 }
 
@@ -338,10 +341,13 @@ function getHumanStatusLabel(s: PermissionRequest): string {
 
 function getTahapLabel(s: PermissionRequest): string {
   if (s.status === "pending_manager") return "Menunggu Manager";
-  if (isHrdValidationPhase(s) && !isFinalStatus(s.status)) return "Butuh Validasi HRD";
+  if (isHrdValidationPhase(s) && !isFinalStatus(s.status))
+    return "Butuh Validasi HRD";
   if (s.status === "approved" || s.status === "closed") return "Selesai";
-  if (s.status === "rejected_manager" || s.status === "rejected_hrd") return "Ditolak";
-  if (s.status === "revision_manager" || s.status === "revision_hrd") return "Perlu Revisi";
+  if (s.status === "rejected_manager" || s.status === "rejected_hrd")
+    return "Ditolak";
+  if (s.status === "revision_manager" || s.status === "revision_hrd")
+    return "Perlu Revisi";
   return "Lainnya";
 }
 
@@ -375,7 +381,7 @@ export function PermissionApprovalClient({
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   const [brandFilter, setBrandFilter] = useState<string>("all");
   const [divisionFilter, setDivisionFilter] = useState<string>("all");
-  
+
   // HRD extra filter states
   const [statusFilter, setStatusFilter] = useState("all");
   const [tahapFilter, setTahapFilter] = useState("all");
@@ -646,11 +652,12 @@ export function PermissionApprovalClient({
         return isThisMonth(s.hrdDecisionAt || s.managerDecisionAt);
       }).length;
       const rejectedMonth = submissions.filter((s) => {
-        if (!["rejected_hrd", "rejected_manager"].includes(s.status)) return false;
+        if (!["rejected_hrd", "rejected_manager"].includes(s.status))
+          return false;
         return isThisMonth(s.hrdDecisionAt || s.managerDecisionAt);
       }).length;
-      const revision = submissions.filter(
-        (s) => ["revision_hrd", "revision_manager"].includes(s.status),
+      const revision = submissions.filter((s) =>
+        ["revision_hrd", "revision_manager"].includes(s.status),
       ).length;
       return {
         waitingManager,
@@ -676,7 +683,7 @@ export function PermissionApprovalClient({
     statusFilter !== "all" ||
     tahapFilter !== "all" ||
     filterReasonType !== "all" ||
-    waitingForFilter
+    (waitingForFilter && waitingForFilter !== "all"),
   );
 
   const filteredSubmissions = useMemo(() => {
@@ -708,16 +715,19 @@ export function PermissionApprovalClient({
             if (s.status !== "pending_manager") return false;
             break;
           case "pending_hrd":
-            if (!isHrdValidationPhase(s) || isFinalStatus(s.status)) return false;
+            if (!isHrdValidationPhase(s) || isFinalStatus(s.status))
+              return false;
             break;
           case "done":
             if (!["approved", "closed"].includes(s.status)) return false;
             break;
           case "rejected":
-            if (!["rejected_manager", "rejected_hrd"].includes(s.status)) return false;
+            if (!["rejected_manager", "rejected_hrd"].includes(s.status))
+              return false;
             break;
           case "revision":
-            if (!["revision_manager", "revision_hrd"].includes(s.status)) return false;
+            if (!["revision_manager", "revision_hrd"].includes(s.status))
+              return false;
             break;
         }
       }
@@ -743,15 +753,21 @@ export function PermissionApprovalClient({
       if (divisionFilter !== "all" && s.division !== divisionFilter)
         return false;
 
-      // ── Menunggu Siapa filter ──
-      if (waitingForFilter.trim()) {
-        const q = waitingForFilter.toLowerCase();
-        const waitingName = (s.waitingForName || s.managerName || "").toLowerCase();
-        const isHrdWaiting = isHrdValidationPhase(s) && !isFinalStatus(s.status);
-        if (isHrdWaiting) {
-          if (!"hrd".includes(q)) return false;
-        } else {
-          if (!waitingName.includes(q)) return false;
+      // ── Penanggung Jawab Saat Ini filter ──
+      if (mode === "hrd" && waitingForFilter && waitingForFilter !== "all") {
+        if (waitingForFilter === "pending_manager") {
+          if (s.status !== "pending_manager") return false;
+        } else if (waitingForFilter === "pending_hrd") {
+          if (!isHrdValidationPhase(s) || isFinalStatus(s.status)) return false;
+        } else if (waitingForFilter === "done") {
+          if (!isFinalStatus(s.status) && ![
+            "approved",
+            "closed",
+            "rejected_manager",
+            "rejected_hrd",
+            "reported",
+            "returned",
+          ].includes(s.status)) return false;
         }
       }
 
@@ -816,6 +832,39 @@ export function PermissionApprovalClient({
     waitingForFilter,
   ]);
 
+  const hrdPendingValidation = useMemo(
+    () =>
+      filteredSubmissions.filter(
+        (s) => isHrdValidationPhase(s) && !isFinalStatus(s.status),
+      ),
+    [filteredSubmissions],
+  );
+
+  const hrdPendingManagerSubmissions = useMemo(
+    () => filteredSubmissions.filter((s) => s.status === "pending_manager"),
+    [filteredSubmissions],
+  );
+
+  const hrdNeedRevision = useMemo(
+    () =>
+      filteredSubmissions.filter((s) =>
+        ["revision_manager", "revision_hrd"].includes(s.status),
+      ),
+    [filteredSubmissions],
+  );
+
+  const hrdFinishedSubmissions = useMemo(
+    () =>
+      filteredSubmissions.filter(
+        (s) =>
+          isFinalStatus(s.status) ||
+          ["rejected_manager", "rejected_hrd", "reported", "returned"].includes(
+            s.status,
+          ),
+      ),
+    [filteredSubmissions],
+  );
+
   const clearFilters = () => {
     setSearchTerm("");
     setFilterFormType("all");
@@ -829,6 +878,240 @@ export function PermissionApprovalClient({
     setFilterReasonType("all");
     setWaitingForFilter("");
   };
+
+  const renderHrdSection = (
+    title: string,
+    description: string,
+    items: PermissionRequest[],
+    emptyMessage: string,
+    highlightClass: string,
+    buttonLabel: string,
+  ) => (
+    <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-background shadow-sm">
+      <div
+        className={cn(
+          "flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between p-4 border-b",
+          highlightClass,
+        )}
+      >
+        <div>
+          <p className="text-sm font-semibold text-foreground">{title}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-3xl font-semibold text-foreground">
+            {items.length}
+          </p>
+          <p className="text-sm text-muted-foreground">Pengajuan</p>
+        </div>
+      </div>
+      {items.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-2 p-10 text-center text-sm text-muted-foreground">
+          <FileText className="h-8 w-8 opacity-30" />
+          <p>{emptyMessage}</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <Table className="min-w-[1000px]">
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[180px]">Pengaju</TableHead>
+                <TableHead className="w-[190px]">Izin</TableHead>
+                <TableHead className="w-[130px]">Periode</TableHead>
+                <TableHead className="w-[150px]">Brand / Divisi</TableHead>
+                <TableHead className="w-[170px]">Keterangan</TableHead>
+                <TableHead className="w-[90px]">Lampiran</TableHead>
+                <TableHead className="w-[210px]">Status / Menunggu</TableHead>
+                <TableHead className="w-[100px] text-right">Aksi</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {items.map((s) => {
+                const formType = s.formType || s.type;
+                const formLabel = getFormLabel(s);
+                const reasonLabel = getReasonLabel(s);
+                const reasonText = s.reason || s.detailedReason || "";
+                const attachments = (s.attachments || []).filter(Boolean);
+                const hasAttachment = attachments.length > 0;
+                const startDt = resolveDate(s.startDate);
+                const endDt = resolveDate(s.endDate);
+                const isOfficeExit = formType === "keluar_kantor";
+                const sameDay =
+                  startDt &&
+                  endDt &&
+                  differenceInCalendarDays(endDt, startDt) === 0;
+                const statusLabel = getHumanStatusLabel(s);
+                const isValidation =
+                  isHrdValidationPhase(s) && !isFinalStatus(s.status);
+                const waitingLabel = (() => {
+                  if (s.status === "pending_manager") {
+                    return `Menunggu persetujuan ${s.waitingForName || s.managerName || "Manager"}`;
+                  }
+                  if (s.status === "revision_manager") {
+                    return `Diminta revisi oleh ${s.managerName || "Manager"}`;
+                  }
+                  if (s.status === "revision_hrd") {
+                    return "Diminta revisi oleh HRD";
+                  }
+                  if (isValidation) {
+                    return "Menunggu validasi HRD";
+                  }
+                  if (isFinalStatus(s.status)) {
+                    return "Proses selesai";
+                  }
+                  return s.waitingForName || s.managerName || "Manager";
+                })();
+                const statusVariant = (() => {
+                  if (s.status === "pending_manager") {
+                    return "bg-amber-100 text-amber-800";
+                  }
+                  if (isValidation) {
+                    return "bg-teal-100 text-teal-800";
+                  }
+                  if (["approved", "closed"].includes(s.status)) {
+                    return "bg-emerald-100 text-emerald-800";
+                  }
+                  if (["rejected_manager", "rejected_hrd"].includes(s.status)) {
+                    return "bg-rose-100 text-rose-800";
+                  }
+                  if (["revision_manager", "revision_hrd"].includes(s.status)) {
+                    return "bg-orange-100 text-orange-800";
+                  }
+                  return "bg-slate-100 text-slate-800";
+                })();
+                return (
+                  <TableRow
+                    key={s.id}
+                    className="cursor-pointer transition-colors hover:bg-slate-800/40 dark:hover:bg-slate-700/30"
+                    onClick={() => setSelectedSubmission(s)}
+                  >
+                    <TableCell>
+                      <p className="font-medium text-sm leading-snug">
+                        {s.fullName}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {getApplicantSubtitle(s) || "Data jabatan belum diatur"}
+                      </p>
+                    </TableCell>
+                    <TableCell>
+                      <p className="text-sm font-medium leading-snug">
+                        {formLabel}
+                      </p>
+                      {reasonLabel && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {reasonLabel}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-sm leading-snug">
+                        {startDt && endDt ? (
+                          isOfficeExit ? (
+                            <>
+                              <p>
+                                {format(startDt, "dd MMM yyyy", {
+                                  locale: idLocale,
+                                })}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {format(startDt, "HH:mm")} —{" "}
+                                {format(endDt, "HH:mm")}
+                              </p>
+                            </>
+                          ) : sameDay ? (
+                            <p>
+                              {format(startDt, "dd MMM yyyy", {
+                                locale: idLocale,
+                              })}
+                            </p>
+                          ) : (
+                            <p>
+                              {format(startDt, "dd MMM", { locale: idLocale })}{" "}
+                              —{" "}
+                              {format(endDt, "dd MMM yyyy", {
+                                locale: idLocale,
+                              })}
+                            </p>
+                          )
+                        ) : (
+                          <p className="text-muted-foreground">—</p>
+                        )}
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {formatDuration(s)}
+                        </p>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <p className="text-sm font-medium text-foreground">
+                        {s._resolvedApplicantBrand || s.brandName || "—"}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {s._resolvedApplicantDivision || s.division || "—"}
+                      </p>
+                    </TableCell>
+                    <TableCell>
+                      <p className="text-sm text-foreground/75 line-clamp-2 leading-relaxed">
+                        {reasonText || (
+                          <span className="text-muted-foreground text-xs italic">
+                            Tidak ada keterangan.
+                          </span>
+                        )}
+                      </p>
+                    </TableCell>
+                    <TableCell>
+                      {hasAttachment ? (
+                        <Badge className="border-transparent bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 text-[10px] gap-1 w-fit">
+                          <Paperclip className="h-2.5 w-2.5" /> Ada
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground/40">
+                          —
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        <Badge
+                          className={cn(
+                            "border-transparent font-medium text-xs",
+                            statusVariant,
+                          )}
+                        >
+                          {statusLabel}
+                        </Badge>
+                        <p className="text-xs text-muted-foreground">
+                          {waitingLabel}
+                        </p>
+                      </div>
+                    </TableCell>
+                    <TableCell
+                      className="text-right"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Button
+                        variant={
+                          buttonLabel === "Validasi" ? "default" : "outline"
+                        }
+                        size="sm"
+                        className={
+                          buttonLabel === "Validasi"
+                            ? "h-8 text-sm bg-teal-600 hover:bg-teal-700 text-white border-0"
+                            : "h-8 text-sm"
+                        }
+                        onClick={() => setSelectedSubmission(s)}
+                      >
+                        {buttonLabel}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  );
 
   // ─── Manager tab definitions ──────────────────────────────────────────────
 
@@ -892,10 +1175,7 @@ export function PermissionApprovalClient({
           </>
         ) : (
           <>
-            <KpiCard
-              title="Menunggu Manager"
-              value={kpis.waitingManager}
-            />
+            <KpiCard title="Menunggu Manager" value={kpis.waitingManager} />
             <KpiCard
               title="Butuh Validasi HRD"
               value={kpis.actionNeeded}
@@ -975,111 +1255,139 @@ export function PermissionApprovalClient({
             </div>
           )}
 
-          {/* ── Filter controls ── */}
-          <div className="flex flex-wrap gap-2 mt-3">
-            {/* Search */}
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-              <Input
-                placeholder="Cari nama, keterangan, divisi..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-8 h-9 text-sm"
-              />
+          {/* ── Filter controls (2 rows) ── */}
+          <div className="space-y-3 mt-3">
+            {/* Row 1: Search, Status, Tahap, Penanggung Jawab */}
+            <div className="flex flex-wrap gap-2">
+              {/* Search */}
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                <Input
+                  placeholder="Cari nama, keterangan, divisi..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-8 h-9 text-sm"
+                />
+              </div>
+
+              {/* Status (HRD only) */}
+              {mode === "hrd" && (
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-[150px] h-9 text-sm">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua Status</SelectItem>
+                    <SelectItem value="draft">Draft</SelectItem>
+                    <SelectItem value="pending_manager">
+                      Menunggu Manager
+                    </SelectItem>
+                    <SelectItem value="rejected_manager">
+                      Ditolak Manager
+                    </SelectItem>
+                    <SelectItem value="revision_manager">
+                      Revisi Manager
+                    </SelectItem>
+                    <SelectItem value="approved_by_manager">
+                      Disetujui Manager
+                    </SelectItem>
+                    <SelectItem value="pending_hrd">Menunggu HRD</SelectItem>
+                    <SelectItem value="rejected_hrd">Ditolak HRD</SelectItem>
+                    <SelectItem value="revision_hrd">Revisi HRD</SelectItem>
+                    <SelectItem value="approved">Disetujui</SelectItem>
+                    <SelectItem value="reported">Dilaporkan Keluar</SelectItem>
+                    <SelectItem value="returned">Sudah Kembali</SelectItem>
+                    <SelectItem value="verified_manager">
+                      Terverifikasi Manager
+                    </SelectItem>
+                    <SelectItem value="closed">Selesai</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+
+              {/* Tahap (HRD only) */}
+              {mode === "hrd" && (
+                <Select value={tahapFilter} onValueChange={setTahapFilter}>
+                  <SelectTrigger className="w-[150px] h-9 text-sm">
+                    <SelectValue placeholder="Tahap" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua Tahap</SelectItem>
+                    <SelectItem value="pending_manager">
+                      Menunggu Manager
+                    </SelectItem>
+                    <SelectItem value="pending_hrd">Menunggu HRD</SelectItem>
+                    <SelectItem value="done">Selesai</SelectItem>
+                    <SelectItem value="rejected">Ditolak</SelectItem>
+                    <SelectItem value="revision">Perlu Revisi</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+
+              {/* Penanggung Jawab Saat Ini (HRD only) */}
+              {mode === "hrd" && (
+                <Select value={waitingForFilter} onValueChange={setWaitingForFilter}>
+                  <SelectTrigger className="w-[180px] h-9 text-sm">
+                    <SelectValue placeholder="Penanggung Jawab" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua Penanggung Jawab</SelectItem>
+                    <SelectItem value="pending_manager">Menunggu Manager</SelectItem>
+                    <SelectItem value="pending_hrd">Menunggu HRD</SelectItem>
+                    <SelectItem value="done">Selesai</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
-            {/* Bentuk izin */}
-            <Select value={filterFormType} onValueChange={setFilterFormType}>
-              <SelectTrigger className="w-[170px] h-9 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {FORM_TYPE_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {/* Status (HRD only) */}
+            {/* Row 2: Bentuk, Alasan, Brand, Divisi, Tanggal, Sort */}
             {mode === "hrd" && (
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[150px] h-9 text-sm">
-                  <SelectValue placeholder="Status Database" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Status</SelectItem>
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="pending_manager">Menunggu Manager</SelectItem>
-                  <SelectItem value="rejected_manager">Ditolak Manager</SelectItem>
-                  <SelectItem value="revision_manager">Revisi Manager</SelectItem>
-                  <SelectItem value="approved_by_manager">Disetujui Manager</SelectItem>
-                  <SelectItem value="pending_hrd">Menunggu HRD</SelectItem>
-                  <SelectItem value="rejected_hrd">Ditolak HRD</SelectItem>
-                  <SelectItem value="revision_hrd">Revisi HRD</SelectItem>
-                  <SelectItem value="approved">Disetujui</SelectItem>
-                  <SelectItem value="reported">Dilaporkan Keluar</SelectItem>
-                  <SelectItem value="returned">Sudah Kembali</SelectItem>
-                  <SelectItem value="verified_manager">Terverifikasi Manager</SelectItem>
-                  <SelectItem value="closed">Selesai</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
+              <div className="flex flex-wrap gap-2">
+                {/* Bentuk izin */}
+                <Select value={filterFormType} onValueChange={setFilterFormType}>
+                  <SelectTrigger className="w-[150px] h-9 text-sm">
+                    <SelectValue placeholder="Bentuk Izin" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FORM_TYPE_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-            {/* Tahap (HRD only) */}
-            {mode === "hrd" && (
-              <Select value={tahapFilter} onValueChange={setTahapFilter}>
-                <SelectTrigger className="w-[150px] h-9 text-sm">
-                  <SelectValue placeholder="Semua Tahap" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Tahap</SelectItem>
-                  <SelectItem value="pending_manager">Menunggu Manager</SelectItem>
-                  <SelectItem value="pending_hrd">Menunggu HRD</SelectItem>
-                  <SelectItem value="done">Selesai</SelectItem>
-                  <SelectItem value="rejected">Ditolak</SelectItem>
-                  <SelectItem value="revision">Revisi</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
+                {/* Alasan Izin */}
+                <Select
+                  value={filterReasonType}
+                  onValueChange={setFilterReasonType}
+                >
+                  <SelectTrigger className="w-[150px] h-9 text-sm">
+                    <SelectValue placeholder="Alasan" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua Alasan</SelectItem>
+                    <SelectItem value="sakit">Sakit</SelectItem>
+                    <SelectItem value="duka">Duka Cita</SelectItem>
+                    <SelectItem value="urusan_keluarga">
+                      Urusan Keluarga
+                    </SelectItem>
+                    <SelectItem value="administrasi_resmi">
+                      Administrasi Resmi
+                    </SelectItem>
+                    <SelectItem value="akademik">Akademik</SelectItem>
+                    <SelectItem value="transportasi">Transportasi</SelectItem>
+                    <SelectItem value="keperluan_pribadi">
+                      Keperluan Pribadi
+                    </SelectItem>
+                    <SelectItem value="lainnya">Lainnya</SelectItem>
+                  </SelectContent>
+                </Select>
 
-            {/* Alasan Izin (HRD only) */}
-            {mode === "hrd" && (
-              <Select value={filterReasonType} onValueChange={setFilterReasonType}>
-                <SelectTrigger className="w-[150px] h-9 text-sm">
-                  <SelectValue placeholder="Semua Alasan" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Alasan</SelectItem>
-                  <SelectItem value="sakit">Sakit</SelectItem>
-                  <SelectItem value="duka">Duka Cita</SelectItem>
-                  <SelectItem value="urusan_keluarga">Urusan Keluarga</SelectItem>
-                  <SelectItem value="administrasi_resmi">Administrasi Resmi</SelectItem>
-                  <SelectItem value="akademik">Akademik</SelectItem>
-                  <SelectItem value="transportasi">Transportasi</SelectItem>
-                  <SelectItem value="keperluan_pribadi">Keperluan Pribadi</SelectItem>
-                  <SelectItem value="lainnya">Lainnya</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
-
-            {/* Menunggu Siapa (HRD only) */}
-            {mode === "hrd" && (
-              <Input
-                placeholder="Menunggu siapa..."
-                value={waitingForFilter}
-                onChange={(e) => setWaitingForFilter(e.target.value)}
-                className="w-[150px] h-9 text-sm"
-              />
-            )}
-
-            {/* Brand + Division (HRD only) */}
-            {mode === "hrd" && (
-              <>
+                {/* Brand */}
                 <Select value={brandFilter} onValueChange={setBrandFilter}>
-                  <SelectTrigger className="w-[145px] h-9 text-sm">
-                    <SelectValue placeholder="Semua Brand" />
+                  <SelectTrigger className="w-[140px] h-9 text-sm">
+                    <SelectValue placeholder="Brand" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Semua Brand</SelectItem>
@@ -1090,12 +1398,14 @@ export function PermissionApprovalClient({
                     ))}
                   </SelectContent>
                 </Select>
+
+                {/* Divisi */}
                 <Select
                   value={divisionFilter}
                   onValueChange={setDivisionFilter}
                 >
-                  <SelectTrigger className="w-[145px] h-9 text-sm">
-                    <SelectValue placeholder="Semua Divisi" />
+                  <SelectTrigger className="w-[140px] h-9 text-sm">
+                    <SelectValue placeholder="Divisi" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Semua Divisi</SelectItem>
@@ -1106,420 +1416,586 @@ export function PermissionApprovalClient({
                     ))}
                   </SelectContent>
                 </Select>
-              </>
+
+                {/* Periode Pengajuan */}
+                <div className="flex items-end gap-2">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-muted-foreground">Dari</label>
+                    <Input
+                      type="date"
+                      value={filterDateFrom}
+                      onChange={(e) => setFilterDateFrom(e.target.value)}
+                      className="w-[130px] h-9 text-sm"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-muted-foreground">Sampai</label>
+                    <Input
+                      type="date"
+                      value={filterDateTo}
+                      onChange={(e) => setFilterDateTo(e.target.value)}
+                      className="w-[130px] h-9 text-sm"
+                    />
+                  </div>
+                </div>
+
+                {/* Sort */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 gap-1.5 text-sm px-3"
+                  onClick={() =>
+                    setSortOrder((p) => (p === "newest" ? "oldest" : "newest"))
+                  }
+                >
+                  {sortOrder === "newest" ? (
+                    <>
+                      <SortDesc className="h-3.5 w-3.5" /> Terbaru
+                    </>
+                  ) : (
+                    <>
+                      <SortAsc className="h-3.5 w-3.5" /> Terlama
+                    </>
+                  )}
+                </Button>
+
+                {/* Clear filters */}
+                {hasActiveFilters && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-9 gap-1.5 text-sm text-muted-foreground"
+                    onClick={clearFilters}
+                  >
+                    <X className="h-3.5 w-3.5" /> Reset
+                  </Button>
+                )}
+              </div>
             )}
 
-            {/* Date from */}
-            <Input
-              type="date"
-              value={filterDateFrom}
-              onChange={(e) => setFilterDateFrom(e.target.value)}
-              className="w-[135px] h-9 text-sm"
-              title="Dari tanggal"
-            />
-            <Input
-              type="date"
-              value={filterDateTo}
-              onChange={(e) => setFilterDateTo(e.target.value)}
-              className="w-[135px] h-9 text-sm"
-              title="Sampai tanggal"
-            />
+            {/* Manager mode single row */}
+            {mode === "manager" && (
+              <div className="flex flex-wrap gap-2">
+                {/* Bentuk izin */}
+                <Select value={filterFormType} onValueChange={setFilterFormType}>
+                  <SelectTrigger className="w-[150px] h-9 text-sm">
+                    <SelectValue placeholder="Bentuk Izin" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FORM_TYPE_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-            {/* Sort */}
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9 gap-1.5 text-sm px-3"
-              onClick={() =>
-                setSortOrder((p) => (p === "newest" ? "oldest" : "newest"))
-              }
-            >
-              {sortOrder === "newest" ? (
-                <>
-                  <SortDesc className="h-3.5 w-3.5" /> Terbaru
-                </>
-              ) : (
-                <>
-                  <SortAsc className="h-3.5 w-3.5" /> Terlama
-                </>
-              )}
-            </Button>
+                {/* Periode Pengajuan */}
+                <div className="flex items-end gap-2">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-muted-foreground">Dari</label>
+                    <Input
+                      type="date"
+                      value={filterDateFrom}
+                      onChange={(e) => setFilterDateFrom(e.target.value)}
+                      className="w-[130px] h-9 text-sm"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-muted-foreground">Sampai</label>
+                    <Input
+                      type="date"
+                      value={filterDateTo}
+                      onChange={(e) => setFilterDateTo(e.target.value)}
+                      className="w-[130px] h-9 text-sm"
+                    />
+                  </div>
+                </div>
 
-            {/* Clear filters */}
-            {hasActiveFilters && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-9 gap-1.5 text-sm text-muted-foreground"
-                onClick={clearFilters}
-              >
-                <X className="h-3.5 w-3.5" /> Reset
-              </Button>
+                {/* Sort */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 gap-1.5 text-sm px-3"
+                  onClick={() =>
+                    setSortOrder((p) => (p === "newest" ? "oldest" : "newest"))
+                  }
+                >
+                  {sortOrder === "newest" ? (
+                    <>
+                      <SortDesc className="h-3.5 w-3.5" /> Terbaru
+                    </>
+                  ) : (
+                    <>
+                      <SortAsc className="h-3.5 w-3.5" /> Terlama
+                    </>
+                  )}
+                </Button>
+
+                {/* Clear filters */}
+                {hasActiveFilters && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-9 gap-1.5 text-sm text-muted-foreground"
+                    onClick={clearFilters}
+                  >
+                    <X className="h-3.5 w-3.5" /> Reset
+                  </Button>
+                )}
+              </div>
             )}
           </div>
         </CardHeader>
 
-        <CardContent>
-          <div className="rounded-lg border overflow-x-auto">
-            <Table
-              className="min-w-[1100px]"
-            >
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[175px]">Pengaju</TableHead>
-                  <TableHead className="w-[190px]">Izin</TableHead>
-                  <TableHead className="w-[140px]">Periode</TableHead>
-                  {mode === "hrd" && (
-                    <TableHead className="w-[140px]">Brand / Divisi</TableHead>
-                  )}
-                  <TableHead className="w-[165px]">Keterangan</TableHead>
-                  <TableHead className="w-[90px]">Lampiran</TableHead>
-                  {mode === "hrd" && (
-                    <TableHead className="w-[130px]">Tahap</TableHead>
-                  )}
-                  <TableHead className="w-[185px]">Status</TableHead>
-                  <TableHead className="w-[155px]">Menunggu</TableHead>
-                  <TableHead className="w-[100px] text-right">Aksi</TableHead>
-                </TableRow>
-              </TableHeader>
-
-              <TableBody>
-                {isLoading ? (
+                <CardContent className="space-y-6">
+          {mode === "hrd" ? (
+            <div className="space-y-6">
+              {renderHrdSection(
+                "Butuh Validasi HRD",
+                "Pengajuan izin yang sudah disetujui manager dan menunggu langkah HRD.",
+                hrdPendingValidation,
+                "Tidak ada pengajuan yang perlu divalidasi HRD saat ini.",
+                "bg-teal-50/80 border-teal-200 dark:bg-teal-950/10",
+                "Validasi",
+              )}
+              {renderHrdSection(
+                "Sedang Proses di Manager",
+                "Pengajuan yang masih menunggu persetujuan manager sebelum HRD dapat memvalidasi.",
+                hrdPendingManagerSubmissions,
+                "Tidak ada pengajuan yang saat ini menunggu manager.",
+                "bg-amber-50/80 border-amber-200 dark:bg-amber-950/10",
+                "Lihat Detail",
+              )}
+              {renderHrdSection(
+                "Perlu Revisi",
+                "Pengajuan yang diminta revisi oleh manager atau HRD.",
+                hrdNeedRevision,
+                "Tidak ada pengajuan yang diminta revisi saat ini.",
+                "bg-orange-50/80 border-orange-200 dark:bg-orange-950/10",
+                "Lihat Detail",
+              )}
+              {renderHrdSection(
+                "Riwayat Selesai",
+                "Pengajuan izin yang sudah ditutup: disetujui, terverifikasi, ditolak, atau dibatalkan.",
+                hrdFinishedSubmissions,
+                "Belum ada riwayat selesai untuk periode saat ini.",
+                "bg-emerald-50/80 border-emerald-200 dark:bg-emerald-950/10",
+                "Lihat Detail",
+              )}
+            </div>
+          ) : (
+            <div className="rounded-lg border overflow-x-auto">
+              <Table className="min-w-[1100px]">
+                <TableHeader>
                   <TableRow>
-                    <TableCell
-                      colSpan={colSpan}
-                      className="h-28 text-center text-muted-foreground"
-                    >
-                      Memuat data...
-                    </TableCell>
+                    <TableHead className="w-[175px]">Pengaju</TableHead>
+                    <TableHead className="w-[190px]">Izin</TableHead>
+                    <TableHead className="w-[140px]">Periode</TableHead>
+                    {mode === "hrd" && (
+                      <TableHead className="w-[140px]">Brand / Divisi</TableHead>
+                    )}
+                    <TableHead className="w-[165px]">Keterangan</TableHead>
+                    <TableHead className="w-[90px]">Lampiran</TableHead>
+                    {mode === "hrd" && (
+                      <TableHead className="w-[130px]">Tahap</TableHead>
+                    )}
+                    <TableHead className="w-[185px]">Status</TableHead>
+                    <TableHead className="w-[155px]">Menunggu</TableHead>
+                    <TableHead className="w-[100px] text-right">Aksi</TableHead>
                   </TableRow>
-                ) : filteredSubmissions.length > 0 ? (
-                  filteredSubmissions.map((s) => {
-                    const formType = s.formType || s.type;
-                    const formLabel = getFormLabel(s);
-                    const reasonLabel = getReasonLabel(s);
-                    const reasonText = s.reason || s.detailedReason || "";
-                    const attachments = (s.attachments || []).filter(Boolean);
-                    const hasAttachment = attachments.length > 0;
-                    const startDt = resolveDate(s.startDate);
-                    const endDt = resolveDate(s.endDate);
-                    const isOfficeExit = formType === "keluar_kantor";
-                    const sameDay =
-                      startDt &&
-                      endDt &&
-                      differenceInCalendarDays(endDt, startDt) === 0;
-                    const needsMyAction =
-                      mode === "manager" && isActionNeeded(s, uid);
-                    
-                    const isHrdActionable = isHrdValidationPhase(s) && !isFinalStatus(s.status);
-                    
-                    // Row highlighting logic
-                    let rowClass = "hover:bg-muted/40";
-                    if (mode === "hrd") {
-                      if (isHrdActionable) {
-                        rowClass = "bg-teal-50/20 hover:bg-teal-50/30 border-l-2 border-l-teal-500 dark:bg-teal-950/10 dark:hover:bg-teal-950/15";
-                      } else if (s.status === "pending_manager") {
-                        rowClass = "bg-amber-50/10 hover:bg-amber-50/20 border-l-2 border-l-amber-400 dark:bg-amber-950/5 dark:hover:bg-amber-950/10";
-                      } else if (s.status === "approved" || s.status === "closed") {
-                        rowClass = "bg-emerald-50/10 hover:bg-emerald-50/20 dark:bg-emerald-950/5 dark:hover:bg-emerald-950/10";
-                      } else if (s.status === "rejected_manager" || s.status === "rejected_hrd") {
-                        rowClass = "bg-rose-50/10 hover:bg-rose-50/20 dark:bg-rose-950/5 dark:hover:bg-rose-950/10";
-                      } else if (s.status === "revision_manager" || s.status === "revision_hrd") {
-                        rowClass = "bg-orange-50/10 hover:bg-orange-50/20 dark:bg-orange-950/5 dark:hover:bg-orange-950/10";
-                      }
-                    } else {
-                      if (needsMyAction) {
-                        rowClass = "border-l-2 border-l-amber-400 bg-amber-50/25 dark:bg-amber-900/10 hover:bg-amber-50/40 dark:hover:bg-amber-900/15";
-                      }
-                    }
+                </TableHeader>
 
-                    return (
-                       <TableRow
-                        key={s.id}
-                        className={cn("cursor-pointer transition-colors", rowClass)}
-                        onClick={() => setSelectedSubmission(s)}
+                <TableBody>
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={colSpan}
+                        className="h-28 text-center text-muted-foreground"
                       >
-                        {/* Pengaju */}
-                        <TableCell>
-                          <p className="font-medium text-sm leading-snug">
-                            {s.fullName}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {(() => {
-                              const subtitle = getApplicantSubtitle(s);
-                              return subtitle || "Data jabatan belum diatur";
-                            })()}
-                          </p>
-                          {isOfficeExit && s.needsManagerAttention && (
-                            <Badge
-                              variant="outline"
-                              className="mt-1 px-1 py-0 h-4 text-[9px] bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-800/40"
-                            >
-                              Deviasi Durasi
-                            </Badge>
-                          )}
-                        </TableCell>
+                        Memuat data...
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredSubmissions.length > 0 ? (
+                    filteredSubmissions.map((s) => {
+                      const formType = s.formType || s.type;
+                      const formLabel = getFormLabel(s);
+                      const reasonLabel = getReasonLabel(s);
+                      const reasonText = s.reason || s.detailedReason || "";
+                      const attachments = (s.attachments || []).filter(Boolean);
+                      const hasAttachment = attachments.length > 0;
+                      const startDt = resolveDate(s.startDate);
+                      const endDt = resolveDate(s.endDate);
+                      const isOfficeExit = formType === "keluar_kantor";
+                      const sameDay =
+                        startDt &&
+                        endDt &&
+                        differenceInCalendarDays(endDt, startDt) === 0;
+                      const needsMyAction =
+                        mode === "manager" && isActionNeeded(s, uid);
 
-                        {/* Izin */}
-                        <TableCell>
-                          <p className="text-sm font-medium leading-snug">
-                            {formLabel}
-                          </p>
-                          {reasonLabel && (
+                      const isHrdActionable =
+                        isHrdValidationPhase(s) && !isFinalStatus(s.status);
+
+                      let rowClass = "hover:bg-slate-800/40 dark:hover:bg-slate-700/30";
+                      if (mode === "hrd") {
+                        if (isHrdActionable) {
+                          rowClass =
+                            "bg-teal-50/20 hover:bg-teal-800/40 border-l-2 border-l-teal-500 dark:bg-teal-950/10 dark:hover:bg-slate-700/30";
+                        } else if (s.status === "pending_manager") {
+                          rowClass =
+                            "bg-amber-50/10 hover:bg-slate-800/40 border-l-2 border-l-amber-400 dark:bg-amber-950/5 dark:hover:bg-slate-700/30";
+                        } else if (
+                          s.status === "approved" ||
+                          s.status === "closed"
+                        ) {
+                          rowClass =
+                            "bg-emerald-50/10 hover:bg-slate-800/40 dark:bg-emerald-950/5 dark:hover:bg-slate-700/30";
+                        } else if (
+                          s.status === "rejected_manager" ||
+                          s.status === "rejected_hrd"
+                        ) {
+                          rowClass =
+                            "bg-rose-50/10 hover:bg-slate-800/40 dark:bg-rose-950/5 dark:hover:bg-slate-700/30";
+                        } else if (
+                          s.status === "revision_manager" ||
+                          s.status === "revision_hrd"
+                        ) {
+                          rowClass =
+                            "bg-orange-50/10 hover:bg-slate-800/40 dark:bg-orange-950/5 dark:hover:bg-slate-700/30";
+                        }
+                      } else {
+                        if (needsMyAction) {
+                          rowClass =
+                            "border-l-2 border-l-amber-400 bg-amber-50/25 dark:bg-amber-900/10 hover:bg-slate-800/40 dark:hover:bg-slate-700/30";
+                        }
+                      }
+
+                      return (
+                        <TableRow
+                          key={s.id}
+                          className={cn(
+                            "cursor-pointer transition-colors",
+                            rowClass,
+                          )}
+                          onClick={() => setSelectedSubmission(s)}
+                        >
+                          {/* Pengaju */}
+                          <TableCell>
+                            <p className="font-medium text-sm leading-snug">
+                              {s.fullName}
+                            </p>
                             <p className="text-xs text-muted-foreground mt-0.5">
-                              {reasonLabel}
+                              {(() => {
+                                const subtitle = getApplicantSubtitle(s);
+                                return subtitle || "Data jabatan belum diatur";
+                              })()}
                             </p>
-                          )}
-                          {s.otherTitle && (
-                            <p className="text-xs text-muted-foreground mt-0.5 italic truncate max-w-[160px]">
-                              {s.otherTitle}
-                            </p>
-                          )}
-                        </TableCell>
+                            {isOfficeExit && s.needsManagerAttention && (
+                              <Badge
+                                variant="outline"
+                                className="mt-1 px-1 py-0 h-4 text-[9px] bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-800/40"
+                              >
+                                Deviasi Durasi
+                              </Badge>
+                            )}
+                          </TableCell>
 
-                        {/* Periode */}
-                        <TableCell>
-                          <div className="text-sm leading-snug">
-                            {startDt && endDt ? (
-                              isOfficeExit ? (
-                                <>
+                          {/* Izin */}
+                          <TableCell>
+                            <p className="text-sm font-medium leading-snug">
+                              {formLabel}
+                            </p>
+                            {reasonLabel && (
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {reasonLabel}
+                              </p>
+                            )}
+                            {s.otherTitle && (
+                              <p className="text-xs text-muted-foreground mt-0.5 italic truncate max-w-[160px]">
+                                {s.otherTitle}
+                              </p>
+                            )}
+                          </TableCell>
+
+                          {/* Periode */}
+                          <TableCell>
+                            <div className="text-sm leading-snug">
+                              {startDt && endDt ? (
+                                isOfficeExit ? (
+                                  <>
+                                    <p>
+                                      {format(startDt, "dd MMM yyyy", {
+                                        locale: idLocale,
+                                      })}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                      {format(startDt, "HH:mm")} —{" "}
+                                      {format(endDt, "HH:mm")}
+                                    </p>
+                                  </>
+                                ) : sameDay ? (
                                   <p>
                                     {format(startDt, "dd MMM yyyy", {
                                       locale: idLocale,
                                     })}
                                   </p>
-                                  <p className="text-xs text-muted-foreground mt-0.5">
-                                    {format(startDt, "HH:mm")} —{" "}
-                                    {format(endDt, "HH:mm")}
+                                ) : (
+                                  <p>
+                                    {format(startDt, "dd MMM", {
+                                      locale: idLocale,
+                                    })} {" "}
+                                    — {" "}
+                                    {format(endDt, "dd MMM yyyy", {
+                                      locale: idLocale,
+                                    })}
                                   </p>
-                                </>
-                              ) : sameDay ? (
-                                <p>
-                                  {format(startDt, "dd MMM yyyy", {
-                                    locale: idLocale,
-                                  })}
-                                </p>
+                                )
                               ) : (
-                                <p>
-                                  {format(startDt, "dd MMM", {
-                                    locale: idLocale,
-                                  })}{" "}
-                                  —{" "}
-                                  {format(endDt, "dd MMM yyyy", {
-                                    locale: idLocale,
-                                  })}
-                                </p>
-                              )
-                            ) : (
-                              <p className="text-muted-foreground">—</p>
-                            )}
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              {formatDuration(s)}
-                            </p>
-                          </div>
-                        </TableCell>
-
-                        {/* Brand / Divisi (HRD only) */}
-                        {mode === "hrd" && (
-                          <TableCell>
-                            <p className="text-sm font-medium text-foreground">
-                              {s._resolvedApplicantBrand || s.brandName || "—"}
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              {s._resolvedApplicantDivision || s.division || "—"}
-                            </p>
+                                <p className="text-muted-foreground">—</p>
+                              )}
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {formatDuration(s)}
+                              </p>
+                            </div>
                           </TableCell>
-                        )}
 
-                        {/* Keterangan */}
-                        <TableCell>
-                          <p className="text-sm text-foreground/75 line-clamp-2 leading-relaxed">
-                            {reasonText || (
-                              <span className="text-muted-foreground text-xs italic">
-                                Tidak ada keterangan.
+                          {/* Brand / Divisi (HRD only) */}
+                          {mode === "hrd" && (
+                            <TableCell>
+                              <p className="text-sm font-medium text-foreground">
+                                {s._resolvedApplicantBrand || s.brandName || "—"}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {s._resolvedApplicantDivision || s.division || "—"}
+                              </p>
+                            </TableCell>
+                          )}
+
+                          {/* Keterangan */}
+                          <TableCell>
+                            <p className="text-sm text-foreground/75 line-clamp-2 leading-relaxed">
+                              {reasonText || (
+                                <span className="text-muted-foreground text-xs italic">
+                                  Tidak ada keterangan.
+                                </span>
+                              )}
+                            </p>
+                            {s.createdAt && resolveDate(s.createdAt) && (
+                              <p className="text-[10px] text-muted-foreground/55 mt-0.5">
+                                {formatDistanceToNow(resolveDate(s.createdAt)!, {
+                                  addSuffix: true,
+                                  locale: idLocale,
+                                })}
+                              </p>
+                            )}
+                          </TableCell>
+
+                          {/* Lampiran */}
+                          <TableCell>
+                            {hasAttachment ? (
+                              <div className="flex flex-col gap-1">
+                                <Badge className="border-transparent bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 text-[10px] gap-1 w-fit">
+                                  <Paperclip className="h-2.5 w-2.5" /> Ada
+                                </Badge>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground/40">
+                                —
                               </span>
                             )}
-                          </p>
-                          {s.createdAt && resolveDate(s.createdAt) && (
-                            <p className="text-[10px] text-muted-foreground/55 mt-0.5">
-                              {formatDistanceToNow(resolveDate(s.createdAt)!, {
-                                addSuffix: true,
-                                locale: idLocale,
-                              })}
-                            </p>
-                          )}
-                        </TableCell>
+                          </TableCell>
 
-                        {/* Lampiran */}
-                        <TableCell>
-                          {hasAttachment ? (
-                            <div className="flex flex-col gap-1">
-                              <Badge className="border-transparent bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 text-[10px] gap-1 w-fit">
-                                <Paperclip className="h-2.5 w-2.5" /> Ada
-                              </Badge>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground/40">
-                              —
-                            </span>
+                          {/* Tahap (HRD only) */}
+                          {mode === "hrd" && (
+                            <TableCell>
+                              {(() => {
+                                const tahap = getTahapLabel(s);
+                                let tahapClass = "bg-slate-100 text-slate-700";
+                                if (tahap === "Menunggu Manager") {
+                                  tahapClass = "bg-amber-100 text-amber-700";
+                                } else if (tahap === "Butuh Validasi HRD") {
+                                  tahapClass = "bg-teal-100 text-teal-700";
+                                } else if (tahap === "Selesai") {
+                                  tahapClass = "bg-emerald-100 text-emerald-700";
+                                } else if (tahap === "Ditolak") {
+                                  tahapClass = "bg-rose-100 text-rose-700";
+                                } else if (tahap === "Perlu Revisi") {
+                                  tahapClass = "bg-orange-100 text-orange-700";
+                                }
+                                return (
+                                  <Badge
+                                    className={cn(
+                                      "border-transparent font-medium text-[10px] px-2 py-0.5",
+                                      tahapClass,
+                                    )}
+                                  >
+                                    {tahap}
+                                  </Badge>
+                                );
+                              })()}
+                            </TableCell>
                           )}
-                        </TableCell>
 
-                        {/* Tahap (HRD only) */}
-                        {mode === "hrd" && (
+                          {/* Status */}
                           <TableCell>
                             {(() => {
-                              const tahap = getTahapLabel(s);
-                              let tahapClass = "bg-slate-100 text-slate-700";
-                              if (tahap === "Menunggu Manager") {
-                                tahapClass = "bg-amber-100 text-amber-700";
-                              } else if (tahap === "Butuh Validasi HRD") {
-                                tahapClass = "bg-teal-100 text-teal-700";
-                              } else if (tahap === "Selesai") {
-                                tahapClass = "bg-emerald-100 text-emerald-700";
-                              } else if (tahap === "Ditolak") {
-                                tahapClass = "bg-rose-100 text-rose-700";
-                              } else if (tahap === "Perlu Revisi") {
-                                tahapClass = "bg-orange-100 text-orange-700";
+                              const label = getHumanStatusLabel(s);
+                              let statusClass = "bg-slate-100 text-slate-800";
+                              if (s.status === "pending_manager") {
+                                statusClass =
+                                  "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/30";
+                              } else if (
+                                isHrdValidationPhase(s) &&
+                                !isFinalStatus(s.status)
+                              ) {
+                                statusClass =
+                                  "bg-teal-100 text-teal-800 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-900/30";
+                              } else if (
+                                s.status === "approved" ||
+                                s.status === "closed"
+                              ) {
+                                statusClass =
+                                  "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900/30";
+                              } else if (
+                                s.status === "rejected_manager" ||
+                                s.status === "rejected_hrd"
+                              ) {
+                                statusClass =
+                                  "bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900/30";
+                              } else if (
+                                s.status === "revision_manager" ||
+                                s.status === "revision_hrd"
+                              ) {
+                                statusClass =
+                                  "bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-900/30";
                               }
                               return (
-                                <Badge className={cn("border-transparent font-medium text-[10px] px-2 py-0.5", tahapClass)}>
-                                  {tahap}
+                                <Badge
+                                  className={cn(
+                                    "border-transparent font-medium text-xs",
+                                    statusClass,
+                                  )}
+                                >
+                                  {label}
                                 </Badge>
                               );
                             })()}
+                            {mode === "manager" &&
+                              isApprovedByMe(s, uid) &&
+                              (s.status === "approved_by_manager" ||
+                                s.status === "pending_hrd") && (
+                                <p className="text-[10px] text-blue-600 dark:text-blue-400 mt-1">
+                                  Sudah Anda setujui
+                                </p>
+                              )}
                           </TableCell>
-                        )}
 
-                        {/* Status */}
-                        <TableCell>
-                          {(() => {
-                            const label = getHumanStatusLabel(s);
-                            let statusClass = "bg-slate-100 text-slate-800";
-                            if (s.status === "pending_manager") {
-                              statusClass = "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/30";
-                            } else if (isHrdValidationPhase(s) && !isFinalStatus(s.status)) {
-                              statusClass = "bg-teal-100 text-teal-800 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-900/30";
-                            } else if (s.status === "approved" || s.status === "closed") {
-                              statusClass = "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900/30";
-                            } else if (s.status === "rejected_manager" || s.status === "rejected_hrd") {
-                              statusClass = "bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900/30";
-                            } else if (s.status === "revision_manager" || s.status === "revision_hrd") {
-                              statusClass = "bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-900/30";
-                            }
-                            return (
-                              <Badge className={cn("border-transparent font-medium text-xs", statusClass)}>
-                                {label}
-                              </Badge>
-                            );
-                          })()}
-                          {/* Extra context badge */}
-                          {mode === "manager" &&
-                            isApprovedByMe(s, uid) &&
-                            (s.status === "approved_by_manager" ||
-                              s.status === "pending_hrd") && (
-                              <p className="text-[10px] text-blue-600 dark:text-blue-400 mt-1">
-                                Sudah Anda setujui
-                              </p>
-                            )}
-                        </TableCell>
-
-                        {/* Menunggu */}
-                        <TableCell>
-                          {(() => {
-                            if (isFinalStatus(s.status)) {
-                              return <span className="text-xs text-muted-foreground">Selesai</span>;
-                            }
-                            if (isHrdValidationPhase(s)) {
+                          {/* Menunggu */}
+                          <TableCell>
+                            {(() => {
+                              if (isFinalStatus(s.status)) {
+                                return (
+                                  <span className="text-xs text-muted-foreground">
+                                    Selesai
+                                  </span>
+                                );
+                              }
+                              if (isHrdValidationPhase(s)) {
+                                return (
+                                  <span className="text-xs font-medium text-teal-600 dark:text-teal-400">
+                                    HRD
+                                  </span>
+                                );
+                              }
                               return (
-                                <span className="text-xs font-medium text-teal-600 dark:text-teal-400">
-                                  HRD
+                                <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                                  {s.waitingForName || s.managerName || "Manager"}
                                 </span>
                               );
-                            }
-                            return (
-                              <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
-                                {s.waitingForName || s.managerName || "Manager"}
-                              </span>
-                            );
-                          })()}
-                        </TableCell>
+                            })()}
+                          </TableCell>
 
-                        {/* Aksi */}
-                        <TableCell
-                          className="text-right"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {(() => {
-                            let btnText = "Lihat Detail";
-                            let btnVariant: "default" | "outline" | "ghost" = "outline";
-                            let btnClass = "";
-                            
-                            if (mode === "hrd") {
-                              if (isHrdActionable) {
-                                btnText = "Validasi";
-                                btnVariant = "default";
-                                btnClass = "bg-teal-600 hover:bg-teal-700 text-white border-0 shadow-sm";
-                              } else {
-                                btnText = "Lihat Detail";
-                                btnVariant = "outline";
-                              }
-                            } else {
-                              if (needsMyAction) {
-                                btnText = "Review";
-                                btnVariant = "default";
-                                btnClass = "bg-amber-500 hover:bg-amber-600 text-white border-0";
-                              } else {
-                                btnText = "Lihat Detail";
-                                btnVariant = "outline";
-                              }
-                            }
-                            
-                            return (
-                              <Button
-                                variant={btnVariant}
-                                size="sm"
-                                className={cn("h-8 text-sm", btnClass)}
-                                onClick={() => setSelectedSubmission(s)}
-                              >
-                                {btnText}
-                              </Button>
-                            );
-                          })()}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={colSpan} className="h-36 text-center">
-                      <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                        <FileText className="h-8 w-8 opacity-25" />
-                        <p className="text-sm font-medium">
-                          {mode === "manager" && activeTab === "action_needed"
-                            ? "Tidak ada pengajuan yang perlu Anda tindaklanjuti."
-                            : hasActiveFilters
-                              ? "Tidak ada pengajuan yang sesuai filter."
-                              : "Belum ada data pengajuan izin."}
-                        </p>
-                        {hasActiveFilters && (
-                          <Button
-                            variant="link"
-                            size="sm"
-                            onClick={clearFilters}
-                            className="text-xs h-auto p-0"
+                          {/* Aksi */}
+                          <TableCell
+                            className="text-right"
+                            onClick={(e) => e.stopPropagation()}
                           >
-                            Bersihkan filter
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                            {(() => {
+                              let btnText = "Lihat Detail";
+                              let btnVariant: "default" | "outline" | "ghost" =
+                                "outline";
+                              let btnClass = "";
+
+                              if (mode === "hrd") {
+                                if (isHrdActionable) {
+                                  btnText = "Validasi";
+                                  btnVariant = "default";
+                                  btnClass =
+                                    "bg-teal-600 hover:bg-teal-700 text-white border-0 shadow-sm";
+                                } else {
+                                  btnText = "Lihat Detail";
+                                  btnVariant = "outline";
+                                }
+                              } else {
+                                if (needsMyAction) {
+                                  btnText = "Review";
+                                  btnVariant = "default";
+                                  btnClass =
+                                    "bg-amber-500 hover:bg-amber-600 text-white border-0";
+                                } else {
+                                  btnText = "Lihat Detail";
+                                  btnVariant = "outline";
+                                }
+                              }
+
+                              return (
+                                <Button
+                                  variant={btnVariant}
+                                  size="sm"
+                                  className={cn("h-8 text-sm", btnClass)}
+                                  onClick={() => setSelectedSubmission(s)}
+                                >
+                                  {btnText}
+                                </Button>
+                              );
+                            })()}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={colSpan} className="h-36 text-center">
+                        <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                          <FileText className="h-8 w-8 opacity-25" />
+                          <p className="text-sm font-medium">
+                            {mode === "manager" && activeTab === "action_needed"
+                              ? "Tidak ada pengajuan yang perlu Anda tindaklanjuti."
+                              : hasActiveFilters
+                                ? "Tidak ada pengajuan yang sesuai filter."
+                                : "Belum ada data pengajuan izin."}
+                          </p>
+                          {hasActiveFilters && (
+                            <Button
+                              variant="link"
+                              size="sm"
+                              onClick={clearFilters}
+                              className="text-xs h-auto p-0"
+                            >
+                              Bersihkan filter
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
+
       </Card>
 
       {selectedSubmission && (
