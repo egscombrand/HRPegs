@@ -224,16 +224,16 @@ export function LeaveDetailModalClient({
   const getStepStatusIcon = (status: string) => {
     switch (status) {
       case "selesai":
-        return <CheckCircle2 className="h-5 w-5 text-emerald-500 bg-slate-950 rounded-full" />;
+        return <CheckCircle2 className="h-5 w-5 text-emerald-500 bg-white dark:bg-slate-950 rounded-full" />;
       case "menunggu":
-        return <Clock className="h-5 w-5 text-amber-500 bg-slate-950 rounded-full animate-pulse" />;
+        return <Clock className="h-5 w-5 text-amber-500 bg-white dark:bg-slate-950 rounded-full animate-pulse" />;
       case "ditolak":
-        return <AlertCircle className="h-5 w-5 text-red-500 bg-slate-950 rounded-full" />;
+        return <AlertCircle className="h-5 w-5 text-red-500 bg-white dark:bg-slate-950 rounded-full" />;
       case "revisi":
-        return <ShieldAlert className="h-5 w-5 text-amber-400 bg-slate-950 rounded-full" />;
+        return <ShieldAlert className="h-5 w-5 text-amber-400 bg-white dark:bg-slate-950 rounded-full" />;
       case "belum aktif":
       default:
-        return <div className="h-5 w-5 rounded-full border-2 border-slate-800 bg-slate-950" />;
+        return <div className="h-5 w-5 rounded-full border-2 border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950" />;
     }
   };
 
@@ -249,20 +249,20 @@ export function LeaveDetailModalClient({
         return <Badge className="bg-amber-400/10 border-amber-400/20 text-amber-300 text-[10px]">Revisi</Badge>;
       case "belum aktif":
       default:
-        return <Badge variant="outline" className="text-slate-600 border-slate-800 text-[10px]">Belum Aktif</Badge>;
+        return <Badge variant="outline" className="text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700 text-[10px]">Belum Aktif</Badge>;
     }
   };
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] bg-black/70 flex items-center justify-center p-4">
       {/* Box Modal */}
-      <div className="w-full max-w-4xl max-h-[85vh] bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col text-slate-100">
-        
+      <div className="w-full max-w-4xl max-h-[85vh] bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col text-slate-900 dark:text-slate-100">
+
         {/* Header */}
-        <div className="sticky top-0 bg-slate-950 border-b border-slate-800 p-5 flex justify-between items-start z-20">
+        <div className="sticky top-0 bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 p-5 flex justify-between items-start z-20">
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-3">
-              <h2 className="text-lg font-black text-slate-50 tracking-tight">
+              <h2 className="text-lg font-black text-slate-900 dark:text-slate-50 tracking-tight">
                 Detail Pengajuan Cuti
               </h2>
               <Badge
@@ -274,13 +274,13 @@ export function LeaveDetailModalClient({
                 {getStatusLabel(request.status)}
               </Badge>
             </div>
-            <p className="text-xs font-semibold text-slate-400">
-              Pengaju: <span className="text-slate-200 font-bold">{request.employeeName}</span> | Unit: {request.divisionName || "-"} / {request.brandName || "-"}
+            <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+              Pengaju: <span className="text-slate-900 dark:text-slate-200 font-bold">{request.employeeName}</span> | Unit: {request.divisionName || "-"} / {request.brandName || "-"}
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg border border-slate-800 hover:bg-slate-900 text-slate-400 hover:text-slate-100 transition-colors"
+            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
           >
             <X className="h-4 w-4" />
           </button>
@@ -291,21 +291,21 @@ export function LeaveDetailModalClient({
           
           {/* Main Info Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-4 bg-slate-900/40 border border-slate-800 rounded-xl space-y-1">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Jenis Cuti</span>
-              <p className="text-sm font-black text-indigo-400 capitalize">
+            <div className="p-4 bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 rounded-xl space-y-1">
+              <span className="text-[10px] font-bold text-slate-600 dark:text-slate-500 uppercase tracking-wider block">Jenis Cuti</span>
+              <p className="text-sm font-black text-indigo-600 dark:text-indigo-400 capitalize">
                 Cuti {request.leaveType === "tahunan" ? "Tahunan" : request.leaveType || "Tahunan"}
               </p>
             </div>
-            <div className="p-4 bg-slate-900/40 border border-slate-800 rounded-xl space-y-1">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Periode Cuti</span>
-              <p className="text-xs font-black text-slate-200">
+            <div className="p-4 bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 rounded-xl space-y-1">
+              <span className="text-[10px] font-bold text-slate-600 dark:text-slate-500 uppercase tracking-wider block">Periode Cuti</span>
+              <p className="text-xs font-black text-slate-900 dark:text-slate-200">
                 {formatDateSafe(request.startDate, "dd MMMM yyyy")} s/d {formatDateSafe(request.endDate, "dd MMMM yyyy")}
               </p>
             </div>
-            <div className="p-4 bg-slate-900/40 border border-slate-800 rounded-xl space-y-1">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Total Durasi</span>
-              <p className="text-sm font-black text-indigo-400">
+            <div className="p-4 bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 rounded-xl space-y-1">
+              <span className="text-[10px] font-bold text-slate-600 dark:text-slate-500 uppercase tracking-wider block">Total Durasi</span>
+              <p className="text-sm font-black text-indigo-600 dark:text-indigo-400">
                 {request.durationDays} Hari Kerja
               </p>
             </div>
@@ -314,63 +314,63 @@ export function LeaveDetailModalClient({
           {/* Details Section */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Alasan Cuti</span>
-              <div className="text-sm font-medium text-slate-300 bg-slate-900/20 border border-slate-800/80 p-3 rounded-lg min-h-[60px]">
+              <span className="text-xs font-bold text-slate-600 dark:text-slate-500 uppercase tracking-wider block">Alasan Cuti</span>
+              <div className="text-sm font-medium text-slate-900 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800/80 p-3 rounded-lg min-h-[60px]">
                 {request.reason || "-"}
               </div>
             </div>
             <div className="space-y-1">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Alamat Selama Cuti</span>
-              <div className="text-sm font-medium text-slate-300 bg-slate-900/20 border border-slate-800/80 p-3 rounded-lg min-h-[60px]">
+              <span className="text-xs font-bold text-slate-600 dark:text-slate-500 uppercase tracking-wider block">Alamat Selama Cuti</span>
+              <div className="text-sm font-medium text-slate-900 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/20 border border-slate-200 dark:border-slate-800/80 p-3 rounded-lg min-h-[60px]">
                 {request.leaveAddress || "-"}
               </div>
             </div>
           </div>
 
           {/* Handover & Delegations */}
-          <div className="p-4 bg-indigo-950/10 border border-indigo-900/30 rounded-xl space-y-4">
-            <div className="flex items-center gap-2 text-indigo-400 border-b border-indigo-900/20 pb-2">
+          <div className="p-4 bg-indigo-50 dark:bg-indigo-950/10 border border-indigo-200 dark:border-indigo-900/30 rounded-xl space-y-4">
+            <div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-400 border-b border-indigo-200 dark:border-indigo-900/20 pb-2">
               <User className="h-4 w-4" />
               <span className="text-xs font-black uppercase tracking-wider">Delegasi Tugas & Kontak Darurat</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <span className="text-[10px] font-bold text-slate-500 uppercase block">Pengganti Sementara</span>
-                <p className="text-sm font-bold text-slate-200 mt-1">
+                <span className="text-[10px] font-bold text-slate-600 dark:text-slate-500 uppercase block">Pengganti Sementara</span>
+                <p className="text-sm font-bold text-slate-900 dark:text-slate-200 mt-1">
                   {request.handoverEmployeeName || "-"}
                 </p>
                 {request.handoverEmployeePosition && (
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
                     {request.handoverEmployeePosition}
                   </p>
                 )}
               </div>
               <div>
-                <span className="text-[10px] font-bold text-slate-500 uppercase block">Kontak Darurat</span>
-                <p className="text-sm font-bold text-slate-200 mt-1">
+                <span className="text-[10px] font-bold text-slate-600 dark:text-slate-500 uppercase block">Kontak Darurat</span>
+                <p className="text-sm font-bold text-slate-900 dark:text-slate-200 mt-1">
                   {request.emergencyContactName || "-"}
                 </p>
                 {request.emergencyContactPhone && (
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
                     {request.emergencyContactPhone}
                   </p>
                 )}
               </div>
             </div>
-            <div className="space-y-1 pt-3 border-t border-indigo-900/20">
-              <span className="text-[10px] font-bold text-slate-500 uppercase block">Catatan Serah Terima Tugas</span>
-              <p className="text-xs text-slate-300 font-medium bg-slate-950/60 p-2.5 rounded-lg border border-slate-900">
+            <div className="space-y-1 pt-3 border-t border-indigo-200 dark:border-indigo-900/20">
+              <span className="text-[10px] font-bold text-slate-600 dark:text-slate-500 uppercase block">Catatan Serah Terima Tugas</span>
+              <p className="text-xs text-slate-900 dark:text-slate-300 font-medium bg-indigo-100/30 dark:bg-slate-950/60 p-2.5 rounded-lg border border-indigo-200 dark:border-slate-900">
                 {request.handoverNotes || "-"}
               </p>
             </div>
           </div>
 
           {/* Structured Approval Timeline */}
-          <div className="p-4 bg-slate-900/30 border border-slate-800 rounded-xl space-y-4">
-            <span className="text-xs font-black text-slate-400 uppercase tracking-widest block">
+          <div className="p-4 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800 rounded-xl space-y-4">
+            <span className="text-xs font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest block">
               Timeline Alur Persetujuan
             </span>
-            <div className="relative pl-6 space-y-6 before:absolute before:left-[9px] before:top-2 before:bottom-2 before:w-[2px] before:bg-slate-800">
+            <div className="relative pl-6 space-y-6 before:absolute before:left-[9px] before:top-2 before:bottom-2 before:w-[2px] before:bg-slate-300 dark:before:bg-slate-800">
               {timelineSteps.map((step, idx) => (
                 <div key={idx} className="relative flex flex-col gap-1">
                   {/* Step Dot Icon */}
@@ -380,28 +380,28 @@ export function LeaveDetailModalClient({
                   
                   {/* Step Header */}
                   <div className="flex items-center justify-between gap-4">
-                    <span className="text-xs font-bold text-slate-100">{step.title}</span>
+                    <span className="text-xs font-bold text-slate-900 dark:text-slate-100">{step.title}</span>
                     {getStepStatusBadge(step.status)}
                   </div>
 
                   {/* Step Details */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 text-[10px] text-slate-400 mt-0.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 text-[10px] text-slate-600 dark:text-slate-400 mt-0.5">
                     <div>
                       <span className="font-semibold">Personel: </span>
-                      <span className="font-bold text-slate-300">{step.approver}</span>
+                      <span className="font-bold text-slate-900 dark:text-slate-300">{step.approver}</span>
                     </div>
                     {step.dateTime && (
                       <div className="sm:text-right">
                         <span className="font-semibold">Waktu: </span>
-                        <span className="font-bold text-slate-300">{step.dateTime}</span>
+                        <span className="font-bold text-slate-900 dark:text-slate-300">{step.dateTime}</span>
                       </div>
                     )}
                   </div>
 
                   {/* Step Notes */}
                   {step.notes && (
-                    <div className="text-[11px] font-medium text-slate-300 bg-slate-950 p-2 rounded-lg border border-slate-900 mt-1 max-w-full break-words">
-                      <span className="font-black text-slate-500">Catatan:</span> {step.notes}
+                    <div className="text-[11px] font-medium text-slate-900 dark:text-slate-300 bg-slate-100 dark:bg-slate-950 p-2 rounded-lg border border-slate-200 dark:border-slate-900 mt-1 max-w-full break-words">
+                      <span className="font-black text-slate-600 dark:text-slate-500">Catatan:</span> {step.notes}
                     </div>
                   )}
                 </div>
@@ -415,7 +415,7 @@ export function LeaveDetailModalClient({
               <Button
                 variant="outline"
                 asChild
-                className="w-full rounded-xl border-slate-800 bg-slate-900 text-slate-200 hover:bg-slate-800 hover:text-slate-100"
+                className="w-full rounded-xl border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100"
               >
                 <a
                   href={request.attachmentUrl}
@@ -431,10 +431,10 @@ export function LeaveDetailModalClient({
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 bg-slate-950 border-t border-slate-800 p-4 flex justify-end z-20">
+        <div className="sticky bottom-0 bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 p-4 flex justify-end z-20">
           <Button
             onClick={onClose}
-            className="bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl px-6 border border-slate-700"
+            className="bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-900 dark:text-white font-bold rounded-xl px-6 border border-slate-300 dark:border-slate-700"
           >
             Tutup
           </Button>

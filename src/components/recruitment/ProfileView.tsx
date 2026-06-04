@@ -34,7 +34,7 @@ const InfoRow = ({
     <dt className="text-xs font-medium text-slate-600 dark:text-muted-foreground">
       {label}
     </dt>
-    <dd className="text-base font-semibold mt-0.5 text-foreground">
+    <dd className="text-base font-semibold mt-0.5 text-slate-900 dark:text-foreground">
       {value || "-"}
     </dd>
   </div>
@@ -72,7 +72,7 @@ const AddressView = ({
       <p className="text-xs font-medium text-slate-600 dark:text-muted-foreground">
         {title}
       </p>
-      <div className="text-sm font-semibold text-foreground">
+      <div className="text-sm font-semibold text-slate-900 dark:text-foreground">
         <p>
           {address.street}, RT {address.rt}/RW {address.rw}
         </p>
@@ -89,8 +89,8 @@ const AddressView = ({
 
 // Helper for Education items
 const EducationView = ({ item }: { item: Education }) => (
-  <div className="text-sm border-b pb-3 last:border-0 last:pb-0">
-    <p className="font-semibold text-base">{item.institution}</p>
+  <div className="text-sm border-b pb-3 last:border-0 last:pb-0 border-slate-200 dark:border-border">
+    <p className="font-semibold text-base text-slate-900 dark:text-foreground">{item.institution}</p>
     <p className="text-slate-600 dark:text-muted-foreground">
       {item.level} - {item.fieldOfStudy}
     </p>
@@ -103,22 +103,22 @@ const EducationView = ({ item }: { item: Education }) => (
       {item.startDate} - {item.isCurrent ? "Sekarang" : item.endDate}
     </p>
     {item.thesisTitle && (
-      <p className="mt-1 text-xs italic">Judul TA: {item.thesisTitle}</p>
+      <p className="mt-1 text-xs italic text-slate-700 dark:text-slate-400">Judul TA: {item.thesisTitle}</p>
     )}
   </div>
 );
 
 // Helper for Work Experience items
 const WorkExperienceView = ({ item }: { item: WorkExperience }) => (
-  <div className="text-sm border-b pb-3 last:border-0 last:pb-0">
-    <p className="font-semibold text-base">{item.position}</p>
+  <div className="text-sm border-b pb-3 last:border-0 last:pb-0 border-slate-200 dark:border-border">
+    <p className="font-semibold text-base text-slate-900 dark:text-foreground">{item.position}</p>
     <p className="capitalize font-medium text-slate-600 dark:text-muted-foreground">
       {item.jobType ? JOB_TYPE_LABELS[item.jobType] : ""} di {item.company}
     </p>
     <p className="text-slate-600 dark:text-muted-foreground text-xs mt-1">
       {item.startDate} - {item.isCurrent ? "Sekarang" : item.endDate}
     </p>
-    {item.description && <p className="mt-2 text-xs">{item.description}</p>}
+    {item.description && <p className="mt-2 text-xs text-slate-700 dark:text-slate-400">{item.description}</p>}
     {!item.isCurrent && item.reasonForLeaving && (
       <p className="mt-1 text-sm italic text-slate-600 dark:text-muted-foreground">
         Alasan berhenti: {item.reasonForLeaving}
@@ -129,15 +129,15 @@ const WorkExperienceView = ({ item }: { item: WorkExperience }) => (
 
 // Helper for Organizational Experience
 const OrgExperienceView = ({ item }: { item: OrganizationalExperience }) => (
-  <div className="text-sm border-b pb-3 last:border-0 last:pb-0">
-    <p className="font-semibold text-base">{item.position}</p>
+  <div className="text-sm border-b pb-3 last:border-0 last:pb-0 border-slate-200 dark:border-border">
+    <p className="font-semibold text-base text-slate-900 dark:text-foreground">{item.position}</p>
     <p className="text-slate-600 dark:text-muted-foreground">
       {item.organization}
     </p>
     <p className="text-slate-600 dark:text-muted-foreground text-xs mt-1">
       {item.startDate} - {item.isCurrent ? "Sekarang" : item.endDate}
     </p>
-    {item.description && <p className="mt-2 text-xs">{item.description}</p>}
+    {item.description && <p className="mt-2 text-xs text-slate-700 dark:text-slate-400">{item.description}</p>}
   </div>
 );
 
@@ -306,7 +306,7 @@ export function ProfileView({ profile }: { profile: Profile }) {
               <EducationView key={i} item={item} />
             ))
           ) : (
-            <p className="text-sm text-slate-600 dark:text-muted-foreground p-4 text-center">
+            <p className="text-sm text-slate-600 dark:text-muted-foreground p-4 text-center bg-slate-50 dark:bg-muted/10 rounded-lg border border-dashed border-slate-200 dark:border-border">
               Belum ada riwayat pendidikan.
             </p>
           )}

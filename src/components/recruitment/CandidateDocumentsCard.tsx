@@ -60,11 +60,11 @@ const CertificationView = ({ item }: { item: Certification }) => {
   return (
     <div className="text-sm flex justify-between items-start gap-2 py-2 border-b last:border-b-0 border-slate-200 dark:border-border">
       <div>
-        <p className="font-semibold text-foreground">{item.name}</p>
-        <p className="text-slate-700 dark:text-muted-foreground text-xs">
+        <p className="font-semibold text-slate-900 dark:text-foreground">{item.name}</p>
+        <p className="text-slate-600 dark:text-muted-foreground text-xs">
           Penerbit: {item.organization}
         </p>
-        <p className="text-slate-700 dark:text-muted-foreground text-xs">
+        <p className="text-slate-600 dark:text-muted-foreground text-xs">
           Tanggal: {item.issueDate}{" "}
           {item.expirationDate ? ` - ${item.expirationDate}` : ""}
         </p>
@@ -179,7 +179,7 @@ export function CandidateDocumentsCard({
             <button
               onClick={() => handleViewDocument("cv")}
               disabled={loadingDoc === "cv"}
-              className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors dark:border-border dark:bg-muted dark:hover:bg-muted/80 w-full disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-colors dark:border-border dark:bg-muted dark:hover:bg-muted/80 w-full disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <div className="flex items-center gap-3">
                 <FileText className="h-5 w-5 text-primary" />
@@ -188,13 +188,13 @@ export function CandidateDocumentsCard({
                 </span>
               </div>
               {loadingDoc === "cv" ? (
-                <Loader2 className="h-4 w-4 text-slate-700 dark:text-muted-foreground animate-spin" />
+                <Loader2 className="h-4 w-4 text-slate-600 dark:text-muted-foreground animate-spin" />
               ) : (
-                <Eye className="h-4 w-4 text-slate-700 dark:text-muted-foreground" />
+                <Eye className="h-4 w-4 text-slate-600 dark:text-muted-foreground" />
               )}
             </button>
           ) : (
-            <div className="flex items-center p-3 rounded-lg border border-dashed text-slate-700 text-sm">
+            <div className="flex items-center p-3 rounded-lg border border-dashed border-slate-300 text-slate-700 dark:border-border dark:text-muted-foreground text-sm bg-slate-50 dark:bg-muted/20">
               CV belum diunggah.
             </div>
           )}
@@ -202,7 +202,7 @@ export function CandidateDocumentsCard({
             <button
               onClick={() => handleViewDocument("ijazah")}
               disabled={loadingDoc === "ijazah"}
-              className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors dark:border-border dark:bg-muted dark:hover:bg-muted/80 w-full disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-colors dark:border-border dark:bg-muted dark:hover:bg-muted/80 w-full disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <div className="flex items-center gap-3">
                 <FileText className="h-5 w-5 text-primary" />
@@ -211,13 +211,13 @@ export function CandidateDocumentsCard({
                 </span>
               </div>
               {loadingDoc === "ijazah" ? (
-                <Loader2 className="h-4 w-4 text-slate-700 dark:text-muted-foreground animate-spin" />
+                <Loader2 className="h-4 w-4 text-slate-600 dark:text-muted-foreground animate-spin" />
               ) : (
-                <Eye className="h-4 w-4 text-slate-700 dark:text-muted-foreground" />
+                <Eye className="h-4 w-4 text-slate-600 dark:text-muted-foreground" />
               )}
             </button>
           ) : (
-            <div className="flex items-center p-3 rounded-lg border border-dashed border-slate-300 text-slate-700 text-sm dark:border-border dark:text-muted-foreground">
+            <div className="flex items-center p-3 rounded-lg border border-dashed border-slate-300 text-slate-700 dark:border-border dark:text-muted-foreground text-sm bg-slate-50 dark:bg-muted/20">
               Ijazah/SKL belum diunggah.
             </div>
           )}
@@ -225,14 +225,14 @@ export function CandidateDocumentsCard({
 
         <div className="space-y-2">
           <h4 className="font-semibold text-sm">Verifikasi Dokumen</h4>
-          <div className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-slate-50 dark:border-border dark:bg-muted/30">
+          <div className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white dark:border-border dark:bg-muted/30">
             <p className="text-sm font-medium text-foreground">CV</p>
             <VerificationToggle
               isVerified={application.cvVerified}
               onToggle={() => handleVerificationToggle("cv")}
             />
           </div>
-          <div className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-slate-50 dark:border-border dark:bg-muted/30">
+          <div className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-white dark:border-border dark:bg-muted/30">
             <p className="text-sm font-medium text-foreground">Ijazah</p>
             <VerificationToggle
               isVerified={application.ijazahVerified}
@@ -246,7 +246,7 @@ export function CandidateDocumentsCard({
             <Separator />
             <div>
               <h4 className="font-semibold text-sm mb-2">Sertifikasi</h4>
-              <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-2 dark:border-border dark:bg-muted/20">
+              <div className="space-y-2 rounded-md border border-slate-200 bg-white p-2 dark:border-border dark:bg-muted/20">
                 {profile.certifications!.map((cert, index) => (
                   <CertificationView key={cert.id || index} item={cert} />
                 ))}

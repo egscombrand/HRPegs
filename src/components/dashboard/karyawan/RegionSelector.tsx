@@ -186,7 +186,7 @@ export function RegionSelector({
         name={`${basePath}.provinsi`}
         render={({ field }) => (
           <FormItem>
-            <FormLabel className="text-slate-400 text-xs uppercase tracking-wider font-semibold">
+            <FormLabel className="text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider font-semibold">
               Provinsi*
             </FormLabel>
             <Select
@@ -195,7 +195,7 @@ export function RegionSelector({
               onValueChange={(val) => handleProvinceChange(val, field.onChange)}
             >
               <FormControl>
-                <SelectTrigger className="bg-slate-950/40 rounded-xl h-11 border-slate-800">
+                <SelectTrigger className="bg-white dark:bg-slate-950/40 rounded-xl h-11 border-slate-200 dark:border-slate-800">
                   {loadingProvince ? (
                     <Loader2 className="h-4 w-4 animate-spin text-slate-500" />
                   ) : (
@@ -221,7 +221,7 @@ export function RegionSelector({
         name={`${basePath}.kabupatenKota`}
         render={({ field }) => (
           <FormItem>
-            <FormLabel className="text-slate-400 text-xs uppercase tracking-wider font-semibold">
+            <FormLabel className="text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider font-semibold">
               Kabupaten/Kota*
             </FormLabel>
             <Select
@@ -235,7 +235,7 @@ export function RegionSelector({
               onValueChange={(val) => handleRegencyChange(val, field.onChange)}
             >
               <FormControl>
-                <SelectTrigger className="bg-slate-950/40 rounded-xl h-11 border-slate-800">
+                <SelectTrigger className="bg-white dark:bg-slate-950/40 rounded-xl h-11 border-slate-200 dark:border-slate-800">
                   {loadingRegency ? (
                     <Loader2 className="h-4 w-4 animate-spin text-slate-500" />
                   ) : (
@@ -261,7 +261,7 @@ export function RegionSelector({
         name={`${basePath}.kecamatan`}
         render={({ field }) => (
           <FormItem>
-            <FormLabel className="text-slate-400 text-xs uppercase tracking-wider font-semibold">
+            <FormLabel className="text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider font-semibold">
               Kecamatan*
             </FormLabel>
             <Select
@@ -275,7 +275,7 @@ export function RegionSelector({
               onValueChange={(val) => handleDistrictChange(val, field.onChange)}
             >
               <FormControl>
-                <SelectTrigger className="bg-slate-950/40 rounded-xl h-11 border-slate-800">
+                <SelectTrigger className="bg-white dark:bg-slate-950/40 rounded-xl h-11 border-slate-200 dark:border-slate-800">
                   {loadingDistrict ? (
                     <Loader2 className="h-4 w-4 animate-spin text-slate-500" />
                   ) : (
@@ -301,7 +301,7 @@ export function RegionSelector({
         name={`${basePath}.kelurahan`}
         render={({ field }) => (
           <FormItem>
-            <FormLabel className="text-slate-400 text-xs uppercase tracking-wider font-semibold">
+            <FormLabel className="text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider font-semibold">
               Desa/Kelurahan*
             </FormLabel>
             <Select
@@ -315,7 +315,7 @@ export function RegionSelector({
               onValueChange={(val) => handleVillageChange(val, field.onChange)}
             >
               <FormControl>
-                <SelectTrigger className="bg-slate-950/40 rounded-xl h-11 border-slate-800">
+                <SelectTrigger className="bg-white dark:bg-slate-950/40 rounded-xl h-11 border-slate-200 dark:border-slate-800">
                   {loadingVillage ? (
                     <Loader2 className="h-4 w-4 animate-spin text-slate-500" />
                   ) : (

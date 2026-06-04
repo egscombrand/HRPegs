@@ -559,8 +559,8 @@ const LatestSubmissionCard = ({
           </div>
         </div>
       </CardContent>
-      <div className="mt-4 rounded-xl border border-slate-700 bg-slate-950/80 p-4">
-        <div className="text-sm font-semibold text-slate-300 mb-3">
+      <div className="mt-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/80 p-4">
+        <div className="text-sm font-semibold text-slate-900 dark:text-slate-300 mb-3">
           Timeline Status
         </div>
         <div className="flex flex-col gap-3 md:flex-row md:items-start">
@@ -571,34 +571,34 @@ const LatestSubmissionCard = ({
                 completed: {
                   ring: "bg-emerald-500 text-white border-emerald-500",
                   badge:
-                    "bg-emerald-500/10 text-emerald-200 border border-emerald-500/20",
-                  card: "border-emerald-500/20 bg-slate-900",
+                    "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-500/20",
+                  card: "border-emerald-200 dark:border-emerald-500/20 bg-white dark:bg-slate-900",
                 },
                 active: {
                   ring: "bg-sky-500 text-white border-sky-500",
-                  badge: "bg-sky-500/10 text-sky-200 border border-sky-500/20",
-                  card: "border-sky-500/20 bg-slate-900",
+                  badge: "bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-200 border border-sky-200 dark:border-sky-500/20",
+                  card: "border-sky-200 dark:border-sky-500/20 bg-white dark:bg-slate-900",
                 },
                 revision: {
                   ring: "bg-amber-500 text-slate-950 border-amber-500",
                   badge:
-                    "bg-amber-500/10 text-amber-200 border border-amber-500/20",
-                  card: "border-amber-500/20 bg-slate-900",
+                    "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-200 border border-amber-200 dark:border-amber-500/20",
+                  card: "border-amber-200 dark:border-amber-500/20 bg-white dark:bg-slate-900",
                 },
                 pending: {
-                  ring: "bg-slate-700 text-slate-300 border-slate-600",
-                  badge: "bg-slate-800 text-slate-500 border border-slate-700",
-                  card: "border-slate-700 bg-slate-950",
+                  ring: "bg-slate-400 dark:bg-slate-700 text-white dark:text-slate-300 border-slate-300 dark:border-slate-600",
+                  badge: "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-500 border border-slate-200 dark:border-slate-700",
+                  card: "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950",
                 },
                 rejected: {
                   ring: "bg-red-500 text-white border-red-500",
-                  badge: "bg-red-500/10 text-red-200 border border-red-500/20",
-                  card: "border-red-500/20 bg-slate-900",
+                  badge: "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-200 border border-red-200 dark:border-red-500/20",
+                  card: "border-red-200 dark:border-red-500/20 bg-white dark:bg-slate-900",
                 },
                 cancelled: {
                   ring: "bg-red-500 text-white border-red-500",
-                  badge: "bg-red-500/10 text-red-200 border border-red-500/20",
-                  card: "border-red-500/20 bg-slate-900",
+                  badge: "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-200 border border-red-200 dark:border-red-500/20",
+                  card: "border-red-200 dark:border-red-500/20 bg-white dark:bg-slate-900",
                 },
               } as const;
               const styles =
@@ -618,7 +618,7 @@ const LatestSubmissionCard = ({
                         </span>
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-slate-100">
+                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                           {step.title}
                         </p>
                         <span
@@ -626,14 +626,14 @@ const LatestSubmissionCard = ({
                         >
                           {step.statusLabel}
                         </span>
-                        <p className="mt-2 text-xs text-slate-400">
+                        <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">
                           {step.description}
                         </p>
                       </div>
                     </div>
                   </div>
                   {!isLast && (
-                    <div className="hidden md:block h-px bg-slate-700 mt-4" />
+                    <div className="hidden md:block h-px bg-slate-200 dark:bg-slate-700 mt-4" />
                   )}
                 </div>
               );

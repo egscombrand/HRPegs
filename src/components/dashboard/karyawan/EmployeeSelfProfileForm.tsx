@@ -1162,9 +1162,9 @@ function DocumentUploadCard({
 
   return (
     <Card
-      className={`overflow-hidden rounded-3xl shadow-sm transition-all duration-300 ${
+      className={`overflow-hidden rounded-3xl shadow-sm transition-all duration-300 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/40 ${
         disabled ? "opacity-70 cursor-not-allowed" : ""
-      } ${hasError ? "border-red-500/40 bg-red-500/5 shadow-red-500/10" : "border-slate-800 bg-slate-900/40 hover:shadow-md"}`}
+      } ${hasError ? "border-red-500/40 bg-red-500/5 dark:bg-red-500/10 shadow-red-500/10" : "hover:shadow-md"}`}
     >
       <CardContent className="p-0">
         <div className="flex flex-col lg:flex-row">
@@ -1184,7 +1184,7 @@ function DocumentUploadCard({
                   <Icon className="h-6 w-6" />
                 </div>
                 <div>
-                  <h4 className="text-lg font-bold text-slate-100 tracking-tight">
+                  <h4 className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight">
                     {title}
                   </h4>
                   <div className="flex items-center gap-2 mt-1">
@@ -1215,7 +1215,7 @@ function DocumentUploadCard({
               </div>
             </div>
 
-            <p className="text-sm text-slate-400 leading-relaxed">
+            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
               {description}
             </p>
 
@@ -1234,7 +1234,7 @@ function DocumentUploadCard({
                 )}
                 {status === "Sudah Upload" ? "Ganti File" : "Upload Dokumen"}
               </Button>
-              <p className="text-[10px] text-slate-500 italic font-medium">
+              <p className="text-[10px] text-slate-600 dark:text-slate-500 italic font-medium">
                 {helperText}
               </p>
             </div>
@@ -1242,18 +1242,18 @@ function DocumentUploadCard({
             {isUploading && (
               <div className="space-y-2 pt-2">
                 <Progress value={progress} className="h-1.5 rounded-full" />
-                <p className="text-[10px] text-right text-slate-400 font-medium">
+                <p className="text-[10px] text-right text-slate-600 dark:text-slate-400 font-medium">
                   Mengunggah file...
                 </p>
               </div>
             )}
 
             {uploadError ? (
-              <Alert className="bg-red-500/10 border-red-500 text-red-200">
-                <AlertTitle className="text-sm font-semibold">
+              <Alert className="bg-red-50 dark:bg-red-500/10 border-red-300 dark:border-red-500 text-red-900 dark:text-red-200">
+                <AlertTitle className="text-sm font-semibold text-red-900 dark:text-red-100">
                   Upload gagal
                 </AlertTitle>
-                <AlertDescription className="text-sm text-red-100">
+                <AlertDescription className="text-sm text-red-800 dark:text-red-100">
                   {uploadError}
                 </AlertDescription>
               </Alert>
@@ -1266,30 +1266,30 @@ function DocumentUploadCard({
           </div>
 
           <div
-            className={`lg:w-72 xl:w-80 border-l border-slate-800 flex items-center justify-center p-6 sm:p-8 transition-all ${
+            className={`lg:w-72 xl:w-80 border-l border-slate-200 dark:border-slate-800 flex items-center justify-center p-6 sm:p-8 transition-all ${
               !value
-                ? "bg-slate-950/20 grayscale opacity-40"
-                : "bg-slate-950/60"
+                ? "bg-slate-100 dark:bg-slate-950/20 grayscale opacity-40"
+                : "bg-slate-100 dark:bg-slate-950/60"
             }`}
           >
-            <div className="group relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 shadow-2xl transition-all hover:border-primary/30">
-              <div className="w-full h-full flex flex-col items-center justify-center gap-4 text-slate-400 bg-slate-800/30">
-                <div className="h-16 w-16 rounded-2xl bg-slate-800 flex items-center justify-center text-slate-500 shadow-lg group-hover:scale-110 transition-transform duration-500">
+            <div className="group relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-slate-200 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 shadow-sm dark:shadow-2xl transition-all hover:border-primary/30">
+              <div className="w-full h-full flex flex-col items-center justify-center gap-4 text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/30">
+                <div className="h-16 w-16 rounded-2xl bg-slate-300 dark:bg-slate-800 flex items-center justify-center text-slate-700 dark:text-slate-500 shadow-sm dark:shadow-lg group-hover:scale-110 transition-transform duration-500">
                   <FileText className="h-10 w-10" />
                 </div>
                 <div className="text-center">
-                  <span className="text-[10px] font-black uppercase tracking-[0.2em] block mb-1">
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] block mb-1 text-slate-700 dark:text-slate-300">
                     {value ? "File sudah diunggah" : "Belum Ada Dokumen"}
                   </span>
                   {title && (
-                    <span className="text-[9px] text-slate-500 font-medium truncate max-w-[120px]">
+                    <span className="text-[9px] text-slate-600 dark:text-slate-500 font-medium truncate max-w-[120px]">
                       {title}
                     </span>
                   )}
                 </div>
               </div>
               {fileId ? (
-                <div className="absolute inset-0 bg-slate-950/80 opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-center gap-3">
+                <div className="absolute inset-0 bg-slate-950/40 dark:bg-slate-950/80 opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-center gap-3">
                   <Button
                     type="button"
                     variant="default"
@@ -3144,11 +3144,11 @@ export function EmployeeSelfProfileForm({
                         value={field.value || ""}
                       >
                         <FormControl>
-                          <SelectTrigger className="bg-slate-950/40 border-slate-800">
+                          <SelectTrigger className="bg-white dark:bg-slate-950/40 border-slate-200 dark:border-slate-800">
                             <SelectValue placeholder="Pilih status" />
                           </SelectTrigger>
                         </FormControl>
-                        <SelectContent className="bg-slate-900 border-slate-800">
+                        <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                           {MARITAL_STATUS_OPTIONS.map((opt) => (
                             <SelectItem key={opt} value={opt}>
                               {opt}
@@ -3236,7 +3236,7 @@ export function EmployeeSelfProfileForm({
               </div>
             </section>
 
-            <Separator className="bg-slate-800/50" />
+            <Separator className="bg-slate-200 dark:bg-slate-800/50" />
 
             <section className="space-y-6">
               <div className="flex flex-col gap-2">
@@ -3288,7 +3288,7 @@ export function EmployeeSelfProfileForm({
               </div>
             </section>
 
-            <Separator className="bg-slate-800/50" />
+            <Separator className="bg-slate-200 dark:bg-slate-800/50" />
 
             <section className="space-y-6">
               <div className="flex flex-col gap-2">
@@ -3426,7 +3426,7 @@ export function EmployeeSelfProfileForm({
               </div>
             </section>
 
-            <Separator className="bg-slate-800/50" />
+            <Separator className="bg-slate-200 dark:bg-slate-800/50" />
 
             <section className="space-y-6">
               <div className="flex flex-col gap-2">
@@ -3443,7 +3443,7 @@ export function EmployeeSelfProfileForm({
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
                 <div className="lg:col-span-1 space-y-4">
                   <div className="flex items-center justify-between">
-                    <FormLabel className="text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+                    <FormLabel className="text-slate-700 dark:text-slate-300 font-semibold uppercase tracking-wider text-[11px]">
                       Nomor KTP (NIK)
                     </FormLabel>
                     {pendingRequests.ktp ? (
@@ -3483,14 +3483,14 @@ export function EmployeeSelfProfileForm({
                             placeholder="16 digit NIK"
                             maxLength={16}
                             inputMode="numeric"
-                            className={`bg-slate-950/40 ${fieldState.error ? "border-red-500 ring-1 ring-red-500 focus:ring-red-500" : "border-slate-800"}`}
+                            className={`bg-white dark:bg-slate-950/40 ${fieldState.error ? "border-red-500 dark:border-red-500 ring-1 ring-red-500 focus:ring-red-500" : "border-slate-200 dark:border-slate-800"}`}
                             onChange={(e) => {
                               const val = e.target.value.replace(/[^0-9]/g, "");
                               field.onChange(val);
                             }}
                           />
                         </FormControl>
-                        <FormDescription className="text-[10px]">
+                        <FormDescription className="text-[10px] text-slate-600 dark:text-slate-400">
                           Pastikan tepat 16 digit angka.
                         </FormDescription>
                         <FormMessage />
@@ -3594,7 +3594,7 @@ export function EmployeeSelfProfileForm({
                           {...field}
                           value={field.value ?? ""}
                           placeholder="Jl. Raya Utama No. 123"
-                          className="bg-slate-950/40 rounded-xl h-11 border-slate-800"
+                          className="bg-white dark:bg-slate-950/40 rounded-xl h-11 border-slate-200 dark:border-slate-800"
                         />
                       </FormControl>
                     </FormItem>
@@ -3613,7 +3613,7 @@ export function EmployeeSelfProfileForm({
                           placeholder="001"
                           maxLength={3}
                           inputMode="numeric"
-                          className="bg-slate-950/40 rounded-xl h-11 border-slate-800"
+                          className="bg-white dark:bg-slate-950/40 rounded-xl h-11 border-slate-200 dark:border-slate-800"
                         />
                       </FormControl>
                     </FormItem>
@@ -3632,7 +3632,7 @@ export function EmployeeSelfProfileForm({
                           placeholder="002"
                           maxLength={3}
                           inputMode="numeric"
-                          className="bg-slate-950/40 rounded-xl h-11 border-slate-800"
+                          className="bg-white dark:bg-slate-950/40 rounded-xl h-11 border-slate-200 dark:border-slate-800"
                         />
                       </FormControl>
                     </FormItem>
@@ -3651,7 +3651,7 @@ export function EmployeeSelfProfileForm({
                           placeholder="15310"
                           maxLength={5}
                           inputMode="numeric"
-                          className="bg-slate-950/40 rounded-xl h-11 border-slate-800"
+                          className="bg-white dark:bg-slate-950/40 rounded-xl h-11 border-slate-200 dark:border-slate-800"
                         />
                       </FormControl>
                     </FormItem>
@@ -3659,7 +3659,7 @@ export function EmployeeSelfProfileForm({
                 />
               </div>
 
-              <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-800/50 mt-4">
+              <div className="bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-800/50 mt-4">
                 <FormField
                   control={form.control}
                   name="alamat.isDomicileSameAsKtp"
@@ -3689,7 +3689,7 @@ export function EmployeeSelfProfileForm({
 
             {!watchedDomicileSame && (
               <>
-                <Separator className="bg-slate-800/50" />
+                <Separator className="bg-slate-200 dark:bg-slate-800/50" />
                 <section className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500">
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-3">
@@ -3718,7 +3718,7 @@ export function EmployeeSelfProfileForm({
                               {...field}
                               value={field.value ?? ""}
                               placeholder="Jl. Raya Utama No. 123"
-                              className="bg-slate-950/40 rounded-xl h-11 border-slate-800"
+                              className="bg-white dark:bg-slate-950/40 rounded-xl h-11 border-slate-200 dark:border-slate-800"
                             />
                           </FormControl>
                         </FormItem>
@@ -3737,7 +3737,7 @@ export function EmployeeSelfProfileForm({
                               placeholder="001"
                               maxLength={3}
                               inputMode="numeric"
-                              className="bg-slate-950/40 rounded-xl h-11 border-slate-800"
+                              className="bg-white dark:bg-slate-950/40 rounded-xl h-11 border-slate-200 dark:border-slate-800"
                             />
                           </FormControl>
                         </FormItem>
@@ -3756,7 +3756,7 @@ export function EmployeeSelfProfileForm({
                               placeholder="002"
                               maxLength={3}
                               inputMode="numeric"
-                              className="bg-slate-950/40 rounded-xl h-11 border-slate-800"
+                              className="bg-white dark:bg-slate-950/40 rounded-xl h-11 border-slate-200 dark:border-slate-800"
                             />
                           </FormControl>
                         </FormItem>
@@ -3775,7 +3775,7 @@ export function EmployeeSelfProfileForm({
                               placeholder="15310"
                               maxLength={5}
                               inputMode="numeric"
-                              className="bg-slate-950/40 rounded-xl h-11 border-slate-800"
+                              className="bg-white dark:bg-slate-950/40 rounded-xl h-11 border-slate-200 dark:border-slate-800"
                             />
                           </FormControl>
                         </FormItem>
@@ -3835,7 +3835,7 @@ export function EmployeeSelfProfileForm({
                   </div>
 
                   {/* Status read-only untuk Foto Diri dan KTP/KTM */}
-                  <div className="space-y-4 bg-slate-800/20 rounded-lg border border-slate-700/50 p-4">
+                  <div className="space-y-4 bg-slate-100 dark:bg-slate-800/20 rounded-lg border border-slate-300 dark:border-slate-700/50 p-4">
                     <p className="text-xs font-medium text-slate-300 uppercase tracking-widest">Status Dokumen dari Data Diri</p>
 
                     <div className="space-y-3">
@@ -3943,7 +3943,7 @@ export function EmployeeSelfProfileForm({
 
                 {!form.watch("dokumenAdministratif.noNpwp") && (
                   <div className="animate-in fade-in slide-in-from-top-4 duration-500 space-y-6">
-                    <div className="bg-slate-900/20 border border-slate-800/60 p-6 rounded-3xl relative">
+                    <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-300 dark:border-slate-800/60 p-6 rounded-3xl relative">
                       <div className="flex items-center justify-between mb-4">
                         <h5 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
                           Data Pajak (NPWP)
@@ -3988,7 +3988,7 @@ export function EmployeeSelfProfileForm({
                                   !!pendingRequests.pajak || isTaxVerified
                                 }
                                 placeholder="00.000.000.0-000.000"
-                                className="bg-slate-950/40 h-12 rounded-xl border-slate-800 focus:border-primary/50 transition-all font-mono tracking-wider"
+                                className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800 focus:border-primary/50 transition-all font-mono tracking-wider"
                                 inputMode="numeric"
                                 onChange={(e) => {
                                   const val = e.target.value.replace(
@@ -4078,7 +4078,7 @@ export function EmployeeSelfProfileForm({
 
                 {!form.watch("dokumenAdministratif.noBpjsKesehatan") && (
                   <div className="animate-in fade-in slide-in-from-top-4 duration-500 space-y-6">
-                    <div className="bg-slate-900/20 border border-slate-800/60 p-6 rounded-3xl">
+                    <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-300 dark:border-slate-800/60 p-6 rounded-3xl">
                       <FormField
                         control={form.control}
                         name="dokumenAdministratif.bpjsKesehatan"
@@ -4095,7 +4095,7 @@ export function EmployeeSelfProfileForm({
                                   !!pendingRequests.bpjs_ks || isBpjsVerified
                                 }
                                 placeholder="0001234567890"
-                                className="bg-slate-950/40 h-12 rounded-xl border-slate-800 focus:border-blue-500/50 transition-all font-mono tracking-wider"
+                                className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800 focus:border-blue-500/50 transition-all font-mono tracking-wider"
                                 inputMode="numeric"
                                 onChange={(e) => {
                                   const val = e.target.value.replace(
@@ -4187,7 +4187,7 @@ export function EmployeeSelfProfileForm({
 
                 {!form.watch("dokumenAdministratif.noBpjsKetenagakerjaan") && (
                   <div className="animate-in fade-in slide-in-from-top-4 duration-500 space-y-6">
-                    <div className="bg-slate-900/20 border border-slate-800/60 p-6 rounded-3xl">
+                    <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-300 dark:border-slate-800/60 p-6 rounded-3xl">
                       <FormField
                         control={form.control}
                         name="dokumenAdministratif.bpjsKetenagakerjaan"
@@ -4204,7 +4204,7 @@ export function EmployeeSelfProfileForm({
                                   !!pendingRequests.bpjs_tk || isBpjsVerified
                                 }
                                 placeholder="0001234567890"
-                                className="bg-slate-950/40 h-12 rounded-xl border-slate-800 focus:border-green-500/50 transition-all font-mono tracking-wider"
+                                className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800 focus:border-green-500/50 transition-all font-mono tracking-wider"
                                 inputMode="numeric"
                                 onChange={(e) => {
                                   const val = e.target.value.replace(
@@ -4245,7 +4245,7 @@ export function EmployeeSelfProfileForm({
 
               {requiresSim && (
                 <div className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-500">
-                  <div className="bg-slate-900/20 border border-slate-800/60 p-6 rounded-3xl mb-6">
+                  <div className="bg-slate-50 dark:bg-slate-900/20 border border-slate-300 dark:border-slate-800/60 p-6 rounded-3xl mb-6">
                     <FormField
                       control={form.control}
                       name="dokumenAdministratif.simNumber"
@@ -4259,7 +4259,7 @@ export function EmployeeSelfProfileForm({
                               {...field}
                               value={field.value ?? ""}
                               placeholder="Masukkan nomor SIM Anda"
-                              className="bg-slate-950/40 h-12 rounded-xl border-slate-800"
+                              className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800"
                               inputMode="numeric"
                               onChange={(e) => {
                                 const val = e.target.value.replace(
@@ -4357,7 +4357,7 @@ export function EmployeeSelfProfileForm({
               </div>
             )}
 
-            <div className="bg-slate-900/30 border border-slate-800/60 rounded-[2.5rem] p-8 md:p-10 shadow-xl space-y-10">
+            <div className="bg-white dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800/60 rounded-[2.5rem] p-8 md:p-10 shadow-xl space-y-10">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-6">
                   <FormField
@@ -4374,11 +4374,11 @@ export function EmployeeSelfProfileForm({
                           disabled={!!pendingBankRequest || isBankVerified}
                         >
                           <FormControl>
-                            <SelectTrigger className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80">
+                            <SelectTrigger className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80">
                               <SelectValue placeholder="Pilih Bank" />
                             </SelectTrigger>
                           </FormControl>
-                          <SelectContent className="bg-slate-900 border-slate-800">
+                          <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                             {INDONESIAN_BANKS.map((opt) => (
                               <SelectItem key={opt} value={opt}>
                                 {opt}
@@ -4405,7 +4405,7 @@ export function EmployeeSelfProfileForm({
                             disabled={!!pendingBankRequest || isBankVerified}
                             value={field.value ?? ""}
                             placeholder="Contoh: 1234567890"
-                            className="bg-slate-950/40 h-12 rounded-xl border-slate-800"
+                            className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800"
                             inputMode="numeric"
                           />
                         </FormControl>
@@ -4427,7 +4427,7 @@ export function EmployeeSelfProfileForm({
                             {...field}
                             disabled={!!pendingBankRequest || isBankVerified}
                             value={field.value ?? ""}
-                            className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80"
+                            className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80"
                             placeholder="Sesuai yang tertera di buku tabungan"
                           />
                         </FormControl>
@@ -4632,14 +4632,14 @@ export function EmployeeSelfProfileForm({
               </Card>
 
               {/* Section Kontak Darurat */}
-              <Card className="border-slate-800 bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-2xl shadow-blue-500/5">
-                <CardHeader className="bg-slate-900/40 border-b border-slate-800/60 p-8">
+              <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-2xl shadow-blue-500/5">
+                <CardHeader className="bg-slate-50 dark:bg-slate-900/40 border-b border-slate-200 dark:border-slate-800/60 p-8">
                   <div className="flex items-center gap-5">
                     <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-500 shadow-inner">
                       <Phone className="h-7 w-7" />
                     </div>
                     <div>
-                      <CardTitle className="text-2xl font-black text-slate-100 tracking-tight">
+                      <CardTitle className="text-2xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
                         Kontak Darurat
                       </CardTitle>
                       <CardDescription className="text-slate-400 mt-1 text-sm font-medium">
@@ -4650,9 +4650,9 @@ export function EmployeeSelfProfileForm({
                 </CardHeader>
                 <CardContent className="p-8 space-y-6">
                   {daruratFields.map((field, index) => (
-                    <div key={field.id} className="space-y-4 p-4 border border-slate-700/50 rounded-lg bg-slate-800/20">
+                    <div key={field.id} className="space-y-4 p-4 border border-slate-200 dark:border-slate-700/50 rounded-lg bg-slate-100 dark:bg-slate-800/20">
                       <div className="flex items-center justify-between">
-                        <h4 className="font-semibold text-sm text-slate-200">
+                        <h4 className="font-semibold text-sm text-slate-900 dark:text-slate-200">
                           Kontak Darurat {index + 1}
                         </h4>
                         {index > 0 && (
@@ -4682,7 +4682,7 @@ export function EmployeeSelfProfileForm({
                                   {...field}
                                   value={field.value || ""}
                                   placeholder="Nama lengkap"
-                                  className="bg-slate-900/40 h-10 rounded-lg border-slate-800/80"
+                                  className="bg-white dark:bg-slate-950/40 h-10 rounded-lg border-slate-200 dark:border-slate-800/80"
                                 />
                               </FormControl>
                               <FormMessage />
@@ -4703,11 +4703,11 @@ export function EmployeeSelfProfileForm({
                                 value={field.value || ""}
                               >
                                 <FormControl>
-                                  <SelectTrigger className="bg-slate-900/40 h-10 rounded-lg border-slate-800/80">
+                                  <SelectTrigger className="bg-white dark:bg-slate-950/40 h-10 rounded-lg border-slate-200 dark:border-slate-800/80">
                                     <SelectValue placeholder="Pilih hubungan" />
                                   </SelectTrigger>
                                 </FormControl>
-                                <SelectContent className="bg-slate-900 border-slate-800">
+                                <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                                   <SelectItem value="Orang Tua">Orang Tua</SelectItem>
                                   <SelectItem value="Saudara">Saudara</SelectItem>
                                   <SelectItem value="Kerabat">Kerabat</SelectItem>
@@ -4733,7 +4733,7 @@ export function EmployeeSelfProfileForm({
                                   value={field.value || ""}
                                   placeholder="08xxx..."
                                   inputMode="tel"
-                                  className="bg-slate-900/40 h-10 rounded-lg border-slate-800/80"
+                                  className="bg-white dark:bg-slate-950/40 h-10 rounded-lg border-slate-200 dark:border-slate-800/80"
                                 />
                               </FormControl>
                               <FormMessage />
@@ -4754,11 +4754,11 @@ export function EmployeeSelfProfileForm({
                                 value={field.value || ""}
                               >
                                 <FormControl>
-                                  <SelectTrigger className="bg-slate-900/40 h-10 rounded-lg border-slate-800/80">
+                                  <SelectTrigger className="bg-white dark:bg-slate-950/40 h-10 rounded-lg border-slate-200 dark:border-slate-800/80">
                                     <SelectValue placeholder="Pilih prioritas" />
                                   </SelectTrigger>
                                 </FormControl>
-                                <SelectContent className="bg-slate-900 border-slate-800">
+                                <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                                   <SelectItem value="Utama">Utama</SelectItem>
                                   <SelectItem value="Sekunder">Sekunder</SelectItem>
                                 </SelectContent>
@@ -4782,7 +4782,7 @@ export function EmployeeSelfProfileForm({
                                 {...field}
                                 value={field.value || ""}
                                 placeholder="Alamat singkat"
-                                className="bg-slate-900/40 h-10 rounded-lg border-slate-800/80"
+                                className="bg-white dark:bg-slate-950/40 h-10 rounded-lg border-slate-200 dark:border-slate-800/80"
                               />
                             </FormControl>
                             <FormMessage />
@@ -4797,7 +4797,7 @@ export function EmployeeSelfProfileForm({
                       type="button"
                       onClick={() => appendDarurat({ id: crypto.randomUUID(), name: "", relation: "", phone: "", address: "", priority: "Utama", relationOther: "" })}
                       variant="outline"
-                      className="w-full border-slate-700 hover:bg-slate-800/50"
+                      className="w-full border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800/50"
                     >
                       <Plus className="h-4 w-4 mr-2" /> Tambah Kontak Darurat
                     </Button>
@@ -4806,14 +4806,14 @@ export function EmployeeSelfProfileForm({
               </Card>
 
               {/* Section Pembimbing Kampus/Sekolah */}
-              <Card className="border-slate-800 bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-2xl shadow-purple-500/5">
-                <CardHeader className="bg-slate-900/40 border-b border-slate-800/60 p-8">
+              <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-2xl shadow-purple-500/5">
+                <CardHeader className="bg-slate-50 dark:bg-slate-900/40 border-b border-slate-200 dark:border-slate-800/60 p-8">
                   <div className="flex items-center gap-5">
                     <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-purple-500/10 text-purple-500 shadow-inner">
                       <BookOpen className="h-7 w-7" />
                     </div>
                     <div>
-                      <CardTitle className="text-2xl font-black text-slate-100 tracking-tight">
+                      <CardTitle className="text-2xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
                         Pembimbing Kampus / Sekolah
                       </CardTitle>
                       <CardDescription className="text-slate-400 mt-1 text-sm font-medium">
@@ -4920,14 +4920,14 @@ export function EmployeeSelfProfileForm({
             key="step-keluarga"
             className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700"
           >
-            <Card className="border-slate-800 bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-2xl shadow-blue-500/5">
-              <CardHeader className="bg-slate-900/40 border-b border-slate-800/60 p-8">
+            <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-2xl shadow-blue-500/5">
+              <CardHeader className="bg-slate-50 dark:bg-slate-900/40 border-b border-slate-200 dark:border-slate-800/60 p-8">
                 <div className="flex items-center gap-5">
                   <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-500 shadow-inner">
                     <Users className="h-7 w-7" />
                   </div>
                   <div>
-                    <CardTitle className="text-2xl font-black text-slate-100 tracking-tight">
+                    <CardTitle className="text-2xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
                       Data Orang Tua
                     </CardTitle>
                     <CardDescription className="text-slate-400 mt-1 text-sm font-medium">
@@ -4945,16 +4945,16 @@ export function EmployeeSelfProfileForm({
                   />
                 </div>
                 <Tabs defaultValue="ayah" className="w-full">
-                  <TabsList className="w-full justify-start rounded-none h-16 bg-slate-900/20 border-b border-slate-800/40 p-0">
+                  <TabsList className="w-full justify-start rounded-none h-16 bg-slate-100 dark:bg-slate-900/20 border-b border-slate-200 dark:border-slate-800/40 p-0">
                     <TabsTrigger
                       value="ayah"
-                      className="flex-1 h-full rounded-none border-b-2 border-transparent data-[state=active]:border-blue-500 data-[state=active]:bg-blue-500/5 text-slate-400 data-[state=active]:text-blue-400 font-bold uppercase tracking-widest text-xs transition-all duration-300"
+                      className="flex-1 h-full rounded-none border-b-2 border-transparent data-[state=active]:border-blue-500 data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-blue-500/5 text-slate-600 dark:text-slate-400 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 font-bold uppercase tracking-widest text-xs transition-all duration-300"
                     >
                       Ayah Kandung
                     </TabsTrigger>
                     <TabsTrigger
                       value="ibu"
-                      className="flex-1 h-full rounded-none border-b-2 border-transparent data-[state=active]:border-pink-500 data-[state=active]:bg-pink-500/5 text-slate-400 data-[state=active]:text-pink-400 font-bold uppercase tracking-widest text-xs transition-all duration-300"
+                      className="flex-1 h-full rounded-none border-b-2 border-transparent data-[state=active]:border-pink-500 data-[state=active]:bg-pink-50 dark:data-[state=active]:bg-pink-500/5 text-slate-600 dark:text-slate-400 data-[state=active]:text-pink-600 dark:data-[state=active]:text-pink-400 font-bold uppercase tracking-widest text-xs transition-all duration-300"
                     >
                       Ibu Kandung
                     </TabsTrigger>
@@ -4977,7 +4977,7 @@ export function EmployeeSelfProfileForm({
                                 {...field}
                                 value={field.value || ""}
                                 placeholder="Nama sesuai KTP"
-                                className="bg-slate-900/40 h-12 rounded-xl border-slate-800/80"
+                                className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80"
                               />
                             </FormControl>
                           </FormItem>
@@ -4996,11 +4996,11 @@ export function EmployeeSelfProfileForm({
                               value={field.value || ""}
                             >
                               <FormControl>
-                                <SelectTrigger className="bg-slate-900/40 h-12 rounded-xl border-slate-800/80">
+                                <SelectTrigger className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80">
                                   <SelectValue placeholder="Pilih kondisi" />
                                 </SelectTrigger>
                               </FormControl>
-                              <SelectContent className="bg-slate-900 border-slate-800">
+                              <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                                 {PARENT_STATUS_OPTIONS.map((opt) => (
                                   <SelectItem key={opt} value={opt}>
                                     {opt}
@@ -5024,7 +5024,7 @@ export function EmployeeSelfProfileForm({
                                 {...field}
                                 value={field.value || ""}
                                 placeholder="Contoh: Jakarta"
-                                className="bg-slate-900/40 h-12 rounded-xl border-slate-800/80"
+                                className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80"
                               />
                             </FormControl>
                           </FormItem>
@@ -5043,7 +5043,7 @@ export function EmployeeSelfProfileForm({
                                 {...field}
                                 value={field.value || ""}
                                 type="date"
-                                className="bg-slate-900/40 h-12 rounded-xl border-slate-800/80"
+                                className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80"
                               />
                             </FormControl>
                           </FormItem>
@@ -5067,11 +5067,11 @@ export function EmployeeSelfProfileForm({
                               }
                             >
                               <FormControl>
-                                <SelectTrigger className="bg-slate-900/40 h-12 rounded-xl border-slate-800/80">
+                                <SelectTrigger className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80">
                                   <SelectValue placeholder="Pilih Aktivitas" />
                                 </SelectTrigger>
                               </FormControl>
-                              <SelectContent className="bg-slate-900 border-slate-800">
+                              <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                                 {PARENT_ACTIVITY_OPTIONS.map((opt) => (
                                   <SelectItem key={opt} value={opt}>
                                     {opt}
@@ -5103,11 +5103,11 @@ export function EmployeeSelfProfileForm({
                               }
                             >
                               <FormControl>
-                                <SelectTrigger className="bg-slate-900/40 h-12 rounded-xl border-slate-800/80">
+                                <SelectTrigger className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80">
                                   <SelectValue placeholder="Pilih Pekerjaan" />
                                 </SelectTrigger>
                               </FormControl>
-                              <SelectContent className="bg-slate-900 border-slate-800">
+                              <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                                 {OCCUPATION_OPTIONS.map((opt) => (
                                   <SelectItem key={opt} value={opt}>
                                     {opt}
@@ -5131,7 +5131,7 @@ export function EmployeeSelfProfileForm({
                                 {...field}
                                 value={field.value || ""}
                                 placeholder="0812xxx"
-                                className="bg-slate-900/40 h-12 rounded-xl border-slate-800/80"
+                                className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80"
                                 disabled={
                                   form.watch(
                                     "dataKeluarga.orangTua.ayah.status",
@@ -5155,11 +5155,11 @@ export function EmployeeSelfProfileForm({
                               value={field.value || ""}
                             >
                               <FormControl>
-                                <SelectTrigger className="bg-slate-900/40 h-12 rounded-xl border-slate-800/80">
+                                <SelectTrigger className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80">
                                   <SelectValue placeholder="Pilih Pendidikan" />
                                 </SelectTrigger>
                               </FormControl>
-                              <SelectContent className="bg-slate-900 border-slate-800">
+                              <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                                 {EDUCATION_OPTIONS.map((opt) => (
                                   <SelectItem key={opt} value={opt}>
                                     {opt}
@@ -5183,7 +5183,7 @@ export function EmployeeSelfProfileForm({
                                 {...field}
                                 value={field.value || ""}
                                 placeholder="Masukkan alamat ayah"
-                                className="bg-slate-900/40 rounded-xl border-slate-800/80 resize-none h-24"
+                                className="bg-white dark:bg-slate-950/40 rounded-xl border-slate-200 dark:border-slate-800/80 resize-none h-24"
                               />
                             </FormControl>
                           </FormItem>
@@ -5209,7 +5209,7 @@ export function EmployeeSelfProfileForm({
                                 {...field}
                                 value={field.value || ""}
                                 placeholder="Nama sesuai KTP"
-                                className="bg-slate-900/40 h-12 rounded-xl border-slate-800/80"
+                                className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80"
                               />
                             </FormControl>
                           </FormItem>
@@ -5228,11 +5228,11 @@ export function EmployeeSelfProfileForm({
                               value={field.value || ""}
                             >
                               <FormControl>
-                                <SelectTrigger className="bg-slate-900/40 h-12 rounded-xl border-slate-800/80">
+                                <SelectTrigger className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80">
                                   <SelectValue placeholder="Pilih kondisi" />
                                 </SelectTrigger>
                               </FormControl>
-                              <SelectContent className="bg-slate-900 border-slate-800">
+                              <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                                 {PARENT_STATUS_OPTIONS.map((opt) => (
                                   <SelectItem key={opt} value={opt}>
                                     {opt}
@@ -5256,7 +5256,7 @@ export function EmployeeSelfProfileForm({
                                 {...field}
                                 value={field.value || ""}
                                 placeholder="Contoh: Jakarta"
-                                className="bg-slate-900/40 h-12 rounded-xl border-slate-800/80"
+                                className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80"
                               />
                             </FormControl>
                           </FormItem>
@@ -5275,7 +5275,7 @@ export function EmployeeSelfProfileForm({
                                 {...field}
                                 value={field.value || ""}
                                 type="date"
-                                className="bg-slate-900/40 h-12 rounded-xl border-slate-800/80"
+                                className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80"
                               />
                             </FormControl>
                           </FormItem>
@@ -5299,11 +5299,11 @@ export function EmployeeSelfProfileForm({
                               }
                             >
                               <FormControl>
-                                <SelectTrigger className="bg-slate-900/40 h-12 rounded-xl border-slate-800/80">
+                                <SelectTrigger className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80">
                                   <SelectValue placeholder="Pilih Aktivitas" />
                                 </SelectTrigger>
                               </FormControl>
-                              <SelectContent className="bg-slate-900 border-slate-800">
+                              <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                                 {PARENT_ACTIVITY_OPTIONS.map((opt) => (
                                   <SelectItem key={opt} value={opt}>
                                     {opt}
@@ -5335,11 +5335,11 @@ export function EmployeeSelfProfileForm({
                               }
                             >
                               <FormControl>
-                                <SelectTrigger className="bg-slate-900/40 h-12 rounded-xl border-slate-800/80">
+                                <SelectTrigger className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80">
                                   <SelectValue placeholder="Pilih Pekerjaan" />
                                 </SelectTrigger>
                               </FormControl>
-                              <SelectContent className="bg-slate-900 border-slate-800">
+                              <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                                 {OCCUPATION_OPTIONS.map((opt) => (
                                   <SelectItem key={opt} value={opt}>
                                     {opt}
@@ -5363,7 +5363,7 @@ export function EmployeeSelfProfileForm({
                                 {...field}
                                 value={field.value || ""}
                                 placeholder="0812xxx"
-                                className="bg-slate-900/40 h-12 rounded-xl border-slate-800/80"
+                                className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80"
                                 disabled={
                                   form.watch(
                                     "dataKeluarga.orangTua.ibu.status",
@@ -5387,11 +5387,11 @@ export function EmployeeSelfProfileForm({
                               value={field.value || ""}
                             >
                               <FormControl>
-                                <SelectTrigger className="bg-slate-900/40 h-12 rounded-xl border-slate-800/80">
+                                <SelectTrigger className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80">
                                   <SelectValue placeholder="Pilih Pendidikan" />
                                 </SelectTrigger>
                               </FormControl>
-                              <SelectContent className="bg-slate-900 border-slate-800">
+                              <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                                 {EDUCATION_OPTIONS.map((opt) => (
                                   <SelectItem key={opt} value={opt}>
                                     {opt}
@@ -5415,7 +5415,7 @@ export function EmployeeSelfProfileForm({
                                 {...field}
                                 value={field.value || ""}
                                 placeholder="Masukkan alamat ibu"
-                                className="bg-slate-900/40 rounded-xl border-slate-800/80 resize-none h-24"
+                                className="bg-white dark:bg-slate-950/40 rounded-xl border-slate-200 dark:border-slate-800/80 resize-none h-24"
                               />
                             </FormControl>
                           </FormItem>
@@ -5435,7 +5435,7 @@ export function EmployeeSelfProfileForm({
                       <FileText className="h-6 w-6 text-blue-500" />
                     </div>
                     <div>
-                      <h4 className="text-xl font-bold text-slate-100 tracking-tight">
+                      <h4 className="text-xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
                         Dokumen Pendukung Keluarga
                       </h4>
                       <p className="text-sm text-slate-400 mt-1">
@@ -5667,7 +5667,7 @@ export function EmployeeSelfProfileForm({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <ShieldCheck className="h-5 w-5 text-blue-500" />
-                    <h5 className="text-base font-bold text-slate-200">
+                    <h5 className="text-base font-bold text-slate-900 dark:text-slate-200">
                       BPJS Kesehatan Keluarga
                     </h5>
                   </div>
@@ -5685,7 +5685,7 @@ export function EmployeeSelfProfileForm({
                         status: "missing",
                       })
                     }
-                    className="rounded-xl border-slate-800 bg-slate-900/50 text-slate-400 hover:text-white"
+                    className="rounded-xl border-slate-300 dark:border-slate-800 bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                   >
                     <Plus className="mr-2 h-4 w-4" /> Tambah BPJS
                     Anak/Tanggungan
@@ -5702,9 +5702,9 @@ export function EmployeeSelfProfileForm({
                     familyBpjsMemberFields.length === 0
                   ) {
                     return (
-                      <div className="bg-slate-900/20 border border-dashed border-slate-800 rounded-[2rem] p-10 flex flex-col items-center justify-center text-center space-y-3">
-                        <ShieldCheck className="h-10 w-10 text-slate-700" />
-                        <p className="text-slate-500 text-sm">
+                      <div className="bg-slate-100 dark:bg-slate-900/20 border border-dashed border-slate-300 dark:border-slate-800 rounded-[2rem] p-10 flex flex-col items-center justify-center text-center space-y-3">
+                        <ShieldCheck className="h-10 w-10 text-slate-400 dark:text-slate-700" />
+                        <p className="text-slate-600 dark:text-slate-500 text-sm">
                           Tambahkan pasangan atau tanggungan terlebih dahulu
                           untuk mengunggah BPJS keluarga.
                         </p>
@@ -5787,7 +5787,7 @@ export function EmployeeSelfProfileForm({
                         return (
                           <Card
                             key={`bpjs-${member.id}`}
-                            className="border-slate-800 bg-slate-900/40 p-6 rounded-[2rem] relative overflow-hidden group"
+                            className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/40 p-6 rounded-[2rem] relative overflow-hidden group"
                           >
                             {!member.isAuto && (
                               <Button
@@ -5834,7 +5834,7 @@ export function EmployeeSelfProfileForm({
                               <div className="flex flex-col">
                                 {member.isAuto ? (
                                   <>
-                                    <span className="text-sm font-bold text-slate-200">
+                                    <span className="text-sm font-bold text-slate-900 dark:text-slate-200">
                                       {member.label}
                                     </span>
                                     <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mt-0.5">
@@ -5860,7 +5860,7 @@ export function EmployeeSelfProfileForm({
                                             e.target.value,
                                           )
                                         }
-                                        className="bg-slate-950/40 border-slate-800 h-9 text-xs"
+                                        className="bg-white dark:bg-slate-950/40 border-slate-200 dark:border-slate-800 h-9 text-xs"
                                       />
                                     </div>
                                     <div className="space-y-1">
@@ -5881,11 +5881,11 @@ export function EmployeeSelfProfileForm({
                                         }
                                       >
                                         <FormControl>
-                                          <SelectTrigger className="bg-slate-950/40 border-slate-800 h-9 rounded-xl text-xs">
+                                          <SelectTrigger className="bg-white dark:bg-slate-950/40 border-slate-200 dark:border-slate-800 h-9 rounded-xl text-xs">
                                             <SelectValue placeholder="Pilih..." />
                                           </SelectTrigger>
                                         </FormControl>
-                                        <SelectContent className="bg-slate-900 border-slate-800">
+                                        <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                                           {[
                                             "Suami",
                                             "Istri",
@@ -5941,7 +5941,7 @@ export function EmployeeSelfProfileForm({
                                         currentMembers,
                                       );
                                     }}
-                                    className="bg-slate-950/40 border-slate-800 h-10 rounded-xl"
+                                    className="bg-white dark:bg-slate-950/40 border-slate-200 dark:border-slate-800 h-10 rounded-xl"
                                   />
                                 </div>
 
@@ -6010,7 +6010,7 @@ export function EmployeeSelfProfileForm({
                 <div className="space-y-6">
                   <div className="flex items-center gap-3">
                     <Baby className="h-5 w-5 text-amber-500" />
-                    <h5 className="text-base font-bold text-slate-200">
+                    <h5 className="text-base font-bold text-slate-900 dark:text-slate-200">
                       Akta Kelahiran Anak
                     </h5>
                   </div>
@@ -6115,7 +6115,7 @@ export function EmployeeSelfProfileForm({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <Plus className="h-5 w-5 text-slate-400" />
-                    <h5 className="text-base font-bold text-slate-200">
+                    <h5 className="text-base font-bold text-slate-900 dark:text-slate-200">
                       Dokumen Tambahan Lainnya
                     </h5>
                   </div>
@@ -6132,7 +6132,7 @@ export function EmployeeSelfProfileForm({
                           status: "missing",
                         })
                       }
-                      className="rounded-xl border-slate-800 bg-slate-900/50 text-slate-400 hover:text-white"
+                      className="rounded-xl border-slate-300 dark:border-slate-800 bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                     >
                       <Plus className="mr-2 h-4 w-4" /> Tambah Lagi
                     </Button>
@@ -6140,12 +6140,12 @@ export function EmployeeSelfProfileForm({
                 </div>
 
                 {additionalFamilyDocFields.length === 0 ? (
-                  <div className="bg-slate-900/20 border border-dashed border-slate-800 rounded-[2rem] p-10 flex flex-col items-center justify-center text-center space-y-4">
-                    <div className="h-16 w-16 rounded-2xl bg-slate-800 flex items-center justify-center text-slate-500 shadow-inner">
+                  <div className="bg-slate-100 dark:bg-slate-900/20 border border-dashed border-slate-300 dark:border-slate-800 rounded-[2rem] p-10 flex flex-col items-center justify-center text-center space-y-4">
+                    <div className="h-16 w-16 rounded-2xl bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-500 shadow-inner">
                       <FileText className="h-8 w-8" />
                     </div>
                     <div className="max-w-md">
-                      <p className="text-slate-400 text-sm font-medium">
+                      <p className="text-slate-600 dark:text-slate-400 text-sm font-medium">
                         Belum ada dokumen tambahan. Tambahkan hanya jika
                         diperlukan.
                       </p>
@@ -6161,7 +6161,7 @@ export function EmployeeSelfProfileForm({
                           status: "missing",
                         })
                       }
-                      className="rounded-xl border-slate-700 bg-slate-800/50 text-slate-300 hover:bg-slate-800 hover:text-white px-8 h-12 font-bold shadow-lg transition-all"
+                      className="rounded-xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white px-8 h-12 font-bold shadow-lg transition-all"
                     >
                       <Plus className="mr-2 h-5 w-5" /> Tambah Dokumen Opsional
                     </Button>
@@ -6175,7 +6175,7 @@ export function EmployeeSelfProfileForm({
                       return (
                         <Card
                           key={field.id}
-                          className="border-slate-800 bg-slate-900/40 p-6 rounded-3xl relative animate-in fade-in slide-in-from-top-4 duration-500"
+                          className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/40 p-6 rounded-3xl relative animate-in fade-in slide-in-from-top-4 duration-500"
                         >
                           <Button
                             type="button"
@@ -6201,11 +6201,11 @@ export function EmployeeSelfProfileForm({
                                     value={field.value || ""}
                                   >
                                     <FormControl>
-                                      <SelectTrigger className="bg-slate-950/40 border-slate-800 h-12 rounded-xl">
+                                      <SelectTrigger className="bg-white dark:bg-slate-950/40 border-slate-200 dark:border-slate-800 h-12 rounded-xl">
                                         <SelectValue placeholder="Pilih jenis dokumen" />
                                       </SelectTrigger>
                                     </FormControl>
-                                    <SelectContent className="bg-slate-900 border-slate-800">
+                                    <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                                       {FAMILY_DOCUMENT_TYPES.map((type) => (
                                         <SelectItem key={type} value={type}>
                                           {type}
@@ -6230,7 +6230,7 @@ export function EmployeeSelfProfileForm({
                                       <Input
                                         {...field}
                                         placeholder="Sebutkan nama dokumen..."
-                                        className="bg-slate-950/40 border-slate-800 h-12 rounded-xl"
+                                        className="bg-white dark:bg-slate-950/40 border-slate-200 dark:border-slate-800 h-12 rounded-xl"
                                       />
                                     </FormControl>
                                   </FormItem>
@@ -6291,14 +6291,14 @@ export function EmployeeSelfProfileForm({
               </div>
             </section>
 
-            <div className="space-y-6 pt-10 pb-10 border-b border-slate-800/40">
+            <div className="space-y-6 pt-10 pb-10 border-b border-slate-200 dark:border-slate-800/40">
               <div className="flex items-center justify-between pb-4">
                 <div className="flex items-center gap-4">
                   <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 shadow-lg shadow-emerald-500/5">
                     <Heart className="h-6 w-6 text-emerald-500" />
                   </div>
                   <div>
-                    <h4 className="text-xl font-bold text-slate-100 tracking-tight">
+                    <h4 className="text-xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
                       Saudara Kandung
                     </h4>
                     <p className="text-xs text-slate-500 uppercase tracking-widest font-semibold mt-1">
@@ -6330,18 +6330,18 @@ export function EmployeeSelfProfileForm({
                 {saudaraFields.map((field, index) => (
                   <div
                     key={field.id}
-                    className="group relative bg-slate-900/40 rounded-[2.5rem] border border-slate-800/60 shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500"
+                    className="group relative bg-white dark:bg-slate-900/40 rounded-[2.5rem] border border-slate-200 dark:border-slate-800/60 shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500"
                     style={{ animationDelay: `${index * 100}ms` }}
                   >
                     <div className="absolute top-0 left-0 w-2 h-full bg-emerald-500/40 group-hover:bg-emerald-500 transition-colors duration-500" />
 
                     <div className="p-8 md:p-10">
-                      <div className="flex items-center justify-between mb-10 pb-6 border-b border-slate-800/60">
+                      <div className="flex items-center justify-between mb-10 pb-6 border-b border-slate-200 dark:border-slate-800/60">
                         <div className="flex items-center gap-4">
-                          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950 text-emerald-400 font-black text-sm border border-slate-800/50 shadow-inner">
+                          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-200 dark:bg-slate-950 text-slate-900 dark:text-emerald-400 font-black text-sm border border-slate-300 dark:border-slate-800/50 shadow-inner">
                             {index + 1}
                           </span>
-                          <h5 className="text-lg font-bold text-slate-200 uppercase tracking-wider">
+                          <h5 className="text-lg font-bold text-slate-900 dark:text-slate-200 uppercase tracking-wider">
                             Saudara {index + 1}
                           </h5>
                         </div>
@@ -6370,7 +6370,7 @@ export function EmployeeSelfProfileForm({
                                   {...field}
                                   value={field.value || ""}
                                   placeholder="Nama saudara"
-                                  className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80"
+                                  className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80"
                                 />
                               </FormControl>
                             </FormItem>
@@ -6390,7 +6390,7 @@ export function EmployeeSelfProfileForm({
                                   value={field.value || ""}
                                   type="number"
                                   placeholder="Contoh: 1"
-                                  className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80"
+                                  className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80"
                                 />
                               </FormControl>
                             </FormItem>
@@ -6410,7 +6410,7 @@ export function EmployeeSelfProfileForm({
                                     {...field}
                                     value={field.value || ""}
                                     placeholder="Contoh: Jakarta"
-                                    className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80"
+                                    className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80"
                                   />
                                 </FormControl>
                               </FormItem>
@@ -6431,7 +6431,7 @@ export function EmployeeSelfProfileForm({
                                     {...field}
                                     value={field.value || ""}
                                     type="date"
-                                    className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80"
+                                    className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80"
                                   />
                                 </FormControl>
                               </FormItem>
@@ -6450,11 +6450,11 @@ export function EmployeeSelfProfileForm({
                                   value={field.value || ""}
                                 >
                                   <FormControl>
-                                    <SelectTrigger className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80">
+                                    <SelectTrigger className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80">
                                       <SelectValue placeholder="Pilih Status" />
                                     </SelectTrigger>
                                   </FormControl>
-                                  <SelectContent className="bg-slate-900 border-slate-800">
+                                  <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                                     {SIBLING_ACTIVITY_OPTIONS.map((opt) => (
                                       <SelectItem key={opt} value={opt}>
                                         {opt}
@@ -6479,11 +6479,11 @@ export function EmployeeSelfProfileForm({
                                 value={field.value || ""}
                               >
                                 <FormControl>
-                                  <SelectTrigger className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80">
+                                  <SelectTrigger className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80">
                                     <SelectValue placeholder="Pilih Pendidikan" />
                                   </SelectTrigger>
                                 </FormControl>
-                                <SelectContent className="bg-slate-900 border-slate-800">
+                                <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                                   {EDUCATION_OPTIONS.map((opt) => (
                                     <SelectItem key={opt} value={opt}>
                                       {opt}
@@ -6512,11 +6512,11 @@ export function EmployeeSelfProfileForm({
                                 }
                               >
                                 <FormControl>
-                                  <SelectTrigger className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80">
+                                  <SelectTrigger className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80">
                                     <SelectValue placeholder="Pilih Pekerjaan" />
                                   </SelectTrigger>
                                 </FormControl>
-                                <SelectContent className="bg-slate-900 border-slate-800">
+                                <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                                   {OCCUPATION_OPTIONS.map((opt) => (
                                     <SelectItem key={opt} value={opt}>
                                       {opt}
@@ -6540,7 +6540,7 @@ export function EmployeeSelfProfileForm({
                                   {...field}
                                   value={field.value || ""}
                                   placeholder="Masukkan alamat saudara"
-                                  className="bg-slate-950/40 rounded-xl border-slate-800/80 resize-none h-24"
+                                  className="bg-white dark:bg-slate-950/40 rounded-xl border-slate-200 dark:border-slate-800/80 resize-none h-24"
                                 />
                               </FormControl>
                             </FormItem>
@@ -6553,14 +6553,14 @@ export function EmployeeSelfProfileForm({
               </div>
             </div>
 
-            <div className="space-y-6 pt-10 pb-10 border-b border-slate-800/40">
+            <div className="space-y-6 pt-10 pb-10 border-b border-slate-200 dark:border-slate-800/40">
               <div className="flex items-center justify-between pb-4">
                 <div className="flex items-center gap-4">
                   <div className="h-12 w-12 rounded-2xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20 shadow-lg shadow-amber-500/5">
                     <Baby className="h-6 w-6 text-amber-500" />
                   </div>
                   <div>
-                    <h4 className="text-xl font-bold text-slate-100 tracking-tight">
+                    <h4 className="text-xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
                       Tanggungan
                     </h4>
                     <p className="text-xs text-slate-500 uppercase tracking-widest font-semibold mt-1">
@@ -6596,18 +6596,18 @@ export function EmployeeSelfProfileForm({
                 {tanggunganFields.map((field, index) => (
                   <div
                     key={field.id}
-                    className="group relative bg-slate-900/40 rounded-[2.5rem] border border-slate-800/60 shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500"
+                    className="group relative bg-white dark:bg-slate-900/40 rounded-[2.5rem] border border-slate-200 dark:border-slate-800/60 shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500"
                     style={{ animationDelay: `${index * 100}ms` }}
                   >
                     <div className="absolute top-0 left-0 w-2 h-full bg-amber-500/40 group-hover:bg-amber-500 transition-colors duration-500" />
 
                     <div className="p-8 md:p-10">
-                      <div className="flex items-center justify-between mb-10 pb-6 border-b border-slate-800/60">
+                      <div className="flex items-center justify-between mb-10 pb-6 border-b border-slate-200 dark:border-slate-800/60">
                         <div className="flex items-center gap-4">
-                          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950 text-amber-400 font-black text-sm border border-slate-800/50 shadow-inner">
+                          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-200 dark:bg-slate-950 text-slate-900 dark:text-amber-400 font-black text-sm border border-slate-300 dark:border-slate-800/50 shadow-inner">
                             {index + 1}
                           </span>
-                          <h5 className="text-lg font-bold text-slate-200 uppercase tracking-wider">
+                          <h5 className="text-lg font-bold text-slate-900 dark:text-slate-200 uppercase tracking-wider">
                             Tanggungan {index + 1}
                           </h5>
                         </div>
@@ -6636,7 +6636,7 @@ export function EmployeeSelfProfileForm({
                                   {...field}
                                   value={field.value || ""}
                                   placeholder="Nama lengkap"
-                                  className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80"
+                                  className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80"
                                 />
                               </FormControl>
                             </FormItem>
@@ -6656,11 +6656,11 @@ export function EmployeeSelfProfileForm({
                                   value={field.value || ""}
                                 >
                                   <FormControl>
-                                    <SelectTrigger className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80">
+                                    <SelectTrigger className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80">
                                       <SelectValue placeholder="Pilih Hubungan" />
                                     </SelectTrigger>
                                   </FormControl>
-                                  <SelectContent className="bg-slate-900 border-slate-800">
+                                  <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                                     {["Istri", "Suami", "Anak"].map((opt) => (
                                       <SelectItem key={opt} value={opt}>
                                         {opt}
@@ -6685,7 +6685,7 @@ export function EmployeeSelfProfileForm({
                                     value={field.value || ""}
                                     type="number"
                                     placeholder="-"
-                                    className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80"
+                                    className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80"
                                     disabled={
                                       form.watch(
                                         `dataKeluarga.tanggungan.${index}.relation`,
@@ -6711,7 +6711,7 @@ export function EmployeeSelfProfileForm({
                                     {...field}
                                     value={field.value || ""}
                                     placeholder="Contoh: Jakarta"
-                                    className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80"
+                                    className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80"
                                   />
                                 </FormControl>
                               </FormItem>
@@ -6730,7 +6730,7 @@ export function EmployeeSelfProfileForm({
                                     {...field}
                                     value={field.value || ""}
                                     type="date"
-                                    className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80"
+                                    className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80"
                                   />
                                 </FormControl>
                               </FormItem>
@@ -6749,11 +6749,11 @@ export function EmployeeSelfProfileForm({
                                   value={field.value || ""}
                                 >
                                   <FormControl>
-                                    <SelectTrigger className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80">
+                                    <SelectTrigger className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80">
                                       <SelectValue placeholder="Pilih Status" />
                                     </SelectTrigger>
                                   </FormControl>
-                                  <SelectContent className="bg-slate-900 border-slate-800">
+                                  <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                                     {SIBLING_ACTIVITY_OPTIONS.map((opt) => (
                                       <SelectItem key={opt} value={opt}>
                                         {opt}
@@ -6778,11 +6778,11 @@ export function EmployeeSelfProfileForm({
                                 value={field.value || ""}
                               >
                                 <FormControl>
-                                  <SelectTrigger className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80">
+                                  <SelectTrigger className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80">
                                     <SelectValue placeholder="Pilih Pendidikan" />
                                   </SelectTrigger>
                                 </FormControl>
-                                <SelectContent className="bg-slate-900 border-slate-800">
+                                <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                                   {EDUCATION_OPTIONS.map((opt) => (
                                     <SelectItem key={opt} value={opt}>
                                       {opt}
@@ -6811,11 +6811,11 @@ export function EmployeeSelfProfileForm({
                                 }
                               >
                                 <FormControl>
-                                  <SelectTrigger className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80">
+                                  <SelectTrigger className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80">
                                     <SelectValue placeholder="Pilih Pekerjaan" />
                                   </SelectTrigger>
                                 </FormControl>
-                                <SelectContent className="bg-slate-900 border-slate-800">
+                                <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                                   {OCCUPATION_OPTIONS.map((opt) => (
                                     <SelectItem key={opt} value={opt}>
                                       {opt}
@@ -6859,7 +6859,7 @@ export function EmployeeSelfProfileForm({
                     <Phone className="h-6 w-6 text-primary" />
                   </div>
                   <div>
-                    <h4 className="text-xl font-bold text-slate-100 tracking-tight flex items-center gap-2">
+                    <h4 className="text-xl font-bold text-slate-900 dark:text-slate-100 tracking-tight flex items-center gap-2">
                       Kontak Darurat
                       <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full border border-primary/20 font-bold uppercase tracking-widest">
                         Wajib
@@ -6894,23 +6894,23 @@ export function EmployeeSelfProfileForm({
                 {daruratFields.map((field, index) => (
                   <div
                     key={field.id}
-                    className="group relative bg-slate-900/40 rounded-[2.5rem] border border-slate-800/60 shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500"
+                    className="group relative bg-white dark:bg-slate-900/40 rounded-[2.5rem] border border-slate-200 dark:border-slate-800/60 shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500"
                     style={{ animationDelay: `${index * 100}ms` }}
                   >
                     <div
-                      className={`absolute top-0 left-0 w-2 h-full transition-colors duration-500 ${form.watch(`kontakDarurat.${index}.priority`) === "Utama" ? "bg-primary" : "bg-slate-700 group-hover:bg-slate-600"}`}
+                      className={`absolute top-0 left-0 w-2 h-full transition-colors duration-500 ${form.watch(`kontakDarurat.${index}.priority`) === "Utama" ? "bg-primary" : "bg-slate-300 dark:bg-slate-700 group-hover:bg-slate-400 dark:group-hover:bg-slate-600"}`}
                     />
 
                     <div className="p-8 md:p-10">
-                      <div className="flex items-center justify-between mb-10 pb-6 border-b border-slate-800/60">
+                      <div className="flex items-center justify-between mb-10 pb-6 border-b border-slate-200 dark:border-slate-800/60">
                         <div className="flex items-center gap-4">
                           <span
-                            className={`flex h-10 w-10 items-center justify-center rounded-xl font-black text-sm border shadow-inner ${form.watch(`kontakDarurat.${index}.priority`) === "Utama" ? "bg-primary/10 text-primary border-primary/20" : "bg-slate-950 text-slate-400 border-slate-800/50"}`}
+                            className={`flex h-10 w-10 items-center justify-center rounded-xl font-black text-sm border shadow-inner ${form.watch(`kontakDarurat.${index}.priority`) === "Utama" ? "bg-primary/10 text-primary border-primary/20" : "bg-slate-200 dark:bg-slate-950 text-slate-900 dark:text-slate-400 border-slate-300 dark:border-slate-800/50"}`}
                           >
                             {index + 1}
                           </span>
                           <div>
-                            <h5 className="text-lg font-bold text-slate-200 uppercase tracking-wider flex items-center gap-3">
+                            <h5 className="text-lg font-bold text-slate-900 dark:text-slate-200 uppercase tracking-wider flex items-center gap-3">
                               Kontak {index + 1}
                               {form.watch(`kontakDarurat.${index}.priority`) ===
                                 "Utama" && (
@@ -6947,7 +6947,7 @@ export function EmployeeSelfProfileForm({
                                   {...field}
                                   value={field.value || ""}
                                   placeholder="Contoh: Budi Santoso"
-                                  className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80"
+                                  className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80"
                                 />
                               </FormControl>
                               <FormMessage />
@@ -6967,11 +6967,11 @@ export function EmployeeSelfProfileForm({
                                 value={field.value || ""}
                               >
                                 <FormControl>
-                                  <SelectTrigger className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80">
+                                  <SelectTrigger className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80">
                                     <SelectValue placeholder="Pilih Prioritas" />
                                   </SelectTrigger>
                                 </FormControl>
-                                <SelectContent className="bg-slate-900 border-slate-800">
+                                <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                                   {EMERGENCY_PRIORITY_OPTIONS.map((opt) => (
                                     <SelectItem key={opt} value={opt}>
                                       {opt}
@@ -6997,11 +6997,11 @@ export function EmployeeSelfProfileForm({
                                   value={field.value || ""}
                                 >
                                   <FormControl>
-                                    <SelectTrigger className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80">
+                                    <SelectTrigger className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80">
                                       <SelectValue placeholder="Pilih Hubungan" />
                                     </SelectTrigger>
                                   </FormControl>
-                                  <SelectContent className="bg-slate-900 border-slate-800">
+                                  <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                                     {EMERGENCY_RELATION_OPTIONS.map((opt) => (
                                       <SelectItem key={opt} value={opt}>
                                         {opt}
@@ -7028,7 +7028,7 @@ export function EmployeeSelfProfileForm({
                                       {...field}
                                       value={field.value || ""}
                                       placeholder="Sebutkan hubungan"
-                                      className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80"
+                                      className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80"
                                     />
                                   </FormControl>
                                   <FormMessage />
@@ -7050,7 +7050,7 @@ export function EmployeeSelfProfileForm({
                                   {...field}
                                   value={field.value || ""}
                                   placeholder="Contoh: 081234567890"
-                                  className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80"
+                                  className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80"
                                   onChange={(e) => {
                                     const cleaned = e.target.value.replace(
                                       /[^0-9]/g,
@@ -7080,7 +7080,7 @@ export function EmployeeSelfProfileForm({
                                   {...field}
                                   value={field.value || ""}
                                   placeholder="Masukkan alamat kontak darurat"
-                                  className="bg-slate-950/40 rounded-xl border-slate-800/80 resize-none h-24"
+                                  className="bg-white dark:bg-slate-950/40 rounded-xl border-slate-200 dark:border-slate-800/80 resize-none h-24"
                                 />
                               </FormControl>
                               <FormMessage />
@@ -7103,7 +7103,7 @@ export function EmployeeSelfProfileForm({
           >
             <div className="space-y-6">
               <div className="space-y-1.5 px-2">
-                <h4 className="text-xl font-bold text-slate-100 flex items-center gap-3 tracking-tight">
+                <h4 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-3 tracking-tight">
                   <div className="h-2 w-2 rounded-full bg-blue-500" />
                   Pendidikan Terakhir
                 </h4>
@@ -7119,7 +7119,7 @@ export function EmployeeSelfProfileForm({
                 title="Pendidikan Terakhir"
               />
 
-              <div className="p-8 space-y-8 bg-slate-900/20 border-x border-b border-slate-800 rounded-b-3xl">
+              <div className="p-8 space-y-8 bg-slate-50 dark:bg-slate-900/20 border-x border-b border-slate-200 dark:border-slate-800 rounded-b-3xl">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-6">
                     <FormField
@@ -7135,11 +7135,11 @@ export function EmployeeSelfProfileForm({
                             value={field.value || ""}
                           >
                             <FormControl>
-                              <SelectTrigger className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80">
+                              <SelectTrigger className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80">
                                 <SelectValue placeholder="Pilih jenjang" />
                               </SelectTrigger>
                             </FormControl>
-                            <SelectContent className="bg-slate-900 border-slate-800">
+                            <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                               {EDUCATION_OPTIONS.map((opt) => (
                                 <SelectItem key={opt} value={opt}>
                                   {opt}
@@ -7162,7 +7162,7 @@ export function EmployeeSelfProfileForm({
                           <FormControl>
                             <Input
                               {...field}
-                              className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80"
+                              className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80"
                               placeholder="Contoh: Universitas Gadjah Mada"
                             />
                           </FormControl>
@@ -7182,7 +7182,7 @@ export function EmployeeSelfProfileForm({
                             <FormControl>
                               <Input
                                 {...field}
-                                className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80"
+                                className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80"
                                 placeholder="Contoh: Teknik Informatika"
                               />
                             </FormControl>
@@ -7203,11 +7203,11 @@ export function EmployeeSelfProfileForm({
                               value={field.value || ""}
                             >
                               <FormControl>
-                                <SelectTrigger className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80">
+                                <SelectTrigger className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80">
                                   <SelectValue placeholder="Pilih tahun" />
                                 </SelectTrigger>
                               </FormControl>
-                              <SelectContent className="bg-slate-900 border-slate-800 max-h-60">
+                              <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 max-h-60">
                                 {YEAR_OPTIONS.map((opt) => (
                                   <SelectItem key={opt} value={opt}>
                                     {opt}
@@ -7243,12 +7243,12 @@ export function EmployeeSelfProfileForm({
               </div>
             </div>
 
-            <Separator className="bg-slate-800/50" />
+            <Separator className="bg-slate-200 dark:bg-slate-800/50" />
 
             <div className="space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-2">
                 <div className="space-y-1.5">
-                  <h4 className="text-xl font-bold text-slate-100 flex items-center gap-3 tracking-tight">
+                  <h4 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-3 tracking-tight">
                     <div className="h-2 w-2 rounded-full bg-indigo-500" />
                     Riwayat Pendidikan Lainnya
                   </h4>
@@ -7280,12 +7280,12 @@ export function EmployeeSelfProfileForm({
                 {pendidikanFields.map((field, index) => (
                   <div
                     key={field.id}
-                    className="relative bg-slate-900/30 border border-slate-800/60 rounded-[2.5rem] overflow-hidden shadow-sm animate-in slide-in-from-right-4 duration-500"
+                    className="relative bg-white dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800/60 rounded-[2.5rem] overflow-hidden shadow-sm animate-in slide-in-from-right-4 duration-500"
                     style={{ animationDelay: `${index * 100}ms` }}
                   >
                     <div className="absolute top-10 left-0 w-1.5 h-12 bg-indigo-500/40 rounded-r-full" />
                     <div className="flex items-center justify-between p-8 sm:p-10 pb-0">
-                      <h5 className="text-sm font-bold text-slate-300 uppercase tracking-[0.3em]">
+                      <h5 className="text-sm font-bold text-slate-900 dark:text-slate-300 uppercase tracking-[0.3em]">
                         Pendidikan #{index + 1}
                       </h5>
                       <Button
@@ -7316,11 +7316,11 @@ export function EmployeeSelfProfileForm({
                                     value={field.value || ""}
                                   >
                                     <FormControl>
-                                      <SelectTrigger className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80">
+                                      <SelectTrigger className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80">
                                         <SelectValue placeholder="Jenjang" />
                                       </SelectTrigger>
                                     </FormControl>
-                                    <SelectContent className="bg-slate-900 border-slate-800">
+                                    <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                                       {EDUCATION_OPTIONS.map((opt) => (
                                         <SelectItem key={opt} value={opt}>
                                           {opt}
@@ -7346,11 +7346,11 @@ export function EmployeeSelfProfileForm({
                                     value={field.value || ""}
                                   >
                                     <FormControl>
-                                      <SelectTrigger className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80">
+                                      <SelectTrigger className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80">
                                         <SelectValue placeholder="Pilih tahun" />
                                       </SelectTrigger>
                                     </FormControl>
-                                    <SelectContent className="bg-slate-900 border-slate-800 max-h-60">
+                                    <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 max-h-60">
                                       {YEAR_OPTIONS.map((opt) => (
                                         <SelectItem key={opt} value={opt}>
                                           {opt}
@@ -7375,7 +7375,7 @@ export function EmployeeSelfProfileForm({
                                 <FormControl>
                                   <Input
                                     {...field}
-                                    className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80"
+                                    className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80"
                                     placeholder="Nama Institusi"
                                   />
                                 </FormControl>
@@ -7395,7 +7395,7 @@ export function EmployeeSelfProfileForm({
                                 <FormControl>
                                   <Input
                                     {...field}
-                                    className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80"
+                                    className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80"
                                     placeholder="Contoh: Teknik Mesin"
                                   />
                                 </FormControl>
@@ -7438,15 +7438,15 @@ export function EmployeeSelfProfileForm({
                   </div>
                 ))}
                 {pendidikanFields.length === 0 && (
-                  <div className="flex flex-col items-center justify-center py-20 rounded-[3rem] border-2 border-dashed border-slate-800/40 bg-slate-950/10 text-slate-500 space-y-6">
+                  <div className="flex flex-col items-center justify-center py-20 rounded-[3rem] border-2 border-dashed border-slate-300 dark:border-slate-800/40 bg-slate-50 dark:bg-slate-950/10 text-slate-500 space-y-6">
                     <div className="h-16 w-16 rounded-2xl bg-indigo-500/5 flex items-center justify-center border border-indigo-500/10">
-                      <GraduationCap className="h-8 w-8 text-indigo-500/20" />
+                      <GraduationCap className="h-8 w-8 text-indigo-500/40 dark:text-indigo-500/20" />
                     </div>
                     <div className="text-center max-w-sm px-6">
-                      <p className="font-bold text-slate-300 text-lg tracking-tight">
+                      <p className="font-bold text-slate-700 dark:text-slate-300 text-lg tracking-tight">
                         Belum ada riwayat pendidikan tambahan
                       </p>
-                      <p className="text-xs mt-2 text-slate-500 leading-relaxed italic">
+                      <p className="text-xs mt-2 text-slate-500 dark:text-slate-500 leading-relaxed italic">
                         Anda dapat menambahkan riwayat pendidikan lain jika
                         diperlukan.
                       </p>
@@ -7456,13 +7456,13 @@ export function EmployeeSelfProfileForm({
               </div>
             </div>
 
-            <Separator className="bg-slate-800/50" />
+            <Separator className="bg-slate-200 dark:bg-slate-800/50" />
 
             {/* Sertifikasi & Pelatihan */}
             <div className="space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-2">
                 <div className="space-y-1.5">
-                  <h4 className="text-xl font-bold text-slate-100 flex items-center gap-3 tracking-tight">
+                  <h4 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-3 tracking-tight">
                     <div className="h-2 w-2 rounded-full bg-emerald-500" />
                     Sertifikasi & Pelatihan
                   </h4>
@@ -7494,13 +7494,13 @@ export function EmployeeSelfProfileForm({
                 {sertifikasiFields.map((field, index) => (
                   <div
                     key={field.id}
-                    className="relative bg-slate-900/30 border border-slate-800/60 rounded-[2.5rem] overflow-hidden shadow-sm animate-in slide-in-from-right-4 duration-500"
+                    className="relative bg-white dark:bg-slate-900/30 border border-slate-200 dark:border-slate-800/60 rounded-[2.5rem] overflow-hidden shadow-sm animate-in slide-in-from-right-4 duration-500"
                     style={{ animationDelay: `${index * 100}ms` }}
                   >
                     <div className="absolute top-10 left-0 w-1.5 h-12 bg-emerald-500/40 rounded-r-full" />
 
                     <div className="flex items-center justify-between p-8 sm:p-10 pb-0">
-                      <h5 className="text-sm font-bold text-slate-300 uppercase tracking-[0.3em]">
+                      <h5 className="text-sm font-bold text-slate-900 dark:text-slate-300 uppercase tracking-[0.3em]">
                         Sertifikasi #{index + 1}
                       </h5>
                       <Button
@@ -7528,7 +7528,7 @@ export function EmployeeSelfProfileForm({
                                 <FormControl>
                                   <Input
                                     {...field}
-                                    className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80"
+                                    className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80"
                                     placeholder="Nama Sertifikasi"
                                   />
                                 </FormControl>
@@ -7548,7 +7548,7 @@ export function EmployeeSelfProfileForm({
                                 <FormControl>
                                   <Input
                                     {...field}
-                                    className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80"
+                                    className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80"
                                     placeholder="Instansi Penyelenggara"
                                   />
                                 </FormControl>
@@ -7571,11 +7571,11 @@ export function EmployeeSelfProfileForm({
                                     value={field.value || ""}
                                   >
                                     <FormControl>
-                                      <SelectTrigger className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80">
+                                      <SelectTrigger className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80">
                                         <SelectValue placeholder="Tahun" />
                                       </SelectTrigger>
                                     </FormControl>
-                                    <SelectContent className="bg-slate-900 border-slate-800 max-h-60">
+                                    <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 max-h-60">
                                       {YEAR_OPTIONS.map((opt) => (
                                         <SelectItem key={opt} value={opt}>
                                           {opt}
@@ -7601,11 +7601,11 @@ export function EmployeeSelfProfileForm({
                                     value={field.value || ""}
                                   >
                                     <FormControl>
-                                      <SelectTrigger className="bg-slate-950/40 h-12 rounded-xl border-slate-800/80">
+                                      <SelectTrigger className="bg-white dark:bg-slate-950/40 h-12 rounded-xl border-slate-200 dark:border-slate-800/80">
                                         <SelectValue placeholder="Expired" />
                                       </SelectTrigger>
                                     </FormControl>
-                                    <SelectContent className="bg-slate-900 border-slate-800 max-h-60">
+                                    <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 max-h-60">
                                       {EXPIRED_YEAR_OPTIONS.map((opt) => (
                                         <SelectItem key={opt} value={opt}>
                                           {opt}
@@ -7645,15 +7645,15 @@ export function EmployeeSelfProfileForm({
                   </div>
                 ))}
                 {sertifikasiFields.length === 0 && (
-                  <div className="flex flex-col items-center justify-center py-20 rounded-[3rem] border-2 border-dashed border-slate-800/40 bg-slate-950/10 text-slate-500 space-y-6">
+                  <div className="flex flex-col items-center justify-center py-20 rounded-[3rem] border-2 border-dashed border-slate-300 dark:border-slate-800/40 bg-slate-50 dark:bg-slate-950/10 text-slate-500 space-y-6">
                     <div className="h-16 w-16 rounded-2xl bg-emerald-500/5 flex items-center justify-center border border-emerald-500/10">
-                      <Award className="h-8 w-8 text-emerald-500/20" />
+                      <Award className="h-8 w-8 text-emerald-500/40 dark:text-emerald-500/20" />
                     </div>
                     <div className="text-center max-w-sm px-6">
-                      <p className="font-bold text-slate-300 text-lg tracking-tight">
+                      <p className="font-bold text-slate-700 dark:text-slate-300 text-lg tracking-tight">
                         Belum ada sertifikasi yang ditambahkan
                       </p>
-                      <p className="text-xs mt-2 text-slate-500 leading-relaxed italic">
+                      <p className="text-xs mt-2 text-slate-500 dark:text-slate-500 leading-relaxed italic">
                         Menambahkan sertifikasi dapat meningkatkan kredibilitas
                         profil profesional Anda.
                       </p>
@@ -7679,42 +7679,51 @@ export function EmployeeSelfProfileForm({
               Isi setiap bagian secara bertahap agar tidak terasa berat.
             </CardDescription>
           </div>
-          <div className="text-sm text-slate-400">
+          <div className="text-sm text-slate-600 dark:text-slate-400">
             Langkah {currentStep + 1} dari {stepCount}
           </div>
         </div>
-        <div className="space-y-3">
-          <Progress
-            value={((currentStep + 1) / stepCount) * 100}
-            className="h-2 rounded-full"
-          />
-          <div className="grid gap-2 sm:grid-cols-5">
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs font-semibold">
+              <span className="text-slate-700 dark:text-slate-300">Progress</span>
+              <span className="text-slate-600 dark:text-slate-400">{Math.round(((currentStep + 1) / stepCount) * 100)}%</span>
+            </div>
+            <Progress
+              value={((currentStep + 1) / stepCount) * 100}
+              className="h-2 rounded-full"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2 lg:grid lg:grid-cols-6">
             {STEP_CONFIG.map((item, index) => {
               const isCompleted = index < currentStep;
               const isActive = index === currentStep;
               return (
                 <div
                   key={item.title}
-                  className={`flex items-center gap-2 rounded-2xl px-3 py-2 text-[0.72rem] ${
+                  className={`flex flex-col items-center gap-2 rounded-2xl p-3 text-[0.7rem] flex-1 transition-all ${
                     isActive
-                      ? "bg-slate-950 text-slate-100"
+                      ? "bg-primary/10 dark:bg-primary/20 border-2 border-primary dark:border-primary"
                       : isCompleted
-                        ? "bg-slate-900/90 text-slate-300"
-                        : "bg-slate-950/70 text-slate-500"
+                        ? "bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/50"
+                        : "bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50"
                   }`}
                 >
                   <span
-                    className={`flex h-6 w-6 items-center justify-center rounded-full text-[0.72rem] font-semibold ${
+                    className={`flex h-7 w-7 items-center justify-center rounded-full text-[0.7rem] font-bold transition-all ${
                       isActive
-                        ? "bg-primary text-white"
+                        ? "bg-primary text-white shadow-md shadow-primary/30"
                         : isCompleted
-                          ? "bg-emerald-500 text-slate-950"
-                          : "bg-slate-800 text-slate-400"
+                          ? "bg-emerald-500 text-white"
+                          : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
                     }`}
                   >
-                    {isCompleted ? <Check className="h-4 w-4" /> : index + 1}
+                    {isCompleted ? <Check className="h-3.5 w-3.5" /> : index + 1}
                   </span>
-                  <p className="min-w-0 truncate font-medium">{item.title}</p>
+                  <p className="text-center font-semibold text-slate-900 dark:text-slate-100 leading-tight max-w-[90px]">{item.title}</p>
+                  <p className="text-[0.65rem] text-slate-500 dark:text-slate-400">
+                    {isActive ? "Sedang diisi" : isCompleted ? "Selesai" : "Belum diisi"}
+                  </p>
                 </div>
               );
             })}
@@ -7723,10 +7732,10 @@ export function EmployeeSelfProfileForm({
       </CardHeader>
       <CardContent className="space-y-10 px-10 py-10">
         <div className="space-y-6">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-700 dark:text-slate-300">
             {currentStepConfig.title}
           </p>
-          <p className="max-w-3xl text-sm leading-7 text-slate-400">
+          <p className="max-w-3xl text-sm leading-7 text-slate-600 dark:text-slate-400">
             {currentStepConfig.description}
           </p>
         </div>
@@ -7740,7 +7749,7 @@ export function EmployeeSelfProfileForm({
               className="space-y-10"
             >
               {renderStepContent()}
-              <div className="space-y-5 border-t border-slate-800/60 pt-6">
+              <div className="space-y-5 border-t border-slate-200 dark:border-slate-800/60 pt-6">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex flex-col gap-3 sm:flex-row">
                     <Button
@@ -7799,7 +7808,7 @@ export function EmployeeSelfProfileForm({
           </Form>
         </UploadStateContext.Provider>
       </CardContent>
-      <CardFooter className="flex flex-col gap-3 border-t border-slate-800/60 pt-5 sm:flex-row sm:items-center sm:justify-between">
+      <CardFooter className="flex flex-col gap-3 border-t border-slate-200 dark:border-slate-800/60 pt-5 sm:flex-row sm:items-center sm:justify-between">
         <Button variant="ghost" type="button" onClick={onCancel}>
           <Undo className="mr-2 h-4 w-4" /> Keluar
         </Button>

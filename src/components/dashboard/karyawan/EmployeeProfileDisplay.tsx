@@ -56,11 +56,11 @@ const SectionTitle = ({
         {icon}
       </div>
       <div>
-        <h3 className="text-lg font-bold tracking-tight text-slate-100">
+        <h3 className="text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100">
           {children}
         </h3>
         {description && (
-          <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">
+          <p className="text-xs text-slate-600 dark:text-slate-500 font-medium uppercase tracking-wider">
             {description}
           </p>
         )}
@@ -81,15 +81,15 @@ const DataRow = ({
   className?: string;
 }) => (
   <div
-    className={`group flex flex-col gap-1.5 py-3 border-b border-slate-800/40 last:border-0 ${className}`}
+    className={`group flex flex-col gap-1.5 py-3 border-b border-slate-200 dark:border-slate-800/40 last:border-0 ${className}`}
   >
-    <div className="flex items-center gap-2 text-slate-500 font-semibold uppercase tracking-[0.08em] text-[10px]">
+    <div className="flex items-center gap-2 text-slate-600 dark:text-slate-500 font-semibold uppercase tracking-[0.08em] text-[10px]">
       {icon}
       {label}
     </div>
-    <div className="text-sm font-bold text-slate-200 min-h-[1.25rem]">
+    <div className="text-sm font-bold text-slate-900 dark:text-slate-200 min-h-[1.25rem]">
       {value || (
-        <span className="text-slate-600 font-medium italic text-xs">
+        <span className="text-slate-500 dark:text-slate-600 font-medium italic text-xs">
           Belum diisi
         </span>
       )}
@@ -112,13 +112,13 @@ const FileStatus = ({
 
   if (notOwned) {
     return (
-      <div className="flex items-center justify-between py-3 border-b border-slate-800/40 last:border-0">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+      <div className="flex items-center justify-between py-3 border-b border-slate-200 dark:border-slate-800/40 last:border-0">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-500">
           {label}
         </span>
         <Badge
           variant="outline"
-          className="bg-slate-900/50 text-slate-500 border-slate-800 text-[10px]"
+          className="bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-500 border-slate-300 dark:border-slate-800 text-[10px]"
         >
           File belum tersedia
         </Badge>
@@ -149,14 +149,14 @@ const FileStatus = ({
   };
 
   return (
-    <div className="flex items-center justify-between py-3 border-b border-slate-800/40 last:border-0 group">
+    <div className="flex items-center justify-between py-3 border-b border-slate-200 dark:border-slate-800/40 last:border-0 group">
       <div className="flex items-center gap-3">
         {fileId ? (
-          <div className="h-8 w-8 rounded-lg bg-slate-800/50 flex items-center justify-center border border-slate-700 shrink-0 text-slate-500">
+          <div className="h-8 w-8 rounded-lg bg-slate-200 dark:bg-slate-800/50 flex items-center justify-center border border-slate-300 dark:border-slate-700 shrink-0 text-slate-700 dark:text-slate-500">
             <FileText className="h-4 w-4" />
           </div>
         ) : null}
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-500">
           {label}
         </span>
       </div>
@@ -342,11 +342,11 @@ export function EmployeeProfileDisplay({
   return (
     <div className="space-y-8 pb-12 animate-in fade-in duration-700">
       {/* 1. Header Profile */}
-      <div className="relative group overflow-hidden rounded-[2.5rem] bg-slate-900/40 border border-slate-800/60 p-8 md:p-10 shadow-2xl shadow-blue-500/5">
+      <div className="relative group overflow-hidden rounded-[2.5rem] bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800/60 p-8 md:p-10 shadow-sm dark:shadow-2xl dark:shadow-blue-500/5">
         <div className="absolute top-0 right-0 -m-8 h-64 w-64 rounded-full bg-primary/5 blur-3xl group-hover:bg-primary/10 transition-colors duration-1000" />
         <div className="relative flex flex-col md:flex-row items-center gap-8 md:gap-10">
           <div className="relative group/avatar">
-            <Avatar className="h-32 w-32 md:h-40 md:w-40 rounded-[2.5rem] border-4 border-slate-800 shadow-2xl transition-all duration-500 group-hover/avatar:scale-[1.02] group-hover/avatar:border-primary/30">
+            <Avatar className="h-32 w-32 md:h-40 md:w-40 rounded-[2.5rem] border-4 border-slate-300 dark:border-slate-800 shadow-2xl transition-all duration-500 group-hover/avatar:scale-[1.02] group-hover/avatar:border-primary/30">
               {profilePhotoFileId ? (
                 <SecureDriveImage
                   fileId={profilePhotoFileId}
@@ -355,7 +355,7 @@ export function EmployeeProfileDisplay({
                   fallbackIcon={<User className="h-16 w-16 text-slate-400" />}
                 />
               ) : (
-                <AvatarFallback className="bg-slate-800 text-slate-400">
+                <AvatarFallback className="bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
                   <User className="h-16 w-16" />
                 </AvatarFallback>
               )}
@@ -365,7 +365,7 @@ export function EmployeeProfileDisplay({
           <div className="flex-1 text-center md:text-left space-y-4">
             <div className="space-y-1">
               <div className="flex flex-col md:flex-row items-center gap-3">
-                <h1 className="text-3xl md:text-4xl font-black tracking-tight text-slate-100">
+                <h1 className="text-3xl md:text-4xl font-black tracking-tight text-slate-900 dark:text-slate-100">
                   {iden.fullName || employeeProfile.fullName}
                 </h1>
                 <Badge
@@ -379,12 +379,12 @@ export function EmployeeProfileDisplay({
                     : `Belum Lengkap (${completeness.completedMandatoryCount}/${completeness.totalMandatoryCount})`}
                 </Badge>
               </div>
-              <p className="text-slate-400 font-bold tracking-wider uppercase text-xs flex items-center justify-center md:justify-start gap-4">
+              <p className="text-slate-700 dark:text-slate-400 font-bold tracking-wider uppercase text-xs flex items-center justify-center md:justify-start gap-4">
                 <span className="flex items-center gap-1.5">
                   <Mail className="h-3 w-3 text-primary" />{" "}
                   {iden.personalEmail || employeeProfile.email}
                 </span>
-                <span className="hidden md:inline text-slate-700">|</span>
+                <span className="hidden md:inline text-slate-400 dark:text-slate-700">|</span>
                 <span className="flex items-center gap-1.5">
                   <Phone className="h-3 w-3 text-primary" />{" "}
                   {iden.phone || employeeProfile.phone}
@@ -402,16 +402,16 @@ export function EmployeeProfileDisplay({
             </div>
 
             {!completeness.isFullyComplete && (
-              <div className="mt-4 flex flex-col md:flex-row items-center md:items-start gap-2 bg-orange-500/10 border border-orange-500/20 rounded-xl p-3 text-left">
+              <div className="mt-4 flex flex-col md:flex-row items-center md:items-start gap-2 bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/20 rounded-xl p-3 text-left">
                 <div className="flex-1">
-                  <p className="text-xs text-orange-400 font-semibold mb-1">
+                  <p className="text-xs text-orange-700 dark:text-orange-400 font-semibold mb-1">
                     Blok yang belum lengkap:
                   </p>
-                  <ul className="text-xs text-slate-300 flex flex-wrap gap-2">
+                  <ul className="text-xs text-slate-700 dark:text-slate-300 flex flex-wrap gap-2">
                     {completeness.missingBlocks.map((block, i) => (
                       <li
                         key={i}
-                        className="bg-slate-900/50 px-2 py-1 rounded-md"
+                        className="bg-orange-100 dark:bg-slate-900/50 px-2 py-1 rounded-md"
                       >
                         • {block}
                       </li>
@@ -419,10 +419,10 @@ export function EmployeeProfileDisplay({
                   </ul>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+                  <p className="text-[10px] text-slate-600 dark:text-slate-500 font-bold uppercase tracking-widest">
                     Progress
                   </p>
-                  <p className="text-lg font-black text-orange-400">
+                  <p className="text-lg font-black text-orange-700 dark:text-orange-400">
                     {completeness.percentage}%
                   </p>
                 </div>
@@ -436,7 +436,7 @@ export function EmployeeProfileDisplay({
         {/* Left Column (Main Data) */}
         <div className="space-y-8">
           {/* Section: Data Pribadi */}
-          <Card className="border-slate-800 bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-xl border-t-4 border-t-blue-500/20">
+          <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-sm dark:shadow-xl border-t-4 border-t-blue-200 dark:border-t-blue-500/20">
             <CardContent className="p-8 md:p-10">
               <SectionTitle
                 icon={<User className="h-5 w-5" />}
@@ -500,7 +500,7 @@ export function EmployeeProfileDisplay({
           </Card>
 
           {/* Section: Alamat */}
-          <Card className="border-slate-800 bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-xl border-t-4 border-t-emerald-500/20">
+          <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-sm dark:shadow-xl border-t-4 border-t-emerald-200 dark:border-t-emerald-500/20">
             <CardContent className="p-8 md:p-10">
               <SectionTitle
                 icon={<Home className="h-5 w-5" />}
@@ -510,25 +510,25 @@ export function EmployeeProfileDisplay({
               </SectionTitle>
               <div className="space-y-6">
                 <div className="group space-y-2">
-                  <div className="flex items-center gap-2 text-slate-500 font-semibold uppercase tracking-[0.08em] text-[10px]">
+                  <div className="flex items-center gap-2 text-slate-600 dark:text-slate-500 font-semibold uppercase tracking-[0.08em] text-[10px]">
                     <MapPin className="h-3 w-3" /> Alamat Domisili Saat Ini
                   </div>
-                  <p className="text-sm font-bold text-slate-200 leading-relaxed bg-slate-900/30 p-4 rounded-2xl border border-slate-800/40 group-hover:border-primary/20 transition-colors line-clamp-3">
+                  <p className="text-sm font-bold text-slate-900 dark:text-slate-200 leading-relaxed bg-slate-100 dark:bg-slate-900/30 p-4 rounded-2xl border border-slate-300 dark:border-slate-800/40 group-hover:border-primary/20 transition-colors line-clamp-3">
                     {formatStructuredAddress(addr.domisili) ||
                       addr.addressCurrent || (
-                        <span className="text-slate-600 font-medium italic">
+                        <span className="text-slate-500 dark:text-slate-600 font-medium italic">
                           Belum diisi
                         </span>
                       )}
                   </p>
                 </div>
                 <div className="group space-y-2">
-                  <div className="flex items-center gap-2 text-slate-500 font-semibold uppercase tracking-[0.08em] text-[10px]">
+                  <div className="flex items-center gap-2 text-slate-600 dark:text-slate-500 font-semibold uppercase tracking-[0.08em] text-[10px]">
                     <MapPin className="h-3 w-3" /> Alamat Sesuai KTP
                   </div>
-                  <p className="text-sm font-bold text-slate-200 leading-relaxed bg-slate-900/30 p-4 rounded-2xl border border-slate-800/40 group-hover:border-primary/20 transition-colors line-clamp-3">
+                  <p className="text-sm font-bold text-slate-900 dark:text-slate-200 leading-relaxed bg-slate-100 dark:bg-slate-900/30 p-4 rounded-2xl border border-slate-300 dark:border-slate-800/40 group-hover:border-primary/20 transition-colors line-clamp-3">
                     {formatStructuredAddress(addr.ktp) || (
-                      <span className="text-slate-600 font-medium italic">
+                      <span className="text-slate-500 dark:text-slate-600 font-medium italic">
                         Belum diisi
                       </span>
                     )}
@@ -539,7 +539,7 @@ export function EmployeeProfileDisplay({
           </Card>
 
           {/* Section: Pendidikan & Pengembangan */}
-          <Card className="border-slate-800 bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-xl border-t-4 border-t-indigo-500/20">
+          <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-sm dark:shadow-xl border-t-4 border-t-indigo-200 dark:border-t-indigo-500/20">
             <CardContent className="p-8 md:p-10">
               <SectionTitle
                 icon={<GraduationCap className="h-5 w-5" />}
@@ -555,7 +555,7 @@ export function EmployeeProfileDisplay({
                     <GraduationCap className="h-3 w-3" /> Pendidikan Terakhir
                   </h4>
                   {pp.pendidikanTerakhir?.jenjang ? (
-                    <div className="space-y-1 bg-slate-900/20 p-5 rounded-[2rem] border border-slate-800/40">
+                    <div className="space-y-1 bg-slate-50 dark:bg-slate-900/20 p-5 rounded-[2rem] border border-slate-300 dark:border-slate-800/40">
                       <DataRow
                         label="Jenjang"
                         value={pp.pendidikanTerakhir.jenjang}
@@ -582,7 +582,7 @@ export function EmployeeProfileDisplay({
                       />
                     </div>
                   ) : (
-                    <div className="bg-slate-900/20 p-5 rounded-[2rem] border border-dashed border-slate-800/40 text-center">
+                    <div className="bg-slate-50 dark:bg-slate-900/20 p-5 rounded-[2rem] border border-dashed border-slate-300 dark:border-slate-800/40 text-center">
                       <p className="text-xs text-slate-500 font-bold italic">
                         Belum diisi
                       </p>
@@ -603,7 +603,7 @@ export function EmployeeProfileDisplay({
                         .map((cert: any, idx: number) => (
                           <div
                             key={idx}
-                            className="bg-slate-900/20 p-4 rounded-[1.5rem] border border-slate-800/40"
+                            className="bg-slate-50 dark:bg-slate-900/20 p-4 rounded-[1.5rem] border border-slate-300 dark:border-slate-800/40"
                           >
                             <p className="text-sm font-bold text-slate-200 mb-1">
                               {cert.namaSertifikasi || "-"}
@@ -636,7 +636,7 @@ export function EmployeeProfileDisplay({
                       )}
                     </div>
                   ) : (
-                    <div className="bg-slate-900/20 p-5 rounded-[2rem] border border-dashed border-slate-800/40 text-center flex flex-col justify-center min-h-[80px]">
+                    <div className="bg-slate-50 dark:bg-slate-900/20 p-5 rounded-[2rem] border border-dashed border-slate-300 dark:border-slate-800/40 text-center flex flex-col justify-center min-h-[80px]">
                       <p className="text-xs text-slate-500 font-bold italic">
                         Belum diisi
                       </p>
@@ -655,7 +655,7 @@ export function EmployeeProfileDisplay({
                     {pp.riwayatPendidikan.map((edu: any, idx: number) => (
                       <div
                         key={idx}
-                        className="bg-slate-900/20 p-5 rounded-[2rem] border border-slate-800/40"
+                        className="bg-slate-50 dark:bg-slate-900/20 p-5 rounded-[2rem] border border-slate-300 dark:border-slate-800/40"
                       >
                         <DataRow
                           label="Jenjang"
@@ -690,7 +690,7 @@ export function EmployeeProfileDisplay({
         {/* Internship Documents Section - Only for internship profiles */}
         {isMagang && (
           <>
-            <Card className="border-slate-800 bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-xl border-t-4 border-t-amber-500/20">
+            <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-sm dark:shadow-xl border-t-4 border-t-amber-200 dark:border-t-amber-500/20">
               <CardContent className="p-8">
                 <SectionTitle
                   icon={<FileText className="h-5 w-5" />}
@@ -711,7 +711,7 @@ export function EmployeeProfileDisplay({
             </Card>
 
             {/* Pembimbing Kampus/Sekolah Section - For internship profiles */}
-            <Card className="border-slate-800 bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-xl border-t-4 border-t-indigo-500/20">
+            <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-sm dark:shadow-xl border-t-4 border-t-indigo-200 dark:border-t-indigo-500/20">
               <CardContent className="p-8">
                 <SectionTitle
                   icon={<GraduationCap className="h-5 w-5" />}
@@ -724,7 +724,7 @@ export function EmployeeProfileDisplay({
                   {family.majorName && <DataRow label="Program Studi/Jurusan" value={family.majorName} />}
                   {family.advisorName && <DataRow label="Nama Pembimbing" value={family.advisorName} />}
                   {family.advisorContact && <DataRow label="No HP/Email" value={family.advisorContact} />}
-                  {!family.schoolName && !family.advisorName && <p className="text-xs text-slate-500 italic">Belum diisi</p>}
+                  {!family.schoolName && !family.advisorName && <p className="text-xs text-slate-600 dark:text-slate-500 italic">Belum diisi</p>}
                 </div>
               </CardContent>
             </Card>
@@ -735,7 +735,7 @@ export function EmployeeProfileDisplay({
         <div className="space-y-8">
           {/* Section: Dokumen Administratif - Hidden for internship profiles */}
           {!isMagang && (
-          <Card className="border-slate-800 bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-xl border-t-4 border-t-amber-500/20">
+          <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-sm dark:shadow-xl border-t-4 border-t-amber-200 dark:border-t-amber-500/20">
             <CardContent className="p-8">
               <SectionTitle
                 icon={<FileText className="h-5 w-5" />}
@@ -758,7 +758,7 @@ export function EmployeeProfileDisplay({
                   <DataRow label="Nomor SIM" value={docAdmin.simNumber} />
                 )}
               </div>
-              <Separator className="bg-slate-800/60 mb-6" />
+              <Separator className="bg-slate-300 dark:bg-slate-800/60 mb-6" />
               <div className="space-y-0.5">
                 <FileStatus label="Foto KTP" url={iden.ktpPhotoUrl} />
                 <FileStatus
@@ -789,7 +789,7 @@ export function EmployeeProfileDisplay({
 
           {/* Section: Keuangan - Hidden for internship profiles */}
           {!isMagang && (
-          <Card className="border-slate-800 bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-xl border-t-4 border-t-rose-500/20">
+          <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-sm dark:shadow-xl border-t-4 border-t-rose-200 dark:border-t-rose-500/20">
             <CardContent className="p-8">
               <SectionTitle
                 icon={<Banknote className="h-5 w-5" />}
@@ -802,7 +802,7 @@ export function EmployeeProfileDisplay({
                 <DataRow label="Nomor Rekening" value={rek.bankAccountNumber} />
                 <DataRow label="Atas Nama" value={rek.bankAccountHolderName} />
               </div>
-              <Separator className="bg-slate-800/60 mb-6" />
+              <Separator className="bg-slate-300 dark:bg-slate-800/60 mb-6" />
               <FileStatus label="Bukti Rekening" url={rek.bankDocumentUrl} />
             </CardContent>
           </Card>
@@ -811,7 +811,7 @@ export function EmployeeProfileDisplay({
           {/* Section: Rekening Uang Saku for internship OR Finansial for employees */}
           {isMagang ? (
             // Internship: Simplified bank account section
-            <Card className="border-slate-800 bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-xl border-t-4 border-t-rose-500/20">
+            <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-sm dark:shadow-xl border-t-4 border-t-rose-200 dark:border-t-rose-500/20">
               <CardContent className="p-8">
                 <SectionTitle
                   icon={<Banknote className="h-5 w-5" />}
@@ -823,7 +823,7 @@ export function EmployeeProfileDisplay({
                   {rek.bankName && <DataRow label="Nama Bank" value={rek.bankName} />}
                   {rek.bankAccountNumber && <DataRow label="Nomor Rekening" value={rek.bankAccountNumber} />}
                   {rek.bankAccountHolderName && <DataRow label="Atas Nama" value={rek.bankAccountHolderName} />}
-                  {!rek.bankName && !rek.bankAccountNumber && <p className="text-xs text-slate-500 italic">Belum diisi</p>}
+                  {!rek.bankName && !rek.bankAccountNumber && <p className="text-xs text-slate-600 dark:text-slate-500 italic">Belum diisi</p>}
                 </div>
               </CardContent>
             </Card>
@@ -831,7 +831,7 @@ export function EmployeeProfileDisplay({
 
           {/* Section: Data Keluarga */}
           {!isMagang && (
-          <Card className="border-slate-800 bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-xl border-t-4 border-t-purple-500/20">
+          <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-sm dark:shadow-xl border-t-4 border-t-purple-200 dark:border-t-purple-500/20">
             <CardContent className="p-8 md:p-10">
               <SectionTitle
                 icon={<Users className="h-5 w-5" />}
@@ -841,35 +841,35 @@ export function EmployeeProfileDisplay({
               </SectionTitle>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                <div className="bg-slate-900/60 rounded-3xl p-4 border border-slate-800/60 text-center">
-                  <p className="text-[10px] font-black uppercase text-slate-500 tracking-tighter mb-1">
+                <div className="bg-slate-100 dark:bg-slate-900/60 rounded-3xl p-4 border border-slate-300 dark:border-slate-800/60 text-center">
+                  <p className="text-[10px] font-black uppercase text-slate-700 dark:text-slate-500 tracking-tighter mb-1">
                     Saudara
                   </p>
-                  <p className="text-xl font-black text-slate-200">
+                  <p className="text-xl font-black text-slate-900 dark:text-slate-200">
                     {totalSiblings}
                   </p>
                 </div>
-                <div className="bg-slate-900/60 rounded-3xl p-4 border border-slate-800/60 text-center">
-                  <p className="text-[10px] font-black uppercase text-slate-500 tracking-tighter mb-1">
+                <div className="bg-slate-100 dark:bg-slate-900/60 rounded-3xl p-4 border border-slate-300 dark:border-slate-800/60 text-center">
+                  <p className="text-[10px] font-black uppercase text-slate-700 dark:text-slate-500 tracking-tighter mb-1">
                     Tanggungan
                   </p>
-                  <p className="text-xl font-black text-slate-200">
+                  <p className="text-xl font-black text-slate-900 dark:text-slate-200">
                     {totalDependents}
                   </p>
                 </div>
-                <div className="bg-slate-900/60 rounded-3xl p-4 border border-slate-800/60 text-center">
-                  <p className="text-[10px] font-black uppercase text-slate-500 tracking-tighter mb-1">
+                <div className="bg-slate-100 dark:bg-slate-900/60 rounded-3xl p-4 border border-slate-300 dark:border-slate-800/60 text-center">
+                  <p className="text-[10px] font-black uppercase text-slate-700 dark:text-slate-500 tracking-tighter mb-1">
                     Status Ayah
                   </p>
-                  <p className="text-sm font-bold text-slate-200 truncate px-1">
+                  <p className="text-sm font-bold text-slate-900 dark:text-slate-200 truncate px-1">
                     {family.orangTua?.ayah?.status || "-"}
                   </p>
                 </div>
-                <div className="bg-slate-900/60 rounded-3xl p-4 border border-slate-800/60 text-center">
-                  <p className="text-[10px] font-black uppercase text-slate-500 tracking-tighter mb-1">
+                <div className="bg-slate-100 dark:bg-slate-900/60 rounded-3xl p-4 border border-slate-300 dark:border-slate-800/60 text-center">
+                  <p className="text-[10px] font-black uppercase text-slate-700 dark:text-slate-500 tracking-tighter mb-1">
                     Status Ibu
                   </p>
-                  <p className="text-sm font-bold text-slate-200 truncate px-1">
+                  <p className="text-sm font-bold text-slate-900 dark:text-slate-200 truncate px-1">
                     {family.orangTua?.ibu?.status || "-"}
                   </p>
                 </div>
@@ -880,7 +880,7 @@ export function EmployeeProfileDisplay({
                   <h4 className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-2">
                     <User className="h-3 w-3" /> Data Ayah
                   </h4>
-                  <div className="space-y-1 bg-slate-900/20 p-5 rounded-[2rem] border border-slate-800/40">
+                  <div className="space-y-1 bg-slate-50 dark:bg-slate-900/20 p-5 rounded-[2rem] border border-slate-300 dark:border-slate-800/40">
                     <DataRow
                       label="Nama"
                       value={family.orangTua?.ayah?.name}
@@ -902,7 +902,7 @@ export function EmployeeProfileDisplay({
                   <h4 className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-2">
                     <User className="h-3 w-3" /> Data Ibu
                   </h4>
-                  <div className="space-y-1 bg-slate-900/20 p-5 rounded-[2rem] border border-slate-800/40">
+                  <div className="space-y-1 bg-slate-50 dark:bg-slate-900/20 p-5 rounded-[2rem] border border-slate-300 dark:border-slate-800/40">
                     <DataRow
                       label="Nama"
                       value={family.orangTua?.ibu?.name}
@@ -927,7 +927,7 @@ export function EmployeeProfileDisplay({
 
           {/* Section: Kontak Darurat & Informasi Wali for internship */}
           {isMagang && (
-            <Card className="border-slate-800 bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-xl border-t-4 border-t-purple-500/20">
+            <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-sm dark:shadow-xl border-t-4 border-t-purple-200 dark:border-t-purple-500/20">
               <CardContent className="p-8 md:p-10">
                 <SectionTitle
                   icon={<Users className="h-5 w-5" />}
@@ -941,10 +941,10 @@ export function EmployeeProfileDisplay({
                   <h4 className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-2">
                     <User className="h-3 w-3" /> Ayah / Wali
                   </h4>
-                  <div className="space-y-1 bg-slate-900/20 p-5 rounded-[2rem] border border-slate-800/40">
+                  <div className="space-y-1 bg-slate-50 dark:bg-slate-900/20 p-5 rounded-[2rem] border border-slate-300 dark:border-slate-800/40">
                     {family.orangTua?.ayah?.name && <DataRow label="Nama" value={family.orangTua?.ayah?.name} className="py-2" />}
                     {family.orangTua?.ayah?.phone && <DataRow label="No HP" value={family.orangTua?.ayah?.phone} className="py-2 border-0" />}
-                    {!family.orangTua?.ayah?.name && !family.orangTua?.ayah?.phone && <p className="text-xs text-slate-500 italic">Belum diisi</p>}
+                    {!family.orangTua?.ayah?.name && !family.orangTua?.ayah?.phone && <p className="text-xs text-slate-600 dark:text-slate-500 italic">Belum diisi</p>}
                   </div>
                 </div>
 
@@ -953,10 +953,10 @@ export function EmployeeProfileDisplay({
                   <h4 className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-2">
                     <User className="h-3 w-3" /> Ibu / Wali
                   </h4>
-                  <div className="space-y-1 bg-slate-900/20 p-5 rounded-[2rem] border border-slate-800/40">
+                  <div className="space-y-1 bg-slate-50 dark:bg-slate-900/20 p-5 rounded-[2rem] border border-slate-300 dark:border-slate-800/40">
                     {family.orangTua?.ibu?.name && <DataRow label="Nama" value={family.orangTua?.ibu?.name} className="py-2" />}
                     {family.orangTua?.ibu?.phone && <DataRow label="No HP" value={family.orangTua?.ibu?.phone} className="py-2 border-0" />}
-                    {!family.orangTua?.ibu?.name && !family.orangTua?.ibu?.phone && <p className="text-xs text-slate-500 italic">Belum diisi</p>}
+                    {!family.orangTua?.ibu?.name && !family.orangTua?.ibu?.phone && <p className="text-xs text-slate-600 dark:text-slate-500 italic">Belum diisi</p>}
                   </div>
                 </div>
 
@@ -971,7 +971,7 @@ export function EmployeeProfileDisplay({
           )}
 
           {/* Section: Kontak Darurat */}
-          <Card className="border-slate-800 bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-xl border-t-4 border-t-cyan-500/20">
+          <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40 rounded-[2.5rem] overflow-hidden shadow-sm dark:shadow-xl border-t-4 border-t-cyan-200 dark:border-t-cyan-500/20">
             <CardContent className="p-8">
               <SectionTitle
                 icon={<Phone className="h-5 w-5" />}
@@ -984,7 +984,7 @@ export function EmployeeProfileDisplay({
                   contacts.map((contact, idx) => (
                     <div
                       key={contact.id}
-                      className={`p-4 rounded-3xl border border-slate-800/40 ${contact.priority === "Utama" ? "bg-primary/5 border-primary/20 shadow-inner shadow-primary/5" : "bg-slate-900/30"}`}
+                      className={`p-4 rounded-3xl border ${contact.priority === "Utama" ? "bg-primary/5 dark:bg-primary/10 border-primary/30 dark:border-primary/20 shadow-inner shadow-primary/5" : "bg-slate-100 dark:bg-slate-900/30 border-slate-300 dark:border-slate-800/40"}`}
                     >
                       <div className="flex justify-between items-start mb-2">
                         <span className="text-[10px] font-black uppercase tracking-widest text-primary">
@@ -994,17 +994,17 @@ export function EmployeeProfileDisplay({
                           <CheckCircle2 className="h-3 w-3 text-primary" />
                         )}
                       </div>
-                      <p className="text-sm font-bold text-slate-100 mb-1">
+                      <p className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">
                         {contact.name}
                       </p>
                       <div className="flex flex-col gap-1">
-                        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                        <span className="text-[10px] text-slate-700 dark:text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1.5">
                           <Heart className="h-3 w-3" /> {contact.relation}
                           {contact.relationOther
                             ? ` (${contact.relationOther})`
                             : ""}
                         </span>
-                        <span className="text-xs text-slate-300 font-black flex items-center gap-1.5">
+                        <span className="text-xs text-slate-800 dark:text-slate-300 font-black flex items-center gap-1.5">
                           <Phone className="h-3 w-3 text-primary" />{" "}
                           {contact.phone}
                         </span>
@@ -1012,9 +1012,9 @@ export function EmployeeProfileDisplay({
                     </div>
                   ))
                 ) : (
-                  <div className="text-center py-6 bg-slate-900/30 rounded-3xl border border-dashed border-slate-800/60">
-                    <AlertCircle className="h-8 w-8 text-slate-600 mx-auto mb-2" />
-                    <p className="text-xs text-slate-500 font-bold italic">
+                  <div className="text-center py-6 bg-slate-100 dark:bg-slate-900/30 rounded-3xl border border-dashed border-slate-300 dark:border-slate-800/60">
+                    <AlertCircle className="h-8 w-8 text-slate-600 dark:text-slate-500 mx-auto mb-2" />
+                    <p className="text-xs text-slate-700 dark:text-slate-500 font-bold italic">
                       Belum ada kontak darurat
                     </p>
                   </div>

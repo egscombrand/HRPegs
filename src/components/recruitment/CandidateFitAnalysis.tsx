@@ -222,11 +222,11 @@ export function CandidateFitAnalysis({
       {!compact && (
         <div className="flex justify-between items-start mb-6">
           <div>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-slate-900 dark:text-white">
               <Sparkles className="h-5 w-5 text-primary" />
               Analisis AI (HR Analyst)
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-slate-600 dark:text-slate-400">
               Analisis kesesuaian kandidat berdasarkan CV dengan kualifikasi
               khusus (didukung oleh AI).
             </CardDescription>
@@ -260,18 +260,18 @@ export function CandidateFitAnalysis({
       )}
 
       {!isLoading && !analysis && !error && !compact && (
-        <div className="text-center py-8 text-slate-600">
+        <div className="text-center py-8 text-slate-600 dark:text-slate-400">
           Klik tombol untuk memulai analisis AI.
         </div>
       )}
       {isLoading && (
-        <div className="space-y-4 rounded-lg border border-dashed p-8 text-center min-h-[300px] flex flex-col justify-center">
+        <div className="space-y-4 rounded-lg border border-dashed border-slate-300 dark:border-border bg-slate-50 dark:bg-muted/10 p-8 text-center min-h-[300px] flex flex-col justify-center">
           <Loader2 className="mx-auto h-12 w-12 animate-spin text-primary" />
           <div className="mx-auto max-w-md">
-            <p className="font-bold text-lg">
+            <p className="font-bold text-lg text-slate-900 dark:text-white">
               AI sedang menganalisis profil...
             </p>
-            <p className="mt-2 text-sm text-slate-600 leading-relaxed">
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
               Proses ini membutuhkan waktu sekitar <strong>15-30 detik</strong>.
               AI sedang membandingkan kualifikasi CV dengan persyaratan jabatan.
             </p>
@@ -279,9 +279,9 @@ export function CandidateFitAnalysis({
         </div>
       )}
       {error && (
-        <div className="flex flex-col items-center justify-center text-center py-12 text-destructive">
-          <AlertCircle className="h-12 w-12 mb-4" />
-          <p className="font-bold text-lg">{error}</p>
+        <div className="flex flex-col items-center justify-center text-center py-12 text-destructive bg-red-50 dark:bg-red-950/10 rounded-lg border border-red-200 dark:border-red-900/30 p-6">
+          <AlertCircle className="h-12 w-12 mb-4 text-red-600 dark:text-red-500" />
+          <p className="font-bold text-lg text-slate-900 dark:text-white">{error}</p>
           <Button
             variant="outline"
             size="sm"
@@ -307,7 +307,7 @@ export function CandidateFitAnalysis({
           <div className="grid md:grid-cols-5 gap-6">
             <Card className="md:col-span-2 border-primary/20">
               <CardHeader>
-                <CardTitle className="text-base uppercase tracking-widest font-black">
+                <CardTitle className="text-base uppercase tracking-widest font-black text-slate-900 dark:text-white">
                   Overall Fit
                 </CardTitle>
               </CardHeader>
@@ -315,7 +315,7 @@ export function CandidateFitAnalysis({
                 <div className="text-7xl font-black text-primary">
                   {analysis.overallFitScore}
                 </div>
-                <div className="text-lg font-bold text-slate-700 uppercase">
+                <div className="text-lg font-bold text-slate-900 dark:text-slate-200 uppercase">
                   {fitLabels[analysis.overallFitLabel]}
                 </div>
                 <div className="mt-6 space-y-2 text-left bg-muted/30 p-4 rounded-2xl border">
@@ -333,7 +333,7 @@ export function CandidateFitAnalysis({
             </Card>
             <Card className="md:col-span-3 border-primary/20">
               <CardHeader>
-                <CardTitle className="text-base uppercase tracking-widest font-black">
+                <CardTitle className="text-base uppercase tracking-widest font-black text-slate-900 dark:text-white">
                   Score Matrix
                 </CardTitle>
               </CardHeader>
@@ -391,9 +391,9 @@ export function CandidateFitAnalysis({
             </Card>
           </div>
           <div className="grid md:grid-cols-2 gap-6">
-            <Card className="border-green-200 bg-green-50/10">
+            <Card className="border-green-200 dark:border-green-900/30 bg-green-50 dark:bg-green-950/10">
               <CardHeader className="pb-2">
-                <CardTitle className="text-xs uppercase tracking-widest text-slate-600 font-black">
+                <CardTitle className="text-xs uppercase tracking-widest text-slate-700 dark:text-slate-400 font-black">
                   Decision Recommendation
                 </CardTitle>
               </CardHeader>
@@ -409,9 +409,9 @@ export function CandidateFitAnalysis({
                 </div>
               </CardContent>
             </Card>
-            <Card className="border-blue-200 bg-blue-50/10">
+            <Card className="border-blue-200 dark:border-blue-900/30 bg-blue-50 dark:bg-blue-950/10">
               <CardHeader className="pb-2">
-                <CardTitle className="text-xs uppercase tracking-widest text-slate-600 font-black">
+                <CardTitle className="text-xs uppercase tracking-widest text-slate-700 dark:text-slate-400 font-black">
                   AI Confidence
                 </CardTitle>
               </CardHeader>
@@ -419,12 +419,12 @@ export function CandidateFitAnalysis({
                 <div className="flex flex-col gap-2">
                   <Badge
                     variant="outline"
-                    className="w-fit capitalize text-sm font-black py-1 px-3 border-2"
+                    className="w-fit capitalize text-sm font-black py-1 px-3 border-2 text-slate-900 dark:text-white"
                   >
                     {confidenceLabels[analysis.confidence.level] ||
                       analysis.confidence.level}
                   </Badge>
-                  <p className="text-xs text-slate-600 italic leading-relaxed">
+                  <p className="text-xs text-slate-700 dark:text-slate-400 italic leading-relaxed">
                     {analysis.confidence.reasons.join(", ")}
                   </p>
                 </div>
@@ -438,17 +438,17 @@ export function CandidateFitAnalysis({
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-muted/50">
-                    <TableHead className="font-black text-[10px] uppercase tracking-wider">
+                  <TableRow className="bg-slate-100 dark:bg-muted/50">
+                    <TableHead className="font-black text-[10px] uppercase tracking-wider text-slate-900 dark:text-foreground">
                       Requirement
                     </TableHead>
-                    <TableHead className="font-black text-[10px] uppercase tracking-wider text-center">
+                    <TableHead className="font-black text-[10px] uppercase tracking-wider text-center text-slate-900 dark:text-foreground">
                       Type
                     </TableHead>
-                    <TableHead className="font-black text-[10px] uppercase tracking-wider text-center">
+                    <TableHead className="font-black text-[10px] uppercase tracking-wider text-center text-slate-900 dark:text-foreground">
                       Match
                     </TableHead>
-                    <TableHead className="font-black text-[10px] uppercase tracking-wider">
+                    <TableHead className="font-black text-[10px] uppercase tracking-wider text-slate-900 dark:text-foreground">
                       Evidence from CV
                     </TableHead>
                   </TableRow>
@@ -458,7 +458,7 @@ export function CandidateFitAnalysis({
                     const match = matchConfig[item.match];
                     return (
                       <TableRow key={i}>
-                        <TableCell className="font-bold text-sm">
+                        <TableCell className="font-bold text-sm text-slate-900 dark:text-foreground">
                           {item.requirement}
                         </TableCell>
                         <TableCell className="text-center">
@@ -484,7 +484,7 @@ export function CandidateFitAnalysis({
                             <span>{match.label}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-xs text-slate-600 leading-relaxed italic">
+                        <TableCell className="text-xs text-slate-700 dark:text-slate-400 leading-relaxed italic">
                           &ldquo;{item.evidence_from_cv}&rdquo;
                           {item.risk_note && (
                             <p className="text-[10px] text-destructive font-bold mt-1 uppercase tracking-tighter">
@@ -575,14 +575,14 @@ export function CandidateFitAnalysis({
                   key={i}
                   className="border-b-muted last:border-0 px-2"
                 >
-                  <AccordionTrigger className="text-left font-bold py-4 hover:no-underline">
+                  <AccordionTrigger className="text-left font-bold py-4 hover:no-underline text-slate-900 dark:text-white">
                     {i + 1}. {item.question}
                   </AccordionTrigger>
-                  <AccordionContent className="bg-muted/30 p-4 rounded-2xl border mb-2">
-                    <p className="text-[10px] font-black uppercase text-slate-600 mb-2">
+                  <AccordionContent className="bg-slate-100 dark:bg-muted/30 p-4 rounded-2xl border border-slate-200 dark:border-border mb-2">
+                    <p className="text-[10px] font-black uppercase text-slate-700 dark:text-slate-400 mb-2">
                       Ideal Answer Insight
                     </p>
-                    <p className="text-sm leading-relaxed text-foreground/80 italic font-medium">
+                    <p className="text-sm leading-relaxed text-slate-900 dark:text-foreground/80 italic font-medium">
                       {item.ideal_answer}
                     </p>
                   </AccordionContent>
@@ -626,7 +626,7 @@ export function CandidateFitAnalysis({
             </AnalysisSection>
           </div>
           {application.cvTextExtractedAt && (
-            <div className="text-center text-[10px] font-bold text-slate-600/70 pt-8 border-t border-dashed">
+            <div className="text-center text-[10px] font-bold text-slate-600 dark:text-slate-500 pt-8 border-t border-dashed border-slate-300 dark:border-border">
               <p>
                 Dianalisis menggunakan {application.cvTextSource} pada{" "}
                 {format(

@@ -86,7 +86,7 @@ const StarRating = ({
   label: string;
 }) => (
   <div className="space-y-2">
-    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+    <p className="text-[10px] font-black text-slate-600 dark:text-slate-500 uppercase tracking-widest">
       {label}
     </p>
     <div className="flex gap-1">
@@ -98,8 +98,8 @@ const StarRating = ({
           className={cn(
             "p-1 transition-all duration-200",
             s <= value
-              ? "text-teal-400 scale-110"
-              : "text-slate-700 hover:text-teal-400/50",
+              ? "text-teal-500 dark:text-teal-400 scale-110"
+              : "text-slate-400 dark:text-slate-700 hover:text-teal-500 dark:hover:text-teal-400/50",
           )}
         >
           <Star className="h-6 w-6 fill-current" />
