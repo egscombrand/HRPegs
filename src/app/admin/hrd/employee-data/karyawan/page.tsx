@@ -349,16 +349,16 @@ function SummaryCard({
   color: string;
 }) {
   return (
-    <div className="flex-1 min-w-[120px] bg-slate-900/40 border border-slate-800/50 p-3 rounded-xl hover:border-slate-700 transition-all group">
+    <div className="flex-1 min-w-[120px] bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800/50 p-3 rounded-xl hover:border-slate-300 dark:hover:border-slate-700 transition-all group">
       <div className="flex items-center justify-between mb-3">
         <div className={cn("p-2 rounded-lg", color)}>
           <Icon className="h-5 w-5" />
         </div>
-        <span className="text-2xl md:text-3xl font-black text-white">
+        <span className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white">
           {count}
         </span>
       </div>
-      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+      <p className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest">
         {label}
       </p>
     </div>
@@ -405,7 +405,7 @@ export default function KaryawanDataPage() {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [completenessFilter, actionNeededFilter, searchTerm, sortBy]);
+  }, [completenessFilter, actionNeededFilter, searchTerm, sortBy, brandFilter, activeTab]);
 
   const [selectedReviewEmp, setSelectedReviewEmp] =
     useState<MergedEmployee | null>(null);
@@ -752,9 +752,25 @@ export default function KaryawanDataPage() {
     return filteredEmployees.slice(startIndex, startIndex + pageSize);
   }, [filteredEmployees, currentPage, pageSize]);
 
-  const pendingReviewCount = allMerged.filter(
-    (e) => e.pendingBankRequest,
-  ).length;
+  // Calculate tab counts based on filtered brand
+  const tabCounts = useMemo(() => {
+    const brandFiltered = brandFilter === "all"
+      ? allMerged
+      : allMerged.filter((e) => e.brandId === brandFilter);
+
+    return {
+      all: brandFiltered.length,
+      review: brandFiltered.filter((e) => e.pendingBankRequest).length,
+      tetap: brandFiltered.filter((e) => e.mappedType === "tetap").length,
+      kontrak: brandFiltered.filter((e) => e.mappedType === "kontrak").length,
+      probation: brandFiltered.filter((e) => e.mappedType === "probation").length,
+      magang: brandFiltered.filter((e) => e.mappedType === "magang").length,
+      belum_diatur: brandFiltered.filter((e) => e.mappedType === "belum_diatur").length,
+      nonaktif: brandFiltered.filter((e) => e.mappedType === "nonaktif").length,
+    };
+  }, [allMerged, brandFilter]);
+
+  const pendingReviewCount = tabCounts.review;
 
   const groupedEmployees = useMemo(() => {
     const groups: Record<string, MergedEmployee[]> = {
@@ -774,35 +790,40 @@ export default function KaryawanDataPage() {
   }, [paginatedEmployees]);
 
   const stats = useMemo(() => {
+    // Filter by brand for stats calculation
+    const brandFiltered = brandFilter === "all"
+      ? allMerged
+      : allMerged.filter((e) => e.brandId === brandFilter);
+
     return {
-      total: allMerged.length,
-      tetap: allMerged.filter((e) => e.mappedType === "tetap").length,
-      kontrak: allMerged.filter((e) => e.mappedType === "kontrak").length,
-      probation: allMerged.filter((e) => e.mappedType === "probation").length,
-      magang: allMerged.filter((e) => e.mappedType === "magang").length,
-      belum_diatur: allMerged.filter((e) => e.mappedType === "belum_diatur").length,
-      nonaktif: allMerged.filter((e) => e.mappedType === "nonaktif").length,
+      total: brandFiltered.length,
+      tetap: brandFiltered.filter((e) => e.mappedType === "tetap").length,
+      kontrak: brandFiltered.filter((e) => e.mappedType === "kontrak").length,
+      probation: brandFiltered.filter((e) => e.mappedType === "probation").length,
+      magang: brandFiltered.filter((e) => e.mappedType === "magang").length,
+      belum_diatur: brandFiltered.filter((e) => e.mappedType === "belum_diatur").length,
+      nonaktif: brandFiltered.filter((e) => e.mappedType === "nonaktif").length,
       // Administrative stats
-      needsReview: allMerged.filter((e) => e.pendingBankRequest).length,
-      bankPending: allMerged.filter((e) => e.pendingBankRequest).length,
-      npwpMissing: allMerged.filter(
+      needsReview: brandFiltered.filter((e) => e.pendingBankRequest).length,
+      bankPending: brandFiltered.filter((e) => e.pendingBankRequest).length,
+      npwpMissing: brandFiltered.filter(
         (e) => !e.employeeProfile?.dokumenAdministratif?.npwpPhotoUrl,
       ).length,
-      bpjsMissing: allMerged.filter(
+      bpjsMissing: brandFiltered.filter(
         (e) =>
           !e.employeeProfile?.dokumenAdministratif?.bpjsKesehatanPhotoUrl ||
           !e.employeeProfile?.dokumenAdministratif?.bpjsKetenagakerjaanPhotoUrl,
       ).length,
-      dataIncomplete: allMerged.filter((e) => {
+      dataIncomplete: brandFiltered.filter((e) => {
         const c = calculateProfileCompleteness(e.employeeProfile ?? null);
         return c.status === "not_started" || c.status === "partial";
       }).length,
-      dataComplete: allMerged.filter((e) => {
+      dataComplete: brandFiltered.filter((e) => {
         const c = calculateProfileCompleteness(e.employeeProfile ?? null);
         return c.status === "complete";
       }).length,
     };
-  }, [allMerged]);
+  }, [allMerged, brandFilter]);
 
   const handleExport = () => {
     if (!filteredEmployees.length) {
@@ -875,10 +896,10 @@ export default function KaryawanDataPage() {
         <div className="space-y-8 w-full max-w-[1800px] mx-auto px-4 md:px-8 pb-10">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
             <div>
-              <h1 className="text-2xl font-black text-white tracking-tight">
+              <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
                 Data Karyawan
               </h1>
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                 Directory administrasi karyawan terpusat PT. HRP Environesia
               </p>
             </div>
@@ -886,7 +907,7 @@ export default function KaryawanDataPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="rounded-xl border-slate-800 bg-slate-900/50 text-slate-400 hover:text-white"
+                className="rounded-xl border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 onClick={() => setIsImportOpen(true)}
               >
                 <Upload className="mr-2 h-3.5 w-3.5" /> Import
@@ -894,7 +915,7 @@ export default function KaryawanDataPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="rounded-xl border-slate-800 bg-slate-900/50 text-slate-400 hover:text-white"
+                className="rounded-xl border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 onClick={handleExport}
               >
                 <Download className="mr-2 h-3.5 w-3.5" /> Export
@@ -902,7 +923,7 @@ export default function KaryawanDataPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="rounded-xl border-slate-800 bg-slate-900/50 text-slate-400 hover:text-white"
+                className="rounded-xl border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 onClick={handleDownloadTemplate}
               >
                 <FileSpreadsheet className="mr-2 h-3.5 w-3.5" /> Template
@@ -982,8 +1003,8 @@ export default function KaryawanDataPage() {
           </div>
 
           {/* Administrative Summary Cards */}
-          <div className="bg-slate-900/40 border border-slate-800/50 p-4 rounded-xl">
-            <h3 className="text-sm font-bold text-slate-300 mb-3 uppercase tracking-wider">
+          <div className="bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800/50 p-4 rounded-xl">
+            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-3 uppercase tracking-wider">
               Status Administrasi
             </h3>
             <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
@@ -1020,24 +1041,24 @@ export default function KaryawanDataPage() {
             </div>
           </div>
 
-          <Card className="border-slate-800 bg-slate-950/50 backdrop-blur-xl">
-            <CardHeader className="p-5 border-b border-slate-800/50">
+          <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/50 backdrop-blur-xl">
+            <CardHeader className="p-5 border-b border-slate-200 dark:border-slate-800/50">
               <div className="flex flex-wrap items-center gap-4">
                 <div className="relative flex-1 min-w-[240px]">
-                  <Search className="absolute left-3.5 top-3 h-5 w-5 text-slate-500" />
+                  <Search className="absolute left-3.5 top-3 h-5 w-5 text-slate-400 dark:text-slate-500" />
                   <Input
                     placeholder="Cari nama atau email..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="bg-slate-900/50 border-slate-800 h-11 pl-11 rounded-xl focus:border-emerald-500/50 transition-all text-sm"
+                    className="bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 h-11 pl-11 rounded-xl focus:border-emerald-500/50 transition-all text-sm text-slate-900 dark:text-white"
                   />
                 </div>
 
                 <Select value={brandFilter} onValueChange={setBrandFilter}>
-                  <SelectTrigger className="w-[180px] bg-slate-900/50 border-slate-800 h-11 rounded-xl text-sm font-medium">
+                  <SelectTrigger className="w-[180px] bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 h-11 rounded-xl text-sm font-medium text-slate-900 dark:text-white">
                     <SelectValue placeholder="Brand" />
                   </SelectTrigger>
-                  <SelectContent className="bg-slate-900 border-slate-800">
+                  <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                     <SelectItem value="all">Semua Brand</SelectItem>
                     {brands?.map((b) => (
                       <SelectItem key={b.id!} value={b.id!}>
@@ -1051,10 +1072,10 @@ export default function KaryawanDataPage() {
                   value={completenessFilter}
                   onValueChange={setCompletenessFilter}
                 >
-                  <SelectTrigger className="w-[180px] bg-slate-900/50 border-slate-800 h-11 rounded-xl text-sm font-medium">
+                  <SelectTrigger className="w-[180px] bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 h-11 rounded-xl text-sm font-medium text-slate-900 dark:text-white">
                     <SelectValue placeholder="Kelengkapan" />
                   </SelectTrigger>
-                  <SelectContent className="bg-slate-900 border-slate-800">
+                  <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                     <SelectItem value="all">Semua Kelengkapan</SelectItem>
                     <SelectItem value="complete">Lengkap</SelectItem>
                     <SelectItem value="partial">Sebagian</SelectItem>
@@ -1066,10 +1087,10 @@ export default function KaryawanDataPage() {
                   value={actionNeededFilter}
                   onValueChange={setActionNeededFilter}
                 >
-                  <SelectTrigger className="w-[200px] bg-slate-900/50 border-slate-800 h-11 rounded-xl text-sm font-medium">
+                  <SelectTrigger className="w-[200px] bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 h-11 rounded-xl text-sm font-medium text-slate-900 dark:text-white">
                     <SelectValue placeholder="Action Needed" />
                   </SelectTrigger>
-                  <SelectContent className="bg-slate-900 border-slate-800">
+                  <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                     <SelectItem value="all">Semua Status</SelectItem>
                     <SelectItem value="review">Perlu Review HRD</SelectItem>
                     <SelectItem value="bank_pending">
@@ -1088,10 +1109,10 @@ export default function KaryawanDataPage() {
                   value={sortBy}
                   onValueChange={(value: any) => setSortBy(value)}
                 >
-                  <SelectTrigger className="w-[180px] bg-slate-900/50 border-slate-800 h-11 rounded-xl text-sm font-medium">
+                  <SelectTrigger className="w-[180px] bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 h-11 rounded-xl text-sm font-medium text-slate-900 dark:text-white">
                     <SelectValue placeholder="Urutkan" />
                   </SelectTrigger>
-                  <SelectContent className="bg-slate-900 border-slate-800">
+                  <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                     <SelectItem value="name-asc">Nama A-Z</SelectItem>
                     <SelectItem value="name-desc">Nama Z-A</SelectItem>
                     <SelectItem value="completeness-desc">
@@ -1109,56 +1130,56 @@ export default function KaryawanDataPage() {
                 <Tabs
                   value={activeTab}
                   onValueChange={setActiveTab}
-                  className="bg-slate-900/50 p-1.5 rounded-xl border border-slate-800/50"
+                  className="bg-slate-50 dark:bg-slate-900/50 p-1.5 rounded-xl border border-slate-200 dark:border-slate-800/50"
                 >
                   <TabsList className="h-9 bg-transparent gap-1.5">
                     <TabsTrigger
                       value="all"
-                      className="h-7 text-xs uppercase font-bold rounded-lg px-4"
+                      className="h-7 text-xs uppercase font-bold rounded-lg px-4 text-slate-600 dark:text-slate-400 data-[state=active]:text-slate-900 dark:data-[state=active]:text-white"
                     >
-                      Semua
+                      Semua ({tabCounts.all})
                     </TabsTrigger>
                     <TabsTrigger
                       value="review"
-                      className="h-7 text-xs uppercase font-bold rounded-lg px-4 text-amber-500 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400"
+                      className="h-7 text-xs uppercase font-bold rounded-lg px-4 text-amber-600 dark:text-amber-500 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-700 dark:data-[state=active]:text-amber-400"
                     >
-                      Perlu Review HRD
+                      Perlu Review HRD ({tabCounts.review})
                     </TabsTrigger>
                     <TabsTrigger
                       value="tetap"
-                      className="h-7 text-xs uppercase font-bold rounded-lg px-4"
+                      className="h-7 text-xs uppercase font-bold rounded-lg px-4 text-slate-600 dark:text-slate-400 data-[state=active]:text-slate-900 dark:data-[state=active]:text-white"
                     >
-                      Tetap
+                      Tetap ({tabCounts.tetap})
                     </TabsTrigger>
                     <TabsTrigger
                       value="kontrak"
-                      className="h-7 text-xs uppercase font-bold rounded-lg px-4"
+                      className="h-7 text-xs uppercase font-bold rounded-lg px-4 text-slate-600 dark:text-slate-400 data-[state=active]:text-slate-900 dark:data-[state=active]:text-white"
                     >
-                      Kontrak
+                      Kontrak ({tabCounts.kontrak})
                     </TabsTrigger>
                     <TabsTrigger
                       value="probation"
-                      className="h-7 text-xs uppercase font-bold rounded-lg px-4"
+                      className="h-7 text-xs uppercase font-bold rounded-lg px-4 text-slate-600 dark:text-slate-400 data-[state=active]:text-slate-900 dark:data-[state=active]:text-white"
                     >
-                      Probation
+                      Probation ({tabCounts.probation})
                     </TabsTrigger>
                     <TabsTrigger
                       value="magang"
-                      className="h-7 text-xs uppercase font-bold rounded-lg px-4"
+                      className="h-7 text-xs uppercase font-bold rounded-lg px-4 text-slate-600 dark:text-slate-400 data-[state=active]:text-slate-900 dark:data-[state=active]:text-white"
                     >
-                      Magang
+                      Magang ({tabCounts.magang})
                     </TabsTrigger>
                     <TabsTrigger
                       value="belum_diatur"
-                      className="h-7 text-xs uppercase font-bold rounded-lg px-4"
+                      className="h-7 text-xs uppercase font-bold rounded-lg px-4 text-slate-600 dark:text-slate-400 data-[state=active]:text-slate-900 dark:data-[state=active]:text-white"
                     >
-                      Belum Diatur
+                      Belum Diatur ({tabCounts.belum_diatur})
                     </TabsTrigger>
                     <TabsTrigger
                       value="nonaktif"
-                      className="h-7 text-xs uppercase font-bold rounded-lg px-4"
+                      className="h-7 text-xs uppercase font-bold rounded-lg px-4 text-slate-600 dark:text-slate-400 data-[state=active]:text-slate-900 dark:data-[state=active]:text-white"
                     >
-                      Nonaktif
+                      Nonaktif ({tabCounts.nonaktif})
                     </TabsTrigger>
                   </TabsList>
                 </Tabs>
@@ -1172,7 +1193,7 @@ export default function KaryawanDataPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="text-slate-500 hover:text-white"
+                    className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                     onClick={() => {
                       setSearchTerm("");
                       setBrandFilter("all");
@@ -1209,14 +1230,14 @@ export default function KaryawanDataPage() {
                       <AccordionItem
                         value={status}
                         key={status}
-                        className="border-b border-slate-800/50 last:border-0"
+                        className="border-b border-slate-200 dark:border-slate-800/50 last:border-0"
                       >
-                        <AccordionTrigger className="px-6 py-3 bg-slate-900/20 hover:no-underline group">
+                        <AccordionTrigger className="px-6 py-3 bg-slate-100 dark:bg-slate-900/20 hover:no-underline group">
                           <div className="flex items-center gap-3">
                             <EmployeeTypeBadge
                               type={status as MappedEmployeeType}
                             />
-                            <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                            <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest">
                               {emps.length} Personel
                             </span>
                           </div>
@@ -1224,33 +1245,33 @@ export default function KaryawanDataPage() {
                         <AccordionContent className="pt-0 pb-0">
                           <div className="overflow-x-auto w-full">
                             <Table className="w-full table-fixed min-w-[1200px]">
-                              <TableHeader className="bg-slate-900/40">
-                                <TableRow className="border-slate-800/50 hover:bg-transparent">
-                                  <TableHead className="text-xs uppercase font-bold text-slate-400 px-6 h-12 w-[60px] sticky left-0 bg-slate-900/40 z-10">
+                              <TableHeader className="bg-slate-50 dark:bg-slate-900/40">
+                                <TableRow className="border-slate-200 dark:border-slate-800/50 hover:bg-transparent">
+                                  <TableHead className="text-xs uppercase font-bold text-slate-600 dark:text-slate-400 px-6 h-12 w-[60px] sticky left-0 bg-slate-50 dark:bg-slate-900/40 z-10">
                                     No
                                   </TableHead>
-                                  <TableHead className="text-xs uppercase font-bold text-slate-400 h-12 w-[120px]">
+                                  <TableHead className="text-xs uppercase font-bold text-slate-600 dark:text-slate-400 h-12 w-[120px]">
                                     Employee ID
                                   </TableHead>
-                                  <TableHead className="text-xs uppercase font-bold text-slate-400 h-12 min-w-[300px]">
+                                  <TableHead className="text-xs uppercase font-bold text-slate-600 dark:text-slate-400 h-12 min-w-[300px]">
                                     Karyawan
                                   </TableHead>
-                                  <TableHead className="text-xs uppercase font-bold text-slate-400 h-12 min-w-[200px]">
+                                  <TableHead className="text-xs uppercase font-bold text-slate-600 dark:text-slate-400 h-12 min-w-[200px]">
                                     Brand/Divisi
                                   </TableHead>
-                                  <TableHead className="text-xs uppercase font-bold text-slate-400 h-12 w-[120px]">
+                                  <TableHead className="text-xs uppercase font-bold text-slate-600 dark:text-slate-400 h-12 w-[120px]">
                                     Status
                                   </TableHead>
-                                  <TableHead className="text-xs uppercase font-bold text-slate-400 h-12 w-[160px]">
+                                  <TableHead className="text-xs uppercase font-bold text-slate-600 dark:text-slate-400 h-12 w-[160px]">
                                     Kelengkapan
                                   </TableHead>
-                                  <TableHead className="text-xs uppercase font-bold text-slate-400 h-12 min-w-[250px]">
+                                  <TableHead className="text-xs uppercase font-bold text-slate-600 dark:text-slate-400 h-12 min-w-[250px]">
                                     Action Needed
                                   </TableHead>
-                                  <TableHead className="text-xs uppercase font-bold text-slate-400 h-12 min-w-[300px]">
+                                  <TableHead className="text-xs uppercase font-bold text-slate-600 dark:text-slate-400 h-12 min-w-[300px]">
                                     Admin Check
                                   </TableHead>
-                                  <TableHead className="text-right px-6 h-12 min-w-[200px]">
+                                  <TableHead className="text-right px-6 h-12 min-w-[200px] text-xs uppercase font-bold text-slate-600 dark:text-slate-400">
                                     Aksi
                                   </TableHead>
                                 </TableRow>
@@ -1274,36 +1295,36 @@ export default function KaryawanDataPage() {
                                     <TableRow
                                       key={`${emp.uid}-${index}`}
                                       className={cn(
-                                        "border-slate-800/50 hover:bg-slate-800/40 transition-colors group min-h-[88px]",
-                                        hasPendingReq && "bg-amber-500/[0.04]",
+                                        "border-slate-200 dark:border-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800/40 transition-colors group min-h-[88px]",
+                                        hasPendingReq && "bg-amber-50 dark:bg-amber-500/[0.04]",
                                       )}
                                     >
-                                      <TableCell className="px-6 py-6 text-center align-middle sticky left-0 bg-slate-950/50 backdrop-blur-sm z-10">
-                                        <span className="text-sm font-bold text-slate-400">
+                                      <TableCell className="px-6 py-6 text-center align-middle sticky left-0 bg-white dark:bg-slate-950/50 backdrop-blur-sm z-10">
+                                        <span className="text-sm font-bold text-slate-600 dark:text-slate-400">
                                           {String(globalIndex).padStart(2, "0")}
                                         </span>
                                       </TableCell>
                                       <TableCell className="py-6 align-middle">
-                                        <span className="text-sm font-mono font-bold text-slate-300">
+                                        <span className="text-sm font-mono font-bold text-slate-700 dark:text-slate-300">
                                           {employeeId}
                                         </span>
                                       </TableCell>
                                       <TableCell className="px-6 py-6 align-middle">
                                         <div className="flex flex-col gap-1">
-                                          <span className="text-base font-bold text-white group-hover:text-emerald-400 transition-colors">
+                                          <span className="text-base font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
                                             {emp.fullName || emp.email || "Nama belum tersedia"}
                                           </span>
-                                          <span className="text-sm text-slate-400 font-medium">
+                                          <span className="text-sm text-slate-500 dark:text-slate-400 font-medium">
                                             {emp.email}
                                           </span>
                                         </div>
                                       </TableCell>
                                       <TableCell className="py-6 align-middle">
                                         <div className="flex flex-col gap-1 items-start">
-                                          <span className="text-sm font-semibold text-slate-200">
+                                          <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
                                             {emp.brandName}
                                           </span>
-                                          <span className="text-xs text-slate-500 font-medium">
+                                          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                                             {emp.division}
                                           </span>
                                           {(emp.isDivisionManager || emp.structuralPosition === "division_manager") ? (
@@ -1324,7 +1345,7 @@ export default function KaryawanDataPage() {
                                       </TableCell>
                                       <TableCell className="py-6 align-middle">
                                         <div className="flex flex-col gap-2">
-                                          <div className="w-28 h-2 bg-slate-800 rounded-full overflow-hidden">
+                                          <div className="w-28 h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
                                             <div
                                               className={cn(
                                                 "h-full transition-all",
@@ -1337,7 +1358,7 @@ export default function KaryawanDataPage() {
                                               }}
                                             />
                                           </div>
-                                          <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                                          <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-widest">
                                             {c.percentage}%
                                           </span>
                                         </div>
@@ -1440,7 +1461,7 @@ export default function KaryawanDataPage() {
                                           <Button
                                             variant="ghost"
                                             size="sm"
-                                            className="h-9 px-4 rounded-xl text-[13px] font-bold bg-slate-900 border border-slate-800 hover:bg-emerald-500 hover:text-white hover:border-emerald-500 transition-all"
+                                            className="h-9 px-4 rounded-xl text-[13px] font-bold bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-emerald-500 hover:text-white hover:border-emerald-500 transition-all"
                                             onClick={() =>
                                               router.push(
                                                 `/admin/hrd/employee-data/karyawan/${emp.uid}`,
@@ -1463,14 +1484,14 @@ export default function KaryawanDataPage() {
                 </Accordion>
               ) : (
                 <div className="p-20 text-center space-y-4">
-                  <Users className="h-12 w-12 text-slate-800 mx-auto" />
-                  <p className="text-sm text-slate-500 font-medium">
+                  <Users className="h-12 w-12 text-slate-300 dark:text-slate-800 mx-auto" />
+                  <p className="text-sm text-slate-600 dark:text-slate-400 font-medium">
                     Tidak ada data yang sesuai dengan filter saat ini.
                   </p>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="rounded-xl border-slate-800"
+                    className="rounded-xl border-slate-300 dark:border-slate-800 text-slate-700 dark:text-slate-300"
                     onClick={() => {
                       setSearchTerm("");
                       setBrandFilter("all");
@@ -1489,7 +1510,7 @@ export default function KaryawanDataPage() {
 
             {/* Pagination Controls */}
             {filteredEmployees.length > 0 && (
-              <div className="px-5 py-4 border-t border-slate-800/50 bg-slate-900/20">
+              <div className="px-5 py-4 border-t border-slate-200 dark:border-slate-800/50 bg-slate-50 dark:bg-slate-900/20">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <Select
@@ -1499,16 +1520,16 @@ export default function KaryawanDataPage() {
                         setCurrentPage(1);
                       }}
                     >
-                      <SelectTrigger className="w-[120px] bg-slate-900/50 border-slate-800 h-9 rounded-lg text-sm">
+                      <SelectTrigger className="w-[120px] bg-white dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 h-9 rounded-lg text-sm text-slate-900 dark:text-white">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent className="bg-slate-900 border-slate-800">
+                      <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
                         <SelectItem value="25">25 per halaman</SelectItem>
                         <SelectItem value="50">50 per halaman</SelectItem>
                         <SelectItem value="100">100 per halaman</SelectItem>
                       </SelectContent>
                     </Select>
-                    <span className="text-sm text-slate-400">
+                    <span className="text-sm text-slate-600 dark:text-slate-400">
                       Menampilkan{" "}
                       {Math.min(
                         (currentPage - 1) * pageSize + 1,
@@ -1531,7 +1552,7 @@ export default function KaryawanDataPage() {
                         setCurrentPage((prev) => Math.max(1, prev - 1))
                       }
                       disabled={currentPage === 1}
-                      className="h-9 px-3 rounded-lg border-slate-800 bg-slate-900/50 text-slate-400 hover:text-white disabled:opacity-50"
+                      className="h-9 px-3 rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-50"
                     >
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
@@ -1558,7 +1579,7 @@ export default function KaryawanDataPage() {
                                 "h-9 w-9 rounded-lg text-sm font-bold",
                                 currentPage === pageNum
                                   ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                                  : "border-slate-800 bg-slate-900/50 text-slate-400 hover:text-white",
+                                  : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white",
                               )}
                             >
                               {pageNum}
@@ -1575,7 +1596,7 @@ export default function KaryawanDataPage() {
                         setCurrentPage((prev) => Math.min(totalPages, prev + 1))
                       }
                       disabled={currentPage === totalPages}
-                      className="h-9 px-3 rounded-lg border-slate-800 bg-slate-900/50 text-slate-400 hover:text-white disabled:opacity-50"
+                      className="h-9 px-3 rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white disabled:opacity-50"
                     >
                       <ChevronRight className="h-4 w-4" />
                     </Button>
