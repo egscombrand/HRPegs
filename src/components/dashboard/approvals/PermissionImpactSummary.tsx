@@ -85,19 +85,19 @@ const PAYROLL_IMPACT_LABELS: Record<
   PayrollImpactLabel,
   { label: string; color: string }
 > = {
-  potong_hari: { label: "Potong Hari", color: "bg-red-950 text-red-200" },
-  potong_jam: { label: "Potong Jam", color: "bg-orange-950 text-orange-200" },
+  potong_hari: { label: "Potong Hari", color: "bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-200 border border-red-200 dark:border-red-800" },
+  potong_jam: { label: "Potong Jam", color: "bg-orange-100 dark:bg-orange-950/40 text-orange-700 dark:text-orange-200 border border-orange-200 dark:border-orange-800" },
   tidak_dipotong: {
     label: "Tidak Dipotong",
-    color: "bg-green-950 text-green-200",
+    color: "bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-200 border border-green-200 dark:border-green-800",
   },
   perlu_review_hrd: {
     label: "Review HRD",
-    color: "bg-yellow-950 text-yellow-200",
+    color: "bg-yellow-100 dark:bg-yellow-950/40 text-yellow-700 dark:text-yellow-200 border border-yellow-200 dark:border-yellow-800",
   },
   sesuai_kebijakan: {
     label: "Sesuai Kebijakan",
-    color: "bg-blue-950 text-blue-200",
+    color: "bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-200 border border-blue-200 dark:border-blue-800",
   },
 };
 
@@ -292,19 +292,19 @@ export function PermissionImpactSummary({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40 backdrop-blur-xl">
+      <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 backdrop-blur-xl shadow-sm">
         <CardHeader>
           <div className="flex items-start justify-between">
             <div>
-              <CardTitle className="text-2xl font-bold">
+              <CardTitle className="text-2xl font-bold text-slate-900 dark:text-white">
                 Rekap Dampak Izin Bulanan
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-slate-600 dark:text-slate-400">
                 Ringkasan pengaruh izin terhadap hari kerja efektif dan payroll
                 karyawan per kategori izin
               </CardDescription>
             </div>
-            <Badge variant="outline" className="text-sm">
+            <Badge variant="outline" className="text-sm border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white bg-white dark:bg-slate-800">
               {filtered.length} / {summaries.length} karyawan
             </Badge>
           </div>
@@ -312,7 +312,7 @@ export function PermissionImpactSummary({
       </Card>
 
       {/* Filters */}
-      <Card className="border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 backdrop-blur-xl">
+      <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 backdrop-blur-xl shadow-sm">
         <CardContent className="pt-6">
           <div className="space-y-4">
             {/* Period Selection */}
@@ -325,10 +325,10 @@ export function PermissionImpactSummary({
                   value={periodMode}
                   onValueChange={(v) => setPeriodMode(v as PeriodMode)}
                 >
-                  <SelectTrigger className="bg-white dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100">
+                  <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+                  <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                     <SelectItem value="current_month">Bulan Ini</SelectItem>
                     <SelectItem value="previous_month">Bulan Lalu</SelectItem>
                     <SelectItem value="custom">Custom</SelectItem>
@@ -346,7 +346,7 @@ export function PermissionImpactSummary({
                       type="date"
                       value={customStart}
                       onChange={(e) => setCustomStart(e.target.value)}
-                      className="bg-white dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100"
+                      className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
                     />
                   </div>
                   <div>
@@ -357,7 +357,7 @@ export function PermissionImpactSummary({
                       type="date"
                       value={customEnd}
                       onChange={(e) => setCustomEnd(e.target.value)}
-                      className="bg-white dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100"
+                      className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
                     />
                   </div>
                 </>
@@ -373,7 +373,7 @@ export function PermissionImpactSummary({
                 placeholder="Nama karyawan..."
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
-                className="bg-white dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100"
+                className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-500 dark:placeholder:text-slate-400"
               />
             </div>
 
@@ -384,10 +384,10 @@ export function PermissionImpactSummary({
                   Brand
                 </label>
                 <Select value={brandFilter} onValueChange={setBrandFilter}>
-                  <SelectTrigger className="bg-white dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 text-sm">
+                  <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+                  <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                     <SelectItem value="all">Semua Brand</SelectItem>
                     {availableBrands.map((b) => (
                       <SelectItem key={b} value={b}>
@@ -406,10 +406,10 @@ export function PermissionImpactSummary({
                   value={divisionFilter}
                   onValueChange={setDivisionFilter}
                 >
-                  <SelectTrigger className="bg-white dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 text-sm">
+                  <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+                  <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                     <SelectItem value="all">Semua Divisi</SelectItem>
                     {availableDivisions.map((d) => (
                       <SelectItem key={d} value={d}>
@@ -428,10 +428,10 @@ export function PermissionImpactSummary({
                   value={categoryFilter as string}
                   onValueChange={(v) => setCategoryFilter(v as any)}
                 >
-                  <SelectTrigger className="bg-white dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 text-sm">
+                  <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+                  <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                     <SelectItem value="all">Semua Jenis</SelectItem>
                     {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
                       <SelectItem key={k} value={k}>
@@ -450,10 +450,10 @@ export function PermissionImpactSummary({
                   value={payrollFilter as string}
                   onValueChange={(v) => setPayrollFilter(v as any)}
                 >
-                  <SelectTrigger className="bg-white dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 text-sm">
+                  <SelectTrigger className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+                  <SelectContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                     <SelectItem value="all">Semua Dampak</SelectItem>
                     {Object.entries(PAYROLL_IMPACT_LABELS).map(([k, v]) => (
                       <SelectItem key={k} value={k}>
@@ -470,7 +470,7 @@ export function PermissionImpactSummary({
               <div className="text-sm text-slate-600 dark:text-slate-400 flex items-center gap-2">
                 <Calendar className="h-4 w-4" />
                 <span>
-                  Periode: <strong>{dateRange.label}</strong>
+                  Periode: <strong className="text-slate-900 dark:text-white">{dateRange.label}</strong>
                 </span>
               </div>
               {hasActiveFilters && (
@@ -484,7 +484,7 @@ export function PermissionImpactSummary({
                     setCategoryFilter("all");
                     setPayrollFilter("all");
                   }}
-                  className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-300"
+                  className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
                 >
                   <X className="h-4 w-4 mr-1" />
                   Bersihkan Filter
@@ -497,10 +497,10 @@ export function PermissionImpactSummary({
 
       {/* Summary Table */}
       {filtered.length === 0 ? (
-        <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40 backdrop-blur-xl">
+        <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 backdrop-blur-xl shadow-sm">
           <CardContent className="pt-12 pb-12">
             <div className="text-center">
-              <Filter className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+              <Filter className="h-12 w-12 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
               <p className="text-slate-600 dark:text-slate-400 mb-2">
                 Tidak ada data sesuai filter
               </p>
@@ -511,10 +511,10 @@ export function PermissionImpactSummary({
           </CardContent>
         </Card>
       ) : (
-        <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40 backdrop-blur-xl overflow-hidden">
+        <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 backdrop-blur-xl overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <Table>
-              <TableHeader>
+              <TableHeader className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-800">
                 <TableRow className="border-slate-200 dark:border-slate-800 hover:bg-transparent">
                   <TableHead className="text-slate-900 dark:text-slate-300 font-bold">
                     Nama Karyawan
@@ -577,24 +577,24 @@ export function PermissionImpactSummary({
                   return (
                     <TableRow
                       key={summary.uid}
-                      className="border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900/30"
+                      className="border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40 hover:bg-slate-50 dark:hover:bg-slate-900/30"
                     >
-                      <TableCell className="font-medium text-slate-900 dark:text-slate-100">
+                      <TableCell className="font-medium text-slate-900 dark:text-white">
                         {summary.fullName}
                       </TableCell>
                       <TableCell className="text-sm text-slate-600 dark:text-slate-400">
-                        <div>{summary.brand}</div>
-                        <div className="text-xs">{summary.division}</div>
+                        <div className="text-slate-900 dark:text-white">{summary.brand}</div>
+                        <div className="text-xs text-slate-600 dark:text-slate-500">{summary.division}</div>
                       </TableCell>
-                      <TableCell className="text-right font-mono text-slate-900 dark:text-slate-300">
+                      <TableCell className="text-right font-mono text-slate-900 dark:text-white font-semibold">
                         {summary.totalWorkingDays}
                       </TableCell>
-                      <TableCell className="text-right font-mono text-blue-600 dark:text-blue-300">
+                      <TableCell className="text-right font-mono text-blue-600 dark:text-blue-400 font-semibold">
                         {summary.effectiveWorkingDays}
                       </TableCell>
                       <TableCell className="text-right">
                         {summary.tidak_masuk_total_days > 0 ? (
-                          <Badge className="bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-200 border border-red-200 dark:border-red-800">
+                          <Badge className="bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-200 border border-red-200 dark:border-red-800">
                             {summary.tidak_masuk_total_days}h
                           </Badge>
                         ) : (
@@ -609,7 +609,7 @@ export function PermissionImpactSummary({
                             {rincianItems.map((item, idx) => (
                               <div
                                 key={idx}
-                                className="text-slate-600 dark:text-slate-400"
+                                className="text-slate-700 dark:text-slate-300"
                               >
                                 {item}
                               </div>
@@ -625,18 +625,18 @@ export function PermissionImpactSummary({
                         {jamKTA > 0 ? (
                           <div className="space-y-0.5">
                             {summary.keluar_kantor_minutes > 0 && (
-                              <div className="text-slate-600 dark:text-slate-400">
+                              <div className="text-slate-700 dark:text-slate-300">
                                 Keluar:{" "}
                                 {Math.ceil(summary.keluar_kantor_minutes / 60)}j
                               </div>
                             )}
                             {summary.datang_terlambat_minutes > 0 && (
-                              <div className="text-slate-600 dark:text-slate-400">
+                              <div className="text-slate-700 dark:text-slate-300">
                                 Telat: {summary.datang_terlambat_minutes}m
                               </div>
                             )}
                             {summary.pulang_awal_minutes > 0 && (
-                              <div className="text-slate-600 dark:text-slate-400">
+                              <div className="text-slate-700 dark:text-slate-300">
                                 Awal: {summary.pulang_awal_minutes}m
                               </div>
                             )}
@@ -727,9 +727,9 @@ function PermissionDetailDialog({
 }) {
   return (
     <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="w-[95vw] md:w-[90vw] max-w-4xl bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[95vw] md:w-[90vw] max-w-4xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-xl font-bold">
+          <DialogTitle className="text-xl font-bold text-slate-900 dark:text-white">
             {summary.fullName}
           </DialogTitle>
           <DialogDescription className="text-slate-600 dark:text-slate-400">
@@ -739,40 +739,40 @@ function PermissionDetailDialog({
 
         {/* Summary Stats */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 my-6">
-          <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
-            <p className="text-xs text-slate-600 dark:text-slate-500 mb-1">
+          <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+            <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">
               Hari Kerja
             </p>
-            <p className="text-lg font-bold text-slate-900 dark:text-slate-100">
+            <p className="text-lg font-bold text-slate-900 dark:text-white">
               {summary.totalWorkingDays}
             </p>
           </div>
-          <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
-            <p className="text-xs text-slate-600 dark:text-slate-500 mb-1">
+          <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+            <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">
               Hadir Efektif
             </p>
             <p className="text-lg font-bold text-blue-600 dark:text-blue-400">
               {summary.effectiveWorkingDays}
             </p>
           </div>
-          <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
-            <p className="text-xs text-slate-600 dark:text-slate-500 mb-1">
+          <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+            <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">
               Tidak Masuk
             </p>
             <p className="text-lg font-bold text-red-600 dark:text-red-400">
               {summary.tidak_masuk_total_days}
             </p>
           </div>
-          <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
-            <p className="text-xs text-slate-600 dark:text-slate-500 mb-1">
+          <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+            <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">
               Sakit
             </p>
             <p className="text-lg font-bold text-blue-600 dark:text-blue-400">
               {summary.tidak_masuk_breakdown.sakit}
             </p>
           </div>
-          <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
-            <p className="text-xs text-slate-600 dark:text-slate-500 mb-1">
+          <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+            <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">
               Dampak Payroll
             </p>
             <p className="text-lg font-bold text-orange-600 dark:text-orange-400">
@@ -791,7 +791,7 @@ function PermissionDetailDialog({
             Rincian Izin ({summary.permissions.length})
           </p>
           {summary.permissions.length === 0 ? (
-            <p className="text-sm text-slate-600 dark:text-slate-500">
+            <p className="text-sm text-slate-600 dark:text-slate-400">
               Tidak ada izin untuk periode ini
             </p>
           ) : (
@@ -816,14 +816,14 @@ function PermissionDetailDialog({
                 return (
                   <div
                     key={perm.id}
-                    className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded-lg border border-slate-200 dark:border-slate-800"
+                    className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700"
                   >
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div>
-                        <p className="font-medium text-sm text-slate-900 dark:text-slate-100">
+                        <p className="font-medium text-sm text-slate-900 dark:text-white">
                           {getFormTypeLabel(formType)}
                         </p>
-                        <p className="text-xs text-slate-600 dark:text-slate-500">
+                        <p className="text-xs text-slate-600 dark:text-slate-400">
                           {format(startDt, "d MMM yyyy", { locale: idLocale })}{" "}
                           -{format(endDt, "d MMM yyyy", { locale: idLocale })}
                         </p>
@@ -838,7 +838,7 @@ function PermissionDetailDialog({
                     </div>
                     {reason && reason !== "lainnya" && (
                       <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">
-                        Alasan: <strong>{getReasonLabel(reason)}</strong>
+                        Alasan: <strong className="text-slate-900 dark:text-white">{getReasonLabel(reason)}</strong>
                       </p>
                     )}
                     {perm.attachments && perm.attachments.length > 0 && (

@@ -37,6 +37,8 @@ import {
   Wallet,
   Wrench,
   CalendarClock,
+  Home,
+  Briefcase as BriefcaseIcon,
 } from "lucide-react";
 import type { UserRole } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -505,34 +507,175 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
     DEVELOPER_MENU_ITEMS,
   ],
   hrd: [
-    RECRUITMENT_MENU_ITEMS,
-    EMPLOYEE_MANAGEMENT_ITEMS,
-    EMPLOYEE_MONITORING_ITEMS,
     {
-      title: "Personal",
+      title: "BERANDA",
       items: [
+        {
+          key: "hrd.dashboard.karyawan",
+          href: "/admin/hrd/dashboard-karyawan",
+          label: "Dashboard Karyawan",
+          icon: createElement(LayoutDashboard),
+        },
+        {
+          key: "hrd.dashboard.rekrutmen",
+          href: "/admin/hrd/dashboard-rekrutmen",
+          label: "Dashboard Rekrutmen",
+          icon: createElement(Users),
+        },
+      ],
+    },
+    {
+      title: "REKRUTMEN",
+      items: [
+        {
+          key: "recruitment.jobs",
+          href: "/admin/jobs",
+          label: "Lowongan Kerja",
+          icon: createElement(Briefcase),
+        },
+        {
+          key: "recruitment.applications",
+          href: "/admin/recruitment",
+          label: "Manajemen Lamaran",
+          icon: createElement(FolderKanban),
+        },
+        {
+          key: "recruitment.assessments",
+          href: "/admin/hrd/assessments",
+          label: "Asesmen",
+          icon: createElement(ClipboardCheck),
+        },
+        {
+          key: "recruitment.templates",
+          href: "/admin/recruitment/templates",
+          label: "Template Offering",
+          icon: createElement(FileText),
+        },
         {
           key: "personal.interviews.hrd",
           href: "/admin/interviews",
-          label: "My Interviews",
+          label: "Interview Saya",
           icon: createElement(Video),
         },
         {
           key: "recruitment.tasks",
           href: "/admin/recruitment/my-tasks",
           label: "Tugas Rekrutmen",
-          icon: createElement(Briefcase),
+          icon: createElement(CheckSquare),
         },
       ],
     },
     {
-      title: "Administrasi",
+      title: "DATA KARYAWAN",
       items: [
         {
-          key: "admin.structure",
-          href: "/admin/super-admin/struktur-organisasi",
-          label: "Organisasi Perusahaan",
-          icon: createElement(KanbanSquare),
+          key: "employee.data.karyawan",
+          href: "/admin/hrd/employee-data/karyawan",
+          label: "Direktori Karyawan",
+          icon: createElement(Users),
+        },
+        {
+          key: "monitoring.invites",
+          href: "/admin/hrd/invites",
+          label: "Undangan Karyawan",
+          icon: createElement(UserPlus),
+        },
+        {
+          key: "monitoring.interns",
+          href: "/admin/hrd/employee-data/intern",
+          label: "Profil Magang",
+          icon: createElement(BookUser),
+        },
+      ],
+    },
+    {
+      title: "KEHADIRAN & ABSENSI",
+      items: [
+        {
+          key: "monitoring.attendance",
+          href: "/admin/hrd/monitoring/absen",
+          label: "Monitoring Absen",
+          icon: createElement(FileClock),
+        },
+        {
+          key: "monitoring.settings",
+          href: "/admin/hrd/monitoring/settings",
+          label: "Pengaturan Absensi",
+          icon: createElement(Settings),
+        },
+      ],
+    },
+    {
+      title: "LEMBUR & PAYROLL",
+      items: [
+        {
+          key: "hrd.overtime_approval",
+          href: "/admin/hrd/persetujuan-lembur",
+          label: "Persetujuan Lembur",
+          icon: createElement(Timer),
+        },
+        {
+          key: "overtime_payroll_recap",
+          href: "/admin/overtime-payroll-recap",
+          label: "Rekap Lembur Payroll",
+          icon: createElement(CalendarClock),
+        },
+      ],
+    },
+    {
+      title: "IZIN & CUTI",
+      items: [
+        {
+          key: "hrd.permission_approval",
+          href: "/admin/hrd/persetujuan-izin",
+          label: "Persetujuan Izin",
+          icon: createElement(FileHeart),
+        },
+        {
+          key: "hrd.leave_approval",
+          href: "/admin/hrd/persetujuan-cuti",
+          label: "Persetujuan Cuti",
+          icon: createElement(CalendarOff),
+        },
+        {
+          key: "monitoring.leave",
+          href: "/admin/hrd/monitoring/cuti",
+          label: "Manajemen Cuti",
+          icon: createElement(Calendar),
+        },
+      ],
+    },
+    {
+      title: "PERJALANAN DINAS",
+      items: [
+        {
+          key: "hrd.dinas.monitoring",
+          href: "/admin/hrd/monitoring/dinas",
+          label: "Monitoring Dinas",
+          icon: createElement(MapPin),
+        },
+        {
+          key: "hrd.surat_tugas",
+          href: "/admin/hrd/surat-tugas",
+          label: "Surat Perintah Dinas",
+          icon: createElement(FileText),
+        },
+        {
+          key: "review.business_trip_approval",
+          href: "/admin/review/persetujuan-dinas",
+          label: "Persetujuan Dinas",
+          icon: createElement(CheckSquare),
+        },
+      ],
+    },
+    {
+      title: "PENGEMBANGAN SDM",
+      items: [
+        {
+          key: "monitoring.training",
+          href: "/admin/hrd/monitoring/pelatihan",
+          label: "Pengembangan SDM",
+          icon: createElement(GraduationCap),
         },
       ],
     },
