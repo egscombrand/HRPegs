@@ -1102,35 +1102,35 @@ export function BusinessTripApprovalClient() {
             </div>
           ) : approvals.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-sm text-slate-400">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
                 Tidak ada permintaan yang perlu tindakan.
               </p>
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="overflow-x-auto rounded-2xl border border-slate-800/80 bg-slate-950/80 shadow-lg shadow-slate-950/20">
+              <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/80 shadow-sm dark:shadow-lg dark:shadow-slate-950/20">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-slate-900/90">
-                      <TableHead className="text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
+                    <TableRow className="bg-slate-50 dark:bg-slate-900/90">
+                      <TableHead className="text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
                         Perjalanan
                       </TableHead>
-                      <TableHead className="text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
+                      <TableHead className="text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
                         Tujuan
                       </TableHead>
-                      <TableHead className="text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
+                      <TableHead className="text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
                         Periode
                       </TableHead>
-                      <TableHead className="text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
+                      <TableHead className="text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
                         Anggota
                       </TableHead>
-                      <TableHead className="text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
+                      <TableHead className="text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
                         Diajukan oleh
                       </TableHead>
-                      <TableHead className="text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
+                      <TableHead className="text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
                         Status
                       </TableHead>
-                      <TableHead className="text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
+                      <TableHead className="text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
                         Aksi
                       </TableHead>
                     </TableRow>
@@ -1149,10 +1149,10 @@ export function BusinessTripApprovalClient() {
                       return (
                         <TableRow
                           key={request.id}
-                          className="border-t border-slate-800/70 hover:bg-slate-900/60 transition-colors"
+                          className="border-t border-slate-200 dark:border-slate-800/70 hover:bg-slate-50 dark:hover:bg-slate-900/60 transition-colors"
                         >
                           <TableCell className="py-5 px-4 align-top">
-                            <div className="font-semibold text-slate-50">
+                            <div className="font-semibold text-slate-900 dark:text-slate-50">
                               {request.missionName}
                             </div>
                             {missionDetails?.spdNumber ? (
@@ -1162,16 +1162,16 @@ export function BusinessTripApprovalClient() {
                             ) : null}
                           </TableCell>
                           <TableCell className="py-5 px-4 align-top">
-                            <div className="text-sm leading-6 text-slate-300 max-w-xs">
+                            <div className="text-sm leading-6 text-slate-700 dark:text-slate-300 max-w-xs">
                               {missionDetails
                                 ? formatDestinationHelper(missionDetails)
                                 : "-"}
                             </div>
                           </TableCell>
                           <TableCell className="py-5 px-4 align-top">
-                            <div className="text-sm text-slate-300">
+                            <div className="text-sm text-slate-700 dark:text-slate-300">
                               {formatDate(missionDetails?.startDate)}
-                              <span className="text-slate-500"> - </span>
+                              <span className="text-slate-400 dark:text-slate-500"> - </span>
                               {formatDate(missionDetails?.endDate)}
                             </div>
                             <div className="mt-1 text-xs text-slate-500">
@@ -1207,25 +1207,25 @@ export function BusinessTripApprovalClient() {
                                 anggotaNames.slice(0, 5).map((name) => (
                                   <span
                                     key={name}
-                                    className="rounded-full bg-slate-900/70 px-3 py-1 text-xs text-slate-200"
+                                    className="rounded-full bg-slate-100 dark:bg-slate-900/70 px-3 py-1 text-xs text-slate-700 dark:text-slate-200"
                                   >
                                     {name}
                                   </span>
                                 ))
                               ) : (
-                                <span className="text-sm text-slate-400">
+                                <span className="text-sm text-slate-500 dark:text-slate-400">
                                   {request.memberUids.length} anggota
                                 </span>
                               )}
                               {anggotaNames.length > 5 ? (
-                                <span className="rounded-full bg-slate-900/70 px-3 py-1 text-xs text-slate-200">
+                                <span className="rounded-full bg-slate-100 dark:bg-slate-900/70 px-3 py-1 text-xs text-slate-700 dark:text-slate-200">
                                   +{anggotaNames.length - 5} lainnya
                                 </span>
                               ) : null}
                             </div>
                           </TableCell>
                           <TableCell className="py-5 px-4 align-top">
-                            <span className="text-sm text-slate-300">
+                            <span className="text-sm text-slate-700 dark:text-slate-300">
                               {createdBy}
                             </span>
                           </TableCell>
@@ -1300,38 +1300,38 @@ export function BusinessTripApprovalClient() {
             </div>
           ) : historyApprovals.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-sm text-slate-400">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
                 Belum ada riwayat persetujuan.
               </p>
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="overflow-x-auto rounded-2xl border border-slate-800/80 bg-slate-950/80 shadow-lg shadow-slate-950/20">
+              <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/80 shadow-sm dark:shadow-lg dark:shadow-slate-950/20">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-slate-900/90">
-                      <TableHead className="text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
+                    <TableRow className="bg-slate-50 dark:bg-slate-900/90">
+                      <TableHead className="text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
                         Perjalanan
                       </TableHead>
-                      <TableHead className="text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
+                      <TableHead className="text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
                         Tujuan
                       </TableHead>
-                      <TableHead className="text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
+                      <TableHead className="text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
                         Periode
                       </TableHead>
-                      <TableHead className="text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
+                      <TableHead className="text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
                         Anggota
                       </TableHead>
-                      <TableHead className="text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
+                      <TableHead className="text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
                         Keputusan
                       </TableHead>
-                      <TableHead className="text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
+                      <TableHead className="text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
                         Tanggal Keputusan
                       </TableHead>
-                      <TableHead className="text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
+                      <TableHead className="text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
                         Catatan
                       </TableHead>
-                      <TableHead className="text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
+                      <TableHead className="text-slate-600 dark:text-slate-400 text-[11px] uppercase tracking-[0.18em] py-3 px-4">
                         Aksi
                       </TableHead>
                     </TableRow>
@@ -1346,10 +1346,10 @@ export function BusinessTripApprovalClient() {
                       return (
                         <TableRow
                           key={request.id}
-                          className="border-t border-slate-800/70 hover:bg-slate-900/60 transition-colors"
+                          className="border-t border-slate-200 dark:border-slate-800/70 hover:bg-slate-50 dark:hover:bg-slate-900/60 transition-colors"
                         >
                           <TableCell className="py-5 px-4 align-top">
-                            <div className="font-semibold text-slate-50">
+                            <div className="font-semibold text-slate-900 dark:text-slate-50">
                               {request.missionName}
                             </div>
                             {missionDetails?.spdNumber ? (
@@ -1359,16 +1359,16 @@ export function BusinessTripApprovalClient() {
                             ) : null}
                           </TableCell>
                           <TableCell className="py-5 px-4 align-top">
-                            <div className="text-sm leading-6 text-slate-300 max-w-xs">
+                            <div className="text-sm leading-6 text-slate-700 dark:text-slate-300 max-w-xs">
                               {missionDetails
                                 ? formatDestinationHelper(missionDetails)
                                 : "-"}
                             </div>
                           </TableCell>
                           <TableCell className="py-5 px-4 align-top">
-                            <div className="text-sm text-slate-300">
+                            <div className="text-sm text-slate-700 dark:text-slate-300">
                               {formatDate(missionDetails?.startDate)}
-                              <span className="text-slate-500"> - </span>
+                              <span className="text-slate-400 dark:text-slate-500"> - </span>
                               {formatDate(missionDetails?.endDate)}
                             </div>
                           </TableCell>
@@ -1378,18 +1378,18 @@ export function BusinessTripApprovalClient() {
                                 anggotaNames.slice(0, 3).map((name) => (
                                   <span
                                     key={name}
-                                    className="rounded-full bg-slate-900/70 px-3 py-1 text-xs text-slate-200"
+                                    className="rounded-full bg-slate-100 dark:bg-slate-900/70 px-3 py-1 text-xs text-slate-700 dark:text-slate-200"
                                   >
                                     {name}
                                   </span>
                                 ))
                               ) : (
-                                <span className="text-sm text-slate-400">
+                                <span className="text-sm text-slate-500 dark:text-slate-400">
                                   {request.memberUids.length} anggota
                                 </span>
                               )}
                               {anggotaNames.length > 3 ? (
-                                <span className="rounded-full bg-slate-900/70 px-3 py-1 text-xs text-slate-200">
+                                <span className="rounded-full bg-slate-100 dark:bg-slate-900/70 px-3 py-1 text-xs text-slate-700 dark:text-slate-200">
                                   +{anggotaNames.length - 3}
                                 </span>
                               ) : null}
@@ -1419,7 +1419,7 @@ export function BusinessTripApprovalClient() {
                             </div>
                           </TableCell>
                           <TableCell className="py-5 px-4 align-top">
-                            <div className="text-sm text-slate-300">
+                            <div className="text-sm text-slate-700 dark:text-slate-300">
                               {formatDate(
                                 request.decidedAt || request.approvedAt,
                               )}
@@ -1431,7 +1431,7 @@ export function BusinessTripApprovalClient() {
                             )}
                           </TableCell>
                           <TableCell className="py-5 px-4 align-top">
-                            <div className="text-sm text-slate-300 max-w-xs">
+                            <div className="text-sm text-slate-700 dark:text-slate-300 max-w-xs">
                               {request.status === "approved" &&
                               request.missionDetails?.status ===
                                 "waiting_staff_confirmation"
@@ -1471,22 +1471,22 @@ export function BusinessTripApprovalClient() {
           if (!open) setSelectedRequestForModal(null);
         }}
       >
-        <DialogContent className="max-w-7xl max-h-[95vh] overflow-y-auto bg-slate-950 text-slate-50 border border-slate-800">
+        <DialogContent className="max-w-7xl max-h-[95vh] overflow-y-auto bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-50 border border-slate-200 dark:border-slate-800">
           <VisuallyHidden.Root>
             <DialogTitle>Detail Persetujuan Perjalanan Dinas</DialogTitle>
           </VisuallyHidden.Root>
           {isLoadingModalDetails ? (
             <div className="space-y-3 p-6">
-              <div className="h-8 w-3/4 animate-pulse rounded bg-slate-700" />
-              <div className="h-4 w-1/2 animate-pulse rounded bg-slate-700" />
-              <div className="h-4 w-full animate-pulse rounded bg-slate-700" />
+              <div className="h-8 w-3/4 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
+              <div className="h-4 w-1/2 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
+              <div className="h-4 w-full animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
             </div>
           ) : selectedRequestForModal ? (
             <div className="space-y-6 p-6">
               {/* Header Section */}
-              <div className="space-y-5 pb-6 border-b border-slate-800/60">
+              <div className="space-y-5 pb-6 border-b border-slate-200 dark:border-slate-800/60">
                 <div>
-                  <h1 className="text-4xl font-bold text-slate-50 tracking-tight">
+                  <h1 className="text-4xl font-bold text-slate-900 dark:text-slate-50 tracking-tight">
                     {selectedRequestForModal.missionName || "-"}
                   </h1>
                   <p className="text-sm text-slate-500 mt-3 font-medium">
@@ -1511,7 +1511,7 @@ export function BusinessTripApprovalClient() {
                   </Badge>
                   <div className="flex gap-2 items-center text-xs text-slate-500">
                     <span>Dibuat oleh:</span>
-                    <span className="text-slate-300 font-medium">
+                    <span className="text-slate-700 dark:text-slate-300 font-medium">
                       {selectedRequestForModal.missionDetails?.assignedByName ||
                         "-"}
                     </span>
@@ -1522,85 +1522,85 @@ export function BusinessTripApprovalClient() {
               {/* Summary Cards Grid */}
               <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
                 {/* SPD Number */}
-                <div className="rounded-lg border border-slate-800/60 bg-slate-900/40 p-4 hover:bg-slate-900/60 transition">
+                <div className="rounded-lg border border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-slate-900/40 p-4 hover:bg-slate-100 dark:hover:bg-slate-900/60 transition">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
                     Nomor SPD
                   </p>
-                  <p className="text-lg font-bold text-slate-50 mt-3">
+                  <p className="text-lg font-bold text-slate-900 dark:text-slate-50 mt-3">
                     {selectedRequestForModal.missionDetails?.assignmentNumber ||
                       "-"}
                   </p>
                 </div>
 
                 {/* Destination */}
-                <div className="rounded-lg border border-slate-800/60 bg-slate-900/40 p-4 hover:bg-slate-900/60 transition">
+                <div className="rounded-lg border border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-slate-900/40 p-4 hover:bg-slate-100 dark:hover:bg-slate-900/60 transition">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
                     Tujuan
                   </p>
-                  <p className="text-sm font-semibold text-slate-50 mt-3 line-clamp-2">
+                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-50 mt-3 line-clamp-2">
                     {formatDestination(selectedRequestForModal.missionDetails)}
                   </p>
                 </div>
 
                 {/* Total Members */}
-                <div className="rounded-lg border border-slate-800/60 bg-slate-900/40 p-4 hover:bg-slate-900/60 transition">
+                <div className="rounded-lg border border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-slate-900/40 p-4 hover:bg-slate-100 dark:hover:bg-slate-900/60 transition">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
                     Total Anggota
                   </p>
-                  <p className="text-2xl font-bold text-cyan-400 mt-3">
+                  <p className="text-2xl font-bold text-cyan-600 dark:text-cyan-400 mt-3">
                     {selectedRequestForModal.memberUids?.length || 0}
                   </p>
                 </div>
 
                 {/* Members Needing My Approval */}
-                <div className="rounded-lg border border-amber-600/50 bg-amber-500/15 p-4 hover:bg-amber-500/20 transition">
-                  <p className="text-xs font-semibold text-amber-400 uppercase tracking-wide">
+                <div className="rounded-lg border border-amber-300 dark:border-amber-600/50 bg-amber-50 dark:bg-amber-500/15 p-4 hover:bg-amber-100 dark:hover:bg-amber-500/20 transition">
+                  <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
                     Perlu Persetujuan Saya
                   </p>
-                  <p className="text-2xl font-bold text-amber-300 mt-3">
+                  <p className="text-2xl font-bold text-amber-700 dark:text-amber-300 mt-3">
                     {selectedRequestForModal.memberUids?.length || 0}
                   </p>
                 </div>
 
                 {/* Approval Status */}
-                <div className="rounded-lg border border-slate-800/60 bg-slate-900/40 p-4 hover:bg-slate-900/60 transition">
+                <div className="rounded-lg border border-slate-200 dark:border-slate-800/60 bg-slate-50 dark:bg-slate-900/40 p-4 hover:bg-slate-100 dark:hover:bg-slate-900/60 transition">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
                     Status
                   </p>
-                  <p className="text-sm font-semibold text-slate-50 mt-3">
+                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-50 mt-3">
                     {formatBusinessTripStatus(selectedRequestForModal.status)}
                   </p>
                 </div>
               </div>
 
-              <Separator className="bg-slate-800/60" />
+              <Separator className="bg-slate-200 dark:bg-slate-800/60" />
 
               {/* Mission Details Section */}
               <div className="space-y-5">
-                <h2 className="text-xl font-bold text-slate-50 tracking-tight">
+                <h2 className="text-xl font-bold text-slate-900 dark:text-slate-50 tracking-tight">
                   Informasi Perjalanan
                 </h2>
-                <div className="grid gap-5 p-5 rounded-lg border border-slate-800/50 bg-slate-900/20 backdrop-blur-sm">
+                <div className="grid gap-5 p-5 rounded-lg border border-slate-200 dark:border-slate-800/50 bg-slate-50 dark:bg-slate-900/20">
                   <div className="grid md:grid-cols-2 gap-4">
                     <div>
-                      <p className="text-xs font-medium text-slate-400">
+                      <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
                         Periode
                       </p>
-                      <p className="text-sm text-slate-100 mt-2">
+                      <p className="text-sm text-slate-900 dark:text-slate-100 mt-2">
                         {formatDate(
                           selectedRequestForModal.missionDetails?.startDate,
                         )}{" "}
-                        <span className="text-slate-400">s/d</span>{" "}
+                        <span className="text-slate-500 dark:text-slate-400">s/d</span>{" "}
                         {formatDate(
                           selectedRequestForModal.missionDetails?.endDate,
                         )}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-slate-400">
+                      <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
                         Dibuat Oleh
                       </p>
-                      <p className="text-sm text-slate-100 mt-2">
+                      <p className="text-sm text-slate-900 dark:text-slate-100 mt-2">
                         {selectedRequestForModal.missionDetails
                           ?.assignedByName || "-"}
                       </p>
@@ -1608,10 +1608,10 @@ export function BusinessTripApprovalClient() {
                   </div>
 
                   <div>
-                    <p className="text-xs font-medium text-slate-400">
+                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
                       Alamat Tujuan
                     </p>
-                    <p className="text-sm text-slate-100 mt-2">
+                    <p className="text-sm text-slate-900 dark:text-slate-100 mt-2">
                       {selectedRequestForModal.missionDetails
                         ?.destinationAddress || "-"}
                     </p>
@@ -1620,10 +1620,10 @@ export function BusinessTripApprovalClient() {
                   {selectedRequestForModal.missionDetails?.instructionNote ||
                   selectedRequestForModal.missionDetails?.instructionHtml ? (
                     <div>
-                      <p className="text-xs font-medium text-slate-400">
+                      <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
                         Instruksi
                       </p>
-                      <p className="text-sm text-slate-100 mt-2">
+                      <p className="text-sm text-slate-900 dark:text-slate-100 mt-2">
                         {stripHtml(
                           selectedRequestForModal.missionDetails
                             .instructionNote ||
@@ -1655,20 +1655,20 @@ export function BusinessTripApprovalClient() {
                               href={previewUrl}
                               target="_blank"
                               rel="noreferrer"
-                              className="inline-flex items-center gap-2 px-3 py-2 rounded text-sm font-medium bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 transition border border-cyan-500/30"
+                              className="inline-flex items-center gap-2 px-3 py-2 rounded text-sm font-medium bg-cyan-100 dark:bg-cyan-500/20 text-cyan-700 dark:text-cyan-400 hover:bg-cyan-200 dark:hover:bg-cyan-500/30 transition border border-cyan-300 dark:border-cyan-500/30"
                             >
                               📄 Preview SPD
                             </a>
                             <a
                               href={`${previewUrl}&download=true`}
                               download
-                              className="inline-flex items-center gap-2 px-3 py-2 rounded text-sm font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition border border-slate-700"
+                              className="inline-flex items-center gap-2 px-3 py-2 rounded text-sm font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition border border-slate-300 dark:border-slate-700"
                             >
                               ⬇️ Download SPD
                             </a>
                           </div>
                         ) : (
-                          <p className="text-sm text-amber-400 mt-3">
+                          <p className="text-sm text-amber-600 dark:text-amber-400 mt-3">
                             ⚠️ Dokumen belum bisa dipreview lintas akun. Hubungi
                             admin untuk membuka akses.
                           </p>
@@ -1679,18 +1679,18 @@ export function BusinessTripApprovalClient() {
                 </div>
               </div>
 
-              <Separator className="bg-slate-800/60" />
+              <Separator className="bg-slate-200 dark:bg-slate-800/60" />
 
               {/* Members Section - Approval Flow */}
               <div className="space-y-6">
                 {/* Approval Flow Explanation */}
                 <div className="space-y-3">
-                  <h2 className="text-xl font-bold text-slate-50 tracking-tight">
+                  <h2 className="text-xl font-bold text-slate-900 dark:text-slate-50 tracking-tight">
                     Arus Persetujuan
                   </h2>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {/* Staff → Manager */}
-                    <div className="rounded-lg border border-slate-800/50 bg-slate-900/30 p-4 hover:bg-slate-900/40 transition">
+                    <div className="rounded-lg border border-slate-200 dark:border-slate-800/50 bg-slate-50 dark:bg-slate-900/30 p-4 hover:bg-slate-100 dark:hover:bg-slate-900/40 transition">
                       <div className="flex items-center gap-2">
                         <Badge
                           variant="secondary"
@@ -1698,7 +1698,7 @@ export function BusinessTripApprovalClient() {
                         >
                           Staff Biasa
                         </Badge>
-                        <span className="text-slate-500">→</span>
+                        <span className="text-slate-400 dark:text-slate-500">→</span>
                         <Badge
                           variant="secondary"
                           className="text-xs font-semibold"
@@ -1709,7 +1709,7 @@ export function BusinessTripApprovalClient() {
                     </div>
 
                     {/* Manager → Director */}
-                    <div className="rounded-lg border border-slate-800/50 bg-slate-900/30 p-4 hover:bg-slate-900/40 transition">
+                    <div className="rounded-lg border border-slate-200 dark:border-slate-800/50 bg-slate-50 dark:bg-slate-900/30 p-4 hover:bg-slate-100 dark:hover:bg-slate-900/40 transition">
                       <div className="flex items-center gap-2">
                         <Badge
                           variant="secondary"
@@ -1717,7 +1717,7 @@ export function BusinessTripApprovalClient() {
                         >
                           Manager Divisi
                         </Badge>
-                        <span className="text-slate-500">→</span>
+                        <span className="text-slate-400 dark:text-slate-500">→</span>
                         <Badge
                           variant="secondary"
                           className="text-xs font-semibold"
@@ -1728,11 +1728,11 @@ export function BusinessTripApprovalClient() {
                     </div>
 
                     {/* Status */}
-                    <div className="rounded-lg border border-slate-800/50 bg-slate-900/30 p-4 hover:bg-slate-900/40 transition">
+                    <div className="rounded-lg border border-slate-200 dark:border-slate-800/50 bg-slate-50 dark:bg-slate-900/30 p-4 hover:bg-slate-100 dark:hover:bg-slate-900/40 transition">
                       <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
                         Status Request
                       </p>
-                      <p className="text-sm font-semibold text-slate-50 mt-3">
+                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-50 mt-3">
                         {formatBusinessTripStatus(
                           selectedRequestForModal.status,
                         )}
@@ -1744,7 +1744,7 @@ export function BusinessTripApprovalClient() {
                 {/* Members Needing Approval */}
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-bold text-slate-50 tracking-tight">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-slate-50 tracking-tight">
                       ✓ Perlu Persetujuan Anda
                     </h3>
                     <Badge variant="default" className="text-xs">
@@ -1754,29 +1754,29 @@ export function BusinessTripApprovalClient() {
 
                   {selectedRequestForModal.memberDetails &&
                   selectedRequestForModal.memberDetails.length > 0 ? (
-                    <div className="overflow-x-auto rounded-lg border border-slate-800/50">
+                    <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800/50">
                       <Table>
                         <TableHeader>
-                          <TableRow className="bg-slate-900/60 hover:bg-slate-900/60">
-                            <TableHead className="text-slate-300 font-semibold">
+                          <TableRow className="bg-slate-50 dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-900/60">
+                            <TableHead className="text-slate-700 dark:text-slate-300 font-semibold">
                               Nama
                             </TableHead>
-                            <TableHead className="text-slate-300 font-semibold">
+                            <TableHead className="text-slate-700 dark:text-slate-300 font-semibold">
                               Posisi
                             </TableHead>
-                            <TableHead className="text-slate-300 font-semibold">
+                            <TableHead className="text-slate-700 dark:text-slate-300 font-semibold">
                               Brand / Divisi
                             </TableHead>
-                            <TableHead className="text-slate-300 font-semibold">
+                            <TableHead className="text-slate-700 dark:text-slate-300 font-semibold">
                               Tipe
                             </TableHead>
-                            <TableHead className="text-slate-300 font-semibold">
+                            <TableHead className="text-slate-700 dark:text-slate-300 font-semibold">
                               Approver
                             </TableHead>
-                            <TableHead className="text-slate-300 font-semibold">
+                            <TableHead className="text-slate-700 dark:text-slate-300 font-semibold">
                               Status Approval
                             </TableHead>
-                            <TableHead className="text-slate-300 font-semibold">
+                            <TableHead className="text-slate-700 dark:text-slate-300 font-semibold">
                               Konfirmasi Staff
                             </TableHead>
                           </TableRow>
@@ -1819,23 +1819,23 @@ export function BusinessTripApprovalClient() {
                                 <TableRow
                                   key={member.id || member.employeeUid}
                                   className={
-                                    idx % 2 === 1 ? "bg-slate-900/40" : ""
+                                    idx % 2 === 1 ? "bg-slate-50 dark:bg-slate-900/40" : "bg-white dark:bg-transparent"
                                   }
                                 >
-                                  <TableCell className="text-slate-50 font-medium">
+                                  <TableCell className="text-slate-900 dark:text-slate-50 font-medium">
                                     {memberName}
                                   </TableCell>
-                                  <TableCell className="text-slate-400 text-sm">
+                                  <TableCell className="text-slate-600 dark:text-slate-400 text-sm">
                                     {member.employeePosition || "-"}
                                   </TableCell>
-                                  <TableCell className="text-slate-400 text-sm">
+                                  <TableCell className="text-slate-600 dark:text-slate-400 text-sm">
                                     {member.brandName && member.divisionName
                                       ? `${member.brandName} / ${member.divisionName}`
                                       : member.brandName ||
                                         member.divisionName ||
                                         "-"}
                                   </TableCell>
-                                  <TableCell className="text-slate-400 text-sm">
+                                  <TableCell className="text-slate-600 dark:text-slate-400 text-sm">
                                     <Badge
                                       variant="outline"
                                       className="text-xs font-semibold"
@@ -1843,7 +1843,7 @@ export function BusinessTripApprovalClient() {
                                       {memberType}
                                     </Badge>
                                   </TableCell>
-                                  <TableCell className="text-slate-400 text-sm">
+                                  <TableCell className="text-slate-600 dark:text-slate-400 text-sm">
                                     {member.managerName || "-"}
                                   </TableCell>
                                   <TableCell>
@@ -1878,8 +1878,8 @@ export function BusinessTripApprovalClient() {
                       </Table>
                     </div>
                   ) : (
-                    <div className="rounded-lg border border-dashed border-slate-700 bg-slate-900/20 p-6 text-center">
-                      <p className="text-sm text-slate-400">
+                    <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/20 p-6 text-center">
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
                         Memuat detail anggota...
                       </p>
                     </div>
@@ -1890,9 +1890,9 @@ export function BusinessTripApprovalClient() {
               {/* Timeline Section */}
               {modalTimeline.length > 0 && (
                   <>
-                    <Separator className="bg-slate-800/60" />
+                    <Separator className="bg-slate-200 dark:bg-slate-800/60" />
                     <div className="space-y-5">
-                      <h2 className="text-xl font-bold text-slate-50 tracking-tight">
+                      <h2 className="text-xl font-bold text-slate-900 dark:text-slate-50 tracking-tight">
                         Timeline Aktivitas
                       </h2>
                       <div className="space-y-3">
@@ -1909,13 +1909,13 @@ export function BusinessTripApprovalClient() {
 
                               {/* Timeline dot */}
                               <div className="relative mt-1 flex h-8 w-8 flex-shrink-0 items-center justify-center">
-                                <div className="absolute inset-0 rounded-full border-2 border-cyan-500/50 bg-cyan-500/10" />
-                                <div className="h-2 w-2 rounded-full bg-cyan-400" />
+                                <div className="absolute inset-0 rounded-full border-2 border-cyan-500/50 bg-cyan-100 dark:bg-cyan-500/10" />
+                                <div className="h-2 w-2 rounded-full bg-cyan-500 dark:bg-cyan-400" />
                               </div>
 
                               {/* Timeline content */}
-                              <div className="flex-1 rounded-lg border border-slate-800/50 bg-slate-900/30 p-4">
-                                <p className="text-sm font-medium text-slate-50">
+                              <div className="flex-1 rounded-lg border border-slate-200 dark:border-slate-800/50 bg-slate-50 dark:bg-slate-900/30 p-4">
+                                <p className="text-sm font-medium text-slate-900 dark:text-slate-50">
                                   {entry.message}
                                 </p>
                                 <p className="text-xs text-slate-500 mt-2">
@@ -1934,9 +1934,9 @@ export function BusinessTripApprovalClient() {
               {selectedRequestForModal.staffChanges &&
                 selectedRequestForModal.staffChanges.length > 0 && (
                   <>
-                    <Separator className="bg-slate-700/50" />
+                    <Separator className="bg-slate-200 dark:bg-slate-700/50" />
                     <div className="space-y-4">
-                      <h2 className="text-xl font-semibold text-slate-100">
+                      <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
                         Riwayat Perubahan Staff
                       </h2>
                       <div className="space-y-2">
@@ -1944,14 +1944,14 @@ export function BusinessTripApprovalClient() {
                           (change: any) => (
                             <div
                               key={change.id}
-                              className="rounded-lg border border-slate-700/40 bg-slate-900/30 p-3"
+                              className="rounded-lg border border-slate-200 dark:border-slate-700/40 bg-slate-50 dark:bg-slate-900/30 p-3"
                             >
-                              <p className="text-sm font-medium text-slate-100">
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                                 {change.originalStaffName}{" "}
                                 <span className="text-slate-400">→</span>{" "}
                                 {change.newStaffName}
                               </p>
-                              <p className="text-sm text-slate-400 mt-1">
+                              <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
                                 {change.reason}
                               </p>
                               <p className="text-xs text-slate-500 mt-2">
@@ -1966,9 +1966,9 @@ export function BusinessTripApprovalClient() {
                 )}
 
               {/* Action Buttons Section */}
-              <div className="border-t border-slate-800/60 pt-6 mt-6">
+              <div className="border-t border-slate-200 dark:border-slate-800/60 pt-6 mt-6">
                 <div className="space-y-4">
-                  <p className="text-sm font-bold text-slate-50 uppercase tracking-wide">
+                  <p className="text-sm font-bold text-slate-900 dark:text-slate-50 uppercase tracking-wide">
                     Tindakan Persetujuan
                   </p>
 
@@ -1991,7 +1991,7 @@ export function BusinessTripApprovalClient() {
                         }
                         placeholder="Tulis alasan jika Anda menolak atau meminta penggantian..."
                         rows={3}
-                        className="mt-3 text-sm bg-slate-900/50 border-slate-800"
+                        className="mt-3 text-sm bg-white dark:bg-slate-900/50 border-slate-300 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600"
                       />
                     </div>
 
@@ -2061,16 +2061,16 @@ export function BusinessTripApprovalClient() {
         open={showReplacementModal}
         onOpenChange={setShowReplacementModal}
       >
-        <DialogContent className="max-w-2xl bg-slate-950 text-slate-50 border border-slate-800">
+        <DialogContent className="max-w-2xl bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-50 border border-slate-200 dark:border-slate-800">
           <VisuallyHidden.Root>
             <DialogTitle>Ganti Staff Perjalanan Dinas</DialogTitle>
           </VisuallyHidden.Root>
           <div className="space-y-6">
             <div>
-              <h2 className="text-2xl font-bold">
+              <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-50">
                 Ganti Staff Perjalanan Dinas
               </h2>
-              <p className="text-sm text-slate-400 mt-1">
+              <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
                 Pilih anggota yang akan diganti dan kandidat pengganti dari
                 divisi yang sama
               </p>
@@ -2079,7 +2079,7 @@ export function BusinessTripApprovalClient() {
             <div className="space-y-4">
               {/* Member Selection */}
               <div className="space-y-2">
-                <Label htmlFor="member-select" className="text-slate-200">
+                <Label htmlFor="member-select" className="text-slate-700 dark:text-slate-200">
                   Anggota yang akan diganti
                 </Label>
                 <Select
@@ -2097,17 +2097,17 @@ export function BusinessTripApprovalClient() {
                 >
                   <SelectTrigger
                     id="member-select"
-                    className="bg-slate-900 border-slate-700 text-slate-50"
+                    className="bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-50"
                   >
                     <SelectValue placeholder="Pilih anggota..." />
                   </SelectTrigger>
-                  <SelectContent className="bg-slate-900 border-slate-700">
+                  <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700">
                     {selectedRequestForModal?.memberDetails?.map(
                       (member: any) => (
                         <SelectItem
                           key={member.employeeUid}
                           value={member.employeeUid}
-                          className="text-slate-50"
+                          className="text-slate-900 dark:text-slate-50"
                         >
                           {member.employeeName} - {member.employeePosition}
                         </SelectItem>
@@ -2119,26 +2119,26 @@ export function BusinessTripApprovalClient() {
 
               {/* Candidate Selection */}
               <div className="space-y-2">
-                <Label htmlFor="candidate-select" className="text-slate-200">
+                <Label htmlFor="candidate-select" className="text-slate-700 dark:text-slate-200">
                   Pengganti dari Divisi{" "}
-                  <span className="font-semibold text-cyan-400">
+                  <span className="font-semibold text-cyan-600 dark:text-cyan-400">
                     {selectedMemberDivisionName || "divisi"}
                   </span>
                 </Label>
                 {!selectedMemberForReplacement ? (
-                  <div className="bg-slate-900/50 border border-slate-800 rounded-md p-3 text-sm text-slate-400">
+                  <div className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-md p-3 text-sm text-slate-500 dark:text-slate-400">
                     Pilih anggota terlebih dahulu untuk melihat kandidat
                     pengganti
                   </div>
                 ) : isLoadingCandidates ? (
-                  <div className="bg-slate-900/50 border border-slate-800 rounded-md p-3 text-sm text-slate-400">
+                  <div className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-md p-3 text-sm text-slate-500 dark:text-slate-400">
                     <div className="flex items-center gap-2">
-                      <div className="animate-spin h-4 w-4 border-2 border-cyan-400 border-t-transparent rounded-full" />
+                      <div className="animate-spin h-4 w-4 border-2 border-cyan-500 dark:border-cyan-400 border-t-transparent rounded-full" />
                       Memuat kandidat pengganti...
                     </div>
                   </div>
                 ) : replacementCandidates.length === 0 ? (
-                  <div className="bg-slate-900/50 border border-slate-800/80 rounded-md p-3 text-sm text-amber-400">
+                  <div className="bg-amber-50 dark:bg-slate-900/50 border border-amber-200 dark:border-slate-800/80 rounded-md p-3 text-sm text-amber-700 dark:text-amber-400">
                     Tidak ada kandidat pengganti aktif di divisi ini
                   </div>
                 ) : (
@@ -2148,11 +2148,11 @@ export function BusinessTripApprovalClient() {
                   >
                     <SelectTrigger
                       id="candidate-select"
-                      className="bg-slate-900 border-slate-700 text-slate-50"
+                      className="bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-50"
                     >
                       <SelectValue placeholder="Pilih pengganti..." />
                     </SelectTrigger>
-                    <SelectContent className="bg-slate-900 border-slate-700">
+                    <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700">
                       {replacementCandidates.map((candidate: any) => {
                         const displayName =
                           candidate.fullName &&
@@ -2166,11 +2166,11 @@ export function BusinessTripApprovalClient() {
                           <SelectItem
                             key={candidate.id || candidate.uid}
                             value={candidate.uid}
-                            className="text-slate-50 cursor-pointer py-2"
+                            className="text-slate-900 dark:text-slate-50 cursor-pointer py-2"
                           >
                             <div className="flex flex-col gap-1">
                               <span className="font-medium">{displayName}</span>
-                              <span className="text-xs text-slate-400">
+                              <span className="text-xs text-slate-500 dark:text-slate-400">
                                 {candidate.position !== "-"
                                   ? candidate.position
                                   : "Posisi tidak terdaftar"}
@@ -2193,7 +2193,7 @@ export function BusinessTripApprovalClient() {
 
               {/* Replacement Reason */}
               <div className="space-y-2">
-                <Label htmlFor="reason-textarea" className="text-slate-200">
+                <Label htmlFor="reason-textarea" className="text-slate-700 dark:text-slate-200">
                   Alasan penggantian
                 </Label>
                 <Textarea
@@ -2201,14 +2201,14 @@ export function BusinessTripApprovalClient() {
                   value={replacementReason}
                   onChange={(e) => setReplacementReason(e.target.value)}
                   placeholder="Jelaskan alasan mengapa staff ini perlu diganti..."
-                  className="bg-slate-900 border-slate-700 text-slate-50 placeholder:text-slate-600"
+                  className="bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-50 placeholder:text-slate-400 dark:placeholder:text-slate-600"
                   rows={4}
                 />
               </div>
             </div>
 
             {/* Action Buttons */}
-            <div className="flex gap-3 justify-end pt-4 border-t border-slate-800">
+            <div className="flex gap-3 justify-end pt-4 border-t border-slate-200 dark:border-slate-800">
               <Button
                 onClick={() => {
                   setShowReplacementModal(false);
@@ -2219,7 +2219,7 @@ export function BusinessTripApprovalClient() {
                   setReplacementCandidates([]);
                 }}
                 variant="outline"
-                className="border-slate-700 text-slate-400 hover:text-slate-50 hover:bg-slate-900"
+                className="border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-50 hover:bg-slate-100 dark:hover:bg-slate-900"
               >
                 Batal
               </Button>

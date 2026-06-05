@@ -24,13 +24,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -42,9 +35,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/providers/auth-provider";
 import { sendNotification } from "@/lib/notifications";
-import { Search, Loader2, Filter, FileSpreadsheet, Check, ReceiptText, ShieldCheck, User, Calendar, Trash2 } from "lucide-react";
+import { Search, Loader2, Filter, FileSpreadsheet, Check, ReceiptText, ShieldCheck, User, Calendar, Trash2, X } from "lucide-react";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
+import type { Brand } from "@/lib/types";
 
 interface OvertimePayrollRecap {
   id?: string;
@@ -123,6 +117,10 @@ export function OvertimePayrollRecapClient() {
   const employeesRef = useMemoFirebase(() => collection(firestore, "employees"), [firestore]);
   const { data: employeesData } = useCollection<EmployeeMaster>(employeesRef);
 
+  // Query all brands from master data (TUGAS 2)
+  const brandsRef = useMemoFirebase(() => query(collection(firestore, "brands")), [firestore]);
+  const { data: allBrands = [] } = useCollection<Brand>(brandsRef);
+
   const employeeMetadataMap = useMemo(() => {
     const map = new Map<string, string>();
     employeesData?.forEach((emp) => {
@@ -131,14 +129,25 @@ export function OvertimePayrollRecapClient() {
     return map;
   }, [employeesData]);
 
-  // Dynamic filter options
+  // Dynamic filter options (TUGAS 2: Include master brands + payroll data brands)
   const brandOptions = useMemo(() => {
     const map = new Map<string, string>();
-    recaps?.forEach((r) => {
-      if (r.brand) map.set(r.brand, r.brand);
+
+    // Priority 1: Master brands from collection
+    allBrands?.forEach((brand) => {
+      const value = brand.id || "";
+      const label = brand.name || brand.id || "Unknown";
+      if (value && !map.has(value)) map.set(value, label);
     });
-    return [...map.keys()];
-  }, [recaps]);
+
+    // Priority 2: Brands from payroll data that are not in master
+    recaps?.forEach((r) => {
+      const value = r.brand || "";
+      if (value && !map.has(value)) map.set(value, r.brand);
+    });
+
+    return [...map.entries()].map(([value, label]) => ({ value, label }));
+  }, [allBrands, recaps]);
 
   const divisionOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -564,11 +573,11 @@ export function OvertimePayrollRecapClient() {
       {/* Title Block */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-            <ReceiptText className="h-6 w-6 text-emerald-400" />
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+            <ReceiptText className="h-6 w-6 text-emerald-500 dark:text-emerald-400" />
             Rekap Lembur Payroll
           </h1>
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-slate-600 dark:text-slate-300">
             Kelola persetujuan lembur final secara massal atau semi-manual untuk dasar perhitungan penggajian karyawan.
           </p>
         </div>
@@ -583,8 +592,8 @@ export function OvertimePayrollRecapClient() {
           </Button>
 
           {selectedGroupIds.size > 0 && (
-            <div className="flex items-center gap-1.5 border border-slate-800 bg-slate-900/60 p-1 rounded-xl">
-              <span className="text-[11px] font-bold text-slate-400 px-2">{selectedGroupIds.size} Terpilih</span>
+            <div className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 p-1 rounded-xl">
+              <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400 px-2">{selectedGroupIds.size} Terpilih</span>
               <Button
                 size="sm"
                 variant="ghost"
@@ -624,31 +633,31 @@ export function OvertimePayrollRecapClient() {
       </div>
 
       {/* Filter panel */}
-      <Card className="border-slate-800 bg-slate-950/20 rounded-[2rem] shadow-xl backdrop-blur-xl">
+      <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/20 rounded-[2rem] shadow-xl backdrop-blur-xl">
         <CardContent className="p-6">
           <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-5">
             {/* Period Picker */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-400">Bulan Payroll</label>
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Bulan Payroll</label>
               <Input
                 type="month"
                 value={periodFilter}
                 onChange={(e) => setPeriodFilter(e.target.value)}
-                className="bg-slate-900/50 border-slate-800 text-white rounded-xl"
+                className="bg-white dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl"
               />
             </div>
 
             {/* Brand Filter */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-400">Brand</label>
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Brand</label>
               <Select value={brandFilter} onValueChange={setBrandFilter}>
-                <SelectTrigger className="bg-slate-900/50 border-slate-800 text-white rounded-xl">
+                <SelectTrigger className="bg-white dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl">
                   <SelectValue placeholder="Semua Brand" />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-900 border-slate-800 text-white">
+                <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white">
                   <SelectItem value="all">Semua Brand</SelectItem>
-                  {brandOptions.map((brand) => (
-                    <SelectItem key={brand} value={brand}>{brand}</SelectItem>
+                  {brandOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -656,12 +665,12 @@ export function OvertimePayrollRecapClient() {
 
             {/* Division Filter */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-400">Divisi</label>
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Divisi</label>
               <Select value={divisionFilter} onValueChange={setDivisionFilter}>
-                <SelectTrigger className="bg-slate-900/50 border-slate-800 text-white rounded-xl">
+                <SelectTrigger className="bg-white dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl">
                   <SelectValue placeholder="Semua Divisi" />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-900 border-slate-800 text-white">
+                <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white">
                   <SelectItem value="all">Semua Divisi</SelectItem>
                   {divisionOptions.map((div) => (
                     <SelectItem key={div} value={div}>{div}</SelectItem>
@@ -672,12 +681,12 @@ export function OvertimePayrollRecapClient() {
 
             {/* Payroll Status */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-400">Status Payroll</label>
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Status Payroll</label>
               <Select value={payrollStatusFilter} onValueChange={setPayrollStatusFilter}>
-                <SelectTrigger className="bg-slate-900/50 border-slate-800 text-white rounded-xl">
+                <SelectTrigger className="bg-white dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl">
                   <SelectValue placeholder="Semua Status" />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-900 border-slate-800 text-white">
+                <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white">
                   <SelectItem value="all">Semua Status</SelectItem>
                   <SelectItem value="pending_payroll">Menunggu Payroll</SelectItem>
                   <SelectItem value="processing">Sedang Diproses</SelectItem>
@@ -689,14 +698,14 @@ export function OvertimePayrollRecapClient() {
 
             {/* Search Name */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-400">Cari Karyawan</label>
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Cari Karyawan</label>
               <div className="relative">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 dark:text-slate-500" />
                 <Input
                   placeholder="Nama karyawan..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 bg-slate-900/50 border-slate-800 text-white rounded-xl"
+                  className="pl-9 bg-white dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl"
                 />
               </div>
             </div>
@@ -705,81 +714,81 @@ export function OvertimePayrollRecapClient() {
       </Card>
 
       {/* Main Table */}
-      <Card className="border-slate-800 bg-slate-950/20 rounded-[2rem] shadow-2xl backdrop-blur-xl">
+      <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/20 rounded-[2rem] shadow-2xl backdrop-blur-xl">
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="flex flex-col items-center justify-center p-24 gap-3 text-slate-400">
-              <Loader2 className="h-8 w-8 animate-spin text-emerald-400" />
+            <div className="flex flex-col items-center justify-center p-24 gap-3 text-slate-600 dark:text-slate-400">
+              <Loader2 className="h-8 w-8 animate-spin text-emerald-500 dark:text-emerald-400" />
               <p className="text-sm font-semibold">Mengambil Data Rekapitulasi Payroll...</p>
             </div>
           ) : filteredAndGroupedRecaps.length > 0 ? (
             <div className="overflow-x-auto">
               <Table>
-                <TableHeader className="bg-slate-900/50">
-                  <TableRow className="border-slate-800/50 hover:bg-slate-900/50">
+                <TableHeader className="bg-slate-50 dark:bg-slate-900/50">
+                  <TableRow className="border-slate-200 dark:border-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-900/50">
                     <TableHead className="px-4 py-4 w-12 text-center">
                       <Checkbox
                         checked={filteredAndGroupedRecaps.length > 0 && selectedGroupIds.size === filteredAndGroupedRecaps.length}
                         onCheckedChange={handleSelectAll}
-                        className="border-slate-700 bg-slate-900 data-[state=checked]:bg-emerald-500"
+                        className="border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 data-[state=checked]:bg-emerald-500"
                       />
                     </TableHead>
-                    <TableHead className="px-4 py-4 text-left text-xs uppercase font-black text-slate-400">Nama Karyawan</TableHead>
-                    <TableHead className="px-3 py-4 text-left text-xs uppercase font-black text-slate-400">Brand / Divisi</TableHead>
-                    <TableHead className="px-3 py-4 text-center text-xs uppercase font-black text-slate-400">Bulan Payroll</TableHead>
-                    <TableHead className="px-3 py-4 text-center text-xs uppercase font-black text-slate-400 w-32">Total Hari Lembur</TableHead>
-                    <TableHead className="px-3 py-4 text-right text-xs uppercase font-black text-emerald-400">Durasi Final HRD</TableHead>
-                    <TableHead className="px-3 py-4 text-right text-xs uppercase font-black text-slate-400">Total Menit</TableHead>
-                    <TableHead className="px-3 py-4 text-center text-xs uppercase font-black text-slate-400">Status Payroll</TableHead>
-                    <TableHead className="px-3 py-4 text-center text-xs uppercase font-black text-slate-400">Tanggal Diproses</TableHead>
-                    <TableHead className="px-3 py-4 text-center text-xs uppercase font-black text-slate-400">Tanggal Dibayarkan</TableHead>
-                    <TableHead className="px-6 py-4 text-right text-xs uppercase font-black text-slate-400 w-32">Aksi</TableHead>
+                    <TableHead className="px-4 py-4 text-left text-xs uppercase font-black text-slate-700 dark:text-slate-400">Nama Karyawan</TableHead>
+                    <TableHead className="px-3 py-4 text-left text-xs uppercase font-black text-slate-700 dark:text-slate-400">Brand / Divisi</TableHead>
+                    <TableHead className="px-3 py-4 text-center text-xs uppercase font-black text-slate-700 dark:text-slate-400">Bulan Payroll</TableHead>
+                    <TableHead className="px-3 py-4 text-center text-xs uppercase font-black text-slate-700 dark:text-slate-400 w-32">Total Hari Lembur</TableHead>
+                    <TableHead className="px-3 py-4 text-right text-xs uppercase font-black text-emerald-600 dark:text-emerald-400">Durasi Final HRD</TableHead>
+                    <TableHead className="px-3 py-4 text-right text-xs uppercase font-black text-slate-700 dark:text-slate-400">Total Menit</TableHead>
+                    <TableHead className="px-3 py-4 text-center text-xs uppercase font-black text-slate-700 dark:text-slate-400">Status Payroll</TableHead>
+                    <TableHead className="px-3 py-4 text-center text-xs uppercase font-black text-slate-700 dark:text-slate-400">Tanggal Diproses</TableHead>
+                    <TableHead className="px-3 py-4 text-center text-xs uppercase font-black text-slate-700 dark:text-slate-400">Tanggal Dibayarkan</TableHead>
+                    <TableHead className="px-6 py-4 text-right text-xs uppercase font-black text-slate-700 dark:text-slate-400 w-32">Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredAndGroupedRecaps.map((group) => (
-                    <TableRow key={group.id} className="border-slate-800/30 hover:bg-slate-900/10 transition-colors">
+                    <TableRow key={group.id} className="border-slate-200 dark:border-slate-800/30 hover:bg-slate-100 dark:hover:bg-slate-900/10 transition-colors">
                       <TableCell className="px-4 py-4 text-center">
                         <Checkbox
                           checked={selectedGroupIds.has(group.id)}
                           onCheckedChange={(checked) => handleSelectRow(group.id, !!checked)}
-                          className="border-slate-700 bg-slate-900 data-[state=checked]:bg-emerald-500"
+                          className="border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 data-[state=checked]:bg-emerald-500"
                         />
                       </TableCell>
-                      <TableCell className="px-4 py-4 font-bold text-sm text-slate-200">
+                      <TableCell className="px-4 py-4 font-bold text-sm text-slate-900 dark:text-slate-200">
                         {group.employeeName}
                       </TableCell>
-                      <TableCell className="px-3 py-4 text-sm text-slate-400">
+                      <TableCell className="px-3 py-4 text-sm text-slate-600 dark:text-slate-400">
                         {group.brand} / {group.division}
                       </TableCell>
-                      <TableCell className="px-3 py-4 text-center text-sm font-mono text-slate-300">
+                      <TableCell className="px-3 py-4 text-center text-sm font-mono text-slate-700 dark:text-slate-300">
                         {group.payrollMonth}
                       </TableCell>
                       <TableCell className="px-3 py-4 text-center">
-                        <Badge variant="outline" className="bg-slate-900 border-slate-800 text-slate-300 font-bold px-2 py-0.5">
+                        <Badge variant="outline" className="bg-slate-100 dark:bg-slate-900 border-slate-300 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold px-2 py-0.5">
                           {group.totalDays} Hari
                         </Badge>
                       </TableCell>
-                      <TableCell className="px-3 py-4 text-right font-black text-sm text-emerald-400">
+                      <TableCell className="px-3 py-4 text-right font-black text-sm text-emerald-600 dark:text-emerald-400">
                         {formatMinutesToHuman(group.totalMinutes)}
                       </TableCell>
-                      <TableCell className="px-3 py-4 text-right font-mono text-sm text-slate-300">
+                      <TableCell className="px-3 py-4 text-right font-mono text-sm text-slate-700 dark:text-slate-300">
                         {group.totalMinutes} menit
                       </TableCell>
                       <TableCell className="px-3 py-4 text-center">
                         {getStatusBadge(group.payrollStatus)}
                       </TableCell>
-                      <TableCell className="px-3 py-4 text-center text-xs text-slate-400 font-mono">
+                      <TableCell className="px-3 py-4 text-center text-xs text-slate-600 dark:text-slate-400 font-mono">
                         {parseSafeFormattedDate(group.processedAt)}
                       </TableCell>
-                      <TableCell className="px-3 py-4 text-center text-xs text-slate-400 font-mono">
+                      <TableCell className="px-3 py-4 text-center text-xs text-slate-600 dark:text-slate-400 font-mono">
                         {parseSafeFormattedDate(group.paidAt)}
                       </TableCell>
                       <TableCell className="px-6 py-4 text-right">
                         <Button
                           variant="outline"
                           size="sm"
-                          className="h-8 border-slate-700 hover:bg-slate-800 hover:text-white rounded-xl text-xs"
+                          className="h-8 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-900 dark:text-white dark:hover:text-white rounded-xl text-xs"
                           onClick={() => {
                             setSelectedGroup(group);
                             setIndividualNote(group.items[0]?.payrollNotes || "");
@@ -795,11 +804,11 @@ export function OvertimePayrollRecapClient() {
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center p-20 text-center gap-3">
-              <div className="h-12 w-12 rounded-full bg-slate-900 flex items-center justify-center text-slate-500 animate-pulse">
+              <div className="h-12 w-12 rounded-full bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-400 dark:text-slate-500 animate-pulse">
                 🔍
               </div>
-              <h3 className="text-lg font-bold text-slate-300">Belum Ada Rekap Payroll</h3>
-              <p className="text-sm text-slate-500 max-w-sm">
+              <h3 className="text-lg font-bold text-slate-700 dark:text-slate-300">Belum Ada Rekap Payroll</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 max-w-sm">
                 Tidak ada data lembur berstatus disetujui HRD yang cocok dengan penyaringan filter saat ini.
               </p>
             </div>
@@ -807,225 +816,255 @@ export function OvertimePayrollRecapClient() {
         </CardContent>
       </Card>
 
-      {/* Drawer Rincian Hari & Audit Trail */}
-      <Sheet open={!!selectedGroup} onOpenChange={(open) => !open && setSelectedGroup(null)}>
-        <SheetContent className="sm:max-w-2xl bg-slate-950 border-slate-800 text-white overflow-y-auto">
+      {/* Modal Detail Rincian Hari & Audit Trail (TUGAS 3) */}
+      <Dialog open={!!selectedGroup} onOpenChange={(open) => !open && setSelectedGroup(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] w-[90vw] bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white p-0 overflow-hidden flex flex-col">
+          <DialogTitle className="sr-only">Detail Lembur Payroll</DialogTitle>
           {selectedGroup && (
-            <div className="space-y-6">
-              <SheetHeader>
-                <SheetTitle className="text-lg font-black text-white flex items-center gap-2">
-                  <span>📋</span> Detail Lembur Payroll
-                </SheetTitle>
-                <SheetDescription className="text-slate-400">
-                  Rincian log lembur yang disetujui untuk {selectedGroup.employeeName} periode {selectedGroup.payrollMonth}.
-                </SheetDescription>
-              </SheetHeader>
-
-              {/* Group summary card */}
-              <div className="grid gap-3 grid-cols-3 rounded-2xl bg-slate-900/50 p-4 border border-slate-800/80">
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-slate-500 block">Total Hari Kerja</span>
-                  <span className="text-sm font-black text-slate-200">{selectedGroup.totalDays} Hari</span>
-                </div>
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-slate-500 block">Akumulasi Payroll</span>
-                  <span className="text-sm font-black text-emerald-400">{formatMinutesToHuman(selectedGroup.totalMinutes)}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-slate-500 block">Status Saat Ini</span>
-                  <span className="block mt-0.5">{getStatusBadge(selectedGroup.payrollStatus)}</span>
+            <>
+              {/* Header - Sticky */}
+              <div className="sticky top-0 z-10 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-6 py-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex-1">
+                    <h2 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
+                      <span>📋</span> Detail Lembur Payroll
+                    </h2>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                      Rincian log lembur yang disetujui untuk {selectedGroup.employeeName} periode {selectedGroup.payrollMonth}.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setSelectedGroup(null)}
+                    className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-500 dark:text-slate-400"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
                 </div>
               </div>
 
-              {/* Input Catatan & Aksi Status Payroll */}
-              <div className="space-y-3 bg-slate-900/30 p-4 rounded-2xl border border-slate-900">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Catatan & Aksi Status</span>
-                
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-semibold text-slate-400">Catatan Payroll (Opsional)</label>
-                  <Textarea
-                    placeholder="Masukkan catatan payroll..."
-                    value={individualNote}
-                    onChange={(e) => setIndividualNote(e.target.value)}
-                    className="bg-slate-900 border-slate-800 rounded-xl text-xs h-16 text-white"
-                  />
+              {/* Body - Scrollable */}
+              <div className="flex-1 overflow-y-auto"  >
+                <div className="space-y-6 px-6 py-4">
+
+                {/* Group summary card */}
+                <div className="grid gap-3 grid-cols-3 rounded-2xl bg-slate-50 dark:bg-slate-800 p-4 border border-slate-200 dark:border-slate-700">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-600 dark:text-slate-400 block">Total Hari Kerja</span>
+                    <span className="text-sm font-black text-slate-900 dark:text-slate-200">{selectedGroup.totalDays} Hari</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-600 dark:text-slate-400 block">Akumulasi Payroll</span>
+                    <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">{formatMinutesToHuman(selectedGroup.totalMinutes)}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-600 dark:text-slate-400 block">Status Saat Ini</span>
+                    <span className="block mt-0.5">{getStatusBadge(selectedGroup.payrollStatus)}</span>
+                  </div>
                 </div>
 
-                <div className="flex flex-wrap gap-2 pt-2">
-                  <Button
-                    size="sm"
-                    disabled={loading || selectedGroup.payrollStatus === "pending_payroll"}
-                    variant="outline"
-                    className="border-blue-600/40 text-blue-400 hover:bg-blue-600/10 rounded-xl text-xs h-9"
-                    onClick={() => performUpdateStatus([selectedGroup], "pending_payroll", individualNote)}
-                  >
-                    Tandai Menunggu Payroll
-                  </Button>
-                  <Button
-                    size="sm"
-                    disabled={loading || selectedGroup.payrollStatus === "processing"}
-                    variant="outline"
-                    className="border-amber-600/40 text-amber-400 hover:bg-amber-600/10 rounded-xl text-xs h-9"
-                    onClick={() => performUpdateStatus([selectedGroup], "processing", individualNote)}
-                  >
-                    Tandai Sedang Diproses
-                  </Button>
-                  <Button
-                    size="sm"
-                    disabled={loading || selectedGroup.payrollStatus === "paid"}
-                    variant="outline"
-                    className="border-emerald-600/40 text-emerald-400 hover:bg-emerald-600/10 rounded-xl text-xs h-9"
-                    onClick={() => performUpdateStatus([selectedGroup], "paid", individualNote)}
-                  >
-                    Tandai Sudah Dibayarkan
-                  </Button>
-                  <Button
-                    size="sm"
-                    disabled={loading || selectedGroup.payrollStatus === "excluded"}
-                    variant="outline"
-                    className="border-red-600/40 text-red-400 hover:bg-red-600/10 rounded-xl text-xs h-9"
-                    onClick={() => performUpdateStatus([selectedGroup], "excluded", individualNote)}
-                  >
-                    Tandai Tidak Masuk Payroll
-                  </Button>
-                </div>
-              </div>
+                {/* Input Catatan & Aksi Status Payroll */}
+                <div className="space-y-3 bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Catatan & Aksi Status</span>
 
-              {/* Log Pengajuan Harian */}
-              <div className="space-y-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Log Pengajuan Harian</span>
-                <div className="rounded-xl border border-slate-800 overflow-hidden bg-slate-900/20">
-                  <Table>
-                    <TableHeader className="bg-slate-900/60">
-                      <TableRow className="border-slate-800/50">
-                        <TableHead className="py-2 text-[10px] uppercase font-bold text-slate-400">Tanggal</TableHead>
-                        <TableHead className="py-2 text-[10px] uppercase font-bold text-slate-400">Jam Kerja</TableHead>
-                        <TableHead className="py-2 text-[10px] uppercase font-bold text-slate-400">Lokasi</TableHead>
-                        <TableHead className="py-2 text-[10px] uppercase font-bold text-slate-400">Uraian Tugas</TableHead>
-                        <TableHead className="py-2 text-[10px] uppercase font-bold text-slate-400 text-right">Durasi Ajuan</TableHead>
-                        <TableHead className="py-2 text-[10px] uppercase font-bold text-emerald-400 text-right">Durasi Payroll</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {selectedGroup.items.map((item: OvertimePayrollRecap, idx: number) => (
-                        <TableRow key={item.id || idx} className="border-slate-800/30 hover:bg-slate-900/20">
-                          <TableCell className="py-2 text-xs text-slate-200 font-medium">
-                            {format(new Date(item.overtimeDate), "dd MMM yyyy", { locale: idLocale })}
-                          </TableCell>
-                          <TableCell className="py-2 text-xs font-mono text-slate-400">
-                            {item.startTime} - {item.endTime}
-                          </TableCell>
-                          <TableCell className="py-2 text-xs text-slate-300">
-                            {item.location}
-                          </TableCell>
-                          <TableCell className="py-2 text-xs text-slate-400 max-w-[120px] truncate" title={item.taskSummary}>
-                            {item.taskSummary || item.reason || "-"}
-                          </TableCell>
-                          <TableCell className="py-2 text-xs text-slate-400 text-right">
-                            {formatMinutesToHuman(item.submittedMinutes || 0)}
-                          </TableCell>
-                          <TableCell className="py-2 text-xs font-bold text-emerald-400 text-right">
-                            {formatMinutesToHuman(item.hrdApprovedMinutes || 0)}
-                          </TableCell>
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Catatan Payroll (Opsional)</label>
+                    <Textarea
+                      placeholder="Masukkan catatan payroll..."
+                      value={individualNote}
+                      onChange={(e) => setIndividualNote(e.target.value)}
+                      className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 rounded-xl text-xs h-16 text-slate-900 dark:text-white"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    <Button
+                      size="sm"
+                      disabled={loading || selectedGroup.payrollStatus === "pending_payroll"}
+                      variant="outline"
+                      className="border-blue-300 dark:border-blue-600/40 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-600/10 rounded-xl text-xs h-9"
+                      onClick={() => performUpdateStatus([selectedGroup], "pending_payroll", individualNote)}
+                    >
+                      Tandai Menunggu Payroll
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={loading || selectedGroup.payrollStatus === "processing"}
+                      variant="outline"
+                      className="border-amber-300 dark:border-amber-600/40 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-600/10 rounded-xl text-xs h-9"
+                      onClick={() => performUpdateStatus([selectedGroup], "processing", individualNote)}
+                    >
+                      Tandai Sedang Diproses
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={loading || selectedGroup.payrollStatus === "paid"}
+                      variant="outline"
+                      className="border-emerald-300 dark:border-emerald-600/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-600/10 rounded-xl text-xs h-9"
+                      onClick={() => performUpdateStatus([selectedGroup], "paid", individualNote)}
+                    >
+                      Tandai Sudah Dibayarkan
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={loading || selectedGroup.payrollStatus === "excluded"}
+                      variant="outline"
+                      className="border-red-300 dark:border-red-600/40 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-600/10 rounded-xl text-xs h-9"
+                      onClick={() => performUpdateStatus([selectedGroup], "excluded", individualNote)}
+                    >
+                      Tandai Tidak Masuk Payroll
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Log Pengajuan Harian */}
+                <div className="space-y-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">Log Pengajuan Harian</span>
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-slate-50 dark:bg-slate-900/20">
+                    <Table>
+                      <TableHeader className="bg-slate-100 dark:bg-slate-900/60">
+                        <TableRow className="border-slate-200 dark:border-slate-800/50">
+                          <TableHead className="py-2 text-[10px] uppercase font-bold text-slate-700 dark:text-slate-400">Tanggal</TableHead>
+                          <TableHead className="py-2 text-[10px] uppercase font-bold text-slate-700 dark:text-slate-400">Jam Kerja</TableHead>
+                          <TableHead className="py-2 text-[10px] uppercase font-bold text-slate-700 dark:text-slate-400">Lokasi</TableHead>
+                          <TableHead className="py-2 text-[10px] uppercase font-bold text-slate-700 dark:text-slate-400">Uraian Tugas</TableHead>
+                          <TableHead className="py-2 text-[10px] uppercase font-bold text-slate-700 dark:text-slate-400 text-right">Durasi Ajuan</TableHead>
+                          <TableHead className="py-2 text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 text-right">Durasi Payroll</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {selectedGroup.items.map((item: OvertimePayrollRecap, idx: number) => (
+                          <TableRow key={item.id || idx} className="border-slate-200 dark:border-slate-800/30 hover:bg-slate-100 dark:hover:bg-slate-900/20">
+                            <TableCell className="py-2 text-xs text-slate-700 dark:text-slate-200 font-medium">
+                              {format(new Date(item.overtimeDate), "dd MMM yyyy", { locale: idLocale })}
+                            </TableCell>
+                            <TableCell className="py-2 text-xs font-mono text-slate-600 dark:text-slate-400">
+                              {item.startTime} - {item.endTime}
+                            </TableCell>
+                            <TableCell className="py-2 text-xs text-slate-700 dark:text-slate-300">
+                              {item.location}
+                            </TableCell>
+                            <TableCell className="py-2 text-xs text-slate-600 dark:text-slate-400 max-w-[120px] truncate" title={item.taskSummary}>
+                              {item.taskSummary || item.reason || "-"}
+                            </TableCell>
+                            <TableCell className="py-2 text-xs text-slate-600 dark:text-slate-400 text-right">
+                              {formatMinutesToHuman(item.submittedMinutes || 0)}
+                            </TableCell>
+                            <TableCell className="py-2 text-xs font-bold text-emerald-600 dark:text-emerald-400 text-right">
+                              {formatMinutesToHuman(item.hrdApprovedMinutes || 0)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+
+                {/* Complete Audit Trail */}
+                <div className="space-y-3 bg-slate-50 dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 block pb-1 border-b border-slate-200 dark:border-slate-700">
+                    Audit Trail Lembur & Payroll
+                  </span>
+                  <div className="space-y-3 pt-2 text-xs">
+                    {selectedGroup.items[0] && (
+                      <>
+                        <div className="flex justify-between items-start gap-4">
+                          <span className="text-slate-600 dark:text-slate-400">Disetujui Manager:</span>
+                          <span className="text-right font-medium text-slate-900 dark:text-slate-200">
+                            {selectedGroup.items[0].managerName || "Manager"}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between items-start gap-4">
+                          <span className="text-slate-600 dark:text-slate-400">Disetujui HRD:</span>
+                          <span className="text-right font-medium text-slate-900 dark:text-slate-200">
+                            {selectedGroup.items[0].approvedByHrd || "HRD"}
+                            <span className="text-slate-600 dark:text-slate-500 block text-[10px]">
+                              ({parseSafeFormattedDate(selectedGroup.items[0].approvedAt)})
+                            </span>
+                          </span>
+                        </div>
+
+                        {/* Display payroll status updates */}
+                        {selectedGroup.items[0].payrollStatusUpdatedAt && (
+                          <div className="flex justify-between items-start gap-4 border-t border-slate-200 dark:border-slate-700 pt-2">
+                            <span className="text-slate-600 dark:text-slate-400">Perubahan Payroll Terakhir:</span>
+                            <span className="text-right font-medium text-slate-900 dark:text-slate-200">
+                              Oleh {selectedGroup.items[0].payrollStatusUpdatedByName || "HRD Admin"}
+                              <span className="text-slate-600 dark:text-slate-500 block text-[10px]">
+                                ({parseSafeFormattedDate(selectedGroup.items[0].payrollStatusUpdatedAt)})
+                              </span>
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Display processed details */}
+                        {selectedGroup.items[0].processedAt && (
+                          <div className="flex justify-between items-start gap-4">
+                            <span className="text-slate-600 dark:text-slate-400">Masuk / Diproses Payroll:</span>
+                            <span className="text-right font-medium text-slate-900 dark:text-slate-200">
+                              {selectedGroup.items[0].processedByName || "HRD Admin"}
+                              <span className="text-slate-600 dark:text-slate-500 block text-[10px]">
+                                ({parseSafeFormattedDate(selectedGroup.items[0].processedAt)})
+                              </span>
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Display paid details */}
+                        {selectedGroup.items[0].paidAt && (
+                          <div className="flex justify-between items-start gap-4">
+                            <span className="text-slate-600 dark:text-slate-400">Dibayarkan Oleh:</span>
+                            <span className="text-right font-medium text-slate-900 dark:text-slate-200">
+                              {selectedGroup.items[0].paidByName || "HRD Admin"}
+                              <span className="text-slate-600 dark:text-slate-500 block text-[10px]">
+                                ({parseSafeFormattedDate(selectedGroup.items[0].paidAt)})
+                              </span>
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Payroll Notes display */}
+                        {selectedGroup.items[0].payrollNotes && (
+                          <div className="border-t border-slate-200 dark:border-slate-700 pt-2 space-y-1">
+                            <span className="text-slate-600 dark:text-slate-400 block font-bold">Catatan Audit Payroll:</span>
+                            <p className="bg-white dark:bg-slate-900 p-2 rounded-xl text-slate-700 dark:text-slate-300 italic border border-slate-200 dark:border-slate-700">
+                              "{selectedGroup.items[0].payrollNotes}"
+                            </p>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
                 </div>
               </div>
 
-              {/* Complete Audit Trail */}
-              <div className="space-y-3 bg-slate-900/40 p-5 rounded-2xl border border-slate-800">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block pb-1 border-b border-slate-800">
-                  Audit Trail Lembur & Payroll
-                </span>
-                <div className="space-y-3 pt-2 text-xs">
-                  {selectedGroup.items[0] && (
-                    <>
-                      <div className="flex justify-between items-start gap-4">
-                        <span className="text-slate-400">Disetujui Manager:</span>
-                        <span className="text-right font-medium text-slate-200">
-                          {selectedGroup.items[0].managerName || "Manager"}
-                        </span>
-                      </div>
-
-                      <div className="flex justify-between items-start gap-4">
-                        <span className="text-slate-400">Disetujui HRD:</span>
-                        <span className="text-right font-medium text-slate-200">
-                          {selectedGroup.items[0].approvedByHrd || "HRD"} 
-                          <span className="text-slate-500 block text-[10px]">
-                            ({parseSafeFormattedDate(selectedGroup.items[0].approvedAt)})
-                          </span>
-                        </span>
-                      </div>
-
-                      {/* Display payroll status updates */}
-                      {selectedGroup.items[0].payrollStatusUpdatedAt && (
-                        <div className="flex justify-between items-start gap-4 border-t border-slate-800/50 pt-2">
-                          <span className="text-slate-400">Perubahan Payroll Terakhir:</span>
-                          <span className="text-right font-medium text-slate-200">
-                            Oleh {selectedGroup.items[0].payrollStatusUpdatedByName || "HRD Admin"}
-                            <span className="text-slate-500 block text-[10px]">
-                              ({parseSafeFormattedDate(selectedGroup.items[0].payrollStatusUpdatedAt)})
-                            </span>
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Display processed details */}
-                      {selectedGroup.items[0].processedAt && (
-                        <div className="flex justify-between items-start gap-4">
-                          <span className="text-slate-400">Masuk / Diproses Payroll:</span>
-                          <span className="text-right font-medium text-slate-200">
-                            {selectedGroup.items[0].processedByName || "HRD Admin"}
-                            <span className="text-slate-500 block text-[10px]">
-                              ({parseSafeFormattedDate(selectedGroup.items[0].processedAt)})
-                            </span>
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Display paid details */}
-                      {selectedGroup.items[0].paidAt && (
-                        <div className="flex justify-between items-start gap-4">
-                          <span className="text-slate-400">Dibayarkan Oleh:</span>
-                          <span className="text-right font-medium text-slate-200">
-                            {selectedGroup.items[0].paidByName || "HRD Admin"}
-                            <span className="text-slate-500 block text-[10px]">
-                              ({parseSafeFormattedDate(selectedGroup.items[0].paidAt)})
-                            </span>
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Payroll Notes display */}
-                      {selectedGroup.items[0].payrollNotes && (
-                        <div className="border-t border-slate-800/50 pt-2 space-y-1">
-                          <span className="text-slate-400 block font-bold">Catatan Audit Payroll:</span>
-                          <p className="bg-slate-950 p-2 rounded-xl text-slate-300 italic border border-slate-900/60">
-                            "{selectedGroup.items[0].payrollNotes}"
-                          </p>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
+              {/* Footer - Sticky */}
+              <div className="sticky bottom-0 z-10 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-6 py-4 flex justify-end gap-3">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedGroup(null)}
+                  className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-xl text-xs h-9"
+                >
+                  Tutup
+                </Button>
               </div>
-            </div>
+            </>
           )}
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
 
       {/* Mass Action Execution Dialog */}
       <Dialog open={massActionType !== null} onOpenChange={(open) => !open && setMassActionType(null)}>
-        <DialogContent className="bg-slate-950 border-slate-800 text-white max-w-md rounded-2xl">
+        <DialogContent className="bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white max-w-md rounded-2xl">
           <DialogHeader>
-            <DialogTitle className="text-white font-black text-base flex items-center gap-2">
+            <DialogTitle className="text-slate-900 dark:text-white font-black text-base flex items-center gap-2">
               <span>⚡</span> Pembaruan Massal Status Payroll
             </DialogTitle>
-            <DialogDescription className="text-slate-400 text-xs">
+            <DialogDescription className="text-slate-600 dark:text-slate-400 text-xs">
               Ubah status payroll untuk {selectedGroupIds.size} karyawan secara massal menjadi{" "}
-              <span className="font-bold text-emerald-400">
+              <span className="font-bold text-emerald-600 dark:text-emerald-400">
                 {massActionType === "processing" ? "Sedang Diproses"
                   : massActionType === "paid" ? "Sudah Dibayarkan"
                   : "Tidak Masuk Payroll"}
@@ -1035,12 +1074,12 @@ export function OvertimePayrollRecapClient() {
 
           <div className="space-y-3 py-3">
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-400">Catatan Payroll Massal (Opsional)</label>
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">Catatan Payroll Massal (Opsional)</label>
               <Textarea
                 placeholder="Masukkan catatan massal..."
                 value={massNotes}
                 onChange={(e) => setMassNotes(e.target.value)}
-                className="bg-slate-900 border-slate-800 rounded-xl text-xs h-20 text-white"
+                className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-xl text-xs h-20 text-slate-900 dark:text-white"
               />
             </div>
           </div>
@@ -1050,7 +1089,7 @@ export function OvertimePayrollRecapClient() {
               variant="ghost"
               size="sm"
               onClick={() => setMassActionType(null)}
-              className="text-slate-400 hover:text-white rounded-xl text-xs h-9"
+              className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-xl text-xs h-9"
             >
               Batal
             </Button>

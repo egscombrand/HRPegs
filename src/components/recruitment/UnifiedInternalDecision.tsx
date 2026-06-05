@@ -296,51 +296,51 @@ export function UnifiedInternalDecision({
   };
 
   return (
-    <Card className="shadow-2xl border-none rounded-[3rem] bg-[#020617]/50 backdrop-blur-xl overflow-hidden border-t-8 border-violet-500/20 ring-1 ring-white/5 relative">
+    <Card className="shadow-2xl border border-slate-200 dark:border-none rounded-[3rem] bg-white dark:bg-[#020617]/50 dark:backdrop-blur-xl overflow-hidden border-t-8 border-violet-500/20 dark:ring-1 dark:ring-white/5 relative">
       <div className="absolute top-0 right-0 p-32 bg-violet-600/10 blur-[120px] rounded-full pointer-events-none -z-10" />
 
-      <CardHeader className="bg-violet-500/[0.03] pb-6">
+      <CardHeader className="bg-indigo-50 dark:bg-violet-500/[0.03] pb-6 border-b border-slate-200 dark:border-slate-800/50">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center gap-5">
             <div className="p-3.5 rounded-2xl bg-indigo-600 text-white shadow-2xl shadow-indigo-500/20">
               <Briefcase className="h-6 w-6" />
             </div>
             <div>
-              <CardTitle className="text-2xl font-black tracking-tighter uppercase text-slate-100 flex items-center gap-3">
+              <CardTitle className="text-2xl font-black tracking-tighter uppercase text-slate-900 dark:text-slate-100 flex items-center gap-3">
                 Keputusan Internal
                 {(existingPra || existingPasca) && (
-                  <History className="h-5 w-5 text-indigo-400" />
+                  <History className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
                 )}
               </CardTitle>
               <div className="flex items-center gap-4 mt-2 overflow-x-auto whitespace-nowrap pb-1 no-scrollbar">
-                <div className="flex items-center gap-2 px-3 py-1 bg-slate-900/50 rounded-full border border-slate-800">
-                  <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest">
+                <div className="flex items-center gap-2 px-3 py-1 bg-slate-100 dark:bg-slate-900/50 rounded-full border border-slate-300 dark:border-slate-800">
+                  <span className="text-[9px] font-black uppercase text-slate-700 dark:text-slate-500 tracking-widest">
                     Pra:
                   </span>
                   <span
                     className={cn(
                       "text-[10px] font-bold uppercase",
                       existingPra?.status === "lanjut_ke_tahap_selanjutnya"
-                        ? "text-emerald-400"
+                        ? "text-emerald-700 dark:text-emerald-400"
                         : existingPra
-                          ? "text-rose-400"
+                          ? "text-rose-700 dark:text-rose-400"
                           : "text-slate-600",
                     )}
                   >
                     {getStatusLabelPra(existingPra?.status)}
                   </span>
                 </div>
-                <div className="flex items-center gap-2 px-3 py-1 bg-slate-900/50 rounded-full border border-slate-800">
-                  <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest">
+                <div className="flex items-center gap-2 px-3 py-1 bg-slate-100 dark:bg-slate-900/50 rounded-full border border-slate-300 dark:border-slate-800">
+                  <span className="text-[9px] font-black uppercase text-slate-700 dark:text-slate-500 tracking-widest">
                     Pasca:
                   </span>
                   <span
                     className={cn(
                       "text-[10px] font-bold uppercase",
                       existingPasca?.status === "lanjut"
-                        ? "text-teal-400"
+                        ? "text-teal-700 dark:text-teal-400"
                         : existingPasca
-                          ? "text-rose-400"
+                          ? "text-rose-700 dark:text-rose-400"
                           : "text-slate-600",
                     )}
                   >
@@ -354,7 +354,7 @@ export function UnifiedInternalDecision({
           <Tabs
             value={activeTab}
             onValueChange={(v) => setActiveTab(v as any)}
-            className="bg-slate-900/50 p-1.5 rounded-2xl border border-slate-800"
+            className="bg-slate-100 dark:bg-slate-900/50 p-1.5 rounded-2xl border border-slate-300 dark:border-slate-800"
           >
             <TabsList className="bg-transparent border-0 gap-1 h-12">
               <TabsTrigger
@@ -410,12 +410,12 @@ export function UnifiedInternalDecision({
             className="m-0 space-y-8 animate-in fade-in slide-in-from-right-4 duration-500 focus-visible:outline-none"
           >
             {!isPascaAvailable ? (
-              <div className="text-center py-20 bg-slate-900/40 rounded-[2.5rem] border-2 border-dashed border-slate-800">
-                <AlertCircle className="h-10 w-10 mx-auto text-amber-500/40 mb-4" />
-                <h4 className="text-slate-300 font-bold uppercase tracking-widest text-sm">
+              <div className="text-center py-20 bg-slate-100 dark:bg-slate-900/40 rounded-[2.5rem] border-2 border-dashed border-slate-300 dark:border-slate-800">
+                <AlertCircle className="h-10 w-10 mx-auto text-amber-600 dark:text-amber-500/40 mb-4" />
+                <h4 className="text-slate-700 dark:text-slate-300 font-bold uppercase tracking-widest text-sm">
                   Belum Tersedia
                 </h4>
-                <p className="text-slate-500 text-xs mt-2 italic px-8">
+                <p className="text-slate-600 dark:text-slate-500 text-xs mt-2 italic px-8">
                   Kandidat harus menyelesaikan tahap interview dan tim evaluator
                   harus submit penilaian terlebih dahulu.
                 </p>
@@ -519,32 +519,32 @@ function DecisionPanel({
   const colorConfigs = {
     emerald: {
       border: "border-emerald-500",
-      bg: "bg-emerald-500/10",
-      text: "text-emerald-400",
+      bg: "bg-emerald-50 dark:bg-emerald-500/10",
+      text: "text-emerald-700 dark:text-emerald-400",
       shadow: "shadow-emerald-500/20",
       badge: "bg-emerald-500",
       hover: "hover:border-emerald-500/30",
     },
     amber: {
       border: "border-amber-500",
-      bg: "bg-amber-500/10",
-      text: "text-amber-400",
+      bg: "bg-amber-50 dark:bg-amber-500/10",
+      text: "text-amber-700 dark:text-amber-400",
       shadow: "shadow-amber-500/20",
       badge: "bg-amber-500",
       hover: "hover:border-amber-500/30",
     },
     rose: {
       border: "border-rose-500",
-      bg: "bg-rose-500/10",
-      text: "text-rose-400",
+      bg: "bg-rose-50 dark:bg-rose-500/10",
+      text: "text-rose-700 dark:text-rose-400",
       shadow: "shadow-rose-500/20",
       badge: "bg-rose-500",
       hover: "hover:border-rose-500/30",
     },
     teal: {
       border: "border-teal-500",
-      bg: "bg-teal-500/10",
-      text: "text-teal-400",
+      bg: "bg-teal-50 dark:bg-teal-500/10",
+      text: "text-teal-700 dark:text-teal-400",
       shadow: "shadow-teal-500/20",
       badge: "bg-teal-500",
       hover: "hover:border-teal-500/30",
@@ -555,13 +555,13 @@ function DecisionPanel({
     type === "pra"
       ? {
           border: "border-indigo-500",
-          text: "text-indigo-400",
+          text: "text-indigo-700 dark:text-indigo-400",
           focus: "focus:border-indigo-500/50 focus:ring-indigo-500/10",
           btn: "bg-indigo-600 hover:bg-indigo-500 shadow-indigo-500/20",
         }
       : {
           border: "border-teal-500",
-          text: "text-teal-400",
+          text: "text-teal-700 dark:text-teal-400",
           focus: "focus:border-teal-500/50 focus:ring-teal-500/10",
           btn: "bg-teal-600 hover:bg-teal-500 shadow-teal-500/20",
         };
@@ -584,7 +584,7 @@ function DecisionPanel({
                 "p-6 rounded-[2rem] border-2 flex flex-col items-start gap-4 transition-all duration-300 relative overflow-hidden text-left h-full",
                 isActive
                   ? `${cfg.border} ${cfg.bg} ${cfg.text} shadow-2xl ${cfg.shadow} scale-[1.02]`
-                  : `border-slate-800 bg-slate-900/40 text-slate-500 hover:border-slate-700 hover:bg-slate-900/60`,
+                  : `border-slate-300 dark:border-slate-800 bg-slate-100 dark:bg-slate-900/40 text-slate-600 dark:text-slate-500 hover:border-slate-400 dark:hover:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-900/60`,
                 isLocked && "opacity-60 cursor-not-allowed",
               )}
             >
@@ -593,7 +593,7 @@ function DecisionPanel({
                   "p-3 rounded-xl",
                   isActive
                     ? `${cfg.badge} text-white shadow-lg`
-                    : "bg-slate-800 text-slate-400",
+                    : "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-400",
                 )}
               >
                 <Icon className="h-5 w-5" />
@@ -620,7 +620,7 @@ function DecisionPanel({
         <div className="space-y-4">
           <label
             className={cn(
-              "text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] pl-4 border-l-4 flex items-center gap-2",
+              "text-[10px] font-black text-slate-700 dark:text-slate-400 uppercase tracking-[0.25em] pl-4 border-l-4 flex items-center gap-2",
               mainColor.border,
             )}
           >
@@ -630,7 +630,7 @@ function DecisionPanel({
           <Textarea
             placeholder="Tuliskan alasan/diskusi internal..."
             className={cn(
-              "min-h-[100px] rounded-[1.8rem] text-sm border-2 border-slate-800 bg-slate-900/50 text-slate-200 focus:ring-4 transition-all p-5 shadow-inner",
+              "min-h-[100px] rounded-[1.8rem] text-sm border-2 border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900/50 text-slate-900 dark:text-slate-200 focus:ring-4 transition-all p-5 shadow-inner focus:border-slate-400 dark:focus:border-slate-700",
               mainColor.focus,
               isLocked && "opacity-70",
             )}
@@ -642,38 +642,38 @@ function DecisionPanel({
 
         <div className="space-y-6">
           {type === "pasca" && isLocked && (
-            <div className="rounded-[1.8rem] border border-teal-500/20 bg-teal-500/10 p-4 text-sm text-teal-100">
+            <div className="rounded-[1.8rem] border border-teal-300 dark:border-teal-500/20 bg-teal-100 dark:bg-teal-500/10 p-4 text-sm text-teal-800 dark:text-teal-100">
               <p className="font-semibold">
                 Keputusan telah ditetapkan dan tidak dapat diubah.
               </p>
-              <p className="mt-1 text-slate-300">
+              <p className="mt-1 text-teal-700 dark:text-slate-300">
                 Hasil evaluasi tetap dapat dilihat oleh tim, sementara pilihan
                 keputusan dan tombol simpan dikunci.
               </p>
             </div>
           )}
           {existingData && (
-            <div className="p-6 rounded-[1.8rem] bg-slate-950/60 border border-slate-800 ring-1 ring-white/5 space-y-4">
+            <div className="p-6 rounded-[1.8rem] bg-slate-50 dark:bg-slate-950/60 border border-slate-300 dark:border-slate-800 ring-1 ring-slate-200/50 dark:ring-white/5 space-y-4">
               <div className="flex items-center gap-2">
                 <History className={cn("h-4 w-4", mainColor.text)} />
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-400">
                   Log Keputusan
                 </span>
               </div>
               <div className="space-y-2">
                 <div className="space-y-0.5">
-                  <p className="text-[9px] text-slate-500 font-black uppercase">
+                  <p className="text-[9px] text-slate-600 dark:text-slate-500 font-black uppercase">
                     Decided By
                   </p>
-                  <p className="text-sm font-bold text-slate-200">
+                  <p className="text-sm font-bold text-slate-900 dark:text-slate-200">
                     {existingData.decidedByName}
                   </p>
                 </div>
                 <div className="space-y-0.5">
-                  <p className="text-[9px] text-slate-500 font-black uppercase">
+                  <p className="text-[9px] text-slate-600 dark:text-slate-500 font-black uppercase">
                     Timestamp
                   </p>
-                  <p className="text-xs font-medium text-slate-400">
+                  <p className="text-xs font-medium text-slate-700 dark:text-slate-400">
                     {existingData.decidedAt &&
                     (existingData.decidedAt as any).toDate
                       ? format(

@@ -23,6 +23,7 @@ import {
   Building,
   Calendar,
   ChevronRight,
+  FileText,
   LocateFixed,
   MapPin,
   Sparkles,
@@ -35,6 +36,7 @@ import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/providers/auth-provider";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
+import { normalizeJobCoverImageUrl } from "@/lib/utils";
 
 function JobDetailSkeleton() {
   return (
@@ -64,23 +66,30 @@ function JobDetailSkeleton() {
   );
 }
 
-const OtherJobCard = ({ job }: { job: Job }) => (
+const OtherJobCard = ({ job }: { job: Job }) => {
+  const cardCoverUrl = normalizeJobCoverImageUrl(job.coverImageUrl);
+  return (
   <Link
     href={`/careers/jobs/${job.slug}`}
     className="block transition-all hover:shadow-md rounded-lg"
   >
     <Card className="flex items-center gap-4 p-3 h-full transition-colors bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/50">
-      <div className="relative h-16 w-16 flex-shrink-0">
-        <Image
-          src={
-            job.coverImageUrl ||
-            "https://picsum.photos/seed/job-fallback/200/200"
-          }
-          alt={job.position}
-          fill
-          className="rounded-md object-cover"
-          data-ai-hint="office building"
-        />
+      <div className="relative h-16 w-16 flex-shrink-0 rounded-md overflow-hidden bg-slate-100 dark:bg-slate-700 border border-border">
+        {cardCoverUrl ? (
+          <img
+            src={cardCoverUrl}
+            alt={job.position}
+            className="h-full w-full object-contain object-center"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+              const fallback = e.currentTarget.parentElement?.querySelector<HTMLElement>('.card-job-fallback');
+              if (fallback) fallback.classList.remove('hidden');
+            }}
+          />
+        ) : null}
+        <div className="card-job-fallback hidden absolute inset-0 flex items-center justify-center bg-slate-100 dark:bg-slate-700">
+          <div className="text-xs text-slate-600 dark:text-slate-400">—</div>
+        </div>
       </div>
       <div className="flex-grow overflow-hidden">
         <p className="font-semibold leading-tight truncate text-slate-900 dark:text-slate-100">{job.position}</p>
@@ -99,7 +108,8 @@ const OtherJobCard = ({ job }: { job: Job }) => (
       <ChevronRight className="h-5 w-5 flex-shrink-0 text-slate-600 dark:text-slate-400 ml-auto" />
     </Card>
   </Link>
-);
+  );
+};
 
 const RichTextSection = ({
   title,
@@ -172,39 +182,14 @@ export default function JobDetailPage() {
   const isLoading = authLoading || isLoadingJob;
 
   const handleApplyClick = () => {
-    // If auth is still loading, do nothing to prevent race conditions
-    if (authLoading) {
-      return;
-    }
-
-    // If there is no authenticated user, redirect to login, then to the portal dashboard.
-    if (!firebaseUser) {
-      router.push(`/careers/login?redirect=/careers/portal`);
-      return;
-    }
-
-    // A user is authenticated, now check their profile/role.
-    if (userProfile) {
-      if (userProfile.role === "kandidat") {
-        // If they are a candidate, take them to the portal dashboard.
-        router.push("/careers/portal");
-        return;
-      }
-
-      if (ROLES_INTERNAL.includes(userProfile.role)) {
-        toast({
-          variant: "destructive",
-          title: "Akses Khusus Kandidat",
-          description:
-            "Akun Anda terdaftar sebagai akun internal dan tidak dapat digunakan untuk melamar.",
-        });
-        return;
-      }
-    }
-
-    // Fallback for cases where user is authenticated but profile is still loading.
-    // Redirect to login flow which will handle the final redirect to the portal dashboard.
-    router.push(`/careers/login?redirect=/careers/portal`);
+    // Redirect to candidate login page with return URL to the job application.
+    // All users (authenticated or not) go through the candidate login gateway.
+    // The login page handles:
+    // - Unauthenticated users: shows login/register forms
+    // - Candidates already logged in: auto-redirects to apply page
+    // - Internal users: can log out and re-login as candidate
+    const applyPageUrl = `/careers/jobs/${job.slug}/apply`;
+    router.push(`/careers/login?redirect=${encodeURIComponent(applyPageUrl)}`);
   };
 
   if (isLoading) {
@@ -254,30 +239,33 @@ export default function JobDetailPage() {
 
       <main className="bg-white dark:bg-slate-950">
         <div className="container mx-auto max-w-6xl px-4 py-8 md:py-12">
-          <div className="relative mb-8 w-full overflow-hidden rounded-2xl shadow-lg aspect-video bg-muted">
-            <Image
-              src={
-                job.coverImageUrl ||
-                "https://picsum.photos/seed/default-hero/1200/600"
-              }
-              alt=""
-              fill
-              className="object-cover scale-110 blur-lg opacity-50"
-              data-ai-hint="abstract office background"
-            />
-            <div className="absolute inset-0 bg-black/20" />
-            <Image
-              src={
-                job.coverImageUrl ||
-                "https://picsum.photos/seed/default-hero/1200/600"
-              }
-              alt={`${job.position} cover image`}
-              fill
-              className="object-contain"
-              priority
-              data-ai-hint="office building team"
-            />
-          </div>
+          {(() => {
+            const coverUrl = normalizeJobCoverImageUrl(job.coverImageUrl);
+            console.log('[CareerJobDetail] coverImageUrl (raw):', job.coverImageUrl);
+            console.log('[CareerJobDetail] coverImageUrl (normalized):', coverUrl);
+            return (
+              <div className="relative mb-8 w-full overflow-hidden rounded-2xl shadow-lg aspect-video bg-slate-50 dark:bg-slate-900 border border-border flex items-center justify-center">
+                {coverUrl ? (
+                  <img
+                    src={coverUrl}
+                    alt={`${job.position} cover image`}
+                    className="w-full h-full object-contain object-center p-6"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                      const fallback = e.currentTarget.parentElement?.querySelector<HTMLElement>('.cover-fallback-detail');
+                      if (fallback) fallback.classList.remove('hidden');
+                    }}
+                  />
+                ) : null}
+                <div className="cover-fallback-detail hidden absolute inset-0 flex items-center justify-center">
+                  <div className="text-center text-slate-500 dark:text-slate-400">
+                    <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <span className="text-sm font-medium">No cover image available</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="grid grid-cols-1 gap-x-12 gap-y-8 lg:grid-cols-3">
             {/* Main Content */}

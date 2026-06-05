@@ -26,7 +26,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, UploadCloud } from 'lucide-react';
 import type { Job, Brand, Division } from '@/lib/types';
 import { RichTextEditor } from '../ui/RichTextEditor';
-import Image from 'next/image';
+
 import { GoogleDatePicker } from '../ui/google-date-picker';
 
 const slugify = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -152,14 +152,26 @@ export function JobFormDialog({ open, onOpenChange, job, brands }: JobFormDialog
   const uploadCoverImage = async (jobId: string, imageFile: File): Promise<string> => {
     const processedFile = await compressImage(imageFile);
     const filePath = `jobs/${jobId}/cover-${Date.now()}-${processedFile.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
-    
+
     const result = await uploadFile(processedFile, filePath, userProfile?.uid || 'system', {
       category: 'job_cover',
       ownerUid: userProfile?.uid || 'system',
       compress: false // Already compressed
     });
 
-    return result.webViewLink || result.downloadUrl || "";
+    // Use the server-side proxy route that requires no end-user auth.
+    // /api/storage/google-drive-preview uses the service account, works on
+    // both the admin dashboard and public career pages.
+    if (result.fileId) {
+      return `/api/storage/google-drive-preview?fileId=${result.fileId}`;
+    }
+
+    // Firebase Storage: downloadUrl is a public HTTPS URL — use directly
+    if (result.downloadUrl) {
+      return result.downloadUrl;
+    }
+
+    return "";
   };
 
   const onSubmit = async (values: FormValues) => {
@@ -351,21 +363,41 @@ export function JobFormDialog({ open, onOpenChange, job, brands }: JobFormDialog
                 <FormItem>
                   <FormLabel>Cover Image</FormLabel>
                   <FormControl>
-                    <div className="mt-2 flex justify-center rounded-lg border border-dashed border-input px-6 py-10">
-                      <div className="text-center">
+                    <div className="mt-2 space-y-4">
+                      <div className="relative w-full h-64 rounded-lg border border-input bg-slate-50 dark:bg-slate-900 overflow-hidden flex items-center justify-center">
                         {imagePreview ? (
-                            <Image src={imagePreview} alt="Cover preview" width={200} height={100} className="mx-auto mb-4 h-24 w-auto object-contain rounded-md" />
-                        ) : (
-                          <UploadCloud className="mx-auto h-12 w-12 text-muted-foreground" />
-                        )}
-                        <div className="mt-4 flex text-sm leading-6 text-muted-foreground">
-                          <label htmlFor="cover-image-upload" className="relative cursor-pointer rounded-md font-semibold text-primary focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 hover:text-primary/80">
-                            <span>Upload a file</span>
-                            <input id="cover-image-upload" name={field.name} type="file" className="sr-only" onChange={handleFileChange} accept="image/png, image/jpeg, image/webp" />
-                          </label>
-                          <p className="pl-1">or drag and drop</p>
+                          <img
+                            src={imagePreview}
+                            alt="Cover preview"
+                            className="w-full h-full object-contain object-center p-4"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                              const fallback = e.currentTarget.parentElement?.querySelector<HTMLElement>('.fallback-preview');
+                              if (fallback) fallback.classList.remove('hidden');
+                            }}
+                          />
+                        ) : null}
+                        <div className="fallback-preview hidden absolute inset-0 flex items-center justify-center">
+                          <div className="text-center text-muted-foreground">
+                            <UploadCloud className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                            <p className="text-sm">No preview</p>
+                          </div>
                         </div>
-                        <p className="text-xs leading-5 text-muted-foreground">PNG, JPG, WEBP up to 1MB.</p>
+                      </div>
+                      <div className="text-center">
+                        {!imagePreview && <UploadCloud className="mx-auto h-12 w-12 text-muted-foreground mb-4" />}
+                      <div className="rounded-lg border border-dashed border-input bg-slate-50 dark:bg-slate-900 px-6 py-8">
+                        <div className="text-center">
+                          <div className="flex text-sm leading-6 text-muted-foreground justify-center">
+                            <label htmlFor="cover-image-upload" className="relative cursor-pointer rounded-md font-semibold text-primary focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 hover:text-primary/80">
+                              <span>Upload a file</span>
+                              <input id="cover-image-upload" name={field.name} type="file" className="sr-only" onChange={handleFileChange} accept="image/png, image/jpeg, image/jpg, image/webp" />
+                            </label>
+                            <p className="pl-1">or drag and drop</p>
+                          </div>
+                          <p className="text-xs leading-5 text-muted-foreground mt-2">PNG, JPG, JPEG, WEBP up to 5MB. Recommended: 1200x600px or larger.</p>
+                        </div>
+                      </div>
                       </div>
                     </div>
                   </FormControl>

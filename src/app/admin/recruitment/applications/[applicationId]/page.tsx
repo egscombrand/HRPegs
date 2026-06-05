@@ -1132,55 +1132,55 @@ export default function ApplicationDetailPage() {
             <div className="space-y-6 pt-10">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-3">
-                  <div className="flex p-1 bg-slate-900/50 rounded-2xl border border-slate-800 ring-1 ring-white/5 shadow-2xl">
+                  <div className="flex flex-wrap gap-1 p-1.5 bg-slate-100 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-2xl">
                     <Button
-                      variant={evaluationFilter === "all" ? "default" : "ghost"}
+                      variant="ghost"
                       size="sm"
                       onClick={() => setEvaluationFilter("all")}
                       className={cn(
-                        "rounded-xl text-[10px] font-black uppercase tracking-widest px-6 h-10",
-                        evaluationFilter === "all" &&
-                          "bg-indigo-600 shadow-lg shadow-indigo-600/20",
+                        "rounded-xl text-[10px] font-black uppercase tracking-widest px-5 h-9",
+                        evaluationFilter === "all"
+                          ? "bg-indigo-600 text-white hover:bg-indigo-700 hover:text-white shadow-lg shadow-indigo-600/20"
+                          : "text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800",
                       )}
                     >
                       Semua
                     </Button>
                     <Button
-                      variant={evaluationFilter === "pra" ? "default" : "ghost"}
+                      variant="ghost"
                       size="sm"
                       onClick={() => setEvaluationFilter("pra")}
                       className={cn(
-                        "rounded-xl text-[10px] font-black uppercase tracking-widest px-6 h-10",
-                        evaluationFilter === "pra" &&
-                          "bg-indigo-600 shadow-lg shadow-indigo-600/20",
+                        "rounded-xl text-[10px] font-black uppercase tracking-widest px-5 h-9",
+                        evaluationFilter === "pra"
+                          ? "bg-indigo-600 text-white hover:bg-indigo-700 hover:text-white shadow-lg shadow-indigo-600/20"
+                          : "text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800",
                       )}
                     >
                       Pra Wawancara
                     </Button>
                     <Button
-                      variant={
-                        evaluationFilter === "pasca" ? "default" : "ghost"
-                      }
+                      variant="ghost"
                       size="sm"
                       onClick={() => setEvaluationFilter("pasca")}
                       className={cn(
-                        "rounded-xl text-[10px] font-black uppercase tracking-widest px-6 h-10",
-                        evaluationFilter === "pasca" &&
-                          "bg-teal-600 shadow-lg shadow-teal-600/20",
+                        "rounded-xl text-[10px] font-black uppercase tracking-widest px-5 h-9",
+                        evaluationFilter === "pasca"
+                          ? "bg-teal-600 text-white hover:bg-teal-700 hover:text-white shadow-lg shadow-teal-600/20"
+                          : "text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800",
                       )}
                     >
                       Pasca Wawancara
                     </Button>
                     <Button
-                      variant={
-                        evaluationFilter === "offering" ? "default" : "ghost"
-                      }
+                      variant="ghost"
                       size="sm"
                       onClick={() => setEvaluationFilter("offering")}
                       className={cn(
-                        "rounded-xl text-[10px] font-black uppercase tracking-widest px-6 h-10",
-                        evaluationFilter === "offering" &&
-                          "bg-amber-600 shadow-lg shadow-amber-600/20",
+                        "rounded-xl text-[10px] font-black uppercase tracking-widest px-5 h-9",
+                        evaluationFilter === "offering"
+                          ? "bg-amber-600 text-white hover:bg-amber-700 hover:text-white shadow-lg shadow-amber-600/20"
+                          : "text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800",
                       )}
                     >
                       Offering
@@ -1205,12 +1205,12 @@ export default function ApplicationDetailPage() {
                     internalUsers={internalUsers}
                   />
                 ) : evaluationFilter === "pasca" ? (
-                  <Card className="border border-dashed border-slate-700 bg-slate-950/70">
+                  <Card className="border border-dashed border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950/70">
                     <CardHeader>
-                      <CardTitle className="text-xl font-bold">
+                      <CardTitle className="text-xl font-bold text-slate-900 dark:text-slate-100">
                         Kandidat belum mencapai tahap pasca wawancara.
                       </CardTitle>
-                      <CardDescription>
+                      <CardDescription className="text-slate-600 dark:text-slate-400">
                         Tab ini akan aktif setelah kandidat memasuki proses
                         wawancara.
                       </CardDescription>
@@ -1222,13 +1222,13 @@ export default function ApplicationDetailPage() {
               evaluationFilter === "offering" ? (
                 <div className="space-y-6">
                   {!canOpenOffering ? (
-                    <Card className="border border-dashed border-slate-700 bg-slate-950/70">
+                    <Card className="border border-dashed border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950/70">
                       <CardHeader>
-                        <CardTitle className="text-xl font-bold flex items-center gap-2">
+                        <CardTitle className="text-xl font-bold flex items-center gap-2 text-slate-900 dark:text-slate-100">
                           <Lock className="h-5 w-5 text-amber-500" />
                           Kandidat belum mencapai tahap offering.
                         </CardTitle>
-                        <CardDescription>
+                        <CardDescription className="text-slate-600 dark:text-slate-400">
                           Tab ini akan aktif setelah kandidat lolos ke tahap
                           penawaran kerja.
                         </CardDescription>
@@ -1359,7 +1359,7 @@ export default function ApplicationDetailPage() {
                           </Dialog>
                         </Card>
                       )})()}
-                      <Card className="border border-slate-700">
+                      <Card className="border border-slate-200 dark:border-slate-700">
                         <CardHeader className="pb-3">
                           <div className="flex items-center justify-between gap-3">
                             <CardTitle className="text-lg flex items-center gap-2">
@@ -1497,7 +1497,7 @@ export default function ApplicationDetailPage() {
                         </CardContent>
 
                         {/* Actions Footer */}
-                        <CardFooter className="flex flex-wrap gap-2 border-t border-slate-700 bg-slate-900/30 px-4 py-3">
+                        <CardFooter className="flex flex-wrap gap-2 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/30 px-4 py-3">
                           {!hasOfferData ? (
                             <p className="text-xs text-slate-500">
                               Scroll ke bawah untuk membuat penawaran

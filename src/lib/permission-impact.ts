@@ -38,6 +38,49 @@ export type PayrollImpactLabel =
   | "sesuai_kebijakan";
 
 /**
+ * CATEGORY: For filtering by type of absence/impact
+ * Breaks down tidak_masuk by reason, treats other form types as-is
+ */
+export type PermissionCategory =
+  | "sakit" // Tidak masuk - Sakit
+  | "duka_cita" // Tidak masuk - Duka Cita
+  | "administrasi_resmi" // Tidak masuk - Administrasi Resmi
+  | "tidak_masuk_non_sakit" // Tidak masuk - Pribadi / Lainnya
+  | "keluar_kantor" // Meninggalkan Kantor
+  | "datang_terlambat" // Datang Terlambat
+  | "pulang_awal" // Pulang Awal
+  | "akademik" // Akademik
+  | "lainnya"; // Other
+
+/**
+ * Classify permission into category for filtering
+ * Breaks down tidak_masuk by reason, other types use form type
+ */
+export function classifyPermissionCategory(
+  permission: PermissionRequest,
+): PermissionCategory {
+  const formType = getFormType(permission);
+  const reason = getReason(permission);
+
+  // Break down tidak_masuk by reason
+  if (formType === "tidak_masuk") {
+    if (reason === "sakit") return "sakit";
+    if (reason === "duka_cita") return "duka_cita";
+    if (reason === "administrasi_resmi") return "administrasi_resmi";
+    // pribadi, lainnya -> tidak_masuk_non_sakit
+    return "tidak_masuk_non_sakit";
+  }
+
+  // Other form types map directly
+  if (formType === "keluar_kantor") return "keluar_kantor";
+  if (formType === "datang_terlambat") return "datang_terlambat";
+  if (formType === "pulang_awal") return "pulang_awal";
+  if (formType === "akademik") return "akademik";
+
+  return "lainnya";
+}
+
+/**
  * Extract form type from permission
  * Form type determines the pattern of absence
  */
@@ -66,7 +109,11 @@ export function getReason(permission: PermissionRequest): PermissionReason {
     if (reasonType === "sakit") return "sakit";
     if (reasonType === "duka" || reasonType === "duka_cita") return "duka_cita";
     if (reasonType === "administrasi_resmi") return "administrasi_resmi";
-    if (reasonType === "pribadi" || reasonType === "keperluan_pribadi" || reasonType === "urusan_pribadi")
+    if (
+      reasonType === "pribadi" ||
+      reasonType === "keperluan_pribadi" ||
+      reasonType === "urusan_pribadi"
+    )
       return "pribadi";
   }
 
@@ -74,7 +121,11 @@ export function getReason(permission: PermissionRequest): PermissionReason {
   if (reasonType === "sakit") return "sakit";
   if (reasonType === "duka" || reasonType === "duka_cita") return "duka_cita";
   if (reasonType === "administrasi_resmi") return "administrasi_resmi";
-  if (reasonType === "pribadi" || reasonType === "keperluan_pribadi" || reasonType === "urusan_pribadi")
+  if (
+    reasonType === "pribadi" ||
+    reasonType === "keperluan_pribadi" ||
+    reasonType === "urusan_pribadi"
+  )
     return "pribadi";
 
   return "lainnya";
@@ -113,7 +164,9 @@ export function getFormTypeLabel(formType: PermissionFormType): string {
  * Get payroll impact label based on form type and reason
  * Form type determines primary impact, reason determines rules
  */
-export function getPayrollImpactLabel(permission: PermissionRequest): PayrollImpactLabel {
+export function getPayrollImpactLabel(
+  permission: PermissionRequest,
+): PayrollImpactLabel {
   const formType = getFormType(permission);
   const reason = getReason(permission);
 
@@ -121,7 +174,8 @@ export function getPayrollImpactLabel(permission: PermissionRequest): PayrollImp
   if (formType === "tidak_masuk") {
     if (reason === "sakit") {
       // Sakit: check if has proof
-      const hasAttachment = permission.attachments && permission.attachments.length > 0;
+      const hasAttachment =
+        permission.attachments && permission.attachments.length > 0;
       const attachmentStatus = permission.attachmentStatus;
       const hasProof =
         hasAttachment ||
@@ -170,13 +224,19 @@ export function getDurationInDays(permission: PermissionRequest): number {
 
   if (!permission.startDate || !permission.endDate) return 0;
 
-  const start = permission.startDate && typeof permission.startDate === "object" && "toDate" in permission.startDate
-    ? (permission.startDate as any).toDate()
-    : new Date(permission.startDate as any);
+  const start =
+    permission.startDate &&
+    typeof permission.startDate === "object" &&
+    "toDate" in permission.startDate
+      ? (permission.startDate as any).toDate()
+      : new Date(permission.startDate as any);
 
-  const end = permission.endDate && typeof permission.endDate === "object" && "toDate" in permission.endDate
-    ? (permission.endDate as any).toDate()
-    : new Date(permission.endDate as any);
+  const end =
+    permission.endDate &&
+    typeof permission.endDate === "object" &&
+    "toDate" in permission.endDate
+      ? (permission.endDate as any).toDate()
+      : new Date(permission.endDate as any);
 
   const diffTime = end.getTime() - start.getTime();
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
@@ -200,23 +260,35 @@ export function getDurationInMinutes(permission: PermissionRequest): number {
  */
 export function resolveEmployeeBrand(emp: any): string {
   // Prefer enriched/resolved fields
-  if (emp._resolvedApplicantBrand && emp._resolvedApplicantBrand !== "N/A" && emp._resolvedApplicantBrand !== "Brand belum diatur")
+  if (
+    emp._resolvedApplicantBrand &&
+    emp._resolvedApplicantBrand !== "N/A" &&
+    emp._resolvedApplicantBrand !== "Brand belum diatur"
+  )
     return emp._resolvedApplicantBrand;
   if (emp.applicantBrandName && emp.applicantBrandName !== "N/A")
     return emp.applicantBrandName;
 
   // Employee profile
-  if (emp._enrichedEmployeeProfile?.hrdEmploymentInfo?.brandName && emp._enrichedEmployeeProfile.hrdEmploymentInfo.brandName !== "N/A")
+  if (
+    emp._enrichedEmployeeProfile?.hrdEmploymentInfo?.brandName &&
+    emp._enrichedEmployeeProfile.hrdEmploymentInfo.brandName !== "N/A"
+  )
     return emp._enrichedEmployeeProfile.hrdEmploymentInfo.brandName;
-  if (emp._enrichedEmployeeProfile?.brandName && emp._enrichedEmployeeProfile.brandName !== "N/A")
+  if (
+    emp._enrichedEmployeeProfile?.brandName &&
+    emp._enrichedEmployeeProfile.brandName !== "N/A"
+  )
     return emp._enrichedEmployeeProfile.brandName;
 
   // Fallback to field without enrichment
-  if (emp.brandName && emp.brandName !== "N/A")
-    return emp.brandName;
+  if (emp.brandName && emp.brandName !== "N/A") return emp.brandName;
 
   // User profile
-  if (emp._enrichedUserProfile?.brandName && emp._enrichedUserProfile.brandName !== "N/A")
+  if (
+    emp._enrichedUserProfile?.brandName &&
+    emp._enrichedUserProfile.brandName !== "N/A"
+  )
     return emp._enrichedUserProfile.brandName;
 
   return "Brand belum diatur";
@@ -228,25 +300,37 @@ export function resolveEmployeeBrand(emp: any): string {
  */
 export function resolveEmployeeDivision(emp: any): string {
   // Prefer enriched/resolved fields (from snapshot or query resolution)
-  if (emp._resolvedApplicantDivision && emp._resolvedApplicantDivision !== "N/A" && emp._resolvedApplicantDivision !== "Divisi belum diatur")
+  if (
+    emp._resolvedApplicantDivision &&
+    emp._resolvedApplicantDivision !== "N/A" &&
+    emp._resolvedApplicantDivision !== "Divisi belum diatur"
+  )
     return emp._resolvedApplicantDivision;
   if (emp.applicantDivisionName && emp.applicantDivisionName !== "N/A")
     return emp.applicantDivisionName;
 
   // Employee profile HRD employment info
-  if (emp._enrichedEmployeeProfile?.hrdEmploymentInfo?.divisi && emp._enrichedEmployeeProfile.hrdEmploymentInfo.divisi !== "N/A")
+  if (
+    emp._enrichedEmployeeProfile?.hrdEmploymentInfo?.divisi &&
+    emp._enrichedEmployeeProfile.hrdEmploymentInfo.divisi !== "N/A"
+  )
     return emp._enrichedEmployeeProfile.hrdEmploymentInfo.divisi;
 
   // Employee profile division field
-  if (emp._enrichedEmployeeProfile?.division && emp._enrichedEmployeeProfile.division !== "N/A")
+  if (
+    emp._enrichedEmployeeProfile?.division &&
+    emp._enrichedEmployeeProfile.division !== "N/A"
+  )
     return emp._enrichedEmployeeProfile.division;
 
   // Fallback to field without enrichment
-  if (emp.division && emp.division !== "N/A")
-    return emp.division;
+  if (emp.division && emp.division !== "N/A") return emp.division;
 
   // User profile
-  if (emp._enrichedUserProfile?.divisionName && emp._enrichedUserProfile.divisionName !== "N/A")
+  if (
+    emp._enrichedUserProfile?.divisionName &&
+    emp._enrichedUserProfile.divisionName !== "N/A"
+  )
     return emp._enrichedUserProfile.divisionName;
 
   return "Divisi belum diatur";
@@ -327,14 +411,22 @@ export function buildEmployeePermissionSummaries(
 
     // Check if permission falls within date range
     let permStart: Date;
-    if (perm.startDate && typeof perm.startDate === "object" && "toDate" in perm.startDate) {
+    if (
+      perm.startDate &&
+      typeof perm.startDate === "object" &&
+      "toDate" in perm.startDate
+    ) {
       permStart = (perm.startDate as any).toDate();
     } else {
       permStart = new Date(perm.startDate as any);
     }
 
     let permEnd: Date;
-    if (perm.endDate && typeof perm.endDate === "object" && "toDate" in perm.endDate) {
+    if (
+      perm.endDate &&
+      typeof perm.endDate === "object" &&
+      "toDate" in perm.endDate
+    ) {
       permEnd = (perm.endDate as any).toDate();
     } else {
       permEnd = new Date(perm.endDate as any);
@@ -432,7 +524,8 @@ export function buildEmployeePermissionSummaries(
       } else if (payrollLabel === "potong_jam") {
         summary.payrollImpact.potong_jam += minutes;
       } else if (payrollLabel === "tidak_dipotong") {
-        summary.payrollImpact.tidak_dipotong += formType === "akademik" ? days : 0;
+        summary.payrollImpact.tidak_dipotong +=
+          formType === "akademik" ? days : 0;
       } else if (payrollLabel === "perlu_review_hrd") {
         summary.payrollImpact.perlu_review_hrd += days;
       } else if (payrollLabel === "sesuai_kebijakan") {
@@ -443,8 +536,10 @@ export function buildEmployeePermissionSummaries(
     // Calculate effective working days
     // Only tidak_masuk affects hadir efektif
     // akademik also affects, but separately
-    const daysAffectingPresence = summary.tidak_masuk_total_days + summary.akademik_days;
-    summary.effectiveWorkingDays = summary.totalWorkingDays - daysAffectingPresence;
+    const daysAffectingPresence =
+      summary.tidak_masuk_total_days + summary.akademik_days;
+    summary.effectiveWorkingDays =
+      summary.totalWorkingDays - daysAffectingPresence;
 
     summaries.push(summary);
   }

@@ -257,7 +257,7 @@ export function CandidateLoginForm({ onSwitchToRegister }: { onSwitchToRegister?
         <div className="pt-2 text-center">
           <Link
             href="/careers"
-            className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+            className="text-xs text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
           >
             ← Kembali ke Halaman Karir
           </Link>

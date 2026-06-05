@@ -29,6 +29,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2, LogIn, Eye, EyeOff, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { UserProfile, ROLES_INTERNAL } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 const formSchema = z.object({
   email: z.string().email({ message: 'Masukkan email yang valid.' }),
@@ -166,10 +167,7 @@ export function AdminLoginForm() {
             name="email"
             render={({ field }) => (
               <FormItem>
-                <FormLabel
-                  className="text-xs font-bold uppercase tracking-wide"
-                  style={{ color: '#7a9492' }}
-                >
+                <FormLabel className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-400">
                   Email
                 </FormLabel>
                 <FormControl>
@@ -178,23 +176,10 @@ export function AdminLoginForm() {
                     {...field}
                     autoComplete="email"
                     disabled={loading}
-                    className="h-11 rounded-lg border transition-colors"
-                    style={{
-                      backgroundColor: '#0d1117',
-                      borderColor: '#1e3030',
-                      color: '#ffffff',
-                    }}
-                    onFocus={(e) => {
-                      e.currentTarget.style.borderColor = '#00c896';
-                      e.currentTarget.style.boxShadow = '0 0 0 3px rgba(0, 200, 150, 0.12)';
-                    }}
-                    onBlur={(e) => {
-                      e.currentTarget.style.borderColor = '#1e3030';
-                      e.currentTarget.style.boxShadow = 'none';
-                    }}
+                    className="h-11 rounded-lg border bg-white dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 border-slate-300 dark:border-slate-700 transition-colors focus:border-teal-500 dark:focus:border-teal-400 focus:ring-2 focus:ring-teal-500/20 dark:focus:ring-teal-400/20"
                   />
                 </FormControl>
-                <FormMessage style={{ color: '#ff6b6b' }} />
+                <FormMessage className="text-rose-600 dark:text-rose-400" />
               </FormItem>
             )}
           />
@@ -206,19 +191,13 @@ export function AdminLoginForm() {
             render={({ field }) => (
               <FormItem>
                 <div className="flex items-center justify-between">
-                  <FormLabel
-                    className="text-xs font-bold uppercase tracking-wide"
-                    style={{ color: '#7a9492' }}
-                  >
+                  <FormLabel className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-400">
                     Password
                   </FormLabel>
                   <button
                     type="button"
                     onClick={() => setShowForgotPasswordDialog(true)}
-                    className="text-xs font-semibold transition-colors"
-                    style={{ color: '#00c896' }}
-                    onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.8')}
-                    onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+                    className="text-xs font-semibold text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 transition-colors"
                   >
                     Lupa kata sandi?
                   </button>
@@ -231,35 +210,19 @@ export function AdminLoginForm() {
                       {...field}
                       autoComplete="current-password"
                       disabled={loading}
-                      className="h-11 pr-11 rounded-lg border transition-colors"
-                      style={{
-                        backgroundColor: '#0d1117',
-                        borderColor: '#1e3030',
-                        color: '#ffffff',
-                      }}
-                      onFocus={(e) => {
-                        e.currentTarget.style.borderColor = '#00c896';
-                        e.currentTarget.style.boxShadow = '0 0 0 3px rgba(0, 200, 150, 0.12)';
-                      }}
-                      onBlur={(e) => {
-                        e.currentTarget.style.borderColor = '#1e3030';
-                        e.currentTarget.style.boxShadow = 'none';
-                      }}
+                      className="h-11 pr-11 rounded-lg border bg-white dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 border-slate-300 dark:border-slate-700 transition-colors focus:border-teal-500 dark:focus:border-teal-400 focus:ring-2 focus:ring-teal-500/20 dark:focus:ring-teal-400/20"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       disabled={loading}
-                      className="absolute inset-y-0 right-0 flex items-center pr-3 transition-colors"
-                      style={{ color: '#557370' }}
-                      onMouseEnter={(e) => (e.currentTarget.style.color = '#7a9492')}
-                      onMouseLeave={(e) => (e.currentTarget.style.color = '#557370')}
+                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-400 transition-colors"
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
                 </FormControl>
-                <FormMessage style={{ color: '#ff6b6b' }} />
+                <FormMessage className="text-rose-600 dark:text-rose-400" />
               </FormItem>
             )}
           />
@@ -271,28 +234,17 @@ export function AdminLoginForm() {
             render={({ field }) => (
               <FormItem className="flex items-center space-x-3 space-y-0 pt-2">
                 <FormControl>
-                  <div className="relative">
-                    <Checkbox
-                      checked={field.value}
-                      onCheckedChange={(checked) => {
-                        field.onChange(checked);
-                        handleRememberMeChange(checked as boolean);
-                      }}
-                      disabled={loading}
-                      className="w-5 h-5 rounded border"
-                      style={{
-                        borderColor: '#1e3030',
-                        backgroundColor: '#0d1117',
-                      }}
-                    />
-                  </div>
+                  <Checkbox
+                    checked={field.value}
+                    onCheckedChange={(checked) => {
+                      field.onChange(checked);
+                      handleRememberMeChange(checked as boolean);
+                    }}
+                    disabled={loading}
+                    className="w-5 h-5 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+                  />
                 </FormControl>
-                <FormLabel
-                  className="text-sm font-medium cursor-pointer mt-0 transition-colors"
-                  style={{ color: '#7a9492' }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = '#ffffff')}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = '#7a9492')}
-                >
+                <FormLabel className="text-sm font-medium cursor-pointer mt-0 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-300 transition-colors">
                   Ingat saya di perangkat ini
                 </FormLabel>
               </FormItem>
@@ -304,19 +256,7 @@ export function AdminLoginForm() {
             type="button"
             onClick={() => form.handleSubmit(onSubmit)()}
             disabled={loading}
-            className="w-full h-11 mt-8 rounded-lg font-bold text-sm transition-all flex items-center justify-center gap-2"
-            style={{
-              backgroundColor: '#00c896',
-              color: '#0a1f1b',
-              opacity: loading ? 0.7 : 1,
-              cursor: loading ? 'not-allowed' : 'pointer',
-            }}
-            onMouseEnter={(e) => {
-              if (!loading) e.currentTarget.style.backgroundColor = '#00b383';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = '#00c896';
-            }}
+            className="w-full h-11 mt-8 rounded-lg font-bold text-sm transition-all flex items-center justify-center gap-2 bg-teal-600 dark:bg-teal-600 text-white hover:bg-teal-700 dark:hover:bg-teal-700 disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {loading ? (
               <>
@@ -332,15 +272,9 @@ export function AdminLoginForm() {
           </button>
 
           {/* Security Notice - Single one only */}
-          <div
-            className="rounded-xl p-4 border-l-4 mt-6"
-            style={{
-              backgroundColor: 'rgba(0, 200, 150, 0.08)',
-              borderColor: '#00c896',
-            }}
-          >
-            <p className="text-xs leading-relaxed" style={{ color: '#7a9492' }}>
-              <span className="font-semibold" style={{ color: '#00c896' }}>
+          <div className="rounded-xl p-4 border-l-4 mt-6 bg-teal-50 dark:bg-teal-950/20 border-teal-200 dark:border-teal-800">
+            <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+              <span className="font-semibold text-teal-600 dark:text-teal-400">
                 Keamanan:
               </span>
               {' '}Jangan bagikan akun dan password Anda kepada siapapun.
@@ -351,23 +285,17 @@ export function AdminLoginForm() {
 
       {/* Forgot Password Dialog */}
       <Dialog open={showForgotPasswordDialog} onOpenChange={setShowForgotPasswordDialog}>
-        <DialogContent
-          className="rounded-xl border"
-          style={{
-            backgroundColor: '#0d1117',
-            borderColor: '#1a2e28',
-          }}
-        >
+        <DialogContent className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950">
           <DialogHeader className="space-y-3">
             <div className="flex items-start gap-3">
-              <div className="rounded-full p-2 flex-shrink-0 mt-0.5" style={{ backgroundColor: 'rgba(0, 200, 150, 0.1)' }}>
-                <AlertCircle className="h-5 w-5" style={{ color: '#00c896' }} />
+              <div className="rounded-full p-2 flex-shrink-0 mt-0.5 bg-teal-100 dark:bg-teal-950/30">
+                <AlertCircle className="h-5 w-5 text-teal-600 dark:text-teal-400" />
               </div>
               <div className="space-y-1 flex-1">
-                <DialogTitle style={{ color: '#ffffff' }}>
+                <DialogTitle className="text-slate-900 dark:text-white">
                   Lupa Kata Sandi?
                 </DialogTitle>
-                <DialogDescription style={{ color: '#7a9492' }}>
+                <DialogDescription className="text-slate-600 dark:text-slate-400">
                   Proses pemulihan akun Anda
                 </DialogDescription>
               </div>
@@ -376,61 +304,49 @@ export function AdminLoginForm() {
 
           <div className="space-y-4 py-4">
             {/* Info Alert */}
-            <div
-              className="rounded-lg p-4 border-l-4"
-              style={{
-                backgroundColor: 'rgba(0, 200, 150, 0.05)',
-                borderColor: '#00c896',
-              }}
-            >
-              <p className="text-sm leading-relaxed" style={{ color: '#7a9492' }}>
+            <div className="rounded-lg p-4 border-l-4 bg-teal-50 dark:bg-teal-950/20 border-teal-200 dark:border-teal-800">
+              <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
                 Karena sistem masih dalam tahap pengembangan, proses reset password belum otomatis melalui email.
               </p>
             </div>
 
             {/* Steps */}
             <div className="space-y-3">
-              <h4 className="font-semibold text-sm" style={{ color: '#ffffff' }}>
+              <h4 className="font-semibold text-sm text-slate-900 dark:text-white">
                 Langkah-langkah:
               </h4>
               <ol className="text-sm space-y-3">
                 <li className="flex gap-3">
-                  <span className="font-bold flex-shrink-0 w-6" style={{ color: '#00c896' }}>
+                  <span className="font-bold flex-shrink-0 w-6 text-teal-600 dark:text-teal-400">
                     1
                   </span>
-                  <span style={{ color: '#7a9492' }}>Hubungi HRD atau Super Admin Anda</span>
+                  <span className="text-slate-600 dark:text-slate-400">Hubungi HRD atau Super Admin Anda</span>
                 </li>
                 <li className="flex gap-3">
-                  <span className="font-bold flex-shrink-0 w-6" style={{ color: '#00c896' }}>
+                  <span className="font-bold flex-shrink-0 w-6 text-teal-600 dark:text-teal-400">
                     2
                   </span>
-                  <span style={{ color: '#7a9492' }}>Minta untuk reset password sementara</span>
+                  <span className="text-slate-600 dark:text-slate-400">Minta untuk reset password sementara</span>
                 </li>
                 <li className="flex gap-3">
-                  <span className="font-bold flex-shrink-0 w-6" style={{ color: '#00c896' }}>
+                  <span className="font-bold flex-shrink-0 w-6 text-teal-600 dark:text-teal-400">
                     3
                   </span>
-                  <span style={{ color: '#7a9492' }}>Setelah login dengan password sementara, sistem akan meminta Anda membuat password baru</span>
+                  <span className="text-slate-600 dark:text-slate-400">Setelah login dengan password sementara, sistem akan meminta Anda membuat password baru</span>
                 </li>
                 <li className="flex gap-3">
-                  <span className="font-bold flex-shrink-0 w-6" style={{ color: '#00c896' }}>
+                  <span className="font-bold flex-shrink-0 w-6 text-teal-600 dark:text-teal-400">
                     4
                   </span>
-                  <span style={{ color: '#7a9492' }}>Gunakan password baru untuk login berikutnya</span>
+                  <span className="text-slate-600 dark:text-slate-400">Gunakan password baru untuk login berikutnya</span>
                 </li>
               </ol>
             </div>
 
             {/* Success Message */}
-            <div
-              className="rounded-lg p-4 border-l-4 flex gap-3"
-              style={{
-                backgroundColor: 'rgba(76, 175, 80, 0.05)',
-                borderColor: '#4caf50',
-              }}
-            >
-              <CheckCircle2 className="h-5 w-5 flex-shrink-0 mt-0.5" style={{ color: '#4caf50' }} />
-              <p className="text-xs" style={{ color: '#7a9492' }}>
+            <div className="rounded-lg p-4 border-l-4 flex gap-3 bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800">
+              <CheckCircle2 className="h-5 w-5 flex-shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+              <p className="text-xs text-slate-600 dark:text-slate-400">
                 Password baru yang Anda buat akan disimpan dengan aman di sistem.
               </p>
             </div>
@@ -440,17 +356,7 @@ export function AdminLoginForm() {
           <div className="flex gap-2 pt-2">
             <button
               onClick={() => setShowForgotPasswordDialog(false)}
-              className="flex-1 h-10 rounded-lg font-bold text-sm transition-all"
-              style={{
-                backgroundColor: '#00c896',
-                color: '#0a1f1b',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#00b383';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = '#00c896';
-              }}
+              className="flex-1 h-10 rounded-lg font-bold text-sm transition-all bg-teal-600 text-white hover:bg-teal-700"
             >
               Mengerti
             </button>

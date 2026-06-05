@@ -104,10 +104,10 @@ export default function ManagerLeaveApprovalPage() {
   const currentUserUid = userProfile?.uid || "";
 
   const filterInputClass =
-    "w-full rounded-2xl border border-slate-700 bg-slate-900 text-slate-100 placeholder:text-slate-500 focus:border-teal-500 focus:ring-teal-500 focus:outline-none focus:ring-1 px-3 py-2 text-sm shadow-none";
+    "w-full rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-teal-500 dark:focus:border-teal-500 focus:ring-teal-500 dark:focus:ring-teal-500 focus:outline-none focus:ring-1 px-3 py-2 text-sm shadow-none";
 
   const filterSelectClass =
-    "w-full rounded-2xl border border-slate-700 bg-slate-900 text-slate-100 placeholder:text-slate-500 focus:border-teal-500 focus:ring-teal-500 focus:outline-none focus:ring-1 px-3 py-2 text-sm shadow-none appearance-none";
+    "w-full rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-teal-500 dark:focus:border-teal-500 focus:ring-teal-500 dark:focus:ring-teal-500 focus:outline-none focus:ring-1 px-3 py-2 text-sm shadow-none appearance-none";
 
   const getRequesterLevel = (req: LeaveRequest) => {
     return ((req as any).requesterStructuralPosition as string) || "staff";
@@ -1137,18 +1137,18 @@ export default function ManagerLeaveApprovalPage() {
 
   return (
     <DashboardLayout pageTitle={pageTitle} menuConfig={undefined}>
-      <div className="w-full space-y-6 px-4 md:px-8 max-w-[1600px] mx-auto text-slate-100 pb-10">
+      <div className="w-full space-y-6 px-4 md:px-8 max-w-[1600px] mx-auto text-slate-900 dark:text-slate-100 pb-10">
         {/* Top Header Row */}
-        <div className="flex flex-wrap items-center justify-between gap-4 py-4 border-b border-slate-800">
+        <div className="flex flex-wrap items-center justify-between gap-4 py-4 border-b border-slate-200 dark:border-slate-800">
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-indigo-950/30 rounded-2xl border border-indigo-900/30 shadow-sm">
-              <CalendarOff className="h-6 w-6 text-indigo-400" />
+            <div className="p-3 bg-indigo-100 dark:bg-indigo-950/30 rounded-2xl border border-indigo-200 dark:border-indigo-900/30 shadow-sm">
+              <CalendarOff className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
             </div>
             <div>
-              <h1 className="text-2xl font-black text-white tracking-tight">
+              <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
                 {pageTitle}
               </h1>
-              <p className="text-xs text-slate-400 font-semibold mt-0.5">
+              <p className="text-xs text-slate-600 dark:text-slate-400 font-semibold mt-0.5">
                 {pageSubtitle}
               </p>
             </div>
@@ -1158,7 +1158,7 @@ export default function ManagerLeaveApprovalPage() {
             variant="outline"
             size="sm"
             onClick={() => setIsFilterOpen((prev) => !prev)}
-            className="rounded-2xl border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800"
+            className="rounded-2xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800"
           >
             {isFilterOpen ? "Tutup Filter" : "Buka Filter"}
           </Button>
@@ -1166,9 +1166,9 @@ export default function ManagerLeaveApprovalPage() {
 
         {/* Filters Section (Collapsible) */}
         {isFilterOpen && (
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 p-5 bg-slate-950 rounded-2xl border border-slate-800 animate-in fade-in duration-200">
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 p-5 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 animate-in fade-in duration-200">
             <div className="space-y-2">
-              <label className="text-[10px] uppercase tracking-[0.3em] text-slate-400">
+              <label className="text-[10px] uppercase tracking-[0.3em] text-slate-600 dark:text-slate-400">
                 Brand
               </label>
               <select
@@ -1186,7 +1186,7 @@ export default function ManagerLeaveApprovalPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-[10px] uppercase tracking-[0.3em] text-slate-400">
+              <label className="text-[10px] uppercase tracking-[0.3em] text-slate-600 dark:text-slate-400">
                 Divisi
               </label>
               <select
@@ -1331,13 +1331,13 @@ export default function ManagerLeaveApprovalPage() {
             ].map((item) => (
               <Card
                 key={item.title}
-                className="rounded-2xl border border-slate-800 bg-slate-950 shadow-sm"
+                className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-sm"
               >
                 <CardContent className="p-3.5 space-y-1">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 truncate">
                     {item.title}
                   </p>
-                  <p className="text-2xl font-black text-white">
+                  <p className="text-2xl font-black text-slate-900 dark:text-white">
                     {item.value}
                   </p>
                 </CardContent>
@@ -1347,53 +1347,53 @@ export default function ManagerLeaveApprovalPage() {
         )}
 
         {/* 1. ACTIVE REQUESTS CARD */}
-        <Card className="border-slate-850 bg-slate-950 shadow-md rounded-2xl overflow-hidden">
-          <CardHeader className="border-b border-slate-800 pb-4 bg-slate-900/50">
+        <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-md rounded-2xl overflow-hidden">
+          <CardHeader className="border-b border-slate-200 dark:border-slate-800 pb-4 bg-slate-50 dark:bg-slate-900/50">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-black uppercase tracking-wider text-indigo-400 flex items-center gap-2">
+              <CardTitle className="text-sm font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-2">
                 {isDirectorMode
                   ? "Menunggu Persetujuan Direktur"
                   : "Menunggu Persetujuan Anda"}
-                <Badge className="bg-indigo-600 hover:bg-indigo-650 text-white font-black text-xs rounded-full px-2.5 py-0.5">
+                <Badge className="bg-indigo-600 dark:bg-indigo-600 hover:bg-indigo-700 dark:hover:bg-indigo-700 text-white font-black text-xs rounded-full px-2.5 py-0.5">
                   {activeRequests.length}
                 </Badge>
               </CardTitle>
             </div>
           </CardHeader>
-          <CardContent className="p-0 bg-slate-950">
+          <CardContent className="p-0 bg-white dark:bg-slate-950">
             {/* Desktop Readable Table */}
             <div className="hidden md:block overflow-x-auto w-full">
-              <Table className="w-full min-w-[1200px] border-collapse bg-slate-950">
-                <TableHeader className="bg-slate-900 border-b border-slate-800 sticky top-0 z-10">
-                  <TableRow className="border-b border-slate-800 hover:bg-slate-900">
-                    <TableHead className="px-5 py-4 text-left font-bold text-slate-300 text-sm">
+              <Table className="w-full min-w-[1200px] border-collapse bg-white dark:bg-slate-950">
+                <TableHeader className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10">
+                  <TableRow className="border-b border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-900">
+                    <TableHead className="px-5 py-4 text-left font-bold text-slate-900 dark:text-slate-300 text-sm">
                       Pengaju
                     </TableHead>
-                    <TableHead className="px-5 py-4 text-left font-bold text-slate-300 text-sm">
+                    <TableHead className="px-5 py-4 text-left font-bold text-slate-900 dark:text-slate-300 text-sm">
                       Unit Kerja
                     </TableHead>
-                    <TableHead className="px-5 py-4 text-left font-bold text-slate-300 text-sm">
+                    <TableHead className="px-5 py-4 text-left font-bold text-slate-900 dark:text-slate-300 text-sm">
                       Jenis Cuti
                     </TableHead>
-                    <TableHead className="px-5 py-4 text-left font-bold text-slate-300 text-sm">
+                    <TableHead className="px-5 py-4 text-left font-bold text-slate-900 dark:text-slate-300 text-sm">
                       Tanggal Pengajuan
                     </TableHead>
-                    <TableHead className="px-5 py-4 text-left font-bold text-slate-300 text-sm">
+                    <TableHead className="px-5 py-4 text-left font-bold text-slate-900 dark:text-slate-300 text-sm">
                       Periode Cuti
                     </TableHead>
-                    <TableHead className="px-5 py-4 text-left font-bold text-slate-300 text-sm">
+                    <TableHead className="px-5 py-4 text-left font-bold text-slate-900 dark:text-slate-300 text-sm">
                       Durasi
                     </TableHead>
-                    <TableHead className="px-5 py-4 text-left font-bold text-slate-300 text-sm">
+                    <TableHead className="px-5 py-4 text-left font-bold text-slate-900 dark:text-slate-300 text-sm">
                       Pengganti Sementara
                     </TableHead>
-                    <TableHead className="px-5 py-4 text-left font-bold text-slate-300 text-sm">
+                    <TableHead className="px-5 py-4 text-left font-bold text-slate-900 dark:text-slate-300 text-sm">
                       Dampak Operasional
                     </TableHead>
-                    <TableHead className="px-5 py-4 text-left font-bold text-slate-300 text-sm">
+                    <TableHead className="px-5 py-4 text-left font-bold text-slate-900 dark:text-slate-300 text-sm">
                       Status
                     </TableHead>
-                    <TableHead className="px-5 py-4 text-right font-bold text-slate-300 text-sm">
+                    <TableHead className="px-5 py-4 text-right font-bold text-slate-900 dark:text-slate-300 text-sm">
                       Aksi
                     </TableHead>
                   </TableRow>
@@ -1407,11 +1407,11 @@ export default function ManagerLeaveApprovalPage() {
                       return (
                         <TableRow
                           key={r.id}
-                          className="hover:bg-slate-900/40 transition-colors border-b border-slate-800/80"
+                          className="hover:bg-slate-100 dark:hover:bg-slate-900/40 transition-colors border-b border-slate-200 dark:border-slate-800/80"
                         >
                           <TableCell className="px-5 py-4 align-top text-sm">
                             <div className="space-y-1">
-                              <span className="text-slate-100 font-bold block">
+                              <span className="text-slate-900 dark:text-slate-100 font-bold block">
                                 {r.employeeName}
                               </span>
                               <Badge
@@ -1423,13 +1423,13 @@ export default function ManagerLeaveApprovalPage() {
                               </Badge>
                             </div>
                           </TableCell>
-                          <TableCell className="px-5 py-4 align-top text-sm font-semibold text-slate-300">
+                          <TableCell className="px-5 py-4 align-top text-sm font-semibold text-slate-700 dark:text-slate-300">
                             <div className="space-y-0.5">
-                              <p className="text-slate-100">{r.brandName || "-"}</p>
-                              <p className="text-slate-400 text-xs">{r.divisionName || "-"}</p>
+                              <p className="text-slate-900 dark:text-slate-100">{r.brandName || "-"}</p>
+                              <p className="text-slate-600 dark:text-slate-400 text-xs">{r.divisionName || "-"}</p>
                             </div>
                           </TableCell>
-                          <TableCell className="px-5 py-4 align-top text-sm font-bold text-indigo-400 capitalize">
+                          <TableCell className="px-5 py-4 align-top text-sm font-bold text-indigo-600 dark:text-indigo-400 capitalize">
                             Cuti{" "}
                             {r.leaveType === "tahunan"
                               ? "Tahunan"
@@ -1441,23 +1441,23 @@ export default function ManagerLeaveApprovalPage() {
                                     ? "Melahirkan"
                                     : "Tahunan"}
                           </TableCell>
-                          <TableCell className="px-5 py-4 align-top text-sm text-slate-300">
-                            <p className="font-semibold text-slate-200">{subDate.day}</p>
+                          <TableCell className="px-5 py-4 align-top text-sm text-slate-700 dark:text-slate-300">
+                            <p className="font-semibold text-slate-900 dark:text-slate-200">{subDate.day}</p>
                             {subDate.time && (
-                              <p className="text-slate-500 text-xs mt-0.5">{subDate.time}</p>
+                              <p className="text-slate-500 dark:text-slate-400 text-xs mt-0.5">{subDate.time}</p>
                             )}
                           </TableCell>
-                          <TableCell className="px-5 py-4 align-top text-sm text-slate-300">
-                            <p className="font-semibold text-slate-200">{period.start}</p>
-                            <p className="text-slate-400 text-xs mt-0.5">{period.end}</p>
+                          <TableCell className="px-5 py-4 align-top text-sm text-slate-700 dark:text-slate-300">
+                            <p className="font-semibold text-slate-900 dark:text-slate-200">{period.start}</p>
+                            <p className="text-slate-600 dark:text-slate-400 text-xs mt-0.5">{period.end}</p>
                           </TableCell>
-                          <TableCell className="px-5 py-4 align-top font-bold text-slate-200 text-sm">
+                          <TableCell className="px-5 py-4 align-top font-bold text-slate-900 dark:text-slate-200 text-sm">
                             {formatDuration(r)}
                           </TableCell>
-                          <TableCell className="px-5 py-4 align-top text-sm text-slate-300">
-                            <p className="font-bold text-slate-250">{r.handoverEmployeeName || "-"}</p>
+                          <TableCell className="px-5 py-4 align-top text-sm text-slate-700 dark:text-slate-300">
+                            <p className="font-bold text-slate-900 dark:text-slate-200">{r.handoverEmployeeName || "-"}</p>
                             {r.handoverEmployeePosition && (
-                              <p className="text-slate-450 text-xs mt-0.5">{r.handoverEmployeePosition}</p>
+                              <p className="text-slate-600 dark:text-slate-400 text-xs mt-0.5">{r.handoverEmployeePosition}</p>
                             )}
                           </TableCell>
                           <TableCell className="px-5 py-4 align-top">
@@ -1482,7 +1482,7 @@ export default function ManagerLeaveApprovalPage() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => handleViewDetails(r)}
-                                className="rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white font-bold text-xs gap-1"
+                                className="rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-bold text-xs gap-1"
                               >
                                 <Eye className="h-3.5 w-3.5" /> Tinjau
                               </Button>
@@ -1522,15 +1522,15 @@ export default function ManagerLeaveApprovalPage() {
                     <TableRow className="hover:bg-transparent">
                       <TableCell
                         colSpan={10}
-                        className="h-44 text-center text-slate-500"
+                        className="h-44 text-center text-slate-600 dark:text-slate-400"
                       >
                         <div className="flex flex-col items-center justify-center gap-2">
-                          <CheckCircle2 className="h-10 w-10 text-slate-600 opacity-40" />
-                          <p className="text-sm font-bold">
+                          <CheckCircle2 className="h-10 w-10 text-slate-400 dark:text-slate-600 opacity-40" />
+                          <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
                             Tidak ada pengajuan pending yang perlu diproses saat ini.
                           </p>
                           {hasInvalidApproverPending && (
-                            <p className="text-xs text-amber-450 mt-2">
+                            <p className="text-xs text-amber-600 dark:text-amber-450 mt-2">
                               Pengajuan belum memiliki approver valid. Cek data atasan langsung.
                             </p>
                           )}
@@ -1543,21 +1543,21 @@ export default function ManagerLeaveApprovalPage() {
             </div>
 
             {/* Mobile Card List (Active) */}
-            <div className="block md:hidden space-y-4 px-4 py-4 bg-slate-900/20">
+            <div className="block md:hidden space-y-4 px-4 py-4 bg-slate-100 dark:bg-slate-900/20">
               {activeRequests.length > 0 ? (
                 activeRequests.map((r) => {
                   const impact = getOperationalImpact(r);
                   return (
                     <div
                       key={r.id}
-                      className="p-4 bg-slate-900 rounded-2xl border border-slate-800 shadow-sm space-y-3"
+                      className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3"
                     >
                       <div className="flex justify-between items-start">
                         <div>
-                          <p className="font-black text-slate-100 text-base">
+                          <p className="font-black text-slate-900 dark:text-slate-100 text-base">
                             {r.employeeName}
                           </p>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                          <p className="text-[10px] text-slate-600 dark:text-slate-400 font-bold uppercase tracking-wider">
                             {r.divisionName || "N/A"}
                           </p>
                         </div>
@@ -1569,12 +1569,12 @@ export default function ManagerLeaveApprovalPage() {
                         </Badge>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-xs py-3 border-y border-slate-800">
+                      <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-xs py-3 border-y border-slate-200 dark:border-slate-800">
                         <div>
-                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">
+                          <span className="text-[10px] font-bold text-slate-600 dark:text-slate-500 uppercase tracking-wider block mb-0.5">
                             Jenis Cuti
                           </span>
-                          <span className="font-black text-indigo-400 capitalize">
+                          <span className="font-black text-indigo-600 dark:text-indigo-400 capitalize">
                             {r.leaveType === "tahunan"
                               ? "Cuti Tahunan"
                               : r.leaveType === "besar"
@@ -1667,51 +1667,51 @@ export default function ManagerLeaveApprovalPage() {
         </Card>
 
         {/* 2. HISTORY REQUESTS CARD */}
-        <Card className="border-slate-850 bg-slate-950 shadow-md rounded-2xl overflow-hidden mt-6">
-          <CardHeader className="border-b border-slate-800 pb-4 bg-slate-900/50">
-            <CardTitle className="text-sm font-black uppercase tracking-wider text-slate-400 flex items-center gap-2">
+        <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-md rounded-2xl overflow-hidden mt-6">
+          <CardHeader className="border-b border-slate-200 dark:border-slate-800 pb-4 bg-slate-50 dark:bg-slate-900/50">
+            <CardTitle className="text-sm font-black uppercase tracking-wider text-slate-700 dark:text-slate-400 flex items-center gap-2">
               {isDirectorMode
                 ? "Riwayat Keputusan Cuti Manager Divisi"
                 : "Riwayat Keputusan Cuti Tim"}
-              <Badge className="bg-slate-800 text-slate-300 border border-slate-700 font-black text-xs rounded-full px-2.5 py-0.5">
+              <Badge className="bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-300 border border-slate-300 dark:border-slate-700 font-black text-xs rounded-full px-2.5 py-0.5">
                 {historyRequests.length}
               </Badge>
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-0 bg-slate-950">
+          <CardContent className="p-0 bg-white dark:bg-slate-950">
             {/* Desktop History Table */}
             <div className="hidden md:block overflow-x-auto w-full">
-              <Table className="w-full min-w-[1200px] border-collapse bg-slate-950">
-                <TableHeader className="bg-slate-900 border-b border-slate-800 sticky top-0 z-10">
-                  <TableRow className="border-b border-slate-800 hover:bg-slate-900">
-                    <TableHead className="px-5 py-4 text-left font-bold text-slate-300 text-sm">
+              <Table className="w-full min-w-[1200px] border-collapse bg-white dark:bg-slate-950">
+                <TableHeader className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10">
+                  <TableRow className="border-b border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-900">
+                    <TableHead className="px-5 py-4 text-left font-bold text-slate-900 dark:text-slate-300 text-sm">
                       Pengaju
                     </TableHead>
-                    <TableHead className="px-5 py-4 text-left font-bold text-slate-300 text-sm">
+                    <TableHead className="px-5 py-4 text-left font-bold text-slate-900 dark:text-slate-300 text-sm">
                       Unit Kerja
                     </TableHead>
-                    <TableHead className="px-5 py-4 text-left font-bold text-slate-300 text-sm">
+                    <TableHead className="px-5 py-4 text-left font-bold text-slate-900 dark:text-slate-300 text-sm">
                       Jenis Cuti
                     </TableHead>
-                    <TableHead className="px-5 py-4 text-left font-bold text-slate-300 text-sm">
+                    <TableHead className="px-5 py-4 text-left font-bold text-slate-900 dark:text-slate-300 text-sm">
                       Tanggal Pengajuan
                     </TableHead>
-                    <TableHead className="px-5 py-4 text-left font-bold text-slate-300 text-sm">
+                    <TableHead className="px-5 py-4 text-left font-bold text-slate-900 dark:text-slate-300 text-sm">
                       Periode Cuti
                     </TableHead>
-                    <TableHead className="px-5 py-4 text-left font-bold text-slate-300 text-sm">
+                    <TableHead className="px-5 py-4 text-left font-bold text-slate-900 dark:text-slate-300 text-sm">
                       Durasi
                     </TableHead>
-                    <TableHead className="px-5 py-4 text-left font-bold text-slate-300 text-sm">
+                    <TableHead className="px-5 py-4 text-left font-bold text-slate-900 dark:text-slate-300 text-sm">
                       Pengganti Sementara
                     </TableHead>
-                    <TableHead className="px-5 py-4 text-left font-bold text-slate-300 text-sm">
+                    <TableHead className="px-5 py-4 text-left font-bold text-slate-900 dark:text-slate-300 text-sm">
                       Dampak Operasional
                     </TableHead>
-                    <TableHead className="px-5 py-4 text-left font-bold text-slate-300 text-sm">
+                    <TableHead className="px-5 py-4 text-left font-bold text-slate-900 dark:text-slate-300 text-sm">
                       Status
                     </TableHead>
-                    <TableHead className="px-5 py-4 text-right font-bold text-slate-300 text-sm">
+                    <TableHead className="px-5 py-4 text-right font-bold text-slate-900 dark:text-slate-300 text-sm">
                       Aksi
                     </TableHead>
                   </TableRow>
@@ -1725,11 +1725,11 @@ export default function ManagerLeaveApprovalPage() {
                       return (
                         <TableRow
                           key={r.id}
-                          className="hover:bg-slate-900/40 transition-colors border-b border-slate-800/80"
+                          className="hover:bg-slate-100 dark:hover:bg-slate-900/40 transition-colors border-b border-slate-200 dark:border-slate-800/80"
                         >
                           <TableCell className="px-5 py-4 align-top text-sm">
                             <div className="space-y-1">
-                              <span className="text-slate-100 font-bold block">
+                              <span className="text-slate-900 dark:text-slate-100 font-bold block">
                                 {r.employeeName}
                               </span>
                               <Badge
@@ -1741,13 +1741,13 @@ export default function ManagerLeaveApprovalPage() {
                               </Badge>
                             </div>
                           </TableCell>
-                          <TableCell className="px-5 py-4 align-top text-sm font-semibold text-slate-300">
+                          <TableCell className="px-5 py-4 align-top text-sm font-semibold text-slate-700 dark:text-slate-300">
                             <div className="space-y-0.5">
-                              <p className="text-slate-100">{r.brandName || "-"}</p>
-                              <p className="text-slate-400 text-xs">{r.divisionName || "-"}</p>
+                              <p className="text-slate-900 dark:text-slate-100">{r.brandName || "-"}</p>
+                              <p className="text-slate-600 dark:text-slate-400 text-xs">{r.divisionName || "-"}</p>
                             </div>
                           </TableCell>
-                          <TableCell className="px-5 py-4 align-top text-sm font-bold text-indigo-400 capitalize">
+                          <TableCell className="px-5 py-4 align-top text-sm font-bold text-indigo-600 dark:text-indigo-400 capitalize">
                             Cuti{" "}
                             {r.leaveType === "tahunan"
                               ? "Tahunan"
@@ -1759,23 +1759,23 @@ export default function ManagerLeaveApprovalPage() {
                                     ? "Melahirkan"
                                     : "Tahunan"}
                           </TableCell>
-                          <TableCell className="px-5 py-4 align-top text-sm text-slate-300">
-                            <p className="font-semibold text-slate-200">{subDate.day}</p>
+                          <TableCell className="px-5 py-4 align-top text-sm text-slate-700 dark:text-slate-300">
+                            <p className="font-semibold text-slate-900 dark:text-slate-200">{subDate.day}</p>
                             {subDate.time && (
-                              <p className="text-slate-500 text-xs mt-0.5">{subDate.time}</p>
+                              <p className="text-slate-500 dark:text-slate-400 text-xs mt-0.5">{subDate.time}</p>
                             )}
                           </TableCell>
-                          <TableCell className="px-5 py-4 align-top text-sm text-slate-300">
-                            <p className="font-semibold text-slate-200">{period.start}</p>
-                            <p className="text-slate-400 text-xs mt-0.5">{period.end}</p>
+                          <TableCell className="px-5 py-4 align-top text-sm text-slate-700 dark:text-slate-300">
+                            <p className="font-semibold text-slate-900 dark:text-slate-200">{period.start}</p>
+                            <p className="text-slate-600 dark:text-slate-400 text-xs mt-0.5">{period.end}</p>
                           </TableCell>
-                          <TableCell className="px-5 py-4 align-top font-bold text-slate-200 text-sm">
+                          <TableCell className="px-5 py-4 align-top font-bold text-slate-900 dark:text-slate-200 text-sm">
                             {formatDuration(r)}
                           </TableCell>
-                          <TableCell className="px-5 py-4 align-top text-sm text-slate-300">
-                            <p className="font-bold text-slate-250">{r.handoverEmployeeName || "-"}</p>
+                          <TableCell className="px-5 py-4 align-top text-sm text-slate-700 dark:text-slate-300">
+                            <p className="font-bold text-slate-900 dark:text-slate-200">{r.handoverEmployeeName || "-"}</p>
                             {r.handoverEmployeePosition && (
-                              <p className="text-slate-455 text-xs mt-0.5">{r.handoverEmployeePosition}</p>
+                              <p className="text-slate-600 dark:text-slate-400 text-xs mt-0.5">{r.handoverEmployeePosition}</p>
                             )}
                           </TableCell>
                           <TableCell className="px-5 py-4 align-top">
@@ -1799,7 +1799,7 @@ export default function ManagerLeaveApprovalPage() {
                               variant="ghost"
                               size="sm"
                               onClick={() => handleViewDetails(r)}
-                              className="rounded-xl hover:bg-slate-800 text-slate-300 hover:text-white font-bold text-xs gap-1"
+                              className="rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-bold text-xs gap-1"
                             >
                               <Eye className="h-3.5 w-3.5" /> Detail
                             </Button>
@@ -1811,9 +1811,9 @@ export default function ManagerLeaveApprovalPage() {
                     <TableRow className="hover:bg-transparent">
                       <TableCell
                         colSpan={10}
-                        className="h-28 text-center text-slate-500"
+                        className="h-28 text-center text-slate-600 dark:text-slate-400"
                       >
-                        Belum ada riwayat keputusan cuti yang diproses.
+                        <span className="text-slate-700 dark:text-slate-300">Belum ada riwayat keputusan cuti yang diproses.</span>
                       </TableCell>
                     </TableRow>
                   )}
@@ -1822,19 +1822,19 @@ export default function ManagerLeaveApprovalPage() {
             </div>
 
             {/* Mobile Card List (History) */}
-            <div className="block md:hidden space-y-4 px-4 py-4 bg-slate-900/20">
+            <div className="block md:hidden space-y-4 px-4 py-4 bg-slate-100 dark:bg-slate-900/20">
               {historyRequests.length > 0 ? (
                 historyRequests.map((r) => (
                   <div
                     key={r.id}
-                    className="p-4 bg-slate-900 rounded-2xl border border-slate-800 shadow-sm space-y-3"
+                    className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3"
                   >
                     <div className="flex justify-between items-start">
                       <div>
-                        <p className="font-black text-slate-100 text-base">
+                        <p className="font-black text-slate-900 dark:text-slate-100 text-base">
                           {r.employeeName}
                         </p>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                        <p className="text-[10px] text-slate-600 dark:text-slate-400 font-bold uppercase tracking-wider">
                           {r.divisionName || "N/A"}
                         </p>
                       </div>
@@ -1846,12 +1846,12 @@ export default function ManagerLeaveApprovalPage() {
                       </Badge>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-xs py-3 border-y border-slate-800">
+                    <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-xs py-3 border-y border-slate-200 dark:border-slate-800">
                       <div>
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">
+                        <span className="text-[10px] font-bold text-slate-600 dark:text-slate-500 uppercase tracking-wider block mb-0.5">
                           Jenis Cuti
                         </span>
-                        <span className="font-black text-indigo-400 capitalize">
+                        <span className="font-black text-indigo-600 dark:text-indigo-400 capitalize">
                           Cuti{" "}
                           {r.leaveType === "tahunan"
                             ? "Tahunan"
@@ -1865,18 +1865,18 @@ export default function ManagerLeaveApprovalPage() {
                         </span>
                       </div>
                       <div>
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">
+                        <span className="text-[10px] font-bold text-slate-600 dark:text-slate-500 uppercase tracking-wider block mb-0.5">
                           Durasi
                         </span>
-                        <span className="font-bold text-slate-200">
+                        <span className="font-bold text-slate-900 dark:text-slate-200">
                           {formatDuration(r)}
                         </span>
                       </div>
                       <div className="col-span-2">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">
+                        <span className="text-[10px] font-bold text-slate-600 dark:text-slate-500 uppercase tracking-wider block mb-0.5">
                           Periode Cuti
                         </span>
-                        <span className="font-semibold text-slate-300">
+                        <span className="font-semibold text-slate-900 dark:text-slate-300">
                           {formatPeriodDate(r)}
                         </span>
                       </div>
@@ -1887,7 +1887,7 @@ export default function ManagerLeaveApprovalPage() {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleViewDetails(r)}
-                        className="rounded-xl flex items-center gap-1 font-bold text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2"
+                        className="rounded-xl flex items-center gap-1 font-bold text-xs bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-200 px-4 py-2"
                       >
                         <Eye className="h-3.5 w-3.5" /> Detail
                       </Button>
@@ -1895,8 +1895,8 @@ export default function ManagerLeaveApprovalPage() {
                   </div>
                 ))
               ) : (
-                <div className="text-center py-6 text-slate-500">
-                  Belum ada riwayat keputusan cuti yang diproses.
+                <div className="text-center py-6 text-slate-600 dark:text-slate-400">
+                  <span className="text-slate-700 dark:text-slate-300">Belum ada riwayat keputusan cuti yang diproses.</span>
                 </div>
               )}
             </div>
@@ -1926,16 +1926,16 @@ export default function ManagerLeaveApprovalPage() {
 
       {/* ACTION CONFIRMATION DIALOG (Approve/Reject/Revise) */}
       <Dialog open={isActionOpen} onOpenChange={setIsActionOpen}>
-        <DialogContent className="max-w-md rounded-2xl bg-slate-900 border border-slate-800 text-slate-100 shadow-2xl my-auto top-[50%] translate-y-[-50%] p-6">
+        <DialogContent className="max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-2xl my-auto top-[50%] translate-y-[-50%] p-6">
           <DialogHeader className="space-y-2">
-            <DialogTitle className="text-lg font-black text-slate-50">
+            <DialogTitle className="text-lg font-black text-slate-900 dark:text-slate-50">
               {actionType === "approve"
                 ? "Setujui Pengajuan Cuti"
                 : actionType === "reject"
                   ? "Tolak Pengajuan Cuti"
                   : "Minta Revisi Pengajuan"}
             </DialogTitle>
-            <DialogDescription className="text-xs font-semibold text-slate-400 mt-1">
+            <DialogDescription className="text-xs font-semibold text-slate-600 dark:text-slate-400 mt-1">
               {actionType === "approve"
                 ? "Apakah Anda yakin ingin menyetujui pengajuan cuti ini?"
                 : actionType === "reject"
@@ -1954,7 +1954,7 @@ export default function ManagerLeaveApprovalPage() {
               }
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="rounded-xl border-slate-800 bg-slate-950 text-slate-100 placeholder:text-slate-600 focus:border-indigo-500 focus:ring-indigo-500"
+              className="rounded-xl border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:border-indigo-500 dark:focus:border-indigo-500 focus:ring-indigo-500 dark:focus:ring-indigo-500"
             />
           </div>
 
@@ -1962,7 +1962,7 @@ export default function ManagerLeaveApprovalPage() {
             <Button
               variant="ghost"
               onClick={() => setIsActionOpen(false)}
-              className="rounded-xl font-bold hover:bg-slate-800 text-slate-400 hover:text-slate-100"
+              className="rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
             >
               Batal
             </Button>

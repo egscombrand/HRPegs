@@ -121,3 +121,47 @@ export function formatIndonesianDateTime(date: Date | null | undefined | string 
     return '-';
   }
 }
+
+/**
+ * Normalizes a job cover image URL so it always resolves to a serveable image.
+ *
+ * Problem: Google Drive `uc?export=view` URLs redirect to lh3.googleusercontent.com
+ * which Next.js <Image> doesn't follow, and /api/storage/view requires auth (401 on
+ * public pages). The /api/storage/google-drive-preview route uses the service account
+ * and needs no end-user auth, making it safe for both admin and public pages.
+ *
+ * Handles:
+ *   - https://drive.google.com/uc?export=view&id=FILE_ID
+ *   - https://drive.google.com/file/d/FILE_ID/view
+ *   - /api/storage/view?fileId=FILE_ID  (auth-gated – convert to preview)
+ *   - /api/storage/google-drive-preview?fileId=FILE_ID  (already correct)
+ *   - https://firebasestorage.googleapis.com/…  (pass through)
+ *   - blob: / relative  (pass through, only used during preview)
+ */
+export function normalizeJobCoverImageUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+
+  // Already the correct proxy — leave unchanged
+  if (url.includes('/api/storage/google-drive-preview')) return url;
+
+  // Auth-gated view route → swap to preview route (no auth required)
+  const viewMatch = url.match(/\/api\/storage\/view\?fileId=([a-zA-Z0-9_-]+)/);
+  if (viewMatch) {
+    return `/api/storage/google-drive-preview?fileId=${viewMatch[1]}`;
+  }
+
+  // drive.google.com/uc?export=view&id=FILE_ID  (and variants)
+  const ucMatch = url.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
+  if (url.includes('drive.google.com') && ucMatch) {
+    return `/api/storage/google-drive-preview?fileId=${ucMatch[1]}`;
+  }
+
+  // drive.google.com/file/d/FILE_ID/…
+  const fileMatch = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]{10,})/);
+  if (fileMatch) {
+    return `/api/storage/google-drive-preview?fileId=${fileMatch[1]}`;
+  }
+
+  // Firebase Storage, blob, or any other URL — pass through unchanged
+  return url;
+}

@@ -4262,8 +4262,8 @@ export function ManagementDinasClient() {
                                         </div>
                                       );
                                     })()}
-                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/35 rounded-lg">
-                                      <ZoomIn className="h-5 w-5 text-white" />
+                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900/35 dark:bg-black/35 rounded-lg">
+                                      <ZoomIn className="h-5 w-5 text-slate-100 dark:text-white" />
                                     </div>
                                   </button>
                                   {/* Small thumbnails */}
@@ -6838,7 +6838,7 @@ export function ManagementDinasClient() {
       {/* ── Photo Preview Modal ─────────────────────────────────────────────── */}
       {photoPreviewModal.isOpen && photoPreviewModal.photos.length > 0 && (
         <div
-          className="fixed inset-0 z-[300] flex items-center justify-center bg-black/85 p-4"
+          className="fixed inset-0 z-[300] flex items-center justify-center bg-black/50 dark:bg-black/85 p-4"
           onClick={() => setPhotoPreviewModal((p) => ({ ...p, isOpen: false }))}
         >
           <div
@@ -6848,10 +6848,10 @@ export function ManagementDinasClient() {
             {/* Close */}
             <button
               type="button"
-              className="absolute -top-2 -right-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white/15 hover:bg-white/25 transition-colors"
+              className="absolute -top-2 -right-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-slate-300/50 dark:bg-white/15 hover:bg-slate-400/50 dark:hover:bg-white/25 transition-colors"
               onClick={() => setPhotoPreviewModal((p) => ({ ...p, isOpen: false }))}
             >
-              <X className="h-4 w-4 text-white" />
+              <X className="h-4 w-4 text-slate-900 dark:text-white" />
             </button>
 
             {/* Main image */}
@@ -6860,7 +6860,7 @@ export function ManagementDinasClient() {
               if (!active) return null;
               return (
                 <>
-                  <div className="relative w-full bg-black rounded-xl overflow-hidden flex items-center justify-center min-h-[200px] max-h-[65vh]">
+                  <div className="relative w-full bg-white dark:bg-black rounded-xl overflow-hidden flex items-center justify-center min-h-[200px] max-h-[65vh]">
                     {active.proxySrc ? (
                       <img
                         key={photoPreviewModal.activeIdx}
@@ -6870,8 +6870,8 @@ export function ManagementDinasClient() {
                       />
                     ) : (
                       <div className="flex flex-col items-center justify-center py-12 text-center px-4">
-                        <FileText className="h-10 w-10 text-white/40 mb-2" />
-                        <p className="text-white/50 text-sm">Preview foto belum tersedia</p>
+                        <FileText className="h-10 w-10 text-slate-400 dark:text-white/40 mb-2" />
+                        <p className="text-slate-600 dark:text-white/50 text-sm">Preview foto belum tersedia</p>
                       </div>
                     )}
                   </div>
@@ -6882,16 +6882,16 @@ export function ManagementDinasClient() {
                       <button type="button"
                         disabled={photoPreviewModal.activeIdx === 0}
                         onClick={() => setPhotoPreviewModal((p) => ({ ...p, activeIdx: p.activeIdx - 1 }))}
-                        className="px-3 py-1.5 text-xs font-medium rounded-lg border border-white/20 bg-white/10 text-white hover:bg-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                        className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 dark:border-white/20 bg-slate-100 dark:bg-white/10 text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
                         ← Sebelumnya
                       </button>
-                      <span className="text-xs text-white/60">
+                      <span className="text-xs text-slate-600 dark:text-white/60">
                         {photoPreviewModal.activeIdx + 1} / {photoPreviewModal.photos.length}
                       </span>
                       <button type="button"
                         disabled={photoPreviewModal.activeIdx >= photoPreviewModal.photos.length - 1}
                         onClick={() => setPhotoPreviewModal((p) => ({ ...p, activeIdx: p.activeIdx + 1 }))}
-                        className="px-3 py-1.5 text-xs font-medium rounded-lg border border-white/20 bg-white/10 text-white hover:bg-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                        className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 dark:border-white/20 bg-slate-100 dark:bg-white/10 text-slate-900 dark:text-white hover:bg-slate-200 dark:hover:bg-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
                         Berikutnya →
                       </button>
                     </div>
@@ -6903,12 +6903,12 @@ export function ManagementDinasClient() {
                       {photoPreviewModal.photos.map((p, idx) => (
                         <button key={idx} type="button"
                           onClick={() => setPhotoPreviewModal((prev) => ({ ...prev, activeIdx: idx }))}
-                          className={`w-10 h-10 rounded-md overflow-hidden border-2 transition-colors flex-shrink-0 ${idx === photoPreviewModal.activeIdx ? "border-white" : "border-white/20 hover:border-white/50"}`}>
+                          className={`w-10 h-10 rounded-md overflow-hidden border-2 transition-colors flex-shrink-0 ${idx === photoPreviewModal.activeIdx ? "border-slate-900 dark:border-white" : "border-slate-300 dark:border-white/20 hover:border-slate-500 dark:hover:border-white/50"}`}>
                           {p.proxySrc ? (
                             <img src={p.proxySrc} alt={`thumb ${idx + 1}`} className="w-full h-full object-cover" />
                           ) : (
-                            <div className="w-full h-full bg-white/10 flex items-center justify-center">
-                              <FileText className="h-4 w-4 text-white/40" />
+                            <div className="w-full h-full bg-slate-200 dark:bg-white/10 flex items-center justify-center">
+                              <FileText className="h-4 w-4 text-slate-500 dark:text-white/40" />
                             </div>
                           )}
                         </button>

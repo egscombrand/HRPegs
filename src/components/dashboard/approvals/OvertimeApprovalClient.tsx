@@ -342,15 +342,36 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
     mutate,
   } = useCollection<OvertimeSubmission>(submissionsQuery);
 
+  // Fetch all brands dari master data
+  const brandsQuery = useMemo(
+    () => query(collection(firestore, "brands")),
+    [firestore]
+  );
+
+  const {
+    data: allBrands = [],
+    isLoading: brandsLoading,
+  } = useCollection<Brand>(brandsQuery);
+
   const brandOptions = useMemo(() => {
     const map = new Map<string, string>();
+
+    // Prioritas 1: Ambil dari master brands
+    allBrands?.forEach((brand) => {
+      const value = brand.id;
+      const label = brand.name || brand.id || "Unknown";
+      if (value && !map.has(value)) map.set(value, label);
+    });
+
+    // Prioritas 2: Tambahkan brand dari submissions yang belum ada di master
     submissions?.forEach((submission) => {
       const value = submission.brandId || submission.brandName || "unknown";
       const label = submission.brandName || submission.brandId || "Unknown";
-      if (!map.has(value)) map.set(value, label);
+      if (value && !map.has(value)) map.set(value, label);
     });
+
     return [...map.entries()].map(([value, label]) => ({ value, label }));
-  }, [submissions]);
+  }, [allBrands, submissions]);
 
   const divisionOptions = useMemo(() => {
     const map = new Map<string, string>();

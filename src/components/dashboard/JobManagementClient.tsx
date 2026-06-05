@@ -5,6 +5,9 @@ import { collection, doc, serverTimestamp, query, where } from 'firebase/firesto
 import { useCollection, useFirestore, useMemoFirebase, updateDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import type { Job, Brand, UserProfile } from '@/lib/types';
 import { format } from 'date-fns';
+import { id as idLocale } from 'date-fns/locale';
+
+import SafeRichText from '@/components/ui/SafeRichText';
 import {
   Table,
   TableHeader,
@@ -24,7 +27,7 @@ import {
   DropdownMenuSeparator
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { MoreHorizontal, PlusCircle, Trash2, Edit, Eye, EyeOff, XCircle, Users } from 'lucide-react';
+import { MoreHorizontal, PlusCircle, Trash2, Edit, Eye, EyeOff, XCircle, Users, FileText } from 'lucide-react';
 import { JobFormDialog } from './JobFormDialog';
 import { DeleteConfirmationDialog } from './DeleteConfirmationDialog';
 import { useToast } from '@/hooks/use-toast';
@@ -34,11 +37,14 @@ import { AssignedUsersDialog } from '../recruitment/AssignedUsersDialog';
 import Link from 'next/link';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { getInitials } from '@/lib/utils';
+import { getInitials, normalizeJobCoverImageUrl } from '@/lib/utils';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { JobQuickViewPanel } from '../recruitment/JobQuickViewPanel';
+import { JobDetailPanel } from './JobDetailPanel';
 import { ScrollArea } from '../ui/scroll-area';
 import { Separator } from '../ui/separator';
+import { X } from 'lucide-react';
 
 function JobTableSkeleton() {
   return (
@@ -90,6 +96,7 @@ export function JobManagementClient() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isAssignUsersOpen, setIsAssignUsersOpen] = useState(false);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [brandFilter, setBrandFilter] = useState('all');
@@ -185,6 +192,11 @@ export function JobManagementClient() {
   const handleAssignUsers = (job: Job) => {
     setSelectedJob(job);
     setIsAssignUsersOpen(true);
+  };
+
+  const handleViewDetail = (job: Job) => {
+    setSelectedJob(job);
+    setIsDetailOpen(true);
   };
 
   const confirmDelete = async () => {
@@ -384,6 +396,11 @@ export function JobManagementClient() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem onSelect={() => { setOpenMenuId(null); queueMicrotask(() => handleViewDetail(job)); }}>
+                          <FileText className="mr-2 h-4 w-4" />
+                          Detail
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem onSelect={() => handleAssignUsers(job)}>
                             <Users className="mr-2 h-4 w-4" /> Kelola Tim
                         </DropdownMenuItem>
@@ -482,6 +499,183 @@ export function JobManagementClient() {
             )}
         </SheetContent>
       </Sheet>
+
+      <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
+        <DialogContent className="w-[calc(100%-2rem)] max-w-[1280px] h-[85vh] p-0 gap-0 rounded-xl border border-border bg-background shadow-2xl overflow-hidden flex flex-col sm:w-[calc(100%-1rem)] md:w-[85vw]">
+          {selectedJob && (() => {
+            const coverUrl = normalizeJobCoverImageUrl(selectedJob.coverImageUrl);
+            console.log('[JobDetail] coverImageUrl (raw):', selectedJob.coverImageUrl);
+            console.log('[JobDetail] coverImageUrl (normalized):', coverUrl);
+            console.log('[JobDetail] full job:', selectedJob);
+            return (
+            <>
+              <div className="sticky top-0 z-10 flex items-start justify-between gap-4 p-6 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+                <div className="flex-1 min-w-0">
+                  <DialogTitle className="text-3xl font-bold">{selectedJob.position}</DialogTitle>
+                  <DialogDescription className="text-sm mt-2 text-muted-foreground">
+                    {brandMap.get(selectedJob.brandId)} • {selectedJob.publishStatus === 'published' ? 'Published' : selectedJob.publishStatus === 'draft' ? 'Draft' : 'Closed'} • Read-only view
+                  </DialogDescription>
+                </div>
+                <button
+                  onClick={() => setIsDetailOpen(false)}
+                  className="inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex-shrink-0 h-10 w-10"
+                  aria-label="Close dialog"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <ScrollArea className="flex-1 overflow-hidden">
+                <div className="p-6 space-y-6">
+                  {/* Cover Image */}
+                  {coverUrl ? (
+                    <div className="relative w-full h-80 rounded-lg overflow-hidden bg-slate-50 dark:bg-slate-900 border border-border flex items-center justify-center">
+                      {/* Use plain <img> to avoid Next.js Image hostname restrictions */}
+                      <img
+                        src={coverUrl}
+                        alt={selectedJob.position}
+                        className="w-full h-full object-contain object-center p-4"
+                        onError={(e) => {
+                          e.currentTarget.parentElement!.style.display = 'none';
+                          const fallback = e.currentTarget.parentElement?.querySelector<HTMLElement>('.cover-image-fallback');
+                          if (fallback) fallback.classList.remove('hidden');
+                        }}
+                      />
+                      <div className="cover-image-fallback hidden absolute inset-0 flex items-center justify-center">
+                        <div className="text-center text-muted-foreground">
+                          <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">Cover image tidak dapat dimuat</p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="w-full h-40 rounded-lg bg-slate-50 dark:bg-slate-900 border border-dashed border-border flex items-center justify-center">
+                      <div className="text-center text-muted-foreground">
+                        <FileText className="h-10 w-10 mx-auto mb-2 opacity-40" />
+                        <p className="text-sm">Tidak ada cover image</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Two Column Layout */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* Left Column - Main Info */}
+                    <div className="md:col-span-2 space-y-6">
+                      {/* Position Details */}
+                      <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+                        <h3 className="font-semibold text-lg text-foreground">Detail Posisi</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-xs font-semibold text-muted-foreground uppercase">Divisi</p>
+                            <p className="text-sm text-foreground mt-1">{selectedJob.division || '-'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold text-muted-foreground uppercase">Tipe</p>
+                            <p className="text-sm text-foreground mt-1 capitalize">{selectedJob.statusJob || '-'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold text-muted-foreground uppercase">Mode Kerja</p>
+                            <p className="text-sm text-foreground mt-1 capitalize">{selectedJob.workMode || '-'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold text-muted-foreground uppercase">Lokasi</p>
+                            <p className="text-sm text-foreground mt-1">{selectedJob.location || '-'}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* General Requirements */}
+                      {selectedJob.generalRequirementsHtml && (
+                        <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+                          <h3 className="font-semibold text-lg text-foreground">Persyaratan Umum</h3>
+                          <div className="prose prose-sm dark:prose-invert max-w-none text-sm text-foreground">
+                            <SafeRichText html={selectedJob.generalRequirementsHtml} />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Special Requirements */}
+                      {selectedJob.specialRequirementsHtml && (
+                        <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+                          <h3 className="font-semibold text-lg text-foreground">Persyaratan Khusus</h3>
+                          <div className="prose prose-sm dark:prose-invert max-w-none text-sm text-foreground">
+                            <SafeRichText html={selectedJob.specialRequirementsHtml} />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Job Description */}
+                      {selectedJob.jobDescription && (
+                        <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+                          <h3 className="font-semibold text-lg text-foreground">Deskripsi Pekerjaan</h3>
+                          <div className="prose prose-sm dark:prose-invert max-w-none text-sm text-foreground">
+                            <SafeRichText html={selectedJob.jobDescription} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Right Column - Summary */}
+                    <div className="md:col-span-1 space-y-4">
+                      {/* Status Card */}
+                      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase">Status</p>
+                        <Badge className={selectedJob.publishStatus === 'published' ? 'bg-green-100 dark:bg-green-950 text-green-800 dark:text-green-100' : selectedJob.publishStatus === 'draft' ? 'bg-yellow-100 dark:bg-yellow-950 text-yellow-800 dark:text-yellow-100' : 'bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-100'}>
+                          {selectedJob.publishStatus === 'published' && 'Published'}
+                          {selectedJob.publishStatus === 'draft' && 'Draft'}
+                          {selectedJob.publishStatus === 'closed' && 'Closed'}
+                        </Badge>
+                      </div>
+
+                      {/* Recruitment Info */}
+                      <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+                        <h4 className="font-semibold text-sm text-foreground">Informasi Rekrutmen</h4>
+                        <div className="space-y-3">
+                          <div>
+                            <p className="text-xs font-semibold text-muted-foreground uppercase">Lowongan</p>
+                            <p className="text-sm font-bold text-foreground mt-1">{selectedJob.numberOfOpenings || '-'} posisi</p>
+                          </div>
+                          {selectedJob.applyDeadline && (
+                            <div>
+                              <p className="text-xs font-semibold text-muted-foreground uppercase">Deadline</p>
+                              <p className="text-sm text-foreground mt-1">
+                                {format(
+                                  selectedJob.applyDeadline.seconds ? new Date(selectedJob.applyDeadline.seconds * 1000) : new Date(selectedJob.applyDeadline),
+                                  'dd MMM yyyy',
+                                  { locale: idLocale }
+                                )}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Assigned Team */}
+                      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+                        <h4 className="font-semibold text-sm text-foreground">Tim Rekrutmen</h4>
+                        {(selectedJob.assignedUserIds || []).length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {(selectedJob.assignedUserIds || []).map(uid => {
+                              const user = userProfileMap.get(uid);
+                              return user ? (
+                                <Badge key={uid} variant="secondary">
+                                  {user.fullName}
+                                </Badge>
+                              ) : null;
+                            })}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">Belum ada tim yang ditugaskan.</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </ScrollArea>
+            </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
