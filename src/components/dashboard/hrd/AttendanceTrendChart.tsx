@@ -31,23 +31,20 @@ export function AttendanceTrendChart({ events, date }: AttendanceTrendChartProps
         return eventDate && eventDate >= dayStart && eventDate <= dayEnd;
       });
 
+      // Count check-in events (hadir)
       const hadirSet = new Set(
         dayEvents
           .filter(e => e.type === 'tap_in' || e.type === 'IN')
           .map(e => e.uid || e.userId)
       );
+
+      // Count late arrivals
       const terlambatCount = dayEvents.filter(e => e.flags?.includes('late')).length;
-      const izinCount = dayEvents.filter(e => e.type === 'izin').length;
-      const cutiCount = dayEvents.filter(e => e.type === 'cuti').length;
-      const belumTapInCount = dayEvents.filter(e => e.type === 'belum_tap_in').length;
 
       return {
         date: format(day, 'dd/MM'),
         hadir: hadirSet.size,
         terlambat: terlambatCount,
-        izin: izinCount,
-        cuti: cutiCount,
-        belumTapIn: belumTapInCount,
       };
     });
   }, [events, date]);
@@ -76,7 +73,7 @@ export function AttendanceTrendChart({ events, date }: AttendanceTrendChartProps
       <CardHeader>
         <CardTitle className="text-slate-800 dark:text-slate-100">Tren 7 Hari Terakhir</CardTitle>
         <CardDescription className="text-slate-500 dark:text-slate-400">
-          Tren kehadiran, keterlambatan, izin, dan cuti
+          Tren kehadiran dan keterlambatan
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -96,9 +93,6 @@ export function AttendanceTrendChart({ events, date }: AttendanceTrendChartProps
               <Legend />
               <Line type="monotone" dataKey="hadir" stroke="#14b8a6" strokeWidth={2} name="Hadir" />
               <Line type="monotone" dataKey="terlambat" stroke="#f97316" strokeWidth={2} name="Terlambat" />
-              <Line type="monotone" dataKey="izin" stroke="#3b82f6" strokeWidth={2} name="Izin" />
-              <Line type="monotone" dataKey="cuti" stroke="#8b5cf6" strokeWidth={2} name="Cuti" />
-              <Line type="monotone" dataKey="belumTapIn" stroke="#ef4444" strokeWidth={2} name="Belum Tap In" />
             </LineChart>
           </ResponsiveContainer>
         </ChartContainer>

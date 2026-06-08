@@ -15,10 +15,23 @@ import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { getInitials } from '@/lib/utils';
 import { normalizeGoogleDriveImageUrl } from '@/lib/profile-photo';
 import Link from 'next/link';
-import { XCircle } from 'lucide-react';
+import { XCircle, Eye } from 'lucide-react';
 import { DeleteConfirmationDialog } from './DeleteConfirmationDialog';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
+import {
+  resolveProfileUid,
+  resolveEventUid,
+  isCheckInEvent,
+  isCheckOutEvent,
+  resolvePhotoUrl,
+  resolveAddress,
+  resolveCoordinates,
+  formatTime,
+  calculateLateMinutes,
+  calculateEarlyLeaveMinutes,
+  determineStatus,
+} from '@/lib/attendance-helpers';
 
 interface AttendanceRecord {
   id: string; // uid
@@ -69,29 +82,9 @@ export function AttendanceMonitoringClient() {
   const firestore = useFirestore();
   const { toast } = useToast();
 
-  // Helper: Resolve profile UID dengan fallback logic
+  // Helper: Resolve profile UID dengan fallback logic (backward compat)
   const getProfileUid = (profile: any): string | null => {
-    return (
-      profile.uid ||
-      profile.userId ||
-      profile.authUid ||
-      profile.employeeUid ||
-      profile.id ||
-      profile.__id ||
-      profile.docId ||
-      null
-    );
-  };
-
-  // Helper: Resolve event UID dengan fallback logic
-  const getEventUid = (event: any): string | null => {
-    return (
-      event.uid ||
-      event.userId ||
-      event.employeeUid ||
-      event.authUid ||
-      null
-    );
+    return resolveProfileUid(profile);
   };
 
   // --- Data Fetching ---
@@ -259,6 +252,9 @@ export function AttendanceMonitoringClient() {
     // Deduplicate by uid to avoid duplicate rows
     const seenUids = new Set<string>();
 
+    // Debug: collect matching stats
+    const debugMatchStats: any[] = [];
+
     const processedData = relevantProfiles
       .filter((profile: any) => {
         const profileUid = getProfileUid(profile);
@@ -282,16 +278,46 @@ export function AttendanceMonitoringClient() {
       const resolvedDivision = resolveDivisionName(profile);
       const attendanceMethod = resolveAttendanceMethod(profile);
 
-      // Join with attendance events
-      const userEvents = attendanceEvents.filter(e => {
-        const eventUid = getEventUid(e);
-        return eventUid === profileUid || e.userId === profileUid || e.uid === profileUid;
-      });
-      const tapIn = userEvents.find(e => e.type === 'tap_in' || e.type === 'IN');
-      const tapOut = userEvents.find(e => e.type === 'tap_out' || e.type === 'OUT');
+      // Join with attendance events - using robust UID matching
+      const userEvents = attendanceEvents?.filter((e: any) => {
+        const eventUid = resolveEventUid(e);
+        if (!eventUid || !profileUid) return false;
+        return eventUid === profileUid;
+      }) || [];
 
-      const tapInTimestamp = tapIn ? getTimestamp(tapIn) : null;
-      const tapOutTimestamp = tapOut ? getTimestamp(tapOut) : null;
+      // Find check-in and check-out events using robust type detection
+      const checkInEvent = userEvents.find((e: any) => isCheckInEvent(e.type));
+      const checkOutEvent = userEvents.find((e: any) => isCheckOutEvent(e.type));
+
+      // Debug: log for first few matches
+      if (debugMatchStats.length < 3) {
+        debugMatchStats.push({
+          name: resolvedName,
+          profileUid,
+          allEventsCount: attendanceEvents?.length || 0,
+          userEventsCount: userEvents.length,
+          checkInFound: !!checkInEvent,
+          checkOutFound: !!checkOutEvent,
+          checkInType: checkInEvent?.type,
+          checkOutType: checkOutEvent?.type,
+          sampleEventUids: attendanceEvents?.slice(0, 3).map(e => ({
+            uid: resolveEventUid(e),
+            type: e.type,
+            timestamp: e.tsServer || e.createdAt,
+          })),
+        });
+      }
+
+      const tapInTimestamp = checkInEvent ? getTimestamp(checkInEvent) : null;
+      const tapOutTimestamp = checkOutEvent ? getTimestamp(checkOutEvent) : null;
+
+      // Extract photo URL and address from events (priority: check-in, then check-out)
+      const photoUrl = resolvePhotoUrl(checkInEvent) || resolvePhotoUrl(checkOutEvent);
+      const eventAddress = resolveAddress(checkInEvent) || resolveAddress(checkOutEvent);
+
+      // Keep old variable names for backward compatibility with rest of code
+      const tapIn = checkInEvent;
+      const tapOut = checkOutEvent;
 
       // Check if user is on approved leave today
       const isOnLeaveToday = leaveRequests?.some(req => {
@@ -375,8 +401,8 @@ export function AttendanceMonitoringClient() {
         tapOutId: tapOut?.id || null,
         status: status,
         mode: ((tapIn?.mode as string)?.toLowerCase() || '-') as AttendanceRecord['mode'],
-        photoUrl: tapIn?.photoUrl,
-        address: tapIn?.address || '-',
+        photoUrl: photoUrl,
+        address: eventAddress,
         location: tapIn?.location || null,
         lateMinutes,
         earlyLeaveMinutes,
@@ -395,25 +421,23 @@ export function AttendanceMonitoringClient() {
 
     // Debug log - after all data is defined
     const sampleProfile = employeeProfiles?.[0];
-    const sampleProfileUid = sampleProfile ? getProfileUid(sampleProfile) : null;
     const sampleEvent = attendanceEvents?.[0];
-    const sampleEventUid = sampleEvent ? getEventUid(sampleEvent) : null;
+    const sampleEventUid = sampleEvent ? resolveEventUid(sampleEvent) : null;
 
     console.log({
       module: "monitoring-absen-hrd",
-      allEmployeeProfilesCount: allEmployeeProfiles?.length || 0,
-      filteredEmployeeProfilesCount: employeeProfiles?.length || 0,
+      selectedDate: date ? format(date, 'yyyy-MM-dd') : null,
+      employeeProfilesCount: employeeProfiles?.length || 0,
+      webAbsenProfilesCount: webAbsenProfiles?.length || 0,
       relevantProfilesCount: relevantProfiles.length,
+      attendanceEventsCount: attendanceEvents?.length || 0,
       processedDataCount: processedData.length,
       filteredTableDataCount: filteredTableData.length,
-      attendanceEventsCount: attendanceEvents?.length || 0,
-      selectedDate: date ? format(date, 'yyyy-MM-dd') : null,
-      activeSite: activeSite?.name,
-      brandFilter,
-      statusFilter,
+      matchStats: debugMatchStats,
       sampleProfile: sampleProfile ? {
         name: resolveName(sampleProfile),
-        uid: sampleProfileUid,
+        uid: resolveProfileUid(sampleProfile),
+        attendanceMethod: resolveAttendanceMethod(sampleProfile),
         brand: resolveBrandName(sampleProfile, brandMap),
         employeeNumber: resolveEmployeeNumber(sampleProfile),
       } : null,

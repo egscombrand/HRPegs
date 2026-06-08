@@ -12,14 +12,14 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Save, UploadCloud, Trash2, PlusCircle } from 'lucide-react';
-import { useFirestore, setDocumentNonBlocking, useFirebaseApp } from '@/firebase';
+import { useFirestore, setDocumentNonBlocking, useUser } from '@/firebase';
 import { doc, collection, serverTimestamp } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { 
-  validateStorageFile, 
-  compressImage, 
-  handleStorageError 
+import {
+  validateStorageFile,
+  compressImage,
+  handleStorageError
 } from '@/lib/storage-utils';
+import { uploadFile } from '@/lib/storage/storage-adapter';
 import Image from 'next/image';
 import type { EcosystemSection } from '@/lib/types';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -88,8 +88,7 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
   const [imagePreviews, setImagePreviews] = useState<ImagePreview[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const firestore = useFirestore();
-  const firebaseApp = useFirebaseApp();
-  const storage = getStorage(firebaseApp);
+  const user = useUser();
   const { toast } = useToast();
   const mode = item ? 'Edit' : 'Create';
 
@@ -212,14 +211,27 @@ export function EcosystemSectionFormDialog({ open, onOpenChange, item, onSuccess
         
         const docRef = doc(firestore, 'ecosystem_sections', sectionKey);
 
+        // Upload images using Google Drive via storage adapter
         const newImageUrls = await Promise.all(
-            (values.imageFiles || []).map(async (file) => {
-                const processedFile = await compressImage(file);
-                const filePath = `ecosystem_sections/${sectionKey}/${Date.now()}-${processedFile.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
-                const storageRef = ref(storage, filePath);
-                await uploadBytes(storageRef, processedFile);
-                return getDownloadURL(storageRef);
-            })
+          (values.imageFiles || []).map(async (file) => {
+            try {
+              const result = await uploadFile(
+                file,
+                `ecosystem_sections/${sectionKey}`,
+                user?.uid || 'unknown',
+                {
+                  category: 'section_asset',
+                  ownerUid: sectionKey,
+                  compress: true,
+                }
+              );
+              // Return the best available URL
+              return result.webViewLink || result.viewUrl || result.downloadUrl || '';
+            } catch (error) {
+              console.error(`Failed to upload file ${file.name}:`, error);
+              throw error;
+            }
+          })
         );
         
         const finalImageUrls = imagePreviews.map(p => {

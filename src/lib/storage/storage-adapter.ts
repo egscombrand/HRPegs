@@ -109,23 +109,20 @@ export async function uploadFile(
     }
   }
 
-  // 3. Choose Provider
+  // 3. Choose Provider - NO FALLBACK TO FIREBASE
   let result: UploadResult;
   if (
     STORAGE_PROVIDER === "googleDrive" ||
     STORAGE_PROVIDER === "googleDriveAppsScript"
   ) {
-    try {
-      result = await uploadToGoogleDrive(processedFile, userId, options);
-    } catch (error) {
-      console.warn(
-        "Google Drive upload failed, falling back to Firebase Storage:",
-        error,
-      );
-      result = await uploadToFirebase(processedFile, path, userId);
-    }
-  } else {
+    // STRICT: No fallback to Firebase Storage
+    result = await uploadToGoogleDrive(processedFile, userId, options);
+  } else if (STORAGE_PROVIDER === "firebaseStorage") {
     result = await uploadToFirebase(processedFile, path, userId);
+  } else {
+    throw new Error(
+      `Storage provider tidak dikenal: ${STORAGE_PROVIDER}. Gunakan 'googleDrive', 'googleDriveAppsScript', atau 'firebaseStorage'.`,
+    );
   }
 
   result.originalFileName = originalFileName;
@@ -307,7 +304,10 @@ async function uploadToGoogleDrive(
         errorMessage += ` (Missing ENV: ${data.missingEnv.join(", ")})`;
       }
 
-      throw new Error(errorMessage);
+      // Clear error message - NO fallback to Firebase Storage
+      throw new Error(
+        `Upload Google Drive gagal. Periksa konfigurasi Google Drive Apps Script. Detail: ${errorMessage}`,
+      );
     }
 
     return {
@@ -323,8 +323,11 @@ async function uploadToGoogleDrive(
       uploadedBy: data.uploadedBy,
     };
   } catch (err: any) {
+    // NO fallback - throw error as-is
     const message =
       err?.message || "Network error saat mengupload ke Google Drive";
-    throw new Error(message);
+    throw new Error(
+      `Upload Google Drive gagal. Periksa konfigurasi Google Drive Apps Script. Detail: ${message}`,
+    );
   }
 }
