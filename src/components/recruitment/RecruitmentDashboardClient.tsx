@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { PlusCircle, Upload, LayoutGrid, List } from 'lucide-react';
+import { PlusCircle, Upload, LayoutGrid, List, Users, TrendingUp, ClipboardList, AlertCircle, CheckCircle2, AlertTriangle, Clock, Target } from 'lucide-react';
 import { GlobalFilterBar } from './GlobalFilterBar';
 import { calculateKpis, getJobPerformance } from '@/lib/recruitment/metrics';
 import { KpiCard } from './KpiCard';
@@ -133,19 +133,51 @@ export function RecruitmentDashboardClient() {
                 />
 
                 <TabsContent value="overview" className="mt-0 space-y-6">
+                    {kpis && kpis.overdueCandidates > 0 && (
+                        <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 flex items-center gap-3">
+                            <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                            <div>
+                                <p className="font-semibold text-amber-900 dark:text-amber-100 text-sm">
+                                    {kpis.overdueCandidates} kandidat terlalu lama di stage
+                                </p>
+                                <p className="text-xs text-amber-800 dark:text-amber-200">
+                                    Segera review aplikasi yang memerlukan tindakan
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
                     {kpis && (
-                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-                            <KpiCard title="New Applicants" value={kpis.newApplicants} />
-                            <KpiCard title="Active Candidates" value={kpis.activeCandidates} />
-                            <KpiCard title="In Verification" value={kpis.inScreening} />
-                            <KpiCard title="Assessment Pending" value={kpis.assessmentPending} />
-                            <KpiCard title="Avg. Time to Hire" value={`${kpis.avgTimeToHire} days`} />
-                            {/* Placeholder KPIs for fields not yet in data model */}
-                            <KpiCard title="Interviews Today" value={kpis.interviewsToday} />
-                            <KpiCard title="Offers Pending" value={kpis.offersPending} />
-                            <KpiCard title="Offer Acceptance Rate" value={`${kpis.offerAcceptanceRate.toFixed(1)}%`} />
-                            <KpiCard title="Overdue Tasks" value={kpis.overdueCandidates} deltaType="inverse" />
-                            <KpiCard title="Time to 1st Response" value={`${kpis.avgTimeToFirstResponse}d`} />
+                        <div className="space-y-6">
+                            <div className="space-y-2">
+                                <h3 className="text-sm font-semibold text-muted-foreground px-1">Pelamar</h3>
+                                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                                    <KpiCard title="Total Pelamar" value={kpis.newApplicants} icon={<Users />} variant="teal" subtitle="dalam periode terpilih" />
+                                    <KpiCard title="Baru Minggu Ini" value={kpis.candidatesNewThisWeek} icon={<TrendingUp />} variant="teal" delta={`+${kpis.candidatesNewThisWeek}`} />
+                                    <KpiCard title="Aktif" value={kpis.activeCandidates} icon={<ClipboardList />} variant="blue" subtitle="dalam proses" />
+                                    <KpiCard title="Waktu Hire" value={`${kpis.avgTimeToHire}h`} icon={<Clock />} variant="default" subtitle="median hari" />
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <h3 className="text-sm font-semibold text-muted-foreground px-1">Pipeline</h3>
+                                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                                    <KpiCard title="Perlu Verifikasi" value={kpis.inScreening} icon={<AlertCircle />} variant="amber" deltaType="inverse" />
+                                    <KpiCard title="Assessment Pending" value={kpis.assessmentPending} icon={<Target />} variant="blue" />
+                                    <KpiCard title="Wawancara" value={kpis.inInterview} icon={<Users />} variant="default" subtitle={`${kpis.interviewsToday} hari ini`} />
+                                    <KpiCard title="Offering" value={kpis.inOffered} icon={<CheckCircle2 />} variant="amber" subtitle={`menunggu respon`} />
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <h3 className="text-sm font-semibold text-muted-foreground px-1">Hasil</h3>
+                                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                                    <KpiCard title="Diterima" value={kpis.hired} icon={<CheckCircle2 />} variant="green" subtitle="periode ini" />
+                                    <KpiCard title="Ditolak" value={kpis.rejected} icon={<AlertTriangle />} variant="red" subtitle="periode ini" />
+                                    <KpiCard title="Offer Rate" value={`${kpis.offerAcceptanceRate.toFixed(1)}%`} icon={<TrendingUp />} variant="default" subtitle="acceptance rate" />
+                                    <KpiCard title="Respon 1st" value={`${kpis.avgTimeToFirstResponse}d`} icon={<Clock />} variant="default" subtitle="rata-rata hari" />
+                                </div>
+                            </div>
                         </div>
                     )}
                     <CommandCenter applications={filteredApplications} jobs={jobs || []} />
