@@ -269,15 +269,15 @@ const Header = () => {
     >
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-20 items-center justify-between">
-          <Link href="/careers" className="flex items-center gap-3">
-            <img
-              src="/images/hrp-logo.svg"
-              alt="Environesia"
+          <Link href="/careers" className="flex items-center gap-2">
+            <Image
+              src="/images/Environesia Vacancies.png"
+              alt="Environesia Vacancies"
+              width={140}
+              height={32}
               className="h-8 w-auto object-contain"
+              priority
             />
-            <span className="text-xl font-bold tracking-tight text-foreground">
-              Environesia Vacancies
-            </span>
           </Link>
           <nav className="hidden items-center gap-8 text-sm font-medium md:flex">
             {menuItems.map((item) => (
@@ -314,17 +314,17 @@ const Header = () => {
                   <div className="p-4 border-b">
                     <Link
                       href="/careers"
-                      className="flex items-center gap-3"
+                      className="flex items-center"
                       onClick={() => setMobileMenuOpen(false)}
                     >
-                      <img
-                        src="/images/hrp-logo.svg"
-                        alt="Environesia"
+                      <Image
+                        src="/images/Environesia Vacancies.png"
+                        alt="Environesia Vacancies"
+                        width={120}
+                        height={28}
                         className="h-7 w-auto object-contain"
+                        priority
                       />
-                      <span className="text-base font-bold text-foreground">
-                        Environesia Vacancies
-                      </span>
                     </Link>
                   </div>
                   <nav className="flex flex-col gap-4 p-4">
