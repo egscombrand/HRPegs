@@ -276,14 +276,8 @@ export function DashboardLayout({
         ...group,
         items: group.items.filter((item) => {
           // When navSettings is the authority, trust its filtering and skip secondary filters
-          // Only apply business rule filters (eligibility, assignment checks)
+          // Only apply business rule filters (recruitment assignment checks)
           if (hasNavigationSettings) {
-            if (item.key === "employee.leave") {
-              // Manager/director who is an employee: let navSettings decide (bypass eligibility)
-              if (isManagerOrDirector && isActiveEmployee) return true;
-              return leaveStatus.isEligible;
-            }
-
             if (
               item.key === "recruitment.tasks" &&
               (isAssignmentLoading || !hasAnyAssignment)
@@ -291,6 +285,7 @@ export function DashboardLayout({
               return false;
             }
 
+            // navSettings is the authority - don't apply eligibility checks
             return true;
           }
 
@@ -352,9 +347,14 @@ export function DashboardLayout({
         return group.items.length > 0;
       });
 
-    // Inject personal employee menus AFTER navSettings filter — these appear only if
-    // (a) user is manager/director with isEmployee=true AND (b) key is in navSettings
-    if (canShowPersonalMenus && !manualMenuConfig) {
+    // Inject personal employee menus AFTER navSettings filter
+    // When navSettings is available, ensure personal items from access control rules are injected
+    // For fallback (no navSettings): only inject if canShowPersonalMenus is true
+    const shouldInjectPersonal =
+      !manualMenuConfig &&
+      (canShowPersonalMenus || hasNavigationSettings);
+
+    if (shouldInjectPersonal) {
       const visibleKeys = new Set(
         normalizeMenuVisibilityKeys(navSettings?.visibleMenuItems || []),
       );
