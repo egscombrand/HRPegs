@@ -26,8 +26,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, LogIn, Eye, EyeOff, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Loader2, LogIn, Eye, EyeOff, AlertCircle, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { UserProfile, ROLES_INTERNAL } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -280,6 +281,17 @@ export function AdminLoginForm() {
               {' '}Jangan bagikan akun dan password Anda kepada siapapun.
             </p>
           </div>
+
+          {/* Back to Home Button */}
+          <Link href="/careers">
+            <button
+              type="button"
+              className="w-full h-11 rounded-lg font-semibold text-sm transition-all flex items-center justify-center gap-2 border border-teal-300 dark:border-teal-600/50 text-teal-600 dark:text-teal-400 bg-transparent hover:bg-teal-50 dark:hover:bg-teal-950/30 active:bg-teal-100 dark:active:bg-teal-950/60"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Kembali ke Halaman Depan
+            </button>
+          </Link>
         </div>
       </Form>
 
