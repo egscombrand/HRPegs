@@ -62,6 +62,8 @@ const MENU_KEY_ALIASES: Record<string, string> = {
   perjalanan_dinas: "management.business_trip_missions",
   data_karyawan: "employee.data.karyawan",
   data_saya: "employee.profile",
+  "personal.interviews.manager": "personal.interviews",
+  "personal.interviews.hrd": "personal.interviews",
   "pengajuan-izin": "employee.permission",
   "pengajuan-cuti": "employee.leave",
   "perjalanan-dinas": "management.business_trip_missions",
@@ -268,6 +270,18 @@ const MANAGEMENT_MENU_ITEMS: MenuGroup = {
   ],
 };
 
+const MANAGER_MENU_GROUP: MenuGroup = {
+  title: "Manager",
+  items: [
+    {
+      key: "manager.team",
+      href: "/admin/manager",
+      label: "My Team",
+      icon: createElement(Users),
+    },
+  ],
+};
+
 const DEVELOPER_MENU_ITEMS: MenuGroup = {
   title: "Developer Tools",
   items: [
@@ -286,6 +300,7 @@ export const ALL_MENU_GROUPS: MenuGroup[] = [
   EMPLOYEE_MONITORING_ITEMS,
   REVIEW_ITEMS,
   MANAGEMENT_MENU_ITEMS,
+  MANAGER_MENU_GROUP,
   {
     title: "Administrasi",
     items: [
@@ -388,6 +403,12 @@ export const ALL_MENU_GROUPS: MenuGroup[] = [
         href: "/admin/karyawan/pengajuan-cuti",
         label: "Pengajuan Cuti",
         icon: createElement(CalendarOff),
+      },
+      {
+        key: "employee.dinas.confirmation",
+        href: "/admin/karyawan/konfirmasi-dinas",
+        label: "Konfirmasi & Laporan Dinas",
+        icon: createElement(MapPin),
       },
       {
         key: "employee.dashboard.training",
@@ -584,7 +605,7 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
           icon: createElement(FileText),
         },
         {
-          key: "personal.interviews.hrd",
+          key: "personal.interviews",
           href: "/admin/interviews",
           label: "Interview Saya",
           icon: createElement(Video),
@@ -753,7 +774,7 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
       title: "Personal",
       items: [
         {
-          key: "personal.interviews.manager",
+          key: "personal.interviews",
           href: "/admin/interviews",
           label: "My Interviews",
           icon: createElement(Video),

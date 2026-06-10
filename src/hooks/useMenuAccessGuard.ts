@@ -40,7 +40,11 @@ export function useMenuAccessGuard(menuKey: string) {
       return;
     }
 
-    if (navSettings && navSettings.visibleMenuItems) {
+    // Only block access if navSettings has been loaded AND key is not present
+    const isSettingsLoaded = !settingsLoading;
+    const hasNavSettings = isSettingsLoaded && navSettings?.visibleMenuItems != null;
+
+    if (hasNavSettings) {
       const visibleKeys = new Set(
         normalizeMenuVisibilityKeys(navSettings.visibleMenuItems),
       );
@@ -51,7 +55,10 @@ export function useMenuAccessGuard(menuKey: string) {
     }
   }, [userProfile, authLoading, settingsLoading, navSettings, menuKey, router]);
 
-  const hasAccess = normalizeMenuVisibilityKeys(
+  // Allow access if navSettings not yet loaded. Block only if navSettings exists but key is not in it.
+  const isSettingsLoaded = !settingsLoading;
+  const hasNavSettings = isSettingsLoaded && navSettings?.visibleMenuItems != null;
+  const hasAccess = !hasNavSettings || normalizeMenuVisibilityKeys(
     navSettings?.visibleMenuItems,
   ).includes(normalizeMenuKey(menuKey));
 

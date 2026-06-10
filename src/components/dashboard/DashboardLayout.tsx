@@ -157,11 +157,35 @@ export function DashboardLayout({
       });
     }
 
-    const baseConfig = MENU_CONFIG[lookupKey] || [];
-    let finalConfig = baseConfig.map((group) => ({
+    const hasNavigationSettings =
+      !isLoadingSettings && Array.isArray(navSettings?.visibleMenuItems);
+    const baseConfigSource = hasNavigationSettings
+      ? ALL_MENU_GROUPS
+      : MENU_CONFIG[lookupKey] || [];
+
+    let finalConfig = baseConfigSource.map((group) => ({
       ...group,
       items: group.items.map((item) => ({ ...item })),
     }));
+
+    if (hasNavigationSettings) {
+      const visibleKeys = new Set(
+        normalizeMenuVisibilityKeys(navSettings?.visibleMenuItems || []),
+      );
+
+      if (roleKey === "super-admin" || roleKey === "hrd") {
+        visibleKeys.add("overtime_payroll_recap");
+        visibleKeys.add("hrd.dashboard.karyawan");
+        visibleKeys.add("hrd.dashboard.rekrutmen");
+      }
+
+      finalConfig = ALL_MENU_GROUPS.map((group) => ({
+        ...group,
+        items: group.items.filter((item) =>
+          visibleKeys.has(normalizeMenuKey(item.key)),
+        ),
+      })).filter((group) => group.items.length > 0);
+    }
 
     if (userProfile?.isDivisionManager) {
       const overtimeApprovalMenu: MenuItem = {
@@ -232,13 +256,15 @@ export function DashboardLayout({
         roleKey === "karyawan" ||
         (roleKey || "").startsWith("karyawan-"));
 
-    let currentConfig = manualMenuConfig || finalConfig;
+    let currentConfig = hasNavigationSettings
+      ? finalConfig
+      : manualMenuConfig || finalConfig;
 
     const leaveStatus = isActiveEmployeeEligibleForLeave(
       userProfile,
       employeeProfile,
     );
-    const userCanReview = canUserReview(userProfile);
+    const userCanReview = canUserReview(userProfile) || menuRoleKey === "manager";
 
     // Check if user is management-level (director, management, structuralLevel=management)
     const isManagementLevel =
@@ -249,6 +275,26 @@ export function DashboardLayout({
       .map((group: MenuGroup) => ({
         ...group,
         items: group.items.filter((item) => {
+          // When navSettings is the authority, trust its filtering and skip secondary filters
+          // Only apply business rule filters (eligibility, assignment checks)
+          if (hasNavigationSettings) {
+            if (item.key === "employee.leave") {
+              // Manager/director who is an employee: let navSettings decide (bypass eligibility)
+              if (isManagerOrDirector && isActiveEmployee) return true;
+              return leaveStatus.isEligible;
+            }
+
+            if (
+              item.key === "recruitment.tasks" &&
+              (isAssignmentLoading || !hasAnyAssignment)
+            ) {
+              return false;
+            }
+
+            return true;
+          }
+
+          // Fallback filters when navSettings is NOT configured
           if (item.key === "employee.leave") {
             // Manager/director who is an employee: let navSettings decide (bypass eligibility)
             if (isManagerOrDirector && isActiveEmployee) return true;
@@ -295,33 +341,16 @@ export function DashboardLayout({
         }),
       }))
       .filter((group) => {
+        if (hasNavigationSettings) {
+          // navSettings already filtered items, just remove empty groups
+          return group.items.length > 0;
+        }
+        // Fallback: filter Review group when navSettings not configured
         if (group.title === "Review" && !userCanReview) {
           return false;
         }
         return group.items.length > 0;
       });
-
-    // Apply nav settings visibility filter
-    if (!isLoadingSettings && navSettings?.visibleMenuItems) {
-      const visibleKeys = new Set(
-        normalizeMenuVisibilityKeys(navSettings.visibleMenuItems),
-      );
-
-      if (roleKey === "super-admin" || roleKey === "hrd") {
-        visibleKeys.add("overtime_payroll_recap");
-        visibleKeys.add("hrd.dashboard.karyawan");
-        visibleKeys.add("hrd.dashboard.rekrutmen");
-      }
-
-      currentConfig = currentConfig
-        .map((group) => ({
-          ...group,
-          items: group.items.filter((item) =>
-            visibleKeys.has(normalizeMenuKey(item.key)),
-          ),
-        }))
-        .filter((group) => group.items.length > 0);
-    }
 
     // Inject personal employee menus AFTER navSettings filter — these appear only if
     // (a) user is manager/director with isEmployee=true AND (b) key is in navSettings
@@ -365,6 +394,17 @@ export function DashboardLayout({
           href: "/admin/karyawan/pengajuan-cuti",
           label: "Pengajuan Cuti",
           icon: createElement(CalendarOff),
+        });
+      }
+      if (
+        !hasNavSettings ||
+        visibleKeys.has(normalizeMenuKey("employee.dinas.confirmation"))
+      ) {
+        personalItems.push({
+          key: "employee.dinas.confirmation",
+          href: "/admin/karyawan/konfirmasi-dinas",
+          label: "Konfirmasi & Laporan Dinas",
+          icon: createElement(MapPin),
         });
       }
       if (

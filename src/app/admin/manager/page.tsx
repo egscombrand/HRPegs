@@ -1,14 +1,11 @@
-'use client';
+"use client";
 
-import { useMemo } from 'react';
-import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
-import { useRoleGuard } from '@/hooks/useRoleGuard';
-import { Skeleton } from '@/components/ui/skeleton';
-import { MENU_CONFIG } from '@/lib/menu-config';
+import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
+import { useRoleGuard } from "@/hooks/useRoleGuard";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function ManagerDashboard() {
-  const hasAccess = useRoleGuard('manager');
-  const menuConfig = useMemo(() => MENU_CONFIG['manager'] || [], []);
+  const hasAccess = useRoleGuard("manager");
 
   if (!hasAccess) {
     return (
@@ -19,8 +16,11 @@ export default function ManagerDashboard() {
   }
 
   return (
-    <DashboardLayout pageTitle="Manager's Dashboard" menuConfig={menuConfig}>
-      <p>This is the main content area for the Manager dashboard. View team details and manage approvals.</p>
+    <DashboardLayout pageTitle="Manager's Dashboard">
+      <p>
+        This is the main content area for the Manager dashboard. View team
+        details and manage approvals.
+      </p>
     </DashboardLayout>
   );
 }
