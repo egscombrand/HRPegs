@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useCollection, useFirestore, useMemoFirebase, deleteDocumentNonBlocking } from '@/firebase';
-import { collection, query, where, doc, type Timestamp } from 'firebase/firestore';
+import { useCollection, useFirestore, useMemoFirebase, deleteDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
+import { collection, query, where, doc, type Timestamp, serverTimestamp } from 'firebase/firestore';
 import type { Brand, EmployeeProfile, AttendanceEvent } from '@/lib/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { GoogleDatePicker } from '@/components/ui/google-date-picker';
@@ -15,8 +15,9 @@ import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { getInitials } from '@/lib/utils';
 import { normalizeGoogleDriveImageUrl } from '@/lib/profile-photo';
 import Link from 'next/link';
-import { XCircle, Search, Eye, Camera } from 'lucide-react';
+import { XCircle, Search, Eye, Camera, AlertCircle, RotateCcw } from 'lucide-react';
 import { DeleteConfirmationDialog } from './DeleteConfirmationDialog';
+import { MarkAttendanceInvalidDialog } from './MarkAttendanceInvalidDialog';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -87,6 +88,8 @@ export function AttendanceMonitoringClient() {
   const [eventsToDelete, setEventsToDelete] = useState<{ tapInId: string | null, tapOutId: string | null, userName: string | null }>({ tapInId: null, tapOutId: null, userName: null });
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
+  const [isMarkInvalidDialogOpen, setIsMarkInvalidDialogOpen] = useState(false);
+  const [recordToMarkInvalid, setRecordToMarkInvalid] = useState<any>(null);
   const firestore = useFirestore();
   const { toast } = useToast();
 
@@ -575,6 +578,37 @@ export function AttendanceMonitoringClient() {
     }
   };
 
+  const handleMarkInvalid = async (
+    attendanceUid: string,
+    reason: string,
+    note: string
+  ) => {
+    if (!firestore || !userProfile) return;
+
+    try {
+      const attendanceRef = doc(firestore, 'attendance_events', attendanceUid);
+      await setDocumentNonBlocking(
+        attendanceRef,
+        {
+          isInvalid: true,
+          invalidatedAt: serverTimestamp(),
+          invalidatedByUid: userProfile.uid,
+          invalidatedByName: userProfile.displayName || userProfile.email,
+          invalidReason: reason,
+          invalidNote: note,
+          payrollExcluded: true,
+          status: 'invalid',
+        },
+        { merge: true }
+      );
+
+      mutateEvents(); // Re-fetch the events
+    } catch (error: any) {
+      console.error('[MarkInvalid] Error:', error);
+      throw error;
+    }
+  };
+
   // Get unique brands from employee_profiles
   const brandOptions = useMemo(() => {
     const brands = new Set<string>();
@@ -751,7 +785,9 @@ export function AttendanceMonitoringClient() {
                     <TableCell className="text-slate-700 dark:text-slate-200">{row.tapOut}</TableCell>
                     <TableCell>
                       <Badge className={
-                        row.status === 'Sedang Bekerja'
+                        row.rawEvent?.isInvalid
+                          ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 font-semibold'
+                          : row.status === 'Sedang Bekerja'
                           ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 font-semibold'
                           : row.status === 'Selesai'
                           ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
@@ -763,9 +799,9 @@ export function AttendanceMonitoringClient() {
                           ? 'bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300'
                           : 'bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300'
                       }>
-                        {row.status}
-                        {row.lateMinutes && row.lateMinutes > 0 && ' ⚠️'}
-                        {row.mode === 'offsite' && ' 📍'}
+                        {row.rawEvent?.isInvalid ? 'Tidak Valid' : row.status}
+                        {row.lateMinutes && row.lateMinutes > 0 && !row.rawEvent?.isInvalid && ' ⚠️'}
+                        {row.mode === 'offsite' && !row.rawEvent?.isInvalid && ' 📍'}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -800,15 +836,36 @@ export function AttendanceMonitoringClient() {
                           Detail
                         </Button>
                         {row.tapInId || row.tapOutId ? (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleCancelClick(row)}
-                            title="Batalkan absensi"
-                            className="h-9 w-9"
-                          >
-                            <XCircle className="h-4 w-4 text-red-600 dark:text-red-500" />
-                          </Button>
+                          <>
+                            {!row.rawEvent?.isInvalid ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1 text-xs text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                                onClick={() => {
+                                  setRecordToMarkInvalid(row);
+                                  setIsMarkInvalidDialogOpen(true);
+                                }}
+                                title="Tandai absensi tidak valid"
+                              >
+                                <AlertCircle className="h-3.5 w-3.5" />
+                                Tidak Valid
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="gap-1 text-xs text-slate-600 dark:text-slate-400"
+                                onClick={() => {
+                                  setSelectedRecord(row);
+                                  setIsDetailModalOpen(true);
+                                }}
+                                title="Lihat detail validasi"
+                              >
+                                Lihat Validasi
+                              </Button>
+                            )}
+                          </>
                         ) : null}
                       </div>
                     </TableCell>
@@ -843,6 +900,14 @@ export function AttendanceMonitoringClient() {
           setSelectedRecord(null);
         }}
         record={selectedRecord}
+      />
+
+      {/* Mark Invalid Dialog */}
+      <MarkAttendanceInvalidDialog
+        open={isMarkInvalidDialogOpen}
+        onOpenChange={setIsMarkInvalidDialogOpen}
+        attendanceRecord={recordToMarkInvalid}
+        onConfirm={handleMarkInvalid}
       />
     </div>
   );
