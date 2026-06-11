@@ -93,10 +93,10 @@ export default function RekapAbsensiPayrollPage() {
 
   // Calculate active period
   const activePeriod = useMemo(() => {
-    const targetDate = new Date(selectedYear, selectedMonth, 1);
     return calculatePayrollPeriod(
       periodMode,
-      0,
+      selectedYear,
+      selectedMonth,
       customStartDate ? new Date(customStartDate) : undefined,
       customEndDate ? new Date(customEndDate) : undefined
     );
@@ -366,6 +366,53 @@ export default function RekapAbsensiPayrollPage() {
           </CardContent>
         </Card>
 
+        {/* Summary Stats (moved to top) */}
+        {recapRows.length > 0 && (
+          <Card className="border-slate-200 dark:border-slate-800 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
+            <CardHeader>
+              <CardTitle className="text-sm">Ringkasan Rekap</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
+                <div>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Total Karyawan</p>
+                  <p className="text-2xl font-bold text-slate-900 dark:text-white">{recapRows.length}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Rata-rata Hadir</p>
+                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                    {(recapRows.reduce((sum, r) => sum + r.hadir, 0) / recapRows.length).toFixed(1)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Total Terlambat</p>
+                  <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                    {recapRows.reduce((sum, r) => sum + r.terlambat, 0)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Total Alpha</p>
+                  <p className="text-2xl font-bold text-red-600 dark:text-red-400">
+                    {recapRows.reduce((sum, r) => sum + r.alpha, 0)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Total Izin</p>
+                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                    {recapRows.reduce((sum, r) => sum + r.izin, 0)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Total Cuti</p>
+                  <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                    {recapRows.reduce((sum, r) => sum + r.cuti, 0)}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Data Table */}
         <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40">
           <CardContent className="p-0">
@@ -479,34 +526,6 @@ export default function RekapAbsensiPayrollPage() {
           </CardContent>
         </Card>
 
-        {/* Summary Stats */}
-        {recapRows.length > 0 && (
-          <Card className="border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/20">
-            <CardHeader>
-              <CardTitle className="text-sm">Ringkasan</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                <div>
-                  <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Total Karyawan Web Absen</p>
-                  <p className="text-lg font-bold text-slate-900 dark:text-white">{recapRows.length}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Rata-rata Hadir</p>
-                  <p className="text-lg font-bold text-slate-900 dark:text-white">
-                    {(recapRows.reduce((sum, r) => sum + r.hadir, 0) / recapRows.length).toFixed(1)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Total Alpha</p>
-                  <p className="text-lg font-bold text-red-600 dark:text-red-400">
-                    {recapRows.reduce((sum, r) => sum + r.alpha, 0)}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
       </div>
     </DashboardLayout>
   );

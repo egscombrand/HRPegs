@@ -56,31 +56,36 @@ export interface PayrollRecapRow {
  */
 export function calculatePayrollPeriod(
   mode: PeriodMode,
-  monthOffset: number = 0,
+  year: number,
+  month: number,
   customStart?: Date,
   customEnd?: Date
 ): PayrollPeriod {
-  const today = new Date();
-  const targetMonth = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
-
   let startDate: Date;
   let endDate: Date;
   let displayLabel: string;
 
   if (mode === 'calendar') {
+    const targetMonth = new Date(year, month, 1);
     startDate = startOfMonth(targetMonth);
     endDate = endOfMonth(targetMonth);
     displayLabel = `${startDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}`;
   } else if (mode === 'payroll') {
     // Payroll: 26th of previous month to 25th of current month
-    const prevMonth = new Date(targetMonth.getFullYear(), targetMonth.getMonth() - 1, 26);
+    const prevMonth = new Date(year, month - 1, 26);
     startDate = new Date(prevMonth);
-    endDate = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 25);
-    displayLabel = `Payroll ${targetMonth.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}`;
+    endDate = new Date(year, month, 25);
+    displayLabel = `Payroll ${new Date(year, month, 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}`;
   } else {
-    // Custom range
-    startDate = customStart || startOfMonth(today);
-    endDate = customEnd || endOfMonth(today);
+    // Custom range: must be provided
+    if (!customStart || !customEnd) {
+      const today = new Date();
+      startDate = startOfMonth(today);
+      endDate = endOfMonth(today);
+    } else {
+      startDate = customStart;
+      endDate = customEnd;
+    }
     displayLabel = `${startDate.toLocaleDateString('id-ID')} – ${endDate.toLocaleDateString('id-ID')}`;
   }
 
@@ -153,18 +158,29 @@ export function generateEmployeePayrollRecap(
   // Count working days in effective period
   const hariKerja = getWorkingDays(effectiveStart, effectiveEnd);
 
-  // Get employee attendance events in period
+  // Get employee attendance events in effective period
   const employeeUid = (employee as any).id || (employee as any).uid;
   const employeeNumber = employee.employeeNumber || (employee as any).employeeId;
 
   const employeeEvents = attendanceEvents.filter(e => {
+    // Match by UID or employee number
     const eventUid = (e as any).uid || (e as any).userId || (e as any).employeeUid;
     const eventEmpNo = (e as any).employeeNumber || (e as any).nomorIndukKaryawan;
+    const uidMatch = eventUid && eventUid === employeeUid;
+    const empNoMatch = eventEmpNo && eventEmpNo === employeeNumber;
 
-    const eventDate = new Date((e as any).datetime?.date || new Date());
-    const inPeriod = isWithinInterval(eventDate, { start: effectiveStart, end: effectiveEnd });
+    if (!uidMatch && !empNoMatch) return false;
 
-    return inPeriod && (eventUid === employeeUid || eventEmpNo === employeeNumber);
+    // Filter by date range (attendance_date field format: YYYY-MM-DD)
+    const eventDateStr = (e as any).datetime?.date;
+    if (!eventDateStr) return false;
+
+    try {
+      const eventDate = new Date(eventDateStr);
+      return isWithinInterval(eventDate, { start: effectiveStart, end: effectiveEnd });
+    } catch {
+      return false;
+    }
   });
 
   // Count attendance days
@@ -242,7 +258,7 @@ export function generateEmployeePayrollRecap(
 
   return {
     employeeId: employeeId || '',
-    fullName: employee.fullName || employee.name || 'Unknown',
+    fullName: resolveName(employee, employeeEvents[0]),
     employeeNumber: employeeNumber || 'N/A',
     brandId: resolveBrandId(employee) || '',
     brandName: resolveBrandName(employee, brandMap),
@@ -275,7 +291,41 @@ export function generateEmployeePayrollRecap(
 function isWebAbsenMethod(method: any): boolean {
   if (!method) return false;
   const normalized = String(method).toLowerCase().trim();
-  return normalized === 'web_absen' || normalized === 'web_absen' || normalized === 'web';
+  return normalized === 'web_absen' || normalized === 'web';
+}
+
+/**
+ * Helper: check if role should be excluded (non-operational roles)
+ */
+function shouldExcludeRole(role: any): boolean {
+  if (!role) return false;
+  const normalized = String(role).toLowerCase().trim();
+  const excludedRoles = ['hrd', 'super_admin', 'admin', 'direktur', 'direksi', 'management', 'director'];
+  return excludedRoles.includes(normalized);
+}
+
+/**
+ * Helper: comprehensive name resolution
+ */
+function resolveName(employee: any, event?: any): string {
+  // Employee profile fallback chain
+  if (employee.fullName) return employee.fullName;
+  if (employee.namaLengkap) return employee.namaLengkap;
+  if (employee.displayName) return employee.displayName;
+  if (employee.name) return employee.name;
+  if (employee.dataDiriIdentitas?.fullName) return employee.dataDiriIdentitas.fullName;
+
+  // Event fallback chain
+  if (event?.employeeName) return event.employeeName;
+  if (event?.fullName) return event.fullName;
+  if (event?.name) return event.name;
+  if (event?.email) return event.email;
+
+  // Last resort: use employee number or indicate incomplete data
+  if (employee.employeeNumber) return employee.employeeNumber;
+  if (event?.employeeNumber) return event.employeeNumber;
+
+  return 'Data karyawan belum lengkap';
 }
 
 /**
@@ -299,10 +349,14 @@ export function generatePayrollRecap(
       const status = (emp as any).status || (emp as any).employmentStatus || '';
       if (status === 'inactive' || status === 'nonaktif') return false;
 
-      // Only Web Absen employees
+      // Only Web Absen employees (with normalization)
       const attendanceMethod = (emp as any).attendanceMethod ||
                               (emp as any).hrdEmploymentInfo?.attendanceMethod;
       if (!isWebAbsenMethod(attendanceMethod)) return false;
+
+      // Exclude HRD and management roles
+      const role = (emp as any).role || (emp as any).hrdEmploymentInfo?.role || '';
+      if (shouldExcludeRole(role)) return false;
 
       return true;
     })
