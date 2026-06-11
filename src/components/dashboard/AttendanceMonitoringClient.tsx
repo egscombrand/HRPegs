@@ -137,7 +137,7 @@ export function AttendanceMonitoringClient() {
   const { tableData, summaryStats, brandOptions } = useMemo(() => {
     const empty = {
       tableData: [] as AttendanceRecord[],
-      summaryStats: calculateDailySummaryStats([]),
+      summaryStats: { total: 0, hadir: 0, belumTapIn: 0, sedangBekerja: 0, selesai: 0, terlambat: 0, tidakValid: 0, perluReview: 0 },
       brandOptions: [] as string[],
     };
     if (!allEmployeeProfiles || !brands) return empty;
