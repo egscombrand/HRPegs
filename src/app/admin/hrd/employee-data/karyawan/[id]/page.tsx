@@ -117,7 +117,6 @@ import {
   DollarSign,
   BarChart3,
   Clock,
-  CreditCard,
   Monitor,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
