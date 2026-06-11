@@ -1907,12 +1907,13 @@ export default function EmployeeDetailPage({
               : "bg-slate-500/15 text-slate-400 border-slate-500/20";
 
   const actionItems: string[] = [];
-  // Brand is not required for direction-level staff
-  if (!isDirectionLevel(hrdStruktur?.structuralPosition) && !hrdStruktur?.brandName)
+  const isDirectorEmployee = isDirectionLevel(hrdStruktur?.structuralPosition);
+  if (!isDirectorEmployee && !hrdStruktur?.brandName)
     actionItems.push("Brand / Perusahaan belum diatur.");
-  else if (!hrdStruktur?.divisi && !isDirectionLevel(hrdStruktur?.structuralPosition))
+  if (!isDirectorEmployee && !hrdStruktur?.divisi)
     actionItems.push("Divisi belum diatur.");
-  else if (!hrdStruktur?.jabatan) actionItems.push("Jabatan belum diatur.");
+  if (!hrdStruktur?.jabatan)
+    actionItems.push("Jabatan belum diatur.");
 
   if (hrdStruktur?.statusKerja === "Belum diatur")
     actionItems.push("Status Kerja belum diatur.");
@@ -2044,19 +2045,19 @@ export default function EmployeeDetailPage({
             <div className="animate-in fade-in slide-in-from-right-4 duration-500">
               <TabsContent value="ringkasan" className="space-y-8">
                 {actionItems.length > 0 && (
-                  <Card className="overflow-hidden border-amber-500/30 bg-amber-500/5 backdrop-blur-md">
+                  <Card className="overflow-hidden border-amber-300 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/5 backdrop-blur-md">
                     <div className="flex">
                       <div className="w-1.5 bg-amber-500"></div>
                       <div className="flex-1 p-6">
                         <div className="flex items-center gap-3 mb-4">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20 text-amber-500">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-200 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400">
                             <AlertOctagon className="h-5 w-5" />
                           </div>
                           <div>
-                            <h3 className="text-lg font-bold text-amber-200">
+                            <h3 className="text-lg font-bold text-amber-900 dark:text-amber-200">
                               Perhatian: Data Belum Lengkap
                             </h3>
-                            <p className="text-sm text-amber-500/70">
+                            <p className="text-sm text-amber-800 dark:text-amber-400/80">
                               Terdapat beberapa item yang memerlukan tindakan
                               administrasi HRD.
                             </p>
@@ -2066,9 +2067,9 @@ export default function EmployeeDetailPage({
                           {actionItems.map((item, idx) => (
                             <li
                               key={idx}
-                              className="flex items-start gap-3 rounded-2xl bg-amber-500/5 p-3 text-sm text-amber-200/80 ring-1 ring-amber-500/10"
+                              className="flex items-start gap-3 rounded-2xl bg-amber-100 dark:bg-amber-500/5 p-3 text-sm text-amber-900 dark:text-amber-200/80 ring-1 ring-amber-300 dark:ring-amber-500/10"
                             >
-                              <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" />
                               {item}
                             </li>
                           ))}
@@ -3235,7 +3236,7 @@ export default function EmployeeDetailPage({
                     <CardContent className="pt-6">
                       <div className="grid grid-cols-1 gap-y-2">
                         <DataRow label="Brand / Unit" value={brandLabel} />
-                        <DataRow label="Divisi" value={divisionLabel} />
+                        {!isDirectorEmployee && <DataRow label="Divisi" value={divisionLabel} />}
                         <DataRow
                           label="Jabatan / Fungsi"
                           value={positionLabel}
@@ -4111,47 +4112,44 @@ export default function EmployeeDetailPage({
                                   )}
                                 />
 
-                                {/* Divisi */}
-                                <FormField
-                                  control={form.control}
-                                  name="divisionId"
-                                  render={({ field }) => (
-                                      <FormItem>
-                                        <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                                          Divisi
-                                        </FormLabel>
-                                        <Select
-                                          onValueChange={(value) => {
-                                            field.onChange(value);
-                                            form.setValue("directSupervisorUid", "");
-                                          }}
-                                          value={field.value}
-                                          disabled={!form.watch("brandId")}
-                                        >
-                                          <FormControl>
-                                            <SelectTrigger className="bg-white dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white h-12 rounded-xl">
-                                              <SelectValue placeholder="Pilih Divisi" />
-                                            </SelectTrigger>
-                                          </FormControl>
-                                          <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
-                                            {divisions.map((d) => (
-                                              <SelectItem key={d.id} value={d.id}>
-                                                {d.name}
-                                              </SelectItem>
-                                            ))}
-                                          </SelectContent>
-                                        </Select>
-                                        <p className="text-xs text-slate-500 mt-1">
-                                          Divisi akan menentukan struktur tim dan atasan langsung karyawan.
-                                        </p>
-                                        {divisions.length === 0 && (
-                                          <p className="text-xs text-amber-600 mt-2">
-                                            ⚠️ Belum ada divisi untuk brand ini.
+                                {/* Divisi - Hidden for management level */}
+                                {form.watch("structuralPosition") !== "management" && (
+                                  <FormField
+                                    control={form.control}
+                                    name="divisionId"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                                            Divisi
+                                          </FormLabel>
+                                          <Select
+                                            onValueChange={(value) => {
+                                              field.onChange(value);
+                                              form.setValue("directSupervisorUid", "");
+                                            }}
+                                            value={field.value}
+                                            disabled={!form.watch("brandId")}
+                                          >
+                                            <FormControl>
+                                              <SelectTrigger className="bg-white dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white h-12 rounded-xl">
+                                                <SelectValue placeholder="Pilih Divisi" />
+                                              </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+                                              {divisions.map((d) => (
+                                                <SelectItem key={d.id} value={d.id}>
+                                                  {d.name}
+                                                </SelectItem>
+                                              ))}
+                                            </SelectContent>
+                                          </Select>
+                                          <p className="text-xs text-slate-500 mt-1">
+                                            Divisi menentukan struktur tim dan atasan langsung karyawan.
                                           </p>
-                                        )}
-                                      </FormItem>
-                                  )}
-                                />
+                                        </FormItem>
+                                    )}
+                                  />
+                                )}
 
                                 {/* Jabatan Struktural */}
                                 <FormField
@@ -4168,6 +4166,9 @@ export default function EmployeeDetailPage({
                                           onValueChange={(val) => {
                                             field.onChange(val);
                                             form.setValue("directSupervisorUid", "");
+                                            if (val === "management") {
+                                              form.setValue("divisionId", "");
+                                            }
                                           }}
                                           value={field.value}
                                         >
