@@ -1848,16 +1848,21 @@ export default function EmployeeDetailPage({
     normalizedData?.statusKerja ||
     "Belum Diatur";
 
-  const brandLabel =
-    hrdInfo.brandName ||
-    (empDoc as any)?.brandName ||
-    (empDoc as any)?.brand ||
-    "Belum diisi";
-  const divisionLabel =
-    hrdInfo.divisionName ||
-    (empDoc as any)?.divisionName ||
-    normalizedData?.divisi ||
-    "Belum diisi";
+  const structuralPos = hrdStruktur?.structuralPosition || normalizedData?.structuralPosition || "";
+
+  const brandLabel = isDirectionLevel(structuralPos)
+    ? "Tidak berlaku untuk Direksi"
+    : hrdInfo.brandName ||
+        (empDoc as any)?.brandName ||
+        (empDoc as any)?.brand ||
+        "Belum diisi";
+
+  const divisionLabel = isDirectionLevel(structuralPos)
+    ? "Tidak berlaku untuk Direksi"
+    : hrdInfo.divisionName ||
+        (empDoc as any)?.divisionName ||
+        normalizedData?.divisi ||
+        "Belum diisi";
   const positionLabel =
     hrdInfo.workRole ||
     (empDoc as any)?.workRole ||
@@ -1894,10 +1899,19 @@ export default function EmployeeDetailPage({
               ? "bg-red-500/15 text-red-400 border-red-500/20"
               : "bg-slate-500/15 text-slate-400 border-slate-500/20";
 
+  // Detect if employee is at direction level
+  const isDirectionLevel = (pos?: string) => {
+    if (!pos) return false;
+    const p = pos.toLowerCase();
+    return p.includes("direksi") || p.includes("direktur") || p.includes("director");
+  };
+
   const actionItems: string[] = [];
-  if (!hrdStruktur?.brandName)
+  // Brand is not required for direction-level staff
+  if (!isDirectionLevel(hrdStruktur?.structuralPosition) && !hrdStruktur?.brandName)
     actionItems.push("Brand / Perusahaan belum diatur.");
-  else if (!hrdStruktur?.divisi) actionItems.push("Divisi belum diatur.");
+  else if (!hrdStruktur?.divisi && !isDirectionLevel(hrdStruktur?.structuralPosition))
+    actionItems.push("Divisi belum diatur.");
   else if (!hrdStruktur?.jabatan) actionItems.push("Jabatan belum diatur.");
 
   if (hrdStruktur?.statusKerja === "Belum diatur")
