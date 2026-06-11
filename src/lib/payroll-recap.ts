@@ -1,9 +1,9 @@
 /**
  * Payroll Recap Calculation
- * Generates attendance summary for payroll processing
+ * Generates attendance summary for payroll processing from existing collections
  */
 
-import { startOfMonth, endOfMonth, eachDayOfInterval, isWeekend, differenceInDays, isWithinInterval, isBefore, isAfter } from 'date-fns';
+import { startOfMonth, endOfMonth, eachDayOfInterval, isWeekend, isWithinInterval, isBefore, isAfter, format, startOfDay, endOfDay } from 'date-fns';
 import type { EmployeeProfile, AttendanceEvent } from '@/lib/types';
 
 export type PeriodMode = 'calendar' | 'payroll' | 'custom';
@@ -35,7 +35,6 @@ export interface PayrollRecapRow {
 
   // Leave stats
   izin: number;
-  cuti: number;
   sakit: number;
   dinas: number;
   alpha: number;
@@ -44,16 +43,13 @@ export interface PayrollRecapRow {
   totalJamKerja: number;
 
   // Metadata
-  joinDate?: Date;
-  resignDate?: Date;
   effectiveStart: Date;
   effectiveEnd: Date;
   isPartial: boolean;
 }
 
-/**
- * Calculate payroll period based on mode
- */
+// ─── Period Calculation ────────────────────────────────────────────────────────
+
 export function calculatePayrollPeriod(
   mode: PeriodMode,
   year: number,
@@ -66,199 +62,297 @@ export function calculatePayrollPeriod(
   let displayLabel: string;
 
   if (mode === 'calendar') {
-    const targetMonth = new Date(year, month, 1);
-    startDate = startOfMonth(targetMonth);
-    endDate = endOfMonth(targetMonth);
-    displayLabel = `${startDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}`;
+    startDate = startOfMonth(new Date(year, month, 1));
+    endDate = endOfMonth(new Date(year, month, 1));
+    displayLabel = startDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
   } else if (mode === 'payroll') {
-    // Payroll: 26th of previous month to 25th of current month
-    const prevMonth = new Date(year, month - 1, 26);
-    startDate = new Date(prevMonth);
-    endDate = new Date(year, month, 25);
+    // 26th of previous month → 25th of current month
+    startDate = new Date(year, month - 1, 26, 0, 0, 0);
+    endDate = new Date(year, month, 25, 23, 59, 59);
     displayLabel = `Payroll ${new Date(year, month, 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}`;
   } else {
-    // Custom range: must be provided
-    if (!customStart || !customEnd) {
-      const today = new Date();
-      startDate = startOfMonth(today);
-      endDate = endOfMonth(today);
-    } else {
-      startDate = customStart;
-      endDate = customEnd;
-    }
-    displayLabel = `${startDate.toLocaleDateString('id-ID')} – ${endDate.toLocaleDateString('id-ID')}`;
+    // Custom
+    startDate = customStart ? startOfDay(customStart) : startOfMonth(new Date());
+    endDate = customEnd ? endOfDay(customEnd) : endOfMonth(new Date());
+    displayLabel = `${format(startDate, 'd MMM yyyy')} – ${format(endDate, 'd MMM yyyy')}`;
   }
 
   return { mode, startDate, endDate, displayLabel };
 }
 
-/**
- * Get all working days (Mon-Fri) in period
- */
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 export function getWorkingDays(startDate: Date, endDate: Date): number {
-  const allDays = eachDayOfInterval({ start: startDate, end: endDate });
-  return allDays.filter(d => !isWeekend(d)).length;
+  try {
+    const allDays = eachDayOfInterval({ start: startOfDay(startDate), end: startOfDay(endDate) });
+    return allDays.filter(d => !isWeekend(d)).length;
+  } catch {
+    return 0;
+  }
 }
 
-/**
- * Helper: resolve employee brand
- */
+function isWebAbsenMethod(method: any): boolean {
+  if (!method) return false;
+  const n = String(method).toLowerCase().trim();
+  return n === 'web_absen' || n === 'web';
+}
+
+function isExcludedRole(role: any): boolean {
+  if (!role) return false;
+  const n = String(role).toLowerCase().trim();
+  return ['hrd', 'super_admin', 'superadmin', 'admin', 'direktur', 'direksi', 'management', 'director'].includes(n);
+}
+
+function resolveName(employee: any, firstEvent?: any): string {
+  if (employee.fullName?.trim()) return employee.fullName.trim();
+  if (employee.namaLengkap?.trim()) return employee.namaLengkap.trim();
+  if (employee.displayName?.trim()) return employee.displayName.trim();
+  if (employee.name?.trim()) return employee.name.trim();
+  if (employee.dataDiriIdentitas?.fullName?.trim()) return employee.dataDiriIdentitas.fullName.trim();
+  if (firstEvent?.employeeName?.trim()) return firstEvent.employeeName.trim();
+  if (firstEvent?.fullName?.trim()) return firstEvent.fullName.trim();
+  if (firstEvent?.name?.trim()) return firstEvent.name.trim();
+  if (firstEvent?.displayName?.trim()) return firstEvent.displayName.trim();
+  if (firstEvent?.email?.trim()) return firstEvent.email.trim();
+  if (employee.email?.trim()) return employee.email.trim();
+  if (employee.employeeNumber) return employee.employeeNumber;
+  if (firstEvent?.employeeNumber) return firstEvent.employeeNumber;
+  return 'Nama belum tersedia';
+}
+
 function resolveBrandId(profile: any): string | null {
   const id = profile.hrdEmploymentInfo?.brandId || profile.brandId;
-  return typeof id === 'string' ? id : null;
+  return typeof id === 'string' && id ? id : null;
 }
 
 function resolveBrandName(profile: any, brandMap: Map<string, string>): string {
   const bId = resolveBrandId(profile);
   if (bId) return brandMap.get(bId) || bId;
-  return profile.hrdEmploymentInfo?.brandName || profile.brandName || 'Unknown';
+  return profile.hrdEmploymentInfo?.brandName || profile.brandName || profile.companyName || '-';
 }
 
 function resolveDivision(profile: any): string {
   return profile.hrdEmploymentInfo?.divisionName ||
-         profile.hrdEmploymentInfo?.divisi ||
-         profile.divisionName ||
-         profile.division ||
-         '-';
+    profile.hrdEmploymentInfo?.divisi ||
+    profile.divisionName ||
+    profile.division ||
+    '-';
 }
 
 /**
- * Generate payroll recap for a single employee
+ * Get event date string (YYYY-MM-DD) from event — tries multiple fields
  */
+function getEventDateStr(event: any): string | null {
+  // Primary: datetime.date field (attendance_events format)
+  if (event.datetime?.date) return event.datetime.date;
+
+  // Fallback: parse from timestamps
+  const ts = event.tsServer || event.tsClient || event.createdAt;
+  if (!ts) return null;
+
+  try {
+    let d: Date;
+    if (ts instanceof Date) d = ts;
+    else if (typeof ts === 'number') d = new Date(ts);
+    else if (typeof ts === 'string') d = new Date(ts);
+    else if (typeof ts.toDate === 'function') d = ts.toDate();
+    else return null;
+
+    return format(d, 'yyyy-MM-dd');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Normalize event type for matching
+ */
+function getEventKind(type: string): 'in' | 'out' | null {
+  const t = String(type).toLowerCase().trim();
+  if (t === 'check-in' || t === 'tapin' || t === 'tap_in' || t === 'in') return 'in';
+  if (t === 'check-out' || t === 'tapout' || t === 'tap_out' || t === 'out') return 'out';
+  return null;
+}
+
+// ─── Per-employee Recap ────────────────────────────────────────────────────────
+
 export function generateEmployeePayrollRecap(
   employee: EmployeeProfile,
   period: PayrollPeriod,
-  attendanceEvents: AttendanceEvent[],
+  allEvents: AttendanceEvent[],
   approvedLeaves: any[],
-  brandMap: Map<string, string>,
-  overtimeData: any[] = [],
-  otherAbsenceData: any[] = []
+  brandMap: Map<string, string>
 ): PayrollRecapRow {
-  // Calculate effective period for this employee
-  let effectiveStart = period.startDate;
-  let effectiveEnd = period.endDate;
+  const employeeId = (employee as any).id || (employee as any).uid || '';
+  const employeeNumber = employee.employeeNumber || (employee as any).employeeId || '';
+
+  // ── Effective date range ──
+  let effectiveStart = startOfDay(period.startDate);
+  let effectiveEnd = endOfDay(period.endDate);
   let isPartial = false;
 
   if (employee.joinDate) {
-    const joinDate = employee.joinDate instanceof Date ? employee.joinDate : new Date((employee.joinDate as any).toDate?.() || employee.joinDate);
-    if (isAfter(joinDate, period.startDate)) {
-      effectiveStart = joinDate;
-      isPartial = true;
-    }
+    try {
+      const jd = employee.joinDate instanceof Date
+        ? employee.joinDate
+        : typeof (employee.joinDate as any).toDate === 'function'
+          ? (employee.joinDate as any).toDate()
+          : new Date(employee.joinDate as any);
+      if (isAfter(jd, effectiveStart)) { effectiveStart = startOfDay(jd); isPartial = true; }
+    } catch { /* skip */ }
   }
 
   if ((employee as any).resignDate) {
-    const resignDate = (employee as any).resignDate instanceof Date ? (employee as any).resignDate : new Date(((employee as any).resignDate as any).toDate?.() || (employee as any).resignDate);
-    if (isBefore(resignDate, period.endDate)) {
-      effectiveEnd = resignDate;
-      isPartial = true;
-    }
+    try {
+      const rd = (employee as any).resignDate instanceof Date
+        ? (employee as any).resignDate
+        : typeof (employee as any).resignDate.toDate === 'function'
+          ? (employee as any).resignDate.toDate()
+          : new Date((employee as any).resignDate);
+      if (isBefore(rd, effectiveEnd)) { effectiveEnd = endOfDay(rd); isPartial = true; }
+    } catch { /* skip */ }
   }
 
-  // Count working days in effective period
   const hariKerja = getWorkingDays(effectiveStart, effectiveEnd);
 
-  // Get employee attendance events in effective period
-  const employeeUid = (employee as any).id || (employee as any).uid;
-  const employeeNumber = employee.employeeNumber || (employee as any).employeeId;
+  // ── Filter events for this employee ──
+  const myEvents = allEvents.filter(e => {
+    const ev = e as any;
+    // Match employee
+    const uid = ev.uid || ev.userId || ev.employeeUid;
+    const empNo = ev.employeeNumber || ev.nomorIndukKaryawan;
+    const isMatch = (uid && uid === employeeId) || (empNo && empNo === employeeNumber);
+    if (!isMatch) return false;
 
-  const employeeEvents = attendanceEvents.filter(e => {
-    // Match by UID or employee number
-    const eventUid = (e as any).uid || (e as any).userId || (e as any).employeeUid;
-    const eventEmpNo = (e as any).employeeNumber || (e as any).nomorIndukKaryawan;
-    const uidMatch = eventUid && eventUid === employeeUid;
-    const empNoMatch = eventEmpNo && eventEmpNo === employeeNumber;
-
-    if (!uidMatch && !empNoMatch) return false;
-
-    // Filter by date range (attendance_date field format: YYYY-MM-DD)
-    const eventDateStr = (e as any).datetime?.date;
-    if (!eventDateStr) return false;
+    // Date range filter
+    const dateStr = getEventDateStr(ev);
+    if (!dateStr) return false;
 
     try {
-      const eventDate = new Date(eventDateStr);
-      return isWithinInterval(eventDate, { start: effectiveStart, end: effectiveEnd });
+      const d = new Date(dateStr);
+      return d >= startOfDay(effectiveStart) && d <= endOfDay(effectiveEnd);
     } catch {
       return false;
     }
   });
 
-  // Count attendance days
-  const attendanceDays = new Set<string>();
+  const firstEvent = myEvents[0];
+
+  // ── Build per-day maps ──
+  const checkInByDay = new Map<string, any>();   // dateStr → event
+  const checkOutByDay = new Map<string, any>();  // dateStr → event
+
+  for (const ev of myEvents) {
+    const dateStr = getEventDateStr(ev as any) || '';
+    const kind = getEventKind((ev as any).type || '');
+    if (kind === 'in' && !checkInByDay.has(dateStr)) checkInByDay.set(dateStr, ev);
+    if (kind === 'out' && !checkOutByDay.has(dateStr)) checkOutByDay.set(dateStr, ev);
+  }
+
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+
+  // ── Attendance stats ──
+  const hadirDays = new Set<string>();
   let terlambat = 0;
   let menitTerlambat = 0;
   let pulangAwal = 0;
   let lupaHapIn = 0;
   let lupaHapOut = 0;
-  let totalJamKerja = 0;
+  let totalMinutes = 0;
 
-  for (const event of employeeEvents) {
-    const dateStr = (event as any).datetime?.date || new Date().toISOString().split('T')[0];
-    const eventType = (event as any).type || '';
+  // Days with check-in = hadir
+  for (const [dateStr, ev] of checkInByDay) {
+    hadirDays.add(dateStr);
 
-    if (eventType === 'check-in' || eventType === 'tapIn') {
-      attendanceDays.add(dateStr);
-      if ((event as any).lateMinutes && (event as any).lateMinutes > 0) {
-        terlambat++;
-        menitTerlambat += (event as any).lateMinutes;
-      }
-    } else if (eventType === 'check-out' || eventType === 'tapOut') {
-      attendanceDays.add(dateStr);
-      if ((event as any).earlyLeaveMinutes && (event as any).earlyLeaveMinutes > 0) {
-        pulangAwal++;
-      }
-    }
+    // Late check-in
+    const late = (ev as any).lateMinutes ?? 0;
+    if (late > 0) { terlambat++; menitTerlambat += late; }
 
-    // Sum work duration
-    if ((event as any).workDurationMinutes) {
-      totalJamKerja += (event as any).workDurationMinutes;
+    // No check-out (only count as "lupa tap out" for past days, not today)
+    if (!checkOutByDay.has(dateStr) && dateStr !== todayStr) {
+      lupaHapOut++;
     }
   }
 
-  // Detect incomplete attendance
-  const checkInDays = new Set<string>();
-  const checkOutDays = new Set<string>();
-  for (const event of employeeEvents) {
-    const dateStr = (event as any).datetime?.date || new Date().toISOString().split('T')[0];
-    const eventType = (event as any).type || '';
-    if (eventType === 'check-in' || eventType === 'tapIn') checkInDays.add(dateStr);
-    if (eventType === 'check-out' || eventType === 'tapOut') checkOutDays.add(dateStr);
+  // Days with check-out but no check-in
+  for (const [dateStr] of checkOutByDay) {
+    hadirDays.add(dateStr);
+    if (!checkInByDay.has(dateStr) && dateStr !== todayStr) {
+      lupaHapIn++;
+    }
+
+    // Early leave
+    const ev = checkOutByDay.get(dateStr);
+    const early = (ev as any).earlyLeaveMinutes ?? 0;
+    if (early > 0) pulangAwal++;
   }
 
-  for (const day of checkInDays) {
-    if (!checkOutDays.has(day)) lupaHapOut++;
-  }
-  for (const day of checkOutDays) {
-    if (!checkInDays.has(day)) lupaHapIn++;
+  // Work duration: only days with both in+out
+  for (const [dateStr, inEv] of checkInByDay) {
+    const outEv = checkOutByDay.get(dateStr);
+    if (!outEv) continue;
+    const workDur = (inEv as any).workDurationMinutes || (outEv as any).workDurationMinutes;
+    if (workDur) {
+      totalMinutes += workDur;
+    }
   }
 
-  const hadir = attendanceDays.size;
+  const hadir = hadirDays.size;
 
-  // Count approved leaves
-  const employeeId = (employee as any).id;
-  const approvedInPeriod = approvedLeaves.filter(leave => {
+  // ── Approved leaves in period ──
+  const leavesInPeriod = approvedLeaves.filter(leave => {
     if (leave.employeeId !== employeeId) return false;
-    const startDate = leave.startDate?.toDate?.() || new Date(leave.startDate);
-    const endDate = leave.endDate?.toDate?.() || new Date(leave.endDate);
-    return isWithinInterval(startDate, { start: effectiveStart, end: effectiveEnd }) ||
-           isWithinInterval(endDate, { start: effectiveStart, end: effectiveEnd }) ||
-           (isBefore(startDate, effectiveStart) && isAfter(endDate, effectiveEnd));
+    try {
+      const ls = leave.startDate?.toDate?.() || new Date(leave.startDate);
+      const le = leave.endDate?.toDate?.() || new Date(leave.endDate);
+      return isWithinInterval(ls, { start: effectiveStart, end: effectiveEnd }) ||
+             isWithinInterval(le, { start: effectiveStart, end: effectiveEnd }) ||
+             (isBefore(ls, effectiveStart) && isAfter(le, effectiveEnd));
+    } catch { return false; }
   });
 
-  const izin = approvedInPeriod.filter(l => l.type === 'izin' || l.leaveType === 'izin').length;
-  const cuti = approvedInPeriod.filter(l => l.type === 'cuti' || l.leaveType === 'cuti').length;
-  const sakit = approvedInPeriod.filter(l => l.type === 'sakit' || l.leaveType === 'sakit').length;
-  const dinas = approvedInPeriod.filter(l => l.type === 'dinas' || l.leaveType === 'dinas').length;
+  const izin = leavesInPeriod.filter(l => {
+    const t = (l.type || l.leaveType || '').toLowerCase();
+    return t === 'izin' || t === 'permission';
+  }).length;
+  const sakit = leavesInPeriod.filter(l => {
+    const t = (l.type || l.leaveType || '').toLowerCase();
+    return t === 'sakit' || t === 'sick';
+  }).length;
+  const dinas = leavesInPeriod.filter(l => {
+    const t = (l.type || l.leaveType || '').toLowerCase();
+    return t === 'dinas' || t === 'business_trip';
+  }).length;
 
-  // Calculate alpha
-  const alpha = Math.max(0, hariKerja - hadir - izin - cuti - sakit - dinas);
+  // ── Alpha: past working days only ──
+  // Count working days that are strictly past (< today) and have no presence/leave
+  const effectiveWorkingDays = eachDayOfInterval({
+    start: startOfDay(effectiveStart),
+    end: startOfDay(effectiveEnd),
+  }).filter(d => !isWeekend(d));
 
-  // Convert minutes to hours for totalJamKerja
-  const totalJamKerjaHours = Math.floor(totalJamKerja / 60);
+  let alpha = 0;
+  for (const day of effectiveWorkingDays) {
+    const dateStr = format(day, 'yyyy-MM-dd');
+    // Skip today and future dates
+    if (dateStr >= todayStr) continue;
+    // Skip if has attendance
+    if (hadirDays.has(dateStr)) continue;
+    // Skip if has approved leave on that day
+    const hasLeave = leavesInPeriod.some(leave => {
+      try {
+        const ls = startOfDay(leave.startDate?.toDate?.() || new Date(leave.startDate));
+        const le = endOfDay(leave.endDate?.toDate?.() || new Date(leave.endDate));
+        return day >= ls && day <= le;
+      } catch { return false; }
+    });
+    if (hasLeave) continue;
+    alpha++;
+  }
 
   return {
-    employeeId: employeeId || '',
-    fullName: resolveName(employee, employeeEvents[0]),
+    employeeId,
+    fullName: resolveName(employee, firstEvent),
     employeeNumber: employeeNumber || 'N/A',
     brandId: resolveBrandId(employee) || '',
     brandName: resolveBrandName(employee, brandMap),
@@ -272,104 +366,43 @@ export function generateEmployeePayrollRecap(
     lupaHapIn,
     lupaHapOut,
     izin,
-    cuti,
     sakit,
     dinas,
     alpha,
-    totalJamKerja: totalJamKerjaHours,
-    joinDate: employee.joinDate instanceof Date ? employee.joinDate : undefined,
-    resignDate: (employee as any).resignDate instanceof Date ? (employee as any).resignDate : undefined,
+    totalJamKerja: Math.floor(totalMinutes / 60),
     effectiveStart,
     effectiveEnd,
     isPartial,
   };
 }
 
-/**
- * Helper: normalize and check if attendance method is Web Absen
- */
-function isWebAbsenMethod(method: any): boolean {
-  if (!method) return false;
-  const normalized = String(method).toLowerCase().trim();
-  return normalized === 'web_absen' || normalized === 'web';
-}
+// ─── Batch Recap ──────────────────────────────────────────────────────────────
 
-/**
- * Helper: check if role should be excluded (non-operational roles)
- */
-function shouldExcludeRole(role: any): boolean {
-  if (!role) return false;
-  const normalized = String(role).toLowerCase().trim();
-  const excludedRoles = ['hrd', 'super_admin', 'admin', 'direktur', 'direksi', 'management', 'director'];
-  return excludedRoles.includes(normalized);
-}
-
-/**
- * Helper: comprehensive name resolution
- */
-function resolveName(employee: any, event?: any): string {
-  // Employee profile fallback chain
-  if (employee.fullName) return employee.fullName;
-  if (employee.namaLengkap) return employee.namaLengkap;
-  if (employee.displayName) return employee.displayName;
-  if (employee.name) return employee.name;
-  if (employee.dataDiriIdentitas?.fullName) return employee.dataDiriIdentitas.fullName;
-
-  // Event fallback chain
-  if (event?.employeeName) return event.employeeName;
-  if (event?.fullName) return event.fullName;
-  if (event?.name) return event.name;
-  if (event?.email) return event.email;
-
-  // Last resort: use employee number or indicate incomplete data
-  if (employee.employeeNumber) return employee.employeeNumber;
-  if (event?.employeeNumber) return event.employeeNumber;
-
-  return 'Data karyawan belum lengkap';
-}
-
-/**
- * Generate payroll recap for multiple employees
- */
 export function generatePayrollRecap(
   employees: EmployeeProfile[],
   period: PayrollPeriod,
   attendanceEvents: AttendanceEvent[],
   approvedLeaves: any[],
-  brands: any[],
-  overtimeData: any[] = [],
-  otherAbsenceData: any[] = []
+  brands: any[]
 ): PayrollRecapRow[] {
   const brandMap = new Map(brands.map((b: any) => [b.id, b.name]));
 
-  const rows = employees
+  return employees
     .filter(emp => {
-      // Only active employees
       if ((emp as any).isActive === false) return false;
-      const status = (emp as any).status || (emp as any).employmentStatus || '';
+      const status = ((emp as any).status || (emp as any).employmentStatus || '').toLowerCase();
       if (status === 'inactive' || status === 'nonaktif') return false;
 
-      // Only Web Absen employees (with normalization)
-      const attendanceMethod = (emp as any).attendanceMethod ||
-                              (emp as any).hrdEmploymentInfo?.attendanceMethod;
-      if (!isWebAbsenMethod(attendanceMethod)) return false;
+      // Must be Web Absen
+      const method = (emp as any).attendanceMethod || (emp as any).hrdEmploymentInfo?.attendanceMethod;
+      if (!isWebAbsenMethod(method)) return false;
 
-      // Exclude HRD and management roles
+      // Exclude non-operational roles
       const role = (emp as any).role || (emp as any).hrdEmploymentInfo?.role || '';
-      if (shouldExcludeRole(role)) return false;
+      if (isExcludedRole(role)) return false;
 
       return true;
     })
-    .map(emp => generateEmployeePayrollRecap(
-      emp,
-      period,
-      attendanceEvents,
-      approvedLeaves,
-      brandMap,
-      overtimeData,
-      otherAbsenceData
-    ))
-    .sort((a, b) => a.fullName.localeCompare(b.fullName));
-
-  return rows;
+    .map(emp => generateEmployeePayrollRecap(emp, period, attendanceEvents, approvedLeaves, brandMap))
+    .sort((a, b) => a.fullName.localeCompare(b.fullName, 'id'));
 }

@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { useRoleGuard } from "@/hooks/useRoleGuard";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -22,76 +22,68 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  useCollection,
-  useFirestore,
-  useMemoFirebase,
-} from "@/firebase";
+import { useCollection, useFirestore, useMemoFirebase } from "@/firebase";
 import { collection, query, where } from "firebase/firestore";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
-import { Download, Calendar, Users, Filter, AlertCircle } from "lucide-react";
-import { useAuth } from "@/providers/auth-provider";
+import { Download, AlertCircle, RotateCcw, CalendarDays } from "lucide-react";
 import type { EmployeeProfile, Brand } from "@/lib/types";
-import { calculatePayrollPeriod, generatePayrollRecap, type PeriodMode } from "@/lib/payroll-recap";
+import {
+  calculatePayrollPeriod,
+  generatePayrollRecap,
+  type PeriodMode,
+} from "@/lib/payroll-recap";
 import { Badge } from "@/components/ui/badge";
 
 const PERIOD_MODES: Array<{ value: PeriodMode; label: string }> = [
+  { value: "payroll", label: "Periode Payroll (26–25)" },
   { value: "calendar", label: "Bulan Kalender" },
-  { value: "payroll", label: "Periode Payroll" },
   { value: "custom", label: "Custom Range" },
 ];
 
 export default function RekapAbsensiPayrollPage() {
   const hasAccess = useRoleGuard(["hrd", "super-admin"]);
-  const { userProfile } = useAuth();
   const firestore = useFirestore();
 
-  // Period settings
+  // ── Period state ──
   const [periodMode, setPeriodMode] = useState<PeriodMode>("payroll");
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [customStartDate, setCustomStartDate] = useState<string>("");
   const [customEndDate, setCustomEndDate] = useState<string>("");
 
-  // Filters
+  // ── Filter state ──
   const [selectedBrand, setSelectedBrand] = useState("all");
   const [selectedDivision, setSelectedDivision] = useState("all");
   const [searchName, setSearchName] = useState("");
 
-  // Fetch data
-  const employeesQuery = useMemoFirebase(
-    () => collection(firestore, "employee_profiles"),
-    [firestore]
-  );
+  // ── Data fetching ──
   const { data: employees, isLoading: loadingEmployees } =
-    useCollection<EmployeeProfile>(employeesQuery);
-
-  const brandsQuery = useMemoFirebase(
-    () => collection(firestore, "brands"),
-    [firestore]
-  );
-  const { data: brands } = useCollection<Brand>(brandsQuery);
-
-  const attendanceQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, "attendance_events"));
-  }, [firestore]);
-  const { data: attendanceEvents, isLoading: loadingAttendance } =
-    useCollection<any>(attendanceQuery);
-
-  const leavesQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(
-      collection(firestore, "leave_requests"),
-      where("status", "in", ["approved", "active_leave"])
+    useCollection<EmployeeProfile>(
+      useMemoFirebase(() => collection(firestore, "employee_profiles"), [firestore])
     );
-  }, [firestore]);
-  const { data: leaveRequests } = useCollection<any>(leavesQuery);
+
+  const { data: brands } = useCollection<Brand>(
+    useMemoFirebase(() => collection(firestore, "brands"), [firestore])
+  );
+
+  const { data: attendanceEvents, isLoading: loadingAttendance } =
+    useCollection<any>(
+      useMemoFirebase(() => collection(firestore, "attendance_events"), [firestore])
+    );
+
+  const { data: leaveRequests } = useCollection<any>(
+    useMemoFirebase(() => {
+      return query(
+        collection(firestore, "leave_requests"),
+        where("status", "in", ["approved", "active_leave"])
+      );
+    }, [firestore])
+  );
 
   const isLoading = loadingEmployees || loadingAttendance;
 
-  // Calculate active period
+  // ── Active period ──
   const activePeriod = useMemo(() => {
     return calculatePayrollPeriod(
       periodMode,
@@ -100,11 +92,11 @@ export default function RekapAbsensiPayrollPage() {
       customStartDate ? new Date(customStartDate) : undefined,
       customEndDate ? new Date(customEndDate) : undefined
     );
-  }, [periodMode, selectedMonth, selectedYear, customStartDate, customEndDate]);
+  }, [periodMode, selectedYear, selectedMonth, customStartDate, customEndDate]);
 
-  // Generate recap data
+  // ── Generate recap ──
   const { recapRows, uniqueDivisions } = useMemo(() => {
-    if (!employees || !attendanceEvents || !leaveRequests || !brands) {
+    if (!employees || !attendanceEvents || !brands) {
       return { recapRows: [], uniqueDivisions: [] };
     }
 
@@ -112,41 +104,35 @@ export default function RekapAbsensiPayrollPage() {
       employees,
       activePeriod,
       attendanceEvents,
-      leaveRequests,
+      leaveRequests || [],
       brands
     );
 
-    // Apply filters
-    const filtered = allRows.filter((row) => {
+    const divs = new Set<string>();
+    allRows.forEach(r => { if (r.divisionName && r.divisionName !== '-') divs.add(r.divisionName); });
+
+    const filtered = allRows.filter(row => {
       if (selectedBrand !== "all" && row.brandId !== selectedBrand) return false;
       if (selectedDivision !== "all" && row.divisionName !== selectedDivision) return false;
-      if (searchName && !row.fullName.toLowerCase().includes(searchName.toLowerCase())) return false;
+      if (searchName.trim() &&
+        !row.fullName.toLowerCase().includes(searchName.toLowerCase()) &&
+        !row.employeeNumber.toLowerCase().includes(searchName.toLowerCase())) return false;
       return true;
-    });
-
-    // Get unique divisions for current brand
-    const divs = new Set<string>();
-    allRows.forEach((row) => {
-      if (selectedBrand === "all" || row.brandId === selectedBrand) {
-        divs.add(row.divisionName);
-      }
     });
 
     return { recapRows: filtered, uniqueDivisions: Array.from(divs).sort() };
   }, [employees, attendanceEvents, leaveRequests, brands, activePeriod, selectedBrand, selectedDivision, searchName]);
 
-  const handleExport = () => {
-    // TODO: Implement CSV/Excel export
-    console.log("Export clicked");
-  };
+  // ── Summary stats ──
+  const summary = useMemo(() => ({
+    total: recapRows.length,
+    hadir: recapRows.reduce((s, r) => s + r.hadir, 0),
+    terlambat: recapRows.reduce((s, r) => s + r.terlambat, 0),
+    alpha: recapRows.reduce((s, r) => s + r.alpha, 0),
+    izin: recapRows.reduce((s, r) => s + r.izin, 0),
+    sakit: recapRows.reduce((s, r) => s + r.sakit, 0),
+  }), [recapRows]);
 
-  const handleResetFilters = () => {
-    setSelectedBrand("all");
-    setSelectedDivision("all");
-    setSearchName("");
-  };
-
-  // Conditional renders after all hooks
   if (!hasAccess) {
     return <DashboardLayout pageTitle="Rekap Absensi Payroll"><Skeleton className="h-[600px] w-full" /></DashboardLayout>;
   }
@@ -157,59 +143,53 @@ export default function RekapAbsensiPayrollPage() {
 
   return (
     <DashboardLayout pageTitle="Rekap Absensi Payroll">
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
+      <div className="space-y-5">
+
+        {/* ── Header ── */}
+        <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
               Rekap Absensi Payroll
             </h1>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-              Ringkasan kehadiran karyawan untuk keperluan payroll
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+              Rekap kehadiran karyawan Web Absen
             </p>
           </div>
-          <Button onClick={handleExport} className="gap-2">
+          <Button variant="outline" className="gap-2 shrink-0">
             <Download className="h-4 w-4" />
-            Export Excel
+            Export
           </Button>
         </div>
 
-        {/* Period Selection */}
+        {/* ── Unified Filter Card ── */}
         <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
-              Pilih Periode
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-              {/* Mode */}
-              <div>
-                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase mb-1.5 block">
-                  Mode Periode
+          <CardContent className="pt-5 pb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+
+              {/* Mode Periode */}
+              <div className="lg:col-span-1">
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1.5">
+                  Mode
                 </label>
-                <Select value={periodMode} onValueChange={(val) => setPeriodMode(val as PeriodMode)}>
+                <Select value={periodMode} onValueChange={v => setPeriodMode(v as PeriodMode)}>
                   <SelectTrigger className="h-9 text-sm">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {PERIOD_MODES.map((mode) => (
-                      <SelectItem key={mode.value} value={mode.value}>
-                        {mode.label}
-                      </SelectItem>
+                    {PERIOD_MODES.map(m => (
+                      <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              {/* Month - shown for calendar/payroll */}
+              {/* Month (calendar/payroll) */}
               {periodMode !== "custom" && (
                 <div>
-                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase mb-1.5 block">
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1.5">
                     Bulan
                   </label>
-                  <Select value={selectedMonth.toString()} onValueChange={(v) => setSelectedMonth(parseInt(v))}>
+                  <Select value={selectedMonth.toString()} onValueChange={v => setSelectedMonth(parseInt(v))}>
                     <SelectTrigger className="h-9 text-sm">
                       <SelectValue />
                     </SelectTrigger>
@@ -224,83 +204,58 @@ export default function RekapAbsensiPayrollPage() {
                 </div>
               )}
 
-              {/* Year - shown for calendar/payroll */}
+              {/* Year (calendar/payroll) */}
               {periodMode !== "custom" && (
                 <div>
-                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase mb-1.5 block">
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1.5">
                     Tahun
                   </label>
-                  <Select value={selectedYear.toString()} onValueChange={(v) => setSelectedYear(parseInt(v))}>
+                  <Select value={selectedYear.toString()} onValueChange={v => setSelectedYear(parseInt(v))}>
                     <SelectTrigger className="h-9 text-sm">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       {Array.from({ length: 5 }, (_, i) => {
                         const y = new Date().getFullYear() - i;
-                        return (
-                          <SelectItem key={y} value={y.toString()}>
-                            {y}
-                          </SelectItem>
-                        );
+                        return <SelectItem key={y} value={y.toString()}>{y}</SelectItem>;
                       })}
                     </SelectContent>
                   </Select>
                 </div>
               )}
 
-              {/* Custom Start Date */}
+              {/* Custom dates */}
               {periodMode === "custom" && (
                 <div>
-                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase mb-1.5 block">
-                    Tanggal Mulai
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1.5">
+                    Mulai
                   </label>
                   <Input
                     type="date"
                     value={customStartDate}
-                    onChange={(e) => setCustomStartDate(e.target.value)}
+                    onChange={e => setCustomStartDate(e.target.value)}
                     className="h-9 text-sm"
                   />
                 </div>
               )}
 
-              {/* Custom End Date */}
               {periodMode === "custom" && (
                 <div>
-                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase mb-1.5 block">
-                    Tanggal Selesai
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1.5">
+                    Selesai
                   </label>
                   <Input
                     type="date"
                     value={customEndDate}
-                    onChange={(e) => setCustomEndDate(e.target.value)}
+                    onChange={e => setCustomEndDate(e.target.value)}
                     className="h-9 text-sm"
                   />
                 </div>
               )}
-            </div>
-          </CardContent>
-        </Card>
 
-        {/* Period Preview */}
-        <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-          <p className="text-sm text-blue-700 dark:text-blue-300">
-            <span className="font-semibold">Periode Aktif:</span> {format(activePeriod.startDate, "d MMM yyyy", { locale: idLocale })} – {format(activePeriod.endDate, "d MMM yyyy", { locale: idLocale })}
-          </p>
-        </div>
-
-        {/* Filters */}
-        <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40">
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-slate-600 dark:text-slate-400" />
-              <CardTitle className="text-base">Filter</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
               {/* Brand */}
               <div>
-                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase mb-1.5 block">
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1.5">
                   Brand
                 </label>
                 <Select value={selectedBrand} onValueChange={setSelectedBrand}>
@@ -309,10 +264,8 @@ export default function RekapAbsensiPayrollPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Semua Brand</SelectItem>
-                    {brands?.map((b) => (
-                      <SelectItem key={b.id} value={b.id || ""}>
-                        {b.name}
-                      </SelectItem>
+                    {brands?.map(b => (
+                      <SelectItem key={b.id} value={b.id || ""}>{b.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -320,7 +273,7 @@ export default function RekapAbsensiPayrollPage() {
 
               {/* Division */}
               <div>
-                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase mb-1.5 block">
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1.5">
                   Divisi
                 </label>
                 <Select value={selectedDivision} onValueChange={setSelectedDivision}>
@@ -329,193 +282,158 @@ export default function RekapAbsensiPayrollPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Semua Divisi</SelectItem>
-                    {uniqueDivisions.map((d) => (
-                      <SelectItem key={d} value={d}>
-                        {d}
-                      </SelectItem>
+                    {uniqueDivisions.map(d => (
+                      <SelectItem key={d} value={d}>{d}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              {/* Name Search */}
-              <div>
-                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase mb-1.5 block">
-                  Nama Karyawan
-                </label>
-                <Input
-                  placeholder="Cari nama..."
-                  value={searchName}
-                  onChange={(e) => setSearchName(e.target.value)}
-                  className="h-9 text-sm bg-white dark:bg-slate-900"
-                />
-              </div>
-
-              {/* Reset Button */}
-              <div className="flex items-end">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-9 text-xs w-full"
-                  onClick={handleResetFilters}
-                >
-                  Reset Filters
-                </Button>
+              {/* Name search + Reset */}
+              <div className="flex gap-2 items-end sm:col-span-2 md:col-span-1">
+                <div className="flex-1">
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1.5">
+                    Cari
+                  </label>
+                  <Input
+                    placeholder="Nama / NIK..."
+                    value={searchName}
+                    onChange={e => setSearchName(e.target.value)}
+                    className="h-9 text-sm"
+                  />
+                </div>
+                <div className="shrink-0">
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1.5 invisible">
+                    &nbsp;
+                  </label>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9 px-3"
+                    title="Reset filter"
+                    onClick={() => {
+                      setSelectedBrand("all");
+                      setSelectedDivision("all");
+                      setSearchName("");
+                      setPeriodMode("payroll");
+                      setSelectedMonth(new Date().getMonth());
+                      setSelectedYear(new Date().getFullYear());
+                      setCustomStartDate("");
+                      setCustomEndDate("");
+                    }}
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Summary Stats (moved to top) */}
+        {/* ── Period Preview ── */}
+        <div className="flex items-center gap-2 px-1">
+          <CalendarDays className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+          <p className="text-sm text-slate-700 dark:text-slate-300">
+            <span className="font-semibold text-blue-700 dark:text-blue-400">Periode Aktif:</span>{" "}
+            {format(activePeriod.startDate, "d MMM yyyy", { locale: idLocale })} – {format(activePeriod.endDate, "d MMM yyyy", { locale: idLocale })}
+            <span className="text-slate-400 dark:text-slate-500 ml-2 text-xs">
+              ({recapRows.length} karyawan Web Absen)
+            </span>
+          </p>
+        </div>
+
+        {/* ── Summary Cards ── */}
         {recapRows.length > 0 && (
-          <Card className="border-slate-200 dark:border-slate-800 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
-            <CardHeader>
-              <CardTitle className="text-sm">Ringkasan Rekap</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
-                <div>
-                  <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Total Karyawan</p>
-                  <p className="text-2xl font-bold text-slate-900 dark:text-white">{recapRows.length}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Rata-rata Hadir</p>
-                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                    {(recapRows.reduce((sum, r) => sum + r.hadir, 0) / recapRows.length).toFixed(1)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Total Terlambat</p>
-                  <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-                    {recapRows.reduce((sum, r) => sum + r.terlambat, 0)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Total Alpha</p>
-                  <p className="text-2xl font-bold text-red-600 dark:text-red-400">
-                    {recapRows.reduce((sum, r) => sum + r.alpha, 0)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Total Izin</p>
-                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                    {recapRows.reduce((sum, r) => sum + r.izin, 0)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Total Cuti</p>
-                  <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                    {recapRows.reduce((sum, r) => sum + r.cuti, 0)}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+            {[
+              { label: "Karyawan", value: summary.total, color: "text-slate-900 dark:text-white" },
+              { label: "Total Hadir", value: summary.hadir, color: "text-green-700 dark:text-green-400" },
+              { label: "Terlambat", value: summary.terlambat, color: "text-orange-700 dark:text-orange-400" },
+              { label: "Alpha", value: summary.alpha, color: "text-red-700 dark:text-red-400" },
+              { label: "Izin", value: summary.izin, color: "text-blue-700 dark:text-blue-400" },
+              { label: "Sakit", value: summary.sakit, color: "text-purple-700 dark:text-purple-400" },
+            ].map(card => (
+              <Card key={card.label} className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40">
+                <CardContent className="p-4">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mb-1">{card.label}</p>
+                  <p className={`text-2xl font-bold ${card.color}`}>{card.value}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         )}
 
-        {/* Data Table */}
+        {/* ── Table ── */}
         <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/40">
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader className="bg-slate-50 dark:bg-slate-900/50">
-                  <TableRow className="border-slate-200 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-900/50">
-                    <TableHead className="text-[10px] uppercase font-black text-slate-500 dark:text-slate-400 h-12 px-4">
+                  <TableRow className="border-slate-200 dark:border-slate-800/50">
+                    <TableHead className="text-[10px] uppercase font-black text-slate-500 h-11 px-4 w-[220px]">
                       Nama / NIK
                     </TableHead>
-                    <TableHead className="text-[10px] uppercase font-black text-slate-500 dark:text-slate-400 h-12">
-                      Brand
-                    </TableHead>
-                    <TableHead className="text-[10px] uppercase font-black text-slate-500 dark:text-slate-400 h-12">
-                      Divisi
-                    </TableHead>
-                    <TableHead className="text-[10px] uppercase font-black text-slate-500 dark:text-slate-400 h-12 text-right">
-                      Hari Kerja
-                    </TableHead>
-                    <TableHead className="text-[10px] uppercase font-black text-slate-500 dark:text-slate-400 h-12 text-right">
-                      Hadir
-                    </TableHead>
-                    <TableHead className="text-[10px] uppercase font-black text-slate-500 dark:text-slate-400 h-12 text-right">
-                      Terlambat
-                    </TableHead>
-                    <TableHead className="text-[10px] uppercase font-black text-slate-500 dark:text-slate-400 h-12 text-right">
-                      Izin
-                    </TableHead>
-                    <TableHead className="text-[10px] uppercase font-black text-slate-500 dark:text-slate-400 h-12 text-right">
-                      Cuti
-                    </TableHead>
-                    <TableHead className="text-[10px] uppercase font-black text-slate-500 dark:text-slate-400 h-12 text-right">
-                      Sakit
-                    </TableHead>
-                    <TableHead className="text-[10px] uppercase font-black text-slate-500 dark:text-slate-400 h-12 text-right">
-                      Alpha
-                    </TableHead>
-                    <TableHead className="text-[10px] uppercase font-black text-slate-500 dark:text-slate-400 h-12 text-right">
-                      Total Jam
-                    </TableHead>
+                    <TableHead className="text-[10px] uppercase font-black text-slate-500 h-11">Brand</TableHead>
+                    <TableHead className="text-[10px] uppercase font-black text-slate-500 h-11">Divisi</TableHead>
+                    <TableHead className="text-[10px] uppercase font-black text-slate-500 h-11 text-right">Hari Kerja</TableHead>
+                    <TableHead className="text-[10px] uppercase font-black text-slate-500 h-11 text-right">Hadir</TableHead>
+                    <TableHead className="text-[10px] uppercase font-black text-slate-500 h-11 text-right">Terlambat</TableHead>
+                    <TableHead className="text-[10px] uppercase font-black text-slate-500 h-11 text-right">Izin</TableHead>
+                    <TableHead className="text-[10px] uppercase font-black text-slate-500 h-11 text-right">Sakit</TableHead>
+                    <TableHead className="text-[10px] uppercase font-black text-slate-500 h-11 text-right">Alpha</TableHead>
+                    <TableHead className="text-[10px] uppercase font-black text-slate-500 h-11 text-right pr-4">Total Jam</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {recapRows.length > 0 ? (
-                    recapRows.map((row) => (
+                    recapRows.map(row => (
                       <TableRow
                         key={row.employeeId}
                         className="border-slate-200 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-900/20 transition-colors"
                       >
-                        <TableCell className="px-4 font-medium text-slate-900 dark:text-white text-sm">
-                          <div>{row.fullName}</div>
+                        <TableCell className="px-4 py-3">
+                          <div className="font-medium text-sm text-slate-900 dark:text-white">{row.fullName}</div>
                           <div className="text-xs text-slate-500 dark:text-slate-400">{row.employeeNumber}</div>
-                        </TableCell>
-                        <TableCell className="text-sm text-slate-800 dark:text-slate-200">
-                          {row.brandName}
-                        </TableCell>
-                        <TableCell className="text-sm text-slate-800 dark:text-slate-200">
-                          {row.divisionName}
-                        </TableCell>
-                        <TableCell className="text-sm text-slate-800 dark:text-slate-200 text-right tabular-nums">
-                          {row.hariKerja}
-                        </TableCell>
-                        <TableCell className="text-sm text-slate-800 dark:text-slate-200 text-right tabular-nums font-medium">
-                          {row.hadir}
-                        </TableCell>
-                        <TableCell className="text-sm text-slate-800 dark:text-slate-200 text-right tabular-nums">
-                          {row.terlambat > 0 ? (
-                            <Badge variant="outline" className="bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-300">
-                              {row.terlambat}
-                            </Badge>
-                          ) : (
-                            "—"
+                          {row.isPartial && (
+                            <div className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">Partial periode</div>
                           )}
                         </TableCell>
-                        <TableCell className="text-sm text-slate-800 dark:text-slate-200 text-right tabular-nums">
-                          {row.izin || "—"}
+                        <TableCell className="text-sm text-slate-700 dark:text-slate-300">{row.brandName}</TableCell>
+                        <TableCell className="text-sm text-slate-700 dark:text-slate-300">{row.divisionName}</TableCell>
+                        <TableCell className="text-right text-sm tabular-nums text-slate-700 dark:text-slate-300">{row.hariKerja}</TableCell>
+                        <TableCell className="text-right text-sm tabular-nums font-semibold text-slate-900 dark:text-white">{row.hadir}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {row.terlambat > 0 ? (
+                            <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/20 dark:text-orange-300 dark:border-orange-800">
+                              {row.terlambat}×
+                            </Badge>
+                          ) : <span className="text-sm text-slate-400">—</span>}
                         </TableCell>
-                        <TableCell className="text-sm text-slate-800 dark:text-slate-200 text-right tabular-nums">
-                          {row.cuti || "—"}
+                        <TableCell className="text-right text-sm tabular-nums text-slate-700 dark:text-slate-300">
+                          {row.izin || <span className="text-slate-400">—</span>}
                         </TableCell>
-                        <TableCell className="text-sm text-slate-800 dark:text-slate-200 text-right tabular-nums">
-                          {row.sakit || "—"}
+                        <TableCell className="text-right text-sm tabular-nums text-slate-700 dark:text-slate-300">
+                          {row.sakit || <span className="text-slate-400">—</span>}
                         </TableCell>
-                        <TableCell className="text-sm text-slate-800 dark:text-slate-200 text-right tabular-nums">
+                        <TableCell className="text-right tabular-nums">
                           {row.alpha > 0 ? (
-                            <Badge variant="outline" className="bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300">
+                            <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800">
                               {row.alpha}
                             </Badge>
-                          ) : (
-                            "—"
-                          )}
+                          ) : <span className="text-sm text-slate-400">—</span>}
                         </TableCell>
-                        <TableCell className="text-sm text-slate-800 dark:text-slate-200 text-right tabular-nums font-medium">
-                          {row.totalJamKerja}h
+                        <TableCell className="text-right text-sm tabular-nums font-medium text-slate-700 dark:text-slate-300 pr-4">
+                          {row.totalJamKerja > 0 ? `${row.totalJamKerja}h` : <span className="text-slate-400">—</span>}
                         </TableCell>
                       </TableRow>
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={11} className="text-center py-8 text-slate-600 dark:text-slate-400">
+                      <TableCell colSpan={10} className="text-center py-10 text-slate-500 dark:text-slate-400">
                         <div className="flex flex-col items-center gap-2">
-                          <AlertCircle className="h-5 w-5 text-slate-400" />
-                          <p>Tidak ada data untuk periode dan filter yang dipilih</p>
+                          <AlertCircle className="h-6 w-6 text-slate-300 dark:text-slate-600" />
+                          <p className="text-sm">Tidak ada data karyawan Web Absen untuk periode ini</p>
+                          <p className="text-xs text-slate-400">Pastikan employee_profiles sudah punya attendanceMethod = web_absen</p>
                         </div>
                       </TableCell>
                     </TableRow>
