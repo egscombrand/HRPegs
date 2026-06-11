@@ -73,15 +73,15 @@ export default function RekapAbsensiPayrollPage() {
   // Filters
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [selectedBrand, setSelectedBrand] = useState("");
-  const [selectedDivision, setSelectedDivision] = useState("");
+  const [selectedBrand, setSelectedBrand] = useState("all");
+  const [selectedDivision, setSelectedDivision] = useState("all");
   const [searchName, setSearchName] = useState("");
 
   // Fetch data
   const employeesQuery = useMemoFirebase(() => {
     if (!firestore) return null;
     const conditions = [where("isActive", "==", true)];
-    if (selectedBrand) {
+    if (selectedBrand && selectedBrand !== "all") {
       conditions.push(where("brandId", "==", selectedBrand));
     }
     return query(collection(firestore, "employee_profiles"), ...conditions);
@@ -101,7 +101,7 @@ export default function RekapAbsensiPayrollPage() {
     if (!employees) return [];
     return employees
       .filter((emp) => {
-        if (selectedDivision && emp.division !== selectedDivision) return false;
+        if (selectedDivision !== "all" && emp.division !== selectedDivision) return false;
         if (searchName && !emp.fullName?.toLowerCase().includes(searchName.toLowerCase())) return false;
         return true;
       })
@@ -113,7 +113,7 @@ export default function RekapAbsensiPayrollPage() {
     if (!employees) return [];
     const divs = new Set(
       employees
-        .filter((emp) => !selectedBrand || emp.brandId === selectedBrand)
+        .filter((emp) => selectedBrand === "all" || emp.brandId === selectedBrand)
         .map((emp) => emp.division)
         .filter((d) => d)
     );
@@ -214,7 +214,7 @@ export default function RekapAbsensiPayrollPage() {
                     <SelectValue placeholder="Semua Brand" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Semua Brand</SelectItem>
+                    <SelectItem value="all">Semua Brand</SelectItem>
                     {brands?.map((b) => (
                       <SelectItem key={b.id} value={b.id}>
                         {b.name}
@@ -234,7 +234,7 @@ export default function RekapAbsensiPayrollPage() {
                     <SelectValue placeholder="Semua Divisi" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Semua Divisi</SelectItem>
+                    <SelectItem value="all">Semua Divisi</SelectItem>
                     {divisions.map((d) => (
                       <SelectItem key={d} value={d}>
                         {d}
