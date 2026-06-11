@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useCollection, useFirestore, useMemoFirebase, deleteDocumentNonBlocking } from '@/firebase';
-import { collection, query, where, doc, type Timestamp } from 'firebase/firestore';
+import { useCollection, useFirestore, useMemoFirebase, deleteDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
+import { collection, query, where, doc, type Timestamp, serverTimestamp } from 'firebase/firestore';
 import type { Brand, EmployeeProfile, AttendanceEvent } from '@/lib/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { GoogleDatePicker } from '@/components/ui/google-date-picker';
@@ -15,13 +15,15 @@ import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { getInitials } from '@/lib/utils';
 import { normalizeGoogleDriveImageUrl } from '@/lib/profile-photo';
 import Link from 'next/link';
-import { XCircle, Search, Eye, Camera } from 'lucide-react';
+import { XCircle, Search, Eye, Camera, RefreshCw } from 'lucide-react';
 import { DeleteConfirmationDialog } from './DeleteConfirmationDialog';
+import { AttendanceSyncDialog } from './AttendanceSyncDialog';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { AttendanceDetailModal } from './AttendanceDetailModal';
 import { getAttendanceImageUrl } from '@/lib/google-drive-image';
+import { extractProfileSyncData } from '@/lib/attendance-sync';
 import {
   resolveProfileUid,
   resolveEventUid,
@@ -88,6 +90,8 @@ export function AttendanceMonitoringClient() {
   const [eventsToDelete, setEventsToDelete] = useState<{ tapInId: string | null, tapOutId: string | null, userName: string | null }>({ tapInId: null, tapOutId: null, userName: null });
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
+  const [isSyncDialogOpen, setIsSyncDialogOpen] = useState(false);
+  const [recordToSync, setRecordToSync] = useState<any>(null);
   const firestore = useFirestore();
   const { toast } = useToast();
 
@@ -575,6 +579,43 @@ export function AttendanceMonitoringClient() {
     return Array.from(brands);
   }, [employeeProfiles]);
 
+  // Handle profile synchronization
+  const handleSyncProfile = async (attendanceUid: string, selectedProfileId: string) => {
+    if (!firestore || !allEmployeeProfiles) return;
+
+    const selectedProfile = allEmployeeProfiles.find(p => p.id === selectedProfileId);
+    if (!selectedProfile) {
+      throw new Error('Profile tidak ditemukan');
+    }
+
+    try {
+      const syncData = extractProfileSyncData(selectedProfile);
+
+      // Update attendance_settings document (using uid as doc id)
+      const attendanceSettingsRef = doc(firestore, 'attendance_settings', attendanceUid);
+      await setDocumentNonBlocking(
+        attendanceSettingsRef,
+        {
+          ...syncData,
+          lastSyncedAt: serverTimestamp(),
+          syncStatus: 'synced',
+        },
+        { merge: true }
+      );
+
+      toast({
+        title: 'Sinkronisasi Berhasil',
+        description: `Profil ${selectedProfile.fullName} telah terhubung.`,
+      });
+
+      // Refresh events to update table
+      mutateEvents();
+    } catch (error: any) {
+      console.error('[AttendanceSync] Error:', error);
+      throw error;
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Filter Controls */}
@@ -782,29 +823,47 @@ export function AttendanceMonitoringClient() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-1 text-xs"
-                          onClick={() => {
-                            setSelectedRecord(row);
-                            setIsDetailModalOpen(true);
-                          }}
-                          title="Lihat detail absensi"
-                        >
-                          Detail
-                        </Button>
-                        {row.tapInId || row.tapOutId ? (
+                        {row.name === 'Profil tidak ditemukan' ? (
                           <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleCancelClick(row)}
-                            title="Batalkan absensi"
-                            className="h-9 w-9"
+                            variant="outline"
+                            size="sm"
+                            className="gap-1 text-xs text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                            onClick={() => {
+                              setRecordToSync(row);
+                              setIsSyncDialogOpen(true);
+                            }}
+                            title="Sinkronkan profil karyawan"
                           >
-                            <XCircle className="h-4 w-4 text-red-600 dark:text-red-500" />
+                            <RefreshCw className="h-3.5 w-3.5" />
+                            Sinkronkan
                           </Button>
-                        ) : null}
+                        ) : (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-1 text-xs"
+                              onClick={() => {
+                                setSelectedRecord(row);
+                                setIsDetailModalOpen(true);
+                              }}
+                              title="Lihat detail absensi"
+                            >
+                              Detail
+                            </Button>
+                            {row.tapInId || row.tapOutId ? (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleCancelClick(row)}
+                                title="Batalkan absensi"
+                                className="h-9 w-9"
+                              >
+                                <XCircle className="h-4 w-4 text-red-600 dark:text-red-500" />
+                              </Button>
+                            ) : null}
+                          </>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -838,6 +897,15 @@ export function AttendanceMonitoringClient() {
           setSelectedRecord(null);
         }}
         record={selectedRecord}
+      />
+
+      {/* Sync Dialog */}
+      <AttendanceSyncDialog
+        open={isSyncDialogOpen}
+        onOpenChange={setIsSyncDialogOpen}
+        attendanceRecord={recordToSync}
+        employeeProfiles={allEmployeeProfiles || []}
+        onSync={handleSyncProfile}
       />
     </div>
   );
