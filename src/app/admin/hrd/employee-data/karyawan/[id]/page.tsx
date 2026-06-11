@@ -1848,6 +1848,13 @@ export default function EmployeeDetailPage({
     normalizedData?.statusKerja ||
     "Belum Diatur";
 
+  // Detect if employee is at direction level
+  const isDirectionLevel = (pos?: string) => {
+    if (!pos) return false;
+    const p = pos.toLowerCase();
+    return p.includes("direksi") || p.includes("direktur") || p.includes("director");
+  };
+
   const structuralPos = hrdStruktur?.structuralPosition || normalizedData?.structuralPosition || "";
 
   const brandLabel = isDirectionLevel(structuralPos)
@@ -1898,13 +1905,6 @@ export default function EmployeeDetailPage({
                 employeeTypeBadgeLabel.toLowerCase().includes("resigned")
               ? "bg-red-500/15 text-red-400 border-red-500/20"
               : "bg-slate-500/15 text-slate-400 border-slate-500/20";
-
-  // Detect if employee is at direction level
-  const isDirectionLevel = (pos?: string) => {
-    if (!pos) return false;
-    const p = pos.toLowerCase();
-    return p.includes("direksi") || p.includes("direktur") || p.includes("director");
-  };
 
   const actionItems: string[] = [];
   // Brand is not required for direction-level staff
