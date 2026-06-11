@@ -1122,24 +1122,39 @@ export function PermissionRequestForm({
                           </span>
                         </div>
                         <ArrowRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                        <div className="flex items-center gap-1.5">
-                          <div className="h-5 w-5 rounded-full bg-amber-500/10 flex items-center justify-center text-[10px] font-bold text-amber-600 dark:text-amber-400 border border-amber-400/30">
-                            2
+                        {!isUserManagement && (
+                          <>
+                            <div className="flex items-center gap-1.5">
+                              <div className="h-5 w-5 rounded-full bg-amber-500/10 flex items-center justify-center text-[10px] font-bold text-amber-600 dark:text-amber-400 border border-amber-400/30">
+                                2
+                              </div>
+                              <span className="font-semibold text-foreground">
+                                {directManager.name || "Atasan Langsung"}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground">
+                                ({directManager.role === "director" ? "Direktur" : directManager.role === "hrd" ? "HRD" : "Atasan"})
+                              </span>
+                            </div>
+                            <ArrowRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                            <div className="flex items-center gap-1.5">
+                              <div className="h-5 w-5 rounded-full bg-blue-500/10 flex items-center justify-center text-[10px] font-bold text-blue-600 dark:text-blue-400 border border-blue-400/30">
+                                3
+                              </div>
+                              <span className="text-muted-foreground">HRD</span>
+                            </div>
+                          </>
+                        )}
+                        {isUserManagement && (
+                          <div className="flex items-center gap-1.5">
+                            <div className="h-5 w-5 rounded-full bg-blue-500/10 flex items-center justify-center text-[10px] font-bold text-blue-600 dark:text-blue-400 border border-blue-400/30">
+                              2
+                            </div>
+                            <span className="font-semibold text-foreground">HRD</span>
+                            <span className="text-[10px] text-muted-foreground">
+                              (Persetujuan Langsung)
+                            </span>
                           </div>
-                          <span className="font-semibold text-foreground">
-                            {directManager.name || "Atasan Langsung"}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground">
-                            ({directManager.role === "director" ? "Direktur" : directManager.role === "hrd" ? "HRD" : "Atasan"})
-                          </span>
-                        </div>
-                        <ArrowRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                        <div className="flex items-center gap-1.5">
-                          <div className="h-5 w-5 rounded-full bg-blue-500/10 flex items-center justify-center text-[10px] font-bold text-blue-600 dark:text-blue-400 border border-blue-400/30">
-                            3
-                          </div>
-                          <span className="text-muted-foreground">HRD</span>
-                        </div>
+                        )}
                       </div>
 
                       {/* Info rows */}
@@ -1148,40 +1163,57 @@ export function PermissionRequestForm({
                         <p className="font-medium text-xs text-right">
                           {userProfile?.fullName || "—"}
                         </p>
-                        <p className="text-muted-foreground text-xs">
-                          Tahap persetujuan
-                        </p>
-                        <p className="font-medium text-xs text-right">
-                          {directManager.name || "—"}
-                        </p>
-                        <p className="text-muted-foreground text-xs">
-                          Tahap berikutnya
-                        </p>
-                        <p className="font-medium text-xs text-right">
-                          HRD (setelah disetujui)
-                        </p>
+                        {!isUserManagement && (
+                          <>
+                            <p className="text-muted-foreground text-xs">
+                              Tahap persetujuan
+                            </p>
+                            <p className="font-medium text-xs text-right">
+                              {directManager.name || "—"}
+                            </p>
+                            <p className="text-muted-foreground text-xs">
+                              Tahap berikutnya
+                            </p>
+                            <p className="font-medium text-xs text-right">
+                              HRD (setelah disetujui)
+                            </p>
+                          </>
+                        )}
+                        {isUserManagement && (
+                          <>
+                            <p className="text-muted-foreground text-xs">
+                              Persetujuan langsung
+                            </p>
+                            <p className="font-medium text-xs text-right">
+                              HRD
+                            </p>
+                          </>
+                        )}
                         <p className="text-muted-foreground text-xs">
                           Status awal
                         </p>
                         <p className="font-medium text-xs text-right text-amber-600 dark:text-amber-400">
-                          {directManager.role === "director" ? "Menunggu direktur" : directManager.role === "hrd" ? "Menunggu HRD" : "Menunggu atasan"}
+                          {isUserManagement ? "Menunggu HRD" : directManager.role === "director" ? "Menunggu direktur" : directManager.role === "hrd" ? "Menunggu HRD" : "Menunggu atasan"}
                         </p>
                       </div>
 
-                      {directManager.reason && (
+                      {directManager.reason && !isUserManagement && (
                         <div className="rounded-lg bg-blue-50/60 dark:bg-blue-900/10 border border-blue-200/50 dark:border-blue-800/30 px-3 py-2 text-xs text-blue-700 dark:text-blue-300">
                           <p className="font-medium mb-1">ℹ️ {directManager.reason}</p>
                         </div>
                       )}
 
                       <p className="text-xs text-muted-foreground border-t border-border/50 pt-2">
-                        Pengajuan ini akan dikirim terlebih dahulu ke approver,
-                        lalu diteruskan ke HRD setelah disetujui.
+                        {isUserManagement
+                          ? "Pengajuan ini akan dikirim langsung ke HRD untuk diproses."
+                          : "Pengajuan ini akan dikirim terlebih dahulu ke approver, lalu diteruskan ke HRD setelah disetujui."}
                       </p>
                       <div className="rounded-lg bg-blue-50/60 dark:bg-blue-900/10 border border-blue-200/50 dark:border-blue-800/30 px-3 py-2 text-xs text-blue-700 dark:text-blue-300">
                         Setelah dikirim, status pengajuan akan menjadi:{" "}
                         <strong>
-                          Menunggu persetujuan {directManager.name}
+                          {isUserManagement
+                            ? "Menunggu persetujuan HRD"
+                            : `Menunggu persetujuan ${directManager.name}`}
                         </strong>
                       </div>
                     </>
