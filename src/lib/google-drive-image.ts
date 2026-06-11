@@ -25,7 +25,7 @@ export function extractDriveFileId(url: string | null | undefined): string | nul
  * Menggunakan API lokal proxy di HRP yang membaca dari Google Drive via Apps Script
  *
  * Flow:
- * 1. Extract driveFileId dari event
+ * 1. Extract driveFileId dari event dengan multiple fallback
  * 2. Return `/api/attendance-photo?fileId=...`
  * 3. API route proxy ke Apps Script
  * 4. Apps Script ambil file dari Google Drive dan return base64
@@ -34,40 +34,87 @@ export function extractDriveFileId(url: string | null | undefined): string | nul
 export function getAttendanceImageUrl(event: any): string | null {
   if (!event) return null;
 
-  const evidence = event?.evidence || {};
+  // Debug: log available fields
+  if (typeof window !== "undefined" && window.__DEBUG_ATTENDANCE__) {
+    console.log("[AttendanceImage] Available fields in event:", {
+      event_keys: Object.keys(event),
+      evidence_keys: Object.keys(event?.evidence || {}),
+      photo_keys: Object.keys(event?.photo || {}),
+      event_driveFileId: event?.driveFileId,
+      event_fileId: event?.fileId,
+      event_photoFileId: event?.photoFileId,
+      evidence_driveFileId: event?.evidence?.driveFileId,
+      evidence_fileId: event?.evidence?.fileId,
+      photo_fileId: event?.photo?.fileId,
+    });
+  }
 
-  // Priority 1: Use driveFileId - paling reliable
+  const evidence = event?.evidence || {};
+  const photo = event?.photo || {};
+
+  // Priority 1: Check all possible fileId fields
+  // Different sources may store fileId in different locations
   const driveFileId =
-    evidence.driveFileId ||
+    // Direct fields on event
     event.driveFileId ||
+    event.fileId ||
+    event.photoFileId ||
+    // Fields in evidence object
+    evidence.driveFileId ||
+    evidence.fileId ||
+    evidence.photoFileId ||
+    // Fields in photo object (nested)
+    photo.fileId ||
+    photo.driveFileId ||
+    // Extract from URLs
     extractDriveFileId(evidence.driveViewUrl) ||
     extractDriveFileId(evidence.driveDownloadUrl) ||
+    extractDriveFileId(evidence.thumbnailUrl) ||
+    extractDriveFileId(evidence.directUrl) ||
+    extractDriveFileId(evidence.viewUrl) ||
+    extractDriveFileId(evidence.downloadUrl) ||
+    extractDriveFileId(evidence.watermarkedSelfieUrl) ||
     extractDriveFileId(evidence.selfieUrl) ||
-    extractDriveFileId(event.photoUrl);
+    extractDriveFileId(event.photoUrl) ||
+    extractDriveFileId(event.selfieUrl);
 
   if (driveFileId) {
     // Return HRP API lokal proxy URL
     // API route akan handle komunikasi dengan Google Drive via Apps Script
-    return `/api/attendance-photo?fileId=${encodeURIComponent(driveFileId)}`;
+    const apiUrl = `/api/attendance-photo?fileId=${encodeURIComponent(driveFileId)}`;
+    if (typeof window !== "undefined" && window.__DEBUG_ATTENDANCE__) {
+      console.log("[AttendanceImage] Using fileId:", driveFileId);
+    }
+    return apiUrl;
   }
 
-  // Priority 2: Fallback ke direct URLs (untuk non-Google Drive sources)
-  if (evidence.driveDownloadUrl && !evidence.driveDownloadUrl.includes("drive.google.com")) {
-    return evidence.driveDownloadUrl;
+  // Priority 2: Check for direct URLs (thumbnailUrl, directUrl, downloadUrl)
+  // These might be direct image URLs without needing Google Drive
+  const directUrl =
+    evidence.thumbnailUrl ||
+    evidence.directUrl ||
+    evidence.downloadUrl ||
+    evidence.viewUrl ||
+    evidence.watermarkedSelfieUrl ||
+    evidence.selfieUrl ||
+    event.photoUrl;
+
+  if (directUrl && directUrl.trim()) {
+    // Only use if it's a valid URL
+    try {
+      new URL(directUrl);
+      if (typeof window !== "undefined" && window.__DEBUG_ATTENDANCE__) {
+        console.log("[AttendanceImage] Using direct URL:", directUrl.substring(0, 50) + "...");
+      }
+      return directUrl;
+    } catch {
+      // Invalid URL, continue
+    }
   }
 
-  if (evidence.watermarkedSelfieUrl && !evidence.watermarkedSelfieUrl.includes("drive.google.com")) {
-    return evidence.watermarkedSelfieUrl;
+  if (typeof window !== "undefined" && window.__DEBUG_ATTENDANCE__) {
+    console.warn("[AttendanceImage] No valid image URL found in event", event);
   }
-
-  if (evidence.selfieUrl && !evidence.selfieUrl.includes("drive.google.com")) {
-    return evidence.selfieUrl;
-  }
-
-  if (event.photoUrl && !event.photoUrl.includes("drive.google.com")) {
-    return event.photoUrl;
-  }
-
   return null;
 }
 

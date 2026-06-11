@@ -54,6 +54,19 @@ export function AttendanceDetailModal({ isOpen, onClose, record }: AttendanceDet
   const { toast } = useToast();
   const [imageError, setImageError] = useState(false);
   const [reloadCount, setReloadCount] = useState(0);
+  const [showDebug] = useState(() => {
+    // Enable debug if URL param debug=1 or user pressed Ctrl+D
+    if (typeof window !== "undefined") {
+      const debugEnabled =
+        new URLSearchParams(window.location.search).get("debug") === "1" ||
+        (window as any).__DEBUG_ATTENDANCE__;
+      if (debugEnabled) {
+        (window as any).__DEBUG_ATTENDANCE__ = true;
+      }
+      return debugEnabled;
+    }
+    return false;
+  });
 
   if (!record) return null;
 
@@ -61,6 +74,18 @@ export function AttendanceDetailModal({ isOpen, onClose, record }: AttendanceDet
   // API akan handle komunikasi dengan Google Drive via Apps Script
   const imageUrl = record.rawEvent ? getAttendanceImageUrl(record.rawEvent) : null;
   const hasPhoto = imageUrl && imageUrl !== '-';
+
+  // Check if event has any photo-related data
+  const hasPhotoData =
+    record.rawEvent &&
+    (record.rawEvent.photoUrl ||
+      record.rawEvent.photoFileId ||
+      record.rawEvent.fileId ||
+      record.rawEvent.evidence?.driveFileId ||
+      record.rawEvent.evidence?.fileId ||
+      record.rawEvent.evidence?.selfieUrl ||
+      record.rawEvent.evidence?.directUrl ||
+      record.rawEvent.photo?.fileId);
 
   const handleCopyAddress = () => {
     if (record.address && record.address !== '-') {
@@ -128,22 +153,37 @@ export function AttendanceDetailModal({ isOpen, onClose, record }: AttendanceDet
                     <div className="flex flex-col items-center justify-center gap-4 p-6 text-center">
                       <AlertCircle className="h-12 w-12 text-slate-400" />
                       <div>
-                        <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Foto tidak bisa dimuat</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">Terjadi masalah saat membaca dari server HRP</p>
+                        <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          {hasPhotoData ? "Foto tidak bisa dimuat" : "Foto bukti tidak tersedia"}
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          {hasPhotoData
+                            ? "Terjadi masalah saat membaca dari server HRP. Silakan coba muat ulang atau hubungi administrator jika masalah berlanjut."
+                            : "Data foto bukti absensi tidak tersimpan di sistem"}
+                        </p>
                       </div>
-                      {/* Reload Button */}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setImageError(false);
-                          setReloadCount(prev => prev + 1);
-                        }}
-                        className="gap-2"
-                      >
-                        <RotateCw className="h-4 w-4" />
-                        Muat Ulang Foto
-                      </Button>
+                      {hasPhotoData && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setImageError(false);
+                            setReloadCount(prev => prev + 1);
+                          }}
+                          className="gap-2"
+                        >
+                          <RotateCw className="h-4 w-4" />
+                          Muat Ulang Foto
+                        </Button>
+                      )}
+                      {showDebug && (
+                        <div className="mt-4 p-3 bg-slate-100 dark:bg-slate-800 rounded text-left text-[10px] font-mono max-h-48 overflow-y-auto w-full">
+                          <p className="font-bold mb-2">DEBUG INFO:</p>
+                          <p>imageUrl: {imageUrl || "null"}</p>
+                          <p>hasPhoto: {String(hasPhoto)}</p>
+                          <p>hasPhotoData: {String(hasPhotoData)}</p>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -152,10 +192,12 @@ export function AttendanceDetailModal({ isOpen, onClose, record }: AttendanceDet
             ) : (
               <div className="bg-slate-50 dark:bg-slate-900/20 rounded-lg p-6 text-center">
                 <Badge variant="outline" className="mb-2">
-                  Tidak ada foto
+                  {hasPhotoData ? "Gagal memuat foto" : "Tidak ada foto"}
                 </Badge>
                 <p className="text-sm text-slate-600 dark:text-slate-400">
-                  Bukti selfie absensi tidak tersedia
+                  {hasPhotoData
+                    ? "Data foto ada tetapi tidak dapat dimuat. Hubungi administrator."
+                    : "Bukti selfie absensi tidak tersedia"}
                 </p>
               </div>
             )}
