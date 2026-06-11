@@ -1869,12 +1869,10 @@ export default function EmployeeDetailPage({
 
   const structuralPos = hrdStruktur?.structuralPosition || normalizedData?.structuralPosition || "";
 
-  const brandLabel = isManagementLevel(structuralPos)
-    ? "Tidak berlaku untuk Direksi"
-    : hrdInfo.brandName ||
-        (empDoc as any)?.brandName ||
-        (empDoc as any)?.brand ||
-        "Belum diisi";
+  const brandLabel = hrdInfo.brandName ||
+    (empDoc as any)?.brandName ||
+    (empDoc as any)?.brand ||
+    "Belum diisi";
 
   const divisionLabel = isManagementLevel(structuralPos)
     ? "Tidak berlaku untuk Direksi"
