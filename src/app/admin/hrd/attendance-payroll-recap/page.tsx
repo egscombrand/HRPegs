@@ -121,7 +121,7 @@ export default function RekapAbsensiPayrollPage() {
     });
 
     return { recapRows: filtered, uniqueDivisions: Array.from(divs).sort() };
-  }, [employees, attendanceEvents, leaveRequests, brands, activePeriod, selectedBrand, selectedDivision, searchName]);
+  }, [employees, attendanceEvents, permissionRequests, brands, activePeriod, selectedBrand, selectedDivision, searchName]);
 
   // ── Summary stats ──
   const summary = useMemo(() => ({
