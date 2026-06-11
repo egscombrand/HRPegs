@@ -179,12 +179,29 @@ export function DashboardLayout({
         visibleKeys.add("hrd.dashboard.rekrutmen");
       }
 
+      // First pass: filter by visibility
       finalConfig = ALL_MENU_GROUPS.map((group) => ({
         ...group,
         items: group.items.filter((item) =>
           visibleKeys.has(normalizeMenuKey(item.key)),
         ),
       })).filter((group) => group.items.length > 0);
+
+      // Second pass: deduplicate menu items by normalized key
+      const seenNormalizedKeys = new Set<string>();
+      finalConfig = finalConfig
+        .map((group) => ({
+          ...group,
+          items: group.items.filter((item) => {
+            const normalizedKey = normalizeMenuKey(item.key);
+            if (seenNormalizedKeys.has(normalizedKey)) {
+              return false; // Skip duplicate
+            }
+            seenNormalizedKeys.add(normalizedKey);
+            return true;
+          }),
+        }))
+        .filter((group) => group.items.length > 0);
     }
 
     if (userProfile?.isDivisionManager) {
