@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useCollection, useFirestore, useMemoFirebase, deleteDocumentNonBlocking, setDocumentNonBlocking } from '@/firebase';
-import { collection, query, where, doc, type Timestamp, serverTimestamp } from 'firebase/firestore';
+import { useCollection, useFirestore, useMemoFirebase, deleteDocumentNonBlocking } from '@/firebase';
+import { collection, query, where, doc, type Timestamp } from 'firebase/firestore';
 import type { Brand, EmployeeProfile, AttendanceEvent } from '@/lib/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { GoogleDatePicker } from '@/components/ui/google-date-picker';
@@ -15,15 +15,13 @@ import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { getInitials } from '@/lib/utils';
 import { normalizeGoogleDriveImageUrl } from '@/lib/profile-photo';
 import Link from 'next/link';
-import { XCircle, Search, Eye, Camera, RefreshCw } from 'lucide-react';
+import { XCircle, Search, Eye, Camera } from 'lucide-react';
 import { DeleteConfirmationDialog } from './DeleteConfirmationDialog';
-import { AttendanceSyncDialog } from './AttendanceSyncDialog';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { AttendanceDetailModal } from './AttendanceDetailModal';
 import { getAttendanceImageUrl } from '@/lib/google-drive-image';
-import { extractProfileSyncData, normalizeEmployeeNumber, findEmployeeProfile } from '@/lib/attendance-sync';
 import {
   resolveProfileUid,
   resolveEventUid,
@@ -59,7 +57,6 @@ interface AttendanceRecord {
   lateMinutes: number | null;
   earlyLeaveMinutes: number | null;
   rawEvent?: any; // Original event data for accessing drive info
-  profileComplete: boolean; // Whether employee profile has complete data
 }
 
 const kpiCardsData = [
@@ -90,8 +87,6 @@ export function AttendanceMonitoringClient() {
   const [eventsToDelete, setEventsToDelete] = useState<{ tapInId: string | null, tapOutId: string | null, userName: string | null }>({ tapInId: null, tapOutId: null, userName: null });
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
-  const [isSyncDialogOpen, setIsSyncDialogOpen] = useState(false);
-  const [recordToSync, setRecordToSync] = useState<any>(null);
   const firestore = useFirestore();
   const { toast } = useToast();
 
@@ -167,79 +162,31 @@ export function AttendanceMonitoringClient() {
 
   const isLoading = isLoadingConfig || isLoadingProfiles || isLoadingBrands || isLoadingEvents || isLoadingLeaves;
 
-  // Helper: try to find matching profile by attendance record data
-  const findMatchingProfile = (attendanceRecord: any): EmployeeProfile | null => {
-    if (!allEmployeeProfiles || !employeeProfiles) return null;
-
-    // Priority 1: Try uid
-    if (attendanceRecord.uid) {
-      const match = employeeProfiles.find(p => p.id === attendanceRecord.uid);
-      if (match) return match;
-    }
-
-    // Priority 2: Try employeeProfileId
-    if (attendanceRecord.employeeProfileId) {
-      const match = employeeProfiles.find(p => p.id === attendanceRecord.employeeProfileId);
-      if (match) return match;
-    }
-
-    // Priority 3: Try employeeNumber/employeeId with normalization
-    if (attendanceRecord.employeeNumber) {
-      const normalized = normalizeEmployeeNumber(attendanceRecord.employeeNumber);
-      const matches = employeeProfiles.filter(p => {
-        const empNum = p.employeeNumber ||
-                      (p as any).employeeId ||
-                      (p as any).employeeCode ||
-                      (p as any).nomorIndukKaryawan ||
-                      (p as any).nomorInduk;
-        return normalizeEmployeeNumber(empNum) === normalized;
-      });
-      if (matches.length === 1) return matches[0]; // Only return if single match
-      if (matches.length > 1) return null; // Multiple matches - need manual selection
-    }
-
-    // Priority 4: Try email
-    if (attendanceRecord.email) {
-      const match = employeeProfiles.find(p =>
-        p.email?.toLowerCase() === attendanceRecord.email.toLowerCase()
-      );
-      if (match) return match;
-    }
-
-    return null;
-  };
-
-  // Helper: resolve name from profile with comprehensive fallback
-  const resolveName = (profile: any): string => {
-    // Priority order: fullName variants
+  // Helper: resolve name from profile or event with comprehensive fallback
+  const resolveName = (profile: any, event?: any): string => {
+    // Priority 1: Profile fullName variants
     if (profile.fullName) return profile.fullName;
     if (profile.dataDiriIdentitas?.fullName) return profile.dataDiriIdentitas.fullName;
-
-    // Check alternative naming fields
     if (profile.namaLengkap) return profile.namaLengkap;
     if (profile.displayName) return profile.displayName;
     if (profile.name) return profile.name;
 
-    // Last resort: use email or employeeNumber
+    // Priority 2: Event name fields (if event data available)
+    if (event?.employeeName) return event.employeeName;
+    if (event?.name) return event.name;
+    if (event?.displayName) return event.displayName;
+
+    // Priority 3: Fallback to email
     if (profile.email) return profile.email;
-    if (profile.employeeNumber) return `ID: ${profile.employeeNumber}`;
-    if (profile.employeeId) return `ID: ${profile.employeeId}`;
+    if (event?.email) return event.email;
 
-    // Only if completely empty, indicate need for profile sync
-    return 'Profil tidak ditemukan';
-  };
+    // Priority 4: Fallback to employeeNumber
+    if (profile.employeeNumber) return profile.employeeNumber;
+    if (profile.employeeId) return profile.employeeId;
+    if (event?.employeeNumber) return event.employeeNumber;
 
-  // Helper: check if profile has complete data
-  const hasCompleteProfile = (profile: any): boolean => {
-    const hasName = profile.fullName ||
-                   profile.dataDiriIdentitas?.fullName ||
-                   profile.namaLengkap ||
-                   profile.displayName ||
-                   profile.name;
-    const hasEmployeeId = profile.employeeNumber ||
-                         profile.employeeId ||
-                         profile.employeeCode;
-    return !!(hasName && hasEmployeeId);
+    // Last resort: indicate incomplete data without blocking
+    return 'Data karyawan belum lengkap';
   };
 
   // Helper: resolve employee number
@@ -363,28 +310,10 @@ export function AttendanceMonitoringClient() {
       .map((profile: any) => {
       const profileUid = getProfileUid(profile)!;
       const resolvedEmployeeNumber = resolveEmployeeNumber(profile);
-
-      // Try to find better matching profile if current one is incomplete
-      let workingProfile = profile;
-      let resolvedName = resolveName(profile);
-
-      // If name is not found and we have employeeNumber, try auto-lookup
-      if (resolvedName === 'Profil tidak ditemukan' && resolvedEmployeeNumber && resolvedEmployeeNumber !== 'ID belum diatur') {
-        const matchingProfiles = findEmployeeProfile(allEmployeeProfiles || [], {
-          employeeNumber: resolvedEmployeeNumber
-        });
-
-        // If single match found, use it; if multiple matches, show sync dialog later
-        if (matchingProfiles.length === 1) {
-          workingProfile = matchingProfiles[0];
-          resolvedName = resolveName(workingProfile);
-        }
-      }
-
-      const resolvedBrand = resolveBrandName(workingProfile, brandMap);
-      const resolvedBrandId = workingProfile.hrdEmploymentInfo?.brandId || workingProfile.brandId;
-      const resolvedDivision = resolveDivisionName(workingProfile);
-      const attendanceMethod = resolveAttendanceMethod(workingProfile);
+      const resolvedBrand = resolveBrandName(profile, brandMap);
+      const resolvedBrandId = profile.hrdEmploymentInfo?.brandId || profile.brandId;
+      const resolvedDivision = resolveDivisionName(profile);
+      const attendanceMethod = resolveAttendanceMethod(profile);
 
       // Join with attendance events - using robust UID matching
       const userEvents = attendanceEvents?.filter((e: any) => {
@@ -396,6 +325,9 @@ export function AttendanceMonitoringClient() {
       // Find check-in and check-out events using robust type detection
       const checkInEvent = userEvents.find((e: any) => isCheckInEvent(e.type));
       const checkOutEvent = userEvents.find((e: any) => isCheckOutEvent(e.type));
+
+      // Resolve name with fallback to event data
+      const resolvedName = resolveName(profile, checkInEvent || checkOutEvent);
 
       // Debug: log for first few matches
       if (debugMatchStats.length < 3) {
@@ -513,7 +445,6 @@ export function AttendanceMonitoringClient() {
         lateMinutes,
         earlyLeaveMinutes,
         rawEvent: checkInEvent || checkOutEvent, // Store original event for getting best image URL
-        profileComplete: hasCompleteProfile(workingProfile), // Track whether profile has complete data
       };
     });
 
@@ -638,43 +569,6 @@ export function AttendanceMonitoringClient() {
     return Array.from(brands);
   }, [employeeProfiles]);
 
-  // Handle profile synchronization
-  const handleSyncProfile = async (attendanceUid: string, selectedProfileId: string) => {
-    if (!firestore || !allEmployeeProfiles) return;
-
-    const selectedProfile = allEmployeeProfiles.find(p => p.id === selectedProfileId);
-    if (!selectedProfile) {
-      throw new Error('Profile tidak ditemukan');
-    }
-
-    try {
-      const syncData = extractProfileSyncData(selectedProfile);
-
-      // Update attendance_settings document (using uid as doc id)
-      const attendanceSettingsRef = doc(firestore, 'attendance_settings', attendanceUid);
-      await setDocumentNonBlocking(
-        attendanceSettingsRef,
-        {
-          ...syncData,
-          lastSyncedAt: serverTimestamp(),
-          syncStatus: 'synced',
-        },
-        { merge: true }
-      );
-
-      toast({
-        title: 'Sinkronisasi Berhasil',
-        description: `Profil ${selectedProfile.fullName} telah terhubung.`,
-      });
-
-      // Refresh events to update table
-      mutateEvents();
-    } catch (error: any) {
-      console.error('[AttendanceSync] Error:', error);
-      throw error;
-    }
-  };
-
   return (
     <div className="space-y-6">
       {/* Filter Controls */}
@@ -758,14 +652,7 @@ export function AttendanceMonitoringClient() {
                 {tableData.length > 0 ? tableData.map((row, idx) => (
                   <TableRow key={`${row.id}-${idx}`} className="border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50">
                     <TableCell className="font-medium text-slate-900 dark:text-white">
-                      <div className="space-y-1">
-                        <p className="font-semibold">{row.name}</p>
-                        {!row.profileComplete && (
-                          <Badge variant="outline" className="text-[10px] bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800">
-                            Perlu sinkronisasi data
-                          </Badge>
-                        )}
-                      </div>
+                      <p className="font-semibold">{row.name}</p>
                     </TableCell>
                     <TableCell className="text-xs text-slate-600 dark:text-slate-400">
                       {row.employeeNumber}
@@ -882,47 +769,29 @@ export function AttendanceMonitoringClient() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        {row.name === 'Profil tidak ditemukan' ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1 text-xs"
+                          onClick={() => {
+                            setSelectedRecord(row);
+                            setIsDetailModalOpen(true);
+                          }}
+                          title="Lihat detail absensi"
+                        >
+                          Detail
+                        </Button>
+                        {row.tapInId || row.tapOutId ? (
                           <Button
-                            variant="outline"
-                            size="sm"
-                            className="gap-1 text-xs text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-900/20"
-                            onClick={() => {
-                              setRecordToSync(row);
-                              setIsSyncDialogOpen(true);
-                            }}
-                            title="Sinkronkan profil karyawan"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleCancelClick(row)}
+                            title="Batalkan absensi"
+                            className="h-9 w-9"
                           >
-                            <RefreshCw className="h-3.5 w-3.5" />
-                            Sinkronkan
+                            <XCircle className="h-4 w-4 text-red-600 dark:text-red-500" />
                           </Button>
-                        ) : (
-                          <>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="gap-1 text-xs"
-                              onClick={() => {
-                                setSelectedRecord(row);
-                                setIsDetailModalOpen(true);
-                              }}
-                              title="Lihat detail absensi"
-                            >
-                              Detail
-                            </Button>
-                            {row.tapInId || row.tapOutId ? (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleCancelClick(row)}
-                                title="Batalkan absensi"
-                                className="h-9 w-9"
-                              >
-                                <XCircle className="h-4 w-4 text-red-600 dark:text-red-500" />
-                              </Button>
-                            ) : null}
-                          </>
-                        )}
+                        ) : null}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -956,15 +825,6 @@ export function AttendanceMonitoringClient() {
           setSelectedRecord(null);
         }}
         record={selectedRecord}
-      />
-
-      {/* Sync Dialog */}
-      <AttendanceSyncDialog
-        open={isSyncDialogOpen}
-        onOpenChange={setIsSyncDialogOpen}
-        attendanceRecord={recordToSync}
-        employeeProfiles={allEmployeeProfiles || []}
-        onSync={handleSyncProfile}
       />
     </div>
   );

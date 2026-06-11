@@ -96,14 +96,6 @@ export default function RekapAbsensiPayrollPage() {
   );
   const { data: brands } = useCollection<Brand>(brandsQuery);
 
-  if (!hasAccess) {
-    return <DashboardLayout pageTitle="Rekap Absensi Payroll"><Skeleton className="h-[600px] w-full" /></DashboardLayout>;
-  }
-
-  if (loadingEmployees) {
-    return <DashboardLayout pageTitle="Rekap Absensi Payroll"><Skeleton className="h-[600px] w-full" /></DashboardLayout>;
-  }
-
   // Filter employees
   const filteredEmployees = useMemo(() => {
     if (!employees) return [];
@@ -132,6 +124,15 @@ export default function RekapAbsensiPayrollPage() {
     // TODO: Implement Excel export
     console.log("Export clicked");
   };
+
+  // Conditional renders after all hooks
+  if (!hasAccess) {
+    return <DashboardLayout pageTitle="Rekap Absensi Payroll"><Skeleton className="h-[600px] w-full" /></DashboardLayout>;
+  }
+
+  if (loadingEmployees) {
+    return <DashboardLayout pageTitle="Rekap Absensi Payroll"><Skeleton className="h-[600px] w-full" /></DashboardLayout>;
+  }
 
   return (
     <DashboardLayout pageTitle="Rekap Absensi Payroll">
