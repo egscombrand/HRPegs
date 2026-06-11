@@ -179,29 +179,13 @@ export function DashboardLayout({
         visibleKeys.add("hrd.dashboard.rekrutmen");
       }
 
-      // First pass: filter by visibility
+      // Filter by visibility
       finalConfig = ALL_MENU_GROUPS.map((group) => ({
         ...group,
         items: group.items.filter((item) =>
           visibleKeys.has(normalizeMenuKey(item.key)),
         ),
       })).filter((group) => group.items.length > 0);
-
-      // Second pass: deduplicate menu items by normalized key
-      const seenNormalizedKeys = new Set<string>();
-      finalConfig = finalConfig
-        .map((group) => ({
-          ...group,
-          items: group.items.filter((item) => {
-            const normalizedKey = normalizeMenuKey(item.key);
-            if (seenNormalizedKeys.has(normalizedKey)) {
-              return false; // Skip duplicate
-            }
-            seenNormalizedKeys.add(normalizedKey);
-            return true;
-          }),
-        }))
-        .filter((group) => group.items.length > 0);
     }
 
     if (userProfile?.isDivisionManager) {
@@ -424,21 +408,6 @@ export function DashboardLayout({
           icon: createElement(MapPin),
         });
       }
-      if (
-        isManagementLevel &&
-        (!hasNavSettings ||
-          visibleKeys.has(
-            normalizeMenuKey("management.business_trip_missions"),
-          ))
-      ) {
-        personalItems.push({
-          key: "management.business_trip_missions",
-          href: "/admin/management/perjalanan-dinas",
-          label: "Perjalanan Dinas / Misi Dinas",
-          icon: createElement(MapPin),
-        });
-      }
-
       if (personalItems.length > 0) {
         // Replace existing Personal group or add new one
         const existingIdx = currentConfig.findIndex(
@@ -463,6 +432,28 @@ export function DashboardLayout({
             { title: "Personal", items: mergedItems },
           ];
         }
+      }
+    }
+
+    // Final deduplication: Personal group wins over all other groups.
+    // Remove any item from non-Personal groups if the same item exists in Personal.
+    {
+      const personalGroup = currentConfig.find((g) => g.title === "Personal");
+      if (personalGroup && personalGroup.items.length > 0) {
+        const personalKeys = new Set(
+          personalGroup.items.map((i) => normalizeMenuKey(i.key)),
+        );
+        currentConfig = currentConfig
+          .map((group) => {
+            if (group.title === "Personal") return group;
+            return {
+              ...group,
+              items: group.items.filter(
+                (item) => !personalKeys.has(normalizeMenuKey(item.key)),
+              ),
+            };
+          })
+          .filter((g) => g.items.length > 0);
       }
     }
 
