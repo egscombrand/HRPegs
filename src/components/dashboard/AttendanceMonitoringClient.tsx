@@ -23,7 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { AttendanceDetailModal } from './AttendanceDetailModal';
 import { getAttendanceImageUrl } from '@/lib/google-drive-image';
-import { extractProfileSyncData } from '@/lib/attendance-sync';
+import { extractProfileSyncData, normalizeEmployeeNumber, findEmployeeProfile } from '@/lib/attendance-sync';
 import {
   resolveProfileUid,
   resolveEventUid,
@@ -166,6 +166,48 @@ export function AttendanceMonitoringClient() {
   const { data: leaveRequests, isLoading: isLoadingLeaves } = useCollection<any>(leavesQuery);
 
   const isLoading = isLoadingConfig || isLoadingProfiles || isLoadingBrands || isLoadingEvents || isLoadingLeaves;
+
+  // Helper: try to find matching profile by attendance record data
+  const findMatchingProfile = (attendanceRecord: any): EmployeeProfile | null => {
+    if (!allEmployeeProfiles || !employeeProfiles) return null;
+
+    // Priority 1: Try uid
+    if (attendanceRecord.uid) {
+      const match = employeeProfiles.find(p => p.id === attendanceRecord.uid);
+      if (match) return match;
+    }
+
+    // Priority 2: Try employeeProfileId
+    if (attendanceRecord.employeeProfileId) {
+      const match = employeeProfiles.find(p => p.id === attendanceRecord.employeeProfileId);
+      if (match) return match;
+    }
+
+    // Priority 3: Try employeeNumber/employeeId with normalization
+    if (attendanceRecord.employeeNumber) {
+      const normalized = normalizeEmployeeNumber(attendanceRecord.employeeNumber);
+      const matches = employeeProfiles.filter(p => {
+        const empNum = p.employeeNumber ||
+                      (p as any).employeeId ||
+                      (p as any).employeeCode ||
+                      (p as any).nomorIndukKaryawan ||
+                      (p as any).nomorInduk;
+        return normalizeEmployeeNumber(empNum) === normalized;
+      });
+      if (matches.length === 1) return matches[0]; // Only return if single match
+      if (matches.length > 1) return null; // Multiple matches - need manual selection
+    }
+
+    // Priority 4: Try email
+    if (attendanceRecord.email) {
+      const match = employeeProfiles.find(p =>
+        p.email?.toLowerCase() === attendanceRecord.email.toLowerCase()
+      );
+      if (match) return match;
+    }
+
+    return null;
+  };
 
   // Helper: resolve name from profile with comprehensive fallback
   const resolveName = (profile: any): string => {
@@ -320,12 +362,29 @@ export function AttendanceMonitoringClient() {
       })
       .map((profile: any) => {
       const profileUid = getProfileUid(profile)!;
-      const resolvedName = resolveName(profile);
       const resolvedEmployeeNumber = resolveEmployeeNumber(profile);
-      const resolvedBrand = resolveBrandName(profile, brandMap);
-      const resolvedBrandId = profile.hrdEmploymentInfo?.brandId || profile.brandId;
-      const resolvedDivision = resolveDivisionName(profile);
-      const attendanceMethod = resolveAttendanceMethod(profile);
+
+      // Try to find better matching profile if current one is incomplete
+      let workingProfile = profile;
+      let resolvedName = resolveName(profile);
+
+      // If name is not found and we have employeeNumber, try auto-lookup
+      if (resolvedName === 'Profil tidak ditemukan' && resolvedEmployeeNumber && resolvedEmployeeNumber !== 'ID belum diatur') {
+        const matchingProfiles = findEmployeeProfile(allEmployeeProfiles || [], {
+          employeeNumber: resolvedEmployeeNumber
+        });
+
+        // If single match found, use it; if multiple matches, show sync dialog later
+        if (matchingProfiles.length === 1) {
+          workingProfile = matchingProfiles[0];
+          resolvedName = resolveName(workingProfile);
+        }
+      }
+
+      const resolvedBrand = resolveBrandName(workingProfile, brandMap);
+      const resolvedBrandId = workingProfile.hrdEmploymentInfo?.brandId || workingProfile.brandId;
+      const resolvedDivision = resolveDivisionName(workingProfile);
+      const attendanceMethod = resolveAttendanceMethod(workingProfile);
 
       // Join with attendance events - using robust UID matching
       const userEvents = attendanceEvents?.filter((e: any) => {
@@ -454,7 +513,7 @@ export function AttendanceMonitoringClient() {
         lateMinutes,
         earlyLeaveMinutes,
         rawEvent: checkInEvent || checkOutEvent, // Store original event for getting best image URL
-        profileComplete: hasCompleteProfile(profile), // Track whether profile has complete data
+        profileComplete: hasCompleteProfile(workingProfile), // Track whether profile has complete data
       };
     });
 

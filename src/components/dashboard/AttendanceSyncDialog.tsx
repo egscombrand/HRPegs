@@ -59,9 +59,14 @@ export function AttendanceSyncDialog({
 }: AttendanceSyncDialogProps) {
   const { toast } = useToast();
   const [step, setStep] = useState<SyncStep>("search");
-  const [searchInput, setSearchInput] = useState("");
+
+  // Auto-fill with attendance record data if available
+  const initialSearchInput = attendanceRecord?.employeeNumber || attendanceRecord?.email || "";
+  const initialSearchBy = attendanceRecord?.employeeNumber ? "employeeNumber" : "email";
+
+  const [searchInput, setSearchInput] = useState(initialSearchInput);
   const [searchBy, setSearchBy] = useState<"employeeNumber" | "email">(
-    "employeeNumber"
+    initialSearchBy as "employeeNumber" | "email"
   );
   const [selectedProfileId, setSelectedProfileId] = useState("");
   const [loading, setLoading] = useState(false);
@@ -162,11 +167,11 @@ export function AttendanceSyncDialog({
               <Label>Cari Profil Karyawan</Label>
               <div className="flex gap-2">
                 <Select value={searchBy} onValueChange={(v: any) => setSearchBy(v)}>
-                  <SelectTrigger className="w-[140px]">
+                  <SelectTrigger className="w-[160px]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="employeeNumber">No. ID</SelectItem>
+                    <SelectItem value="employeeNumber">No. Identitas / NIK</SelectItem>
                     <SelectItem value="email">Email</SelectItem>
                   </SelectContent>
                 </Select>
