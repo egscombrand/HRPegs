@@ -2175,7 +2175,7 @@ export default function EmployeeDetailPage({
                       <CardContent className="p-8">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-2">
                           <DataRow label="Brand / Unit" value={brandLabel} />
-                          <DataRow label="Division" value={divisionLabel} />
+                          {!isDirectorEmployee && <DataRow label="Division" value={divisionLabel} />}
                           <DataRow label="Position" value={positionLabel} />
                           <DataRow
                             label="Manager/Atasan"
@@ -3072,7 +3072,7 @@ export default function EmployeeDetailPage({
                           <div className="grid grid-cols-1 gap-y-2">
                             <DataRow label="Nomor Induk Magang" value={hrdInfo.internId || "Belum diisi"} />
                             <DataRow label="Brand / Unit" value={brandLabel} />
-                            <DataRow label="Divisi" value={divisionLabel} />
+                            {!isDirectorEmployee && <DataRow label="Divisi" value={divisionLabel} />}
                             <DataRow label="Role / Posisi Magang" value={hrdInfo.workRole || hrdInfo.internshipRole || "Belum diisi"} />
                             <DataRow label="PIC / Pembimbing Internal" value={supervisorLabel} />
                             <DataRow label="Lokasi Penempatan" value={hrdInfo.internshipLocation || hrdInfo.workLocation || "Belum diisi"} />
