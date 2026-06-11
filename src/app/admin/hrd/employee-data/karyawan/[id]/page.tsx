@@ -117,7 +117,7 @@ import {
   DollarSign,
   BarChart3,
   Clock,
-  Fingerprint,
+  CreditCard,
   Monitor,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
@@ -2735,8 +2735,8 @@ export default function EmployeeDetailPage({
                               ? "bg-teal-100 dark:bg-teal-800 text-teal-600 dark:text-teal-300"
                               : "bg-blue-100 dark:bg-blue-800 text-blue-600 dark:text-blue-300"
                           }`}>
-                            {profileDoc.attendanceMethod === "fingerprint"
-                              ? <Fingerprint className="h-5 w-5" />
+                            {profileDoc.attendanceMethod === "fingerprint" || profileDoc.attendanceMethod === "id_card"
+                              ? <CreditCard className="h-5 w-5" />
                               : <Monitor className="h-5 w-5" />
                             }
                           </div>
@@ -2745,11 +2745,11 @@ export default function EmployeeDetailPage({
                               Metode Absensi
                             </p>
                             <p className={`text-sm font-semibold ${
-                              profileDoc.attendanceMethod === "fingerprint"
+                              profileDoc.attendanceMethod === "fingerprint" || profileDoc.attendanceMethod === "id_card"
                                 ? "text-teal-700 dark:text-teal-300"
                                 : "text-blue-700 dark:text-blue-300"
                             }`}>
-                              {profileDoc.attendanceMethod === "fingerprint" ? "Fingerprint" : "Web Absen"}
+                              {profileDoc.attendanceMethod === "fingerprint" || profileDoc.attendanceMethod === "id_card" ? "ID Card" : "Web Absen"}
                             </p>
                           </div>
                         </div>

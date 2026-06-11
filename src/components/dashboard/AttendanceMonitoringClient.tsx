@@ -367,7 +367,7 @@ export function AttendanceMonitoringClient() {
         status = 'Selesai';
         summary.hadir++;
       } else if (attendanceMethod === 'fingerprint' && !tapIn) {
-        status = 'Fingerprint';
+        status = 'ID Card';
         summary.fingerprint++;
       } else if (attendanceMethod === 'web_absen' && !tapIn) {
         status = 'Belum Tap In';
@@ -606,7 +606,7 @@ export function AttendanceMonitoringClient() {
           {/* Info Banner */}
           <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
             <p className="text-sm text-blue-700 dark:text-blue-300">
-              <span className="font-semibold">ℹ️ Monitoring ini hanya menampilkan karyawan dengan metode Web Absen.</span> Karyawan Fingerprint tidak ditampilkan di halaman ini.
+              <span className="font-semibold">ℹ️ Monitoring ini hanya menampilkan karyawan dengan metode Web Absen.</span> Karyawan ID Card tidak ditampilkan di halaman ini.
             </p>
           </div>
 
@@ -652,7 +652,7 @@ export function AttendanceMonitoringClient() {
                       } className={
                         row.attendanceMethod === 'not_set' ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300' : ''
                       }>
-                        {row.attendanceMethod === 'fingerprint' ? 'Fingerprint' :
+                        {row.attendanceMethod === 'fingerprint' ? 'ID Card' :
                          row.attendanceMethod === 'web_absen' ? 'Web Absen' :
                          'Belum Diatur'}
                       </Badge>
@@ -722,7 +722,7 @@ export function AttendanceMonitoringClient() {
                           ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
                           : row.status === 'Cuti Tahunan'
                           ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300'
-                          : row.status === 'Fingerprint'
+                          : row.status === 'ID Card'
                           ? 'bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300'
                           : 'bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300'
                       }>

@@ -9,17 +9,17 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Loader2, Fingerprint, Monitor } from "lucide-react";
+import { Loader2, CreditCard, Monitor } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { AttendanceSettings } from "@/lib/attendance-methods";
 import type { EmployeeProfile, AttendanceSite } from "@/lib/types";
 
 const METHODS = [
   {
-    value: "fingerprint",
-    label: "Fingerprint",
-    description: "Karyawan absen menggunakan mesin fingerprint.",
-    icon: Fingerprint,
+    value: "id_card",
+    label: "ID Card",
+    description: "Karyawan absen menggunakan ID Card / kartu identitas karyawan.",
+    icon: CreditCard,
     color: "teal",
   },
   {
@@ -47,16 +47,27 @@ export function AttendanceMethodEditDialog({
 }: AttendanceMethodEditDialogProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [selected, setSelected] = useState<"fingerprint" | "web_absen">(
-    (employee?.attendanceMethod as "fingerprint" | "web_absen") || "fingerprint"
-  );
+  const [selected, setSelected] = useState<"id_card" | "web_absen">(() => {
+    const method = employee?.attendanceMethod as string;
+    // Backward compatibility: treat "fingerprint" as "id_card"
+    if (method === "fingerprint") return "id_card";
+    if (method === "id_card") return "id_card";
+    if (method === "web_absen") return "web_absen";
+    return "id_card";
+  });
 
   // Sync selected with current employee setting when dialog opens
   useEffect(() => {
     if (open) {
-      setSelected(
-        (employee?.attendanceMethod as "fingerprint" | "web_absen") || "fingerprint"
-      );
+      const method = employee?.attendanceMethod as string;
+      // Backward compatibility: treat "fingerprint" as "id_card"
+      if (method === "fingerprint") {
+        setSelected("id_card");
+      } else if (method === "web_absen") {
+        setSelected("web_absen");
+      } else {
+        setSelected("id_card");
+      }
     }
   }, [open, employee?.attendanceMethod]);
 
@@ -88,7 +99,7 @@ export function AttendanceMethodEditDialog({
       });
       toast({
         title: "Berhasil disimpan",
-        description: `Metode absensi ${employee?.dataDiriIdentitas?.fullName || "karyawan"} diperbarui ke ${selected === "fingerprint" ? "Fingerprint" : "Web Absen"}.`,
+        description: `Metode absensi ${employee?.dataDiriIdentitas?.fullName || "karyawan"} diperbarui ke ${selected === "id_card" ? "ID Card" : "Web Absen"}.`,
       });
       onOpenChange(false);
     } catch (error) {

@@ -246,7 +246,7 @@ export function AttendanceDetailModal({ isOpen, onClose, record }: AttendanceDet
                 <div className="col-span-2">
                   <p className="text-xs text-slate-600 dark:text-slate-400 font-medium mb-0.5">Metode</p>
                   <Badge variant="outline" className="text-xs">
-                    {record.attendanceMethod === 'web_absen' ? 'Web Absen' : 'Fingerprint'}
+                    {record.attendanceMethod === 'web_absen' ? 'Web Absen' : 'ID Card'}
                   </Badge>
                 </div>
               </div>
