@@ -124,26 +124,25 @@ import {
 import { LeaveDetailModalClient } from "@/components/ui/LeaveDetailModalClient";
 
 // Validation helpers
-function isAtLeastTwoWorkingDaysAhead(startDate: Date): boolean {
+function isAtLeast14DaysAhead(startDate: Date): boolean {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const start = new Date(startDate);
     start.setHours(0, 0, 0, 0);
 
-    // Count working days from tomorrow to start date
-    let temp = addDays(today, 1);
-    let workingDaysCount = 0;
-    while (temp <= start) {
-      if (!isSaturday(temp) && !isSunday(temp)) {
-        workingDaysCount++;
-      }
-      temp = addDays(temp, 1);
-    }
-    return workingDaysCount >= 2;
+    // Minimum date must be at least 14 days from today
+    const minimumDate = addDays(today, 14);
+    return start >= minimumDate;
   } catch {
     return false;
   }
+}
+
+function getMinimumLeaveDate(): Date {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return addDays(today, 14);
 }
 
 function cleanUndefinedFields<T extends object>(obj: T): Partial<T> {
@@ -194,6 +193,16 @@ const formSchema = z
     attachment: z.any().optional(),
   })
   .superRefine((data, ctx) => {
+    // Check H-14 rule for start date
+    if (!isAtLeast14DaysAhead(data.startDate)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["startDate"],
+        message: "Pengajuan cuti minimal diajukan H-14 sebelum tanggal mulai cuti.",
+      });
+    }
+
+    // Check end date is not before start date
     if (data.endDate < data.startDate) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -441,22 +450,11 @@ export function LeaveSubmissionClient() {
       };
     }
 
-    // 2. Pilih hari ini
-    if (start.getTime() === today.getTime()) {
+    // 2. Check H-14 rule (at least 14 calendar days ahead)
+    if (!isAtLeast14DaysAhead(watchStartDate)) {
       return {
         isValid: false,
-        warning: "Cuti tidak bisa diajukan pada hari yang sama.",
-        errorField: "startDate" as const,
-        dur: 0,
-      };
-    }
-
-    // 3. Pilih H-1
-    if (!isAtLeastTwoWorkingDaysAhead(watchStartDate)) {
-      return {
-        isValid: false,
-        warning:
-          "Pengajuan cuti minimal H-2 hari kerja sebelum tanggal mulai cuti.",
+        warning: "Pengajuan cuti minimal diajukan H-14 sebelum tanggal mulai cuti.",
         errorField: "startDate" as const,
         dur: 0,
       };
@@ -1355,8 +1353,15 @@ export function LeaveSubmissionClient() {
                           <GoogleDatePicker
                             value={field.value}
                             onChange={field.onChange}
+                            disabledDate={(date) => {
+                              const minDate = getMinimumLeaveDate();
+                              return date < minDate;
+                            }}
                           />
                         </FormControl>
+                        <FormDescription className="text-xs text-muted-foreground mt-1">
+                          Cuti hanya dapat diajukan minimal 14 hari sebelum tanggal mulai cuti.
+                        </FormDescription>
                         {validationResult.errorField === "startDate" && (
                           <p className="text-[11px] font-bold text-red-500 mt-1 flex items-center gap-1">
                             <AlertTriangle className="h-3 w-3" />{" "}

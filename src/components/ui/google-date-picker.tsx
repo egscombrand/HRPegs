@@ -44,6 +44,7 @@ export type GoogleDatePickerProps = {
   disabled?: boolean;
   className?: string;
   portalled?: boolean;
+  disabledDate?: (date: Date) => boolean;
 };
 
 export const GoogleDatePicker = React.forwardRef<
@@ -63,6 +64,7 @@ export const GoogleDatePicker = React.forwardRef<
       disabled,
       className,
       portalled = true,
+      disabledDate,
     },
     ref,
   ) => {
@@ -198,25 +200,31 @@ export const GoogleDatePicker = React.forwardRef<
           ))}
         </div>
         <div className="grid grid-cols-7">
-          {days.map((day) => (
-            <div key={day.toISOString()} className="p-0.5">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => handleSelectDate(day)}
-                className={cn(
-                  "h-8 w-8 p-0 rounded-full font-normal",
-                  !isSameMonth(day, cursorDate) && "text-muted-foreground/50",
-                  isToday(day) && "ring-1 ring-primary/40",
-                  value &&
-                    isSameDay(day, value) &&
-                    "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground",
-                )}
-              >
-                {format(day, "d")}
-              </Button>
-            </div>
-          ))}
+          {days.map((day) => {
+            const isDisabled = disabledDate?.(day) ?? false;
+            return (
+              <div key={day.toISOString()} className="p-0.5">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => handleSelectDate(day)}
+                  disabled={isDisabled}
+                  className={cn(
+                    "h-8 w-8 p-0 rounded-full font-normal",
+                    !isSameMonth(day, cursorDate) && "text-muted-foreground/50",
+                    isToday(day) && !isDisabled && "ring-1 ring-primary/40",
+                    isDisabled && "text-muted-foreground/30 cursor-not-allowed hover:bg-transparent",
+                    value &&
+                      isSameDay(day, value) &&
+                      !isDisabled &&
+                      "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground",
+                  )}
+                >
+                  {format(day, "d")}
+                </Button>
+              </div>
+            );
+          })}
         </div>
       </>
     );
