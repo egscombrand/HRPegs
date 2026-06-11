@@ -41,7 +41,6 @@ export interface PayrollRecapRow {
   alpha: number;
 
   // Work stats
-  lembur: number;
   totalJamKerja: number;
 
   // Metadata
@@ -238,10 +237,6 @@ export function generateEmployeePayrollRecap(
   // Calculate alpha
   const alpha = Math.max(0, hariKerja - hadir - izin - cuti - sakit - dinas);
 
-  // Count overtime
-  const employeeOT = overtimeData.filter(ot => ot.employeeId === employeeId && ot.status === 'approved');
-  const lembur = employeeOT.reduce((sum, ot) => sum + (ot.hours || 0), 0);
-
   // Convert minutes to hours for totalJamKerja
   const totalJamKerjaHours = Math.floor(totalJamKerja / 60);
 
@@ -265,7 +260,6 @@ export function generateEmployeePayrollRecap(
     sakit,
     dinas,
     alpha,
-    lembur,
     totalJamKerja: totalJamKerjaHours,
     joinDate: employee.joinDate instanceof Date ? employee.joinDate : undefined,
     resignDate: (employee as any).resignDate instanceof Date ? (employee as any).resignDate : undefined,
@@ -273,6 +267,15 @@ export function generateEmployeePayrollRecap(
     effectiveEnd,
     isPartial,
   };
+}
+
+/**
+ * Helper: normalize and check if attendance method is Web Absen
+ */
+function isWebAbsenMethod(method: any): boolean {
+  if (!method) return false;
+  const normalized = String(method).toLowerCase().trim();
+  return normalized === 'web_absen' || normalized === 'web_absen' || normalized === 'web';
 }
 
 /**
@@ -295,6 +298,12 @@ export function generatePayrollRecap(
       if ((emp as any).isActive === false) return false;
       const status = (emp as any).status || (emp as any).employmentStatus || '';
       if (status === 'inactive' || status === 'nonaktif') return false;
+
+      // Only Web Absen employees
+      const attendanceMethod = (emp as any).attendanceMethod ||
+                              (emp as any).hrdEmploymentInfo?.attendanceMethod;
+      if (!isWebAbsenMethod(attendanceMethod)) return false;
+
       return true;
     })
     .map(emp => generateEmployeePayrollRecap(

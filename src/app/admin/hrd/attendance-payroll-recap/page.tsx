@@ -404,9 +404,6 @@ export default function RekapAbsensiPayrollPage() {
                       Alpha
                     </TableHead>
                     <TableHead className="text-[10px] uppercase font-black text-slate-500 dark:text-slate-400 h-12 text-right">
-                      Lembur
-                    </TableHead>
-                    <TableHead className="text-[10px] uppercase font-black text-slate-500 dark:text-slate-400 h-12 text-right">
                       Total Jam
                     </TableHead>
                   </TableRow>
@@ -461,9 +458,6 @@ export default function RekapAbsensiPayrollPage() {
                             "—"
                           )}
                         </TableCell>
-                        <TableCell className="text-sm text-slate-800 dark:text-slate-200 text-right tabular-nums">
-                          {row.lembur > 0 ? row.lembur : "—"}
-                        </TableCell>
                         <TableCell className="text-sm text-slate-800 dark:text-slate-200 text-right tabular-nums font-medium">
                           {row.totalJamKerja}h
                         </TableCell>
@@ -471,7 +465,7 @@ export default function RekapAbsensiPayrollPage() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={12} className="text-center py-8 text-slate-600 dark:text-slate-400">
+                      <TableCell colSpan={11} className="text-center py-8 text-slate-600 dark:text-slate-400">
                         <div className="flex flex-col items-center gap-2">
                           <AlertCircle className="h-5 w-5 text-slate-400" />
                           <p>Tidak ada data untuk periode dan filter yang dipilih</p>
@@ -492,9 +486,9 @@ export default function RekapAbsensiPayrollPage() {
               <CardTitle className="text-sm">Ringkasan</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 <div>
-                  <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Total Karyawan</p>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Total Karyawan Web Absen</p>
                   <p className="text-lg font-bold text-slate-900 dark:text-white">{recapRows.length}</p>
                 </div>
                 <div>
@@ -507,12 +501,6 @@ export default function RekapAbsensiPayrollPage() {
                   <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Total Alpha</p>
                   <p className="text-lg font-bold text-red-600 dark:text-red-400">
                     {recapRows.reduce((sum, r) => sum + r.alpha, 0)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Total Lembur</p>
-                  <p className="text-lg font-bold text-slate-900 dark:text-white">
-                    {recapRows.reduce((sum, r) => sum + r.lembur, 0)}h
                   </p>
                 </div>
               </div>
