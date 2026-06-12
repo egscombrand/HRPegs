@@ -406,8 +406,8 @@ export function generateEmployeePayrollRecap(
     } catch { /* skip */ }
   }
 
-  const dinas = leavesInPeriod.filter(l => {
-    const t = (l.type || l.leaveType || '').toLowerCase();
+  const dinas = permissionsInPeriod.filter(p => {
+    const t = (p.type || p.formType || '').toLowerCase();
     return t === 'dinas' || t === 'business_trip';
   }).length;
 
