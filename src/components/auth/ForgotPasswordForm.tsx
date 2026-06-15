@@ -81,7 +81,7 @@ export function ForgotPasswordForm() {
                 Masukkan alamat email yang terdaftar untuk menerima tautan reset kata sandi.
               </FormDescription>
               <FormControl>
-                <Input placeholder="name@example.com" {...field} autoComplete="email" />
+                <Input placeholder="nama@gmail.com" {...field} autoComplete="email" />
               </FormControl>
               <FormMessage />
             </FormItem>

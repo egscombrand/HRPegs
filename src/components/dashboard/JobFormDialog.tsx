@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import { useRouter } from 'next/navigation';
 import { doc, collection, serverTimestamp, query, where, Timestamp } from 'firebase/firestore';
 import { uploadFile } from '@/lib/storage/storage-adapter';
 import { validateStorageFile, compressImage, handleStorageError } from "@/lib/storage-utils";
@@ -19,12 +20,19 @@ import {
 } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, UploadCloud, Info } from 'lucide-react';
+import { Loader2, UploadCloud, Info, SaveIcon, SendIcon } from 'lucide-react';
 import type { Job, Brand, Division } from '@/lib/types';
 import { RichTextEditor } from '../ui/RichTextEditor';
 import { GoogleDatePicker } from '../ui/google-date-picker';
 
-// Slug helpers
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const cleanUndefined = (obj: Record<string, any>): Record<string, any> => {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([_, value]) => value !== undefined)
+  );
+};
+
 const slugify = (text: string) =>
   text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
@@ -39,7 +47,7 @@ const generateJobCode = (position: string, brandName: string) => {
 
 const formSchema = z.object({
   position: z.string().min(3, { message: 'Posisi harus diisi.' }),
-  statusJob: z.enum(['fulltime', 'internship', 'contract']),
+  statusJob: z.enum(['fulltime', 'internship']),
   divisionId: z.string().optional().nullable(),
   location: z.string().min(2, { message: 'Lokasi harus diisi.' }),
   brandId: z.string({ required_error: 'Brand/Perusahaan wajib dipilih.' }),
@@ -63,9 +71,11 @@ interface JobFormDialogProps {
 export function JobFormDialog({ open, onOpenChange, job, brands }: JobFormDialogProps) {
   const firestore = useFirestore();
   const firebaseApp = useFirebaseApp();
+  const router = useRouter();
   const { userProfile } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [submitMode, setSubmitMode] = useState<'draft' | 'publish'>('draft');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const mode = job ? 'Edit' : 'Buat';
 
@@ -165,6 +175,29 @@ export function JobFormDialog({ open, onOpenChange, job, brands }: JobFormDialog
       toast({ variant: 'destructive', title: 'Error', description: 'Anda harus login.' });
       return;
     }
+
+    // Validation for publish mode
+    if (submitMode === 'publish') {
+      const missingFields = [];
+      if (!values.position) missingFields.push('Posisi');
+      if (!values.brandId) missingFields.push('Brand/Perusahaan');
+      if (!values.statusJob) missingFields.push('Tipe Pekerjaan');
+      if (!values.workMode) missingFields.push('Mode Kerja');
+      if (!values.location) missingFields.push('Lokasi');
+      if (!values.applyDeadline) missingFields.push('Deadline Lamaran');
+      if (!values.numberOfOpenings) missingFields.push('Jumlah yang Dibutuhkan');
+      if (!values.generalRequirementsHtml || values.generalRequirementsHtml.trim().length < 10) missingFields.push('Persyaratan Umum (minimal 10 karakter)');
+
+      if (missingFields.length > 0) {
+        toast({
+          variant: 'destructive',
+          title: 'Field Tidak Lengkap',
+          description: `Harap isi: ${missingFields.join(', ')}`,
+        });
+        return;
+      }
+    }
+
     setLoading(true);
 
     try {
@@ -194,37 +227,50 @@ export function JobFormDialog({ open, onOpenChange, job, brands }: JobFormDialog
 
       const { coverImage, ...restOfValues } = values;
 
+      const publishStatus: Job['publishStatus'] = submitMode === 'publish' ? 'published' : 'draft';
+
       const jobData: Omit<Job, 'id'> = {
         ...restOfValues,
-        division: divisionName || undefined,  // keep legacy field
-        divisionId,
-        divisionName,
+        division: divisionName,  // null if no division, string if division exists
+        divisionId,              // null if no division, string if division exists
+        divisionName,            // null if no division, string if division exists
         scopeType,
         numberOfOpenings: values.numberOfOpenings || 1,
-        applyDeadline: values.applyDeadline ? Timestamp.fromDate(values.applyDeadline) : undefined,
+        applyDeadline: values.applyDeadline ? Timestamp.fromDate(values.applyDeadline) : null,
         coverImageUrl: finalCoverImageUrl,
         slug,
         baseSlug,
         jobCode,
-        publishStatus: job?.publishStatus || 'draft',
+        publishStatus,
+        publishedAt: publishStatus === 'published' && !job?.publishedAt ? serverTimestamp() as any : job?.publishedAt,
         createdAt: job?.createdAt || serverTimestamp() as any,
         updatedAt: serverTimestamp() as any,
         createdBy: job?.createdBy || userProfile.uid,
         updatedBy: userProfile.uid,
         brandName,
         // Preserve deadline history
-        originalDeadline: job?.originalDeadline || (job?.applyDeadline ?? undefined),
+        originalDeadline: job?.originalDeadline || job?.applyDeadline || null,
         deadlineExtended: job?.deadlineExtended ?? false,
         extensionHistory: job?.extensionHistory ?? [],
       };
 
-      await setDocumentNonBlocking(doc(firestore, 'jobs', jobId), jobData, { merge: true });
+      // Remove undefined values before saving to Firestore
+      const cleanedData = cleanUndefined(jobData as any);
+      await setDocumentNonBlocking(doc(firestore, 'jobs', jobId), cleanedData, { merge: true });
 
-      toast({
-        title: `Lowongan ${mode === 'Edit' ? 'Diperbarui' : 'Dibuat'}`,
-        description: `Lowongan "${values.position}" telah disimpan.`,
-      });
-      onOpenChange(false);
+      if (submitMode === 'draft') {
+        toast({
+          title: 'Draft Lowongan Tersimpan',
+          description: `Lowongan "${values.position}" telah disimpan sebagai draft.`,
+        });
+      } else {
+        toast({
+          title: 'Lowongan Berhasil Dipublish',
+          description: `Lowongan "${values.position}" sudah dipublikasikan dan terlihat di Career Page.`,
+        });
+        onOpenChange(false);
+        router.push('/admin/hrd/job-postings');
+      }
     } catch (error: any) {
       handleStorageError(error);
     } finally {
@@ -324,7 +370,6 @@ export function JobFormDialog({ open, onOpenChange, job, brands }: JobFormDialog
                       <SelectContent>
                         <SelectItem value="fulltime">Full-time</SelectItem>
                         <SelectItem value="internship">Internship / Magang</SelectItem>
-                        <SelectItem value="contract">Kontrak</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -434,12 +479,38 @@ export function JobFormDialog({ open, onOpenChange, job, brands }: JobFormDialog
             </form>
           </Form>
         </div>
-        <DialogFooter className="flex-shrink-0 p-6 pt-4 border-t">
-          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Batal</Button>
-          <Button type="submit" form="job-form" disabled={loading}>
-            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Simpan
+        <DialogFooter className="flex-shrink-0 p-6 pt-4 border-t flex justify-between gap-2">
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+            Batal
           </Button>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setSubmitMode('draft');
+                form.handleSubmit(onSubmit)();
+              }}
+              disabled={loading}
+            >
+              {loading && submitMode === 'draft' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <SaveIcon className={submitMode === 'draft' && loading ? 'hidden' : 'mr-2 h-4 w-4'} />
+              Simpan Draft
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                setSubmitMode('publish');
+                form.handleSubmit(onSubmit)();
+              }}
+              disabled={loading}
+              className="bg-teal-600 hover:bg-teal-700 text-white"
+            >
+              {loading && submitMode === 'publish' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <SendIcon className={submitMode === 'publish' && loading ? 'hidden' : 'mr-2 h-4 w-4'} />
+              Publish & Kembali ke List
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -85,6 +85,11 @@ const STATUS_CONFIG: Record<string, { label: string; dot: string; pill: string }
     dot: 'bg-slate-300',
     pill: 'bg-slate-100 text-slate-500 ring-1 ring-slate-200 dark:bg-slate-800/60 dark:text-slate-500 dark:ring-slate-700',
   },
+  deleted: {
+    label: 'Deleted',
+    dot: 'bg-slate-400',
+    pill: 'bg-slate-100 text-slate-500 ring-1 ring-slate-200 dark:bg-slate-800/60 dark:text-slate-500 dark:ring-slate-700',
+  },
 };
 
 function StatusPill({ status }: { status: string }) {
@@ -193,9 +198,145 @@ const QUICK_FILTERS = [
   { key: 'draft',       label: 'Draft' },
   { key: 'expired',     label: 'Expired' },
   { key: 'closed',      label: 'Closed' },
+  { key: 'archived',    label: 'Archived' },
   { key: 'needsReview', label: 'Butuh Review' },
   { key: 'needsExtend', label: 'Perlu Perpanjangan' },
 ] as const;
+
+// ─── Archive Confirmation Dialog ──────────────────────────────────────────────
+
+function ArchiveConfirmationDialog({
+  job, open, onOpenChange, onConfirm, loading,
+}: {
+  job: Job | null;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onConfirm: () => Promise<void>;
+  loading: boolean;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Arsipkan Lowongan?</DialogTitle>
+          <DialogDescription>
+            Lowongan "{job?.position}" akan dipindahkan ke arsip dan tidak lagi ditampilkan di halaman karir.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
+          <p>Anda masih dapat:</p>
+          <ul className="mt-2 space-y-1 list-disc list-inside">
+            <li>Melihat dan mengelola pelamar</li>
+            <li>Membuka ulang lowongan kapan saja</li>
+            <li>Melihat riwayat lowongan</li>
+          </ul>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Batal</Button>
+          <Button onClick={onConfirm} disabled={loading} className="bg-slate-600 hover:bg-slate-700">
+            {loading && <span className="mr-2 h-4 w-4 animate-spin border-2 border-white border-t-transparent rounded-full inline-block" />}
+            Arsipkan
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Delete Confirmation Dialog ───────────────────────────────────────────────
+
+function DeleteJobConfirmationDialog({
+  job, applicantCount, open, onOpenChange, onConfirm, loading,
+}: {
+  job: Job | null;
+  applicantCount: number;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onConfirm: () => Promise<void>;
+  loading: boolean;
+}) {
+  const canHardDelete = applicantCount === 0;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-red-600">
+            <AlertTriangle className="h-5 w-5" /> Hapus Lowongan?
+          </DialogTitle>
+          <DialogDescription>
+            Tindakan ini akan menghapus lowongan "{job?.position}" dari daftar.
+          </DialogDescription>
+        </DialogHeader>
+        <div className={`rounded-xl border px-4 py-3 text-sm ${canHardDelete
+          ? 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+          : 'bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800 text-orange-700 dark:text-orange-400'
+        }`}>
+          {canHardDelete ? (
+            <p>Lowongan akan dihapus permanen karena belum memiliki pelamar.</p>
+          ) : (
+            <div className="space-y-2">
+              <p className="font-semibold">Lowongan memiliki {applicantCount} pelamar.</p>
+              <p>Lowongan akan soft-delete (disembunyikan) untuk melindungi riwayat kandidat. Gunakan <span className="font-semibold">Arsipkan</span> jika hanya ingin menyimpan riwayat.</p>
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Batal</Button>
+          <Button onClick={onConfirm} disabled={loading} variant="destructive">
+            {loading && <span className="mr-2 h-4 w-4 animate-spin border-2 border-white border-t-transparent rounded-full inline-block" />}
+            Hapus Lowongan
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Reopen with Deadline Dialog ──────────────────────────────────────────────
+
+function ReopenJobDialog({
+  job, open, onOpenChange, onConfirm, loading,
+}: {
+  job: Job | null;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onConfirm: (newDeadline?: Date) => Promise<void>;
+  loading: boolean;
+}) {
+  const deadline = job?.applyDeadline || job?.applicationDeadline;
+  const deadlinePassed = deadline ? isPast(deadline.toDate()) : false;
+  const [newDeadline, setNewDeadline] = useState<Date | null>(null);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Buka Ulang Lowongan</DialogTitle>
+          <DialogDescription>Lowongan akan dipublikasikan kembali dan muncul di halaman karir.</DialogDescription>
+        </DialogHeader>
+        {deadlinePassed && (
+          <div className="rounded-xl bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 px-4 py-3 text-sm text-orange-700 dark:text-orange-400 space-y-2">
+            <p className="font-semibold">Deadline sudah lewat</p>
+            <p>Silakan atur deadline baru untuk lowongan ini.</p>
+            <GoogleDatePicker value={newDeadline} onChange={setNewDeadline} portalled={false} />
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => { onOpenChange(false); setNewDeadline(null); }}>Batal</Button>
+          <Button
+            onClick={() => onConfirm(newDeadline || undefined)}
+            disabled={loading || (deadlinePassed && !newDeadline)}
+            className="bg-teal-600 hover:bg-teal-700"
+          >
+            {loading && <span className="mr-2 h-4 w-4 animate-spin border-2 border-white border-t-transparent rounded-full inline-block" />}
+            Buka Ulang
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 // ─── Extend Deadline Dialog ───────────────────────────────────────────────────
 
@@ -259,7 +400,7 @@ function ExtendDeadlineDialog({
 
 // ─── Job row — desktop ────────────────────────────────────────────────────────
 
-function JobRow({ job, userProfileMap, onEdit, onDelete, onAssign, onExtend, onDuplicate, onStatusChange, isSuperAdmin }: {
+function JobRow({ job, userProfileMap, onEdit, onDelete, onAssign, onExtend, onDuplicate, onStatusChange, onArchive, onReopen, isSuperAdmin }: {
   job: any;
   userProfileMap: Map<string, UserProfile>;
   onEdit: (j: Job) => void;
@@ -268,6 +409,8 @@ function JobRow({ job, userProfileMap, onEdit, onDelete, onAssign, onExtend, onD
   onExtend: (j: Job) => void;
   onDuplicate: (j: Job) => void;
   onStatusChange: (j: Job, s: Job['publishStatus']) => void;
+  onArchive: (j: Job) => void;
+  onReopen: (j: Job) => void;
   isSuperAdmin: boolean;
 }) {
   const assignedUsers = (job.assignedUserIds || [])
@@ -281,8 +424,14 @@ function JobRow({ job, userProfileMap, onEdit, onDelete, onAssign, onExtend, onD
   const needsReview = job.appCounts.new > 0;
   const divisionLabel = job.divisionName || job.division || null;
 
+  const isArchived = job.publishStatus === 'archived';
+
   return (
-    <tr className="group border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
+    <tr className={`group border-b border-slate-100 dark:border-slate-800 transition-colors ${
+      isArchived
+        ? 'opacity-60 hover:bg-slate-50/40 dark:hover:bg-slate-800/20'
+        : 'hover:bg-slate-50/70 dark:hover:bg-slate-800/40'
+    }`}>
       {/* Position */}
       <td className="px-5 py-4 align-top">
         <div className="space-y-1 max-w-[220px]">
@@ -338,7 +487,7 @@ function JobRow({ job, userProfileMap, onEdit, onDelete, onAssign, onExtend, onD
       <td className="px-5 py-4 align-top">
         <div className="space-y-1.5">
           <span className="inline-block text-[11px] font-semibold capitalize rounded-md px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-            {job.statusJob === 'fulltime' ? 'Full-time' : job.statusJob === 'internship' ? 'Internship' : 'Kontrak'}
+            {job.statusJob === 'fulltime' ? 'Full-time' : 'Internship'}
           </span>
           {job.workMode && (
             <span className="block text-[10px] capitalize text-slate-400">{job.workMode}</span>
@@ -427,54 +576,61 @@ function JobRow({ job, userProfileMap, onEdit, onDelete, onAssign, onExtend, onD
                 <Users className="h-4 w-4 text-slate-500" /> Lihat Pelamar
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => onEdit(job)} className="gap-2 text-sm">
-              <Edit className="h-4 w-4 text-slate-500" /> Edit Lowongan
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => onDuplicate(job)} className="gap-2 text-sm">
-              <Copy className="h-4 w-4 text-slate-500" /> Duplikat
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => onAssign(job)} className="gap-2 text-sm">
-              <UserCheck className="h-4 w-4 text-slate-500" /> Kelola Tim
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => onExtend(job)} className="gap-2 text-sm">
-              <CalendarClock className="h-4 w-4 text-blue-500" /> Perpanjang Deadline
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            {(job.effectiveStatus === 'draft' || job.effectiveStatus === 'closed' || job.effectiveStatus === 'expired') && (
-              <DropdownMenuItem onSelect={() => onStatusChange(job, 'published')} className="gap-2 text-sm">
-                <Eye className="h-4 w-4 text-green-600" /> Publish
-              </DropdownMenuItem>
-            )}
-            {(job.publishStatus === 'closed' || job.effectiveStatus === 'expired') && (
-              <DropdownMenuItem onSelect={() => onStatusChange(job, 'reopened')} className="gap-2 text-sm">
-                <RefreshCw className="h-4 w-4 text-teal-600" /> Buka Ulang
-              </DropdownMenuItem>
-            )}
-            {(job.publishStatus === 'published' || job.publishStatus === 'reopened') && (
-              <DropdownMenuItem onSelect={() => onStatusChange(job, 'draft')} className="gap-2 text-sm">
-                <EyeOff className="h-4 w-4 text-slate-500" /> Jadikan Draft
-              </DropdownMenuItem>
-            )}
-            {job.publishStatus !== 'closed' && (
-              <DropdownMenuItem onSelect={() => onStatusChange(job, 'closed')} className="gap-2 text-sm">
-                <XCircle className="h-4 w-4 text-red-500" /> Tutup Lowongan
-              </DropdownMenuItem>
-            )}
             {job.publishStatus !== 'archived' && (
-              <DropdownMenuItem onSelect={() => onStatusChange(job, 'archived')} className="gap-2 text-sm text-slate-500">
-                <ArchiveIcon className="h-4 w-4" /> Arsipkan
-              </DropdownMenuItem>
-            )}
-            {isSuperAdmin && (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => onDelete(job)} className="gap-2 text-sm text-red-600 focus:text-red-700 focus:bg-red-50 dark:focus:bg-red-950/30">
-                  <Trash2 className="h-4 w-4" /> Hapus Permanen
+                <DropdownMenuItem onSelect={() => onEdit(job)} className="gap-2 text-sm">
+                  <Edit className="h-4 w-4 text-slate-500" /> Edit Lowongan
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => onDuplicate(job)} className="gap-2 text-sm">
+                  <Copy className="h-4 w-4 text-slate-500" /> Duplikat
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => onAssign(job)} className="gap-2 text-sm">
+                  <UserCheck className="h-4 w-4 text-slate-500" /> Kelola Tim
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => onExtend(job)} className="gap-2 text-sm">
+                  <CalendarClock className="h-4 w-4 text-blue-500" /> Perpanjang Deadline
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {(job.effectiveStatus === 'draft' || job.effectiveStatus === 'closed' || job.effectiveStatus === 'expired') && (
+                  <DropdownMenuItem onSelect={() => onStatusChange(job, 'published')} className="gap-2 text-sm">
+                    <Eye className="h-4 w-4 text-green-600" /> Publish
+                  </DropdownMenuItem>
+                )}
+                {(job.publishStatus === 'closed' || job.effectiveStatus === 'expired') && (
+                  <DropdownMenuItem onSelect={() => onStatusChange(job, 'reopened')} className="gap-2 text-sm">
+                    <RefreshCw className="h-4 w-4 text-teal-600" /> Buka Ulang
+                  </DropdownMenuItem>
+                )}
+                {(job.publishStatus === 'published' || job.publishStatus === 'reopened') && (
+                  <DropdownMenuItem onSelect={() => onStatusChange(job, 'draft')} className="gap-2 text-sm">
+                    <EyeOff className="h-4 w-4 text-slate-500" /> Jadikan Draft
+                  </DropdownMenuItem>
+                )}
+                {job.publishStatus !== 'closed' && (
+                  <DropdownMenuItem onSelect={() => onStatusChange(job, 'closed')} className="gap-2 text-sm">
+                    <XCircle className="h-4 w-4 text-red-500" /> Tutup Lowongan
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => onArchive(job)} className="gap-2 text-sm text-slate-500">
+                  <ArchiveIcon className="h-4 w-4" /> Arsipkan
                 </DropdownMenuItem>
               </>
             )}
+            {job.publishStatus === 'archived' && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => onReopen(job)} className="gap-2 text-sm text-teal-600">
+                  <RefreshCw className="h-4 w-4" /> Buka Ulang
+                </DropdownMenuItem>
+              </>
+            )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => onDelete(job)} className="gap-2 text-sm text-red-600 focus:text-red-700 focus:bg-red-50 dark:focus:bg-red-950/30">
+              <Trash2 className="h-4 w-4" /> Hapus Lowongan
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </td>
@@ -555,6 +711,8 @@ export function JobManagementClient() {
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [isArchiveConfirmOpen, setIsArchiveConfirmOpen] = useState(false);
+  const [isReopenOpen, setIsReopenOpen] = useState(false);
   const [isAssignUsersOpen, setIsAssignUsersOpen] = useState(false);
   const [isExtendOpen, setIsExtendOpen] = useState(false);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
@@ -562,6 +720,9 @@ export function JobManagementClient() {
   const [brandFilter, setBrandFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
+  const [isReopening, setIsReopening] = useState(false);
 
   const jobsRef = useMemoFirebase(() => collection(firestore, 'jobs'), [firestore]);
   const { data: jobs, isLoading: isLoadingJobs, mutate: mutateJobs } = useCollection<Job>(jobsRef);
@@ -614,14 +775,16 @@ export function JobManagementClient() {
   }, [jobs, brandMap, appCountsByJob]);
 
   const summary = useMemo(() => ({
-    total: enrichedJobs.length,
-    published: enrichedJobs.filter(j => j.effectiveStatus === 'published' || j.effectiveStatus === 'reopened').length,
-    draft: enrichedJobs.filter(j => j.effectiveStatus === 'draft').length,
-    closed: enrichedJobs.filter(j => j.effectiveStatus === 'closed').length,
-    expired: enrichedJobs.filter(j => j.effectiveStatus === 'expired').length,
+    total: enrichedJobs.filter(j => !j.isDeleted).length,
+    published: enrichedJobs.filter(j => (j.effectiveStatus === 'published' || j.effectiveStatus === 'reopened') && !j.isDeleted).length,
+    draft: enrichedJobs.filter(j => j.effectiveStatus === 'draft' && !j.isDeleted).length,
+    closed: enrichedJobs.filter(j => j.effectiveStatus === 'closed' && !j.isDeleted).length,
+    expired: enrichedJobs.filter(j => j.effectiveStatus === 'expired' && !j.isDeleted).length,
+    archived: enrichedJobs.filter(j => j.publishStatus === 'archived' && !j.isDeleted).length,
     totalApps: (applications || []).length,
-    needsReview: enrichedJobs.filter(j => j.appCounts.new > 0).length,
+    needsReview: enrichedJobs.filter(j => j.appCounts.new > 0 && !j.isDeleted).length,
     needsExtend: enrichedJobs.filter(j => {
+      if (j.isDeleted) return false;
       const d = j.applyDeadline || j.applicationDeadline;
       const days = d ? differenceInDays(d.toDate(), new Date()) : null;
       return j.effectiveStatus === 'expired' || (days !== null && days <= 3 && j.appCounts.total < (j.numberOfOpenings || 1));
@@ -629,7 +792,7 @@ export function JobManagementClient() {
   }), [enrichedJobs, applications]);
 
   const filteredJobs = useMemo(() => {
-    let result = enrichedJobs;
+    let result = enrichedJobs.filter(j => !j.isDeleted);
 
     // Quick filter
     if (quickFilter === 'needsReview') result = result.filter(j => j.appCounts.new > 0);
@@ -639,6 +802,8 @@ export function JobManagementClient() {
         const days = d ? differenceInDays(d.toDate(), new Date()) : null;
         return j.effectiveStatus === 'expired' || (days !== null && days <= 3 && j.appCounts.total < (j.numberOfOpenings || 1));
       });
+    } else if (quickFilter === 'archived') {
+      result = result.filter(j => j.publishStatus === 'archived');
     } else if (quickFilter !== 'all') {
       result = result.filter(j => j.effectiveStatus === quickFilter);
     }
@@ -662,6 +827,8 @@ export function JobManagementClient() {
   const handleCreate = () => { setSelectedJob(null); setIsFormOpen(true); };
   const handleEdit = (job: Job) => { setSelectedJob(job); setIsFormOpen(true); };
   const handleDelete = (job: Job) => { setSelectedJob(job); setIsDeleteConfirmOpen(true); };
+  const handleArchive = (job: Job) => { setSelectedJob(job); setIsArchiveConfirmOpen(true); };
+  const handleReopen = (job: Job) => { setSelectedJob(job); setIsReopenOpen(true); };
   const handleAssignUsers = (job: Job) => { setSelectedJob(job); setIsAssignUsersOpen(true); };
   const handleExtend = (job: Job) => { setSelectedJob(job); setIsExtendOpen(true); };
 
@@ -721,12 +888,72 @@ export function JobManagementClient() {
 
   const confirmDelete = async () => {
     if (!selectedJob?.id) return;
+    setIsDeleting(true);
     try {
-      await deleteDocumentNonBlocking(doc(firestore, 'jobs', selectedJob.id));
-      toast({ title: 'Lowongan Dihapus', description: `"${selectedJob.position}" telah dihapus.` });
+      const applicantCount = appCountsByJob.get(selectedJob.id)?.total ?? 0;
+
+      if (applicantCount === 0) {
+        // Hard delete if no applicants
+        await deleteDocumentNonBlocking(doc(firestore, 'jobs', selectedJob.id));
+        toast({ title: 'Lowongan Dihapus', description: `"${selectedJob.position}" telah dihapus permanen.` });
+      } else {
+        // Soft delete if has applicants
+        await updateDocumentNonBlocking(doc(firestore, 'jobs', selectedJob.id), {
+          isDeleted: true,
+          deletedAt: serverTimestamp(),
+          deletedBy: userProfile?.uid,
+          publishStatus: 'deleted' as any,
+          updatedAt: serverTimestamp(),
+          updatedBy: userProfile?.uid,
+        });
+        toast({ title: 'Lowongan Dihapus', description: `"${selectedJob.position}" telah disembunyikan.` });
+      }
     } catch (e: any) {
       toast({ variant: 'destructive', title: 'Gagal', description: e.message });
-    } finally { setIsDeleteConfirmOpen(false); setSelectedJob(null); }
+    } finally { setIsDeleting(false); setIsDeleteConfirmOpen(false); setSelectedJob(null); }
+  };
+
+  const confirmArchive = async () => {
+    if (!selectedJob?.id || !userProfile) return;
+    setIsArchiving(true);
+    try {
+      await updateDocumentNonBlocking(doc(firestore, 'jobs', selectedJob.id), {
+        publishStatus: 'archived',
+        isArchived: true,
+        archivedAt: serverTimestamp(),
+        archivedBy: userProfile.uid,
+        updatedAt: serverTimestamp(),
+        updatedBy: userProfile.uid,
+      });
+      toast({ title: 'Lowongan Diarsipkan', description: `"${selectedJob.position}" telah dipindahkan ke arsip.` });
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'Gagal', description: e.message });
+    } finally { setIsArchiving(false); setIsArchiveConfirmOpen(false); setSelectedJob(null); }
+  };
+
+  const confirmReopen = async (newDeadline?: Date) => {
+    if (!selectedJob?.id || !userProfile) return;
+    setIsReopening(true);
+    try {
+      const updateData: any = {
+        publishStatus: 'reopened',
+        isArchived: false,
+        reopenedAt: serverTimestamp(),
+        reopenedBy: userProfile.uid,
+        updatedAt: serverTimestamp(),
+        updatedBy: userProfile.uid,
+      };
+
+      if (newDeadline) {
+        updateData.applyDeadline = Timestamp.fromDate(newDeadline);
+        updateData.applicationDeadline = Timestamp.fromDate(newDeadline);
+      }
+
+      await updateDocumentNonBlocking(doc(firestore, 'jobs', selectedJob.id), updateData);
+      toast({ title: 'Lowongan Dibuka Ulang', description: `"${selectedJob.position}" kembali dipublikasikan.` });
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'Gagal', description: e.message });
+    } finally { setIsReopening(false); setIsReopenOpen(false); setSelectedJob(null); }
   };
 
   // ── Loading ───────────────────────────────────────────────────────────────
@@ -758,12 +985,12 @@ export function JobManagementClient() {
           color="border-red-200 dark:border-red-900 text-red-600 dark:text-red-400" />
         <KpiCard label="Expired" value={summary.expired} icon={Clock}
           color="border-orange-200 dark:border-orange-900 text-orange-600 dark:text-orange-400" />
+        <KpiCard label="Archived" value={summary.archived} icon={ArchiveIcon}
+          color="border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400" />
         <KpiCard label="Total Pelamar" value={summary.totalApps} icon={Users}
           color="border-blue-200 dark:border-blue-900 text-blue-700 dark:text-blue-400" />
         <KpiCard label="Butuh Review" value={summary.needsReview} icon={AlertTriangle}
           color="border-amber-200 dark:border-amber-900 text-amber-600 dark:text-amber-400" />
-        <KpiCard label="Perlu Perpanjang" value={summary.needsExtend} icon={CalendarClock}
-          color="border-orange-200 dark:border-orange-900 text-orange-600 dark:text-orange-400" />
       </div>
 
       {/* Toolbar */}
@@ -776,6 +1003,7 @@ export function JobManagementClient() {
               : f.key === 'draft' ? summary.draft
               : f.key === 'expired' ? summary.expired
               : f.key === 'closed' ? summary.closed
+              : f.key === 'archived' ? summary.archived
               : f.key === 'needsReview' ? summary.needsReview
               : summary.needsExtend;
 
@@ -828,7 +1056,6 @@ export function JobManagementClient() {
               <SelectItem value="all">Semua Tipe</SelectItem>
               <SelectItem value="fulltime">Full-time</SelectItem>
               <SelectItem value="internship">Internship</SelectItem>
-              <SelectItem value="contract">Kontrak</SelectItem>
             </SelectContent>
           </Select>
           <div className="ml-auto">
@@ -863,6 +1090,8 @@ export function JobManagementClient() {
                 onExtend={handleExtend}
                 onDuplicate={handleDuplicate}
                 onStatusChange={handleStatusChange}
+                onArchive={handleArchive}
+                onReopen={handleReopen}
                 isSuperAdmin={isSuperAdmin}
               />
             )) : (
@@ -908,9 +1137,27 @@ export function JobManagementClient() {
 
       {/* Dialogs */}
       <JobFormDialog open={isFormOpen} onOpenChange={setIsFormOpen} job={selectedJob} brands={brands || []} />
-      <DeleteConfirmationDialog
-        open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}
-        onConfirm={confirmDelete} itemName={selectedJob?.position} itemType="Lowongan"
+      <DeleteJobConfirmationDialog
+        job={selectedJob}
+        applicantCount={selectedJob ? (appCountsByJob.get(selectedJob.id!)?.total ?? 0) : 0}
+        open={isDeleteConfirmOpen}
+        onOpenChange={setIsDeleteConfirmOpen}
+        onConfirm={confirmDelete}
+        loading={isDeleting}
+      />
+      <ArchiveConfirmationDialog
+        job={selectedJob}
+        open={isArchiveConfirmOpen}
+        onOpenChange={setIsArchiveConfirmOpen}
+        onConfirm={confirmArchive}
+        loading={isArchiving}
+      />
+      <ReopenJobDialog
+        job={selectedJob}
+        open={isReopenOpen}
+        onOpenChange={setIsReopenOpen}
+        onConfirm={confirmReopen}
+        loading={isReopening}
       />
       {userProfile && (
         <AssignedUsersDialog

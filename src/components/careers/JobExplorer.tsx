@@ -55,11 +55,21 @@ function normalizeCity(raw: string | null | undefined): string | null {
 
 // ─── Visibility ───────────────────────────────────────────────────────────────
 
-// Only show published/reopened and not yet expired
+// Only show published/reopened and not yet expired, not archived, not deleted
 function isJobVisible(job: Job): boolean {
-  if (job.publishStatus !== 'published' && job.publishStatus !== 'reopened') return false;
+  // Exclude deleted or archived jobs
+  if (job.isDeleted || job.isArchived || job.publishStatus === 'archived' || job.publishStatus === 'deleted') {
+    return false;
+  }
+  // Only show published or reopened
+  if (job.publishStatus !== 'published' && job.publishStatus !== 'reopened') {
+    return false;
+  }
+  // Exclude expired
   const deadline = job.applyDeadline || job.applicationDeadline;
-  if (deadline && isPast(deadline.toDate())) return false;
+  if (deadline && isPast(deadline.toDate())) {
+    return false;
+  }
   return true;
 }
 
@@ -69,7 +79,6 @@ function JobTypeBadge({ type }: { type: string }) {
   const map: Record<string, { label: string; cls: string }> = {
     fulltime:   { label: 'Full-time',  cls: 'bg-teal-50 text-teal-700 ring-teal-200 dark:bg-teal-950/60 dark:text-teal-300 dark:ring-teal-800' },
     internship: { label: 'Internship', cls: 'bg-blue-50 text-blue-700 ring-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:ring-blue-800' },
-    contract:   { label: 'Kontrak',    cls: 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:ring-amber-800' },
   };
   const cfg = map[type] || { label: type, cls: 'bg-slate-100 text-slate-600 ring-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:ring-slate-700' };
   return (
@@ -371,11 +380,11 @@ export function JobExplorerClient() {
       <div className="space-y-3">
         {/* Type quick chips */}
         <div className="flex flex-wrap items-center gap-2">
-          {(['all', 'fulltime', 'internship', 'contract'] as const).map(v => (
+          {(['all', 'fulltime', 'internship'] as const).map(v => (
             <FilterChip
               key={v}
               value={v}
-              label={v === 'all' ? 'Semua Tipe' : v === 'fulltime' ? 'Full-time' : v === 'internship' ? 'Internship' : 'Kontrak'}
+              label={v === 'all' ? 'Semua Tipe' : v === 'fulltime' ? 'Full-time' : 'Internship'}
               selected={filterType === v}
               onClick={() => handleFilterChange(() => setFilterType(v))}
             />

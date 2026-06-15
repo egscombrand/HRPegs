@@ -767,7 +767,7 @@ export type Job = {
   slug: string;
   baseSlug?: string;
   jobCode?: string;
-  statusJob: "fulltime" | "internship" | "contract";
+  statusJob: "fulltime" | "internship";
   // Division is now optional — brands without divisions omit these
   division?: string | null;
   divisionId?: string | null;
@@ -780,7 +780,7 @@ export type Job = {
   coverImageUrl?: string;
   generalRequirementsHtml: string;
   specialRequirementsHtml: string;
-  publishStatus: "draft" | "published" | "closed" | "expired" | "reopened" | "archived";
+  publishStatus: "draft" | "published" | "closed" | "expired" | "reopened" | "archived" | "deleted";
   applyDeadline?: Timestamp;
   applicationDeadline?: Timestamp; // alias kept for backward compat
   originalDeadline?: Timestamp;
@@ -793,6 +793,17 @@ export type Job = {
   updatedBy: string;
   assignedUserIds?: string[];
   tags?: string[];
+  // Archive state
+  isArchived?: boolean;
+  archivedAt?: Timestamp;
+  archivedBy?: string;
+  // Soft delete state
+  isDeleted?: boolean;
+  deletedAt?: Timestamp;
+  deletedBy?: string;
+  // Reopen state
+  reopenedAt?: Timestamp;
+  reopenedBy?: string;
   interviewTemplate?: {
     meetingLink?: string;
     meetingPublished?: boolean;
@@ -1003,7 +1014,7 @@ export type JobApplication = {
   jobSlug: string;
   brandId: string;
   brandName: string;
-  jobType: "fulltime" | "internship" | "contract";
+  jobType: "fulltime" | "internship";
   candidateStatus?: CandidateStatus;
   finalDecisionLocked?: boolean;
   location: string;

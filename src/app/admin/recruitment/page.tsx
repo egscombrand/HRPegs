@@ -72,6 +72,11 @@ const STATUS_CFG: Record<string, { label: string; dot: string; pill: string }> =
     dot: 'bg-slate-300',
     pill: 'bg-slate-100 text-slate-500 ring-1 ring-slate-200 dark:bg-slate-800/60 dark:text-slate-500 dark:ring-slate-700',
   },
+  deleted: {
+    label: 'Deleted',
+    dot: 'bg-slate-400',
+    pill: 'bg-slate-100 text-slate-500 ring-1 ring-slate-200 dark:bg-slate-800/60 dark:text-slate-500 dark:ring-slate-700',
+  },
 };
 
 function StatusPill({ status }: { status: string }) {
@@ -230,7 +235,7 @@ function JobRow({ job, userMap, onStatusChange, isSuperAdmin }: {
       {/* Tipe */}
       <td className="px-4 py-3.5 align-top">
         <span className="inline-block text-[11px] font-semibold capitalize rounded-md px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-          {job.statusJob === 'fulltime' ? 'Full-time' : job.statusJob === 'internship' ? 'Internship' : 'Kontrak'}
+          {job.statusJob === 'fulltime' ? 'Full-time' : 'Internship'}
         </span>
       </td>
 
@@ -351,6 +356,7 @@ const QUICK_FILTERS = [
   { key: 'draft',       label: 'Draft' },
   { key: 'expired',     label: 'Expired' },
   { key: 'closed',      label: 'Closed' },
+  { key: 'archived',    label: 'Archived' },
   { key: 'needsReview', label: 'Butuh Review' },
 ] as const;
 
@@ -427,20 +433,21 @@ export default function RecruitmentJobSelectionPage() {
   }, [jobs, appCountsByJob]);
 
   const summary = useMemo(() => ({
-    total: enrichedJobs.length,
-    published: enrichedJobs.filter(j => j.effectiveStatus === 'published' || j.effectiveStatus === 'reopened').length,
-    closed: enrichedJobs.filter(j => j.effectiveStatus === 'closed').length,
-    expired: enrichedJobs.filter(j => j.effectiveStatus === 'expired').length,
+    total: enrichedJobs.filter(j => !j.isDeleted).length,
+    published: enrichedJobs.filter(j => (j.effectiveStatus === 'published' || j.effectiveStatus === 'reopened') && !j.isDeleted).length,
+    closed: enrichedJobs.filter(j => j.effectiveStatus === 'closed' && !j.isDeleted).length,
+    expired: enrichedJobs.filter(j => j.effectiveStatus === 'expired' && !j.isDeleted).length,
     totalApps: (applications || []).length,
-    newApps: enrichedJobs.reduce((s, j) => s + j.counts.new, 0),
-    needsReview: enrichedJobs.filter(j => j.counts.new > 0).length,
+    newApps: enrichedJobs.filter(j => !j.isDeleted).reduce((s, j) => s + j.counts.new, 0),
+    needsReview: enrichedJobs.filter(j => j.counts.new > 0 && !j.isDeleted).length,
   }), [enrichedJobs, applications]);
 
   const filteredJobs = useMemo(() => {
-    let result = enrichedJobs;
+    let result = enrichedJobs.filter(j => !j.isDeleted);
 
     // Quick filter
     if (quickFilter === 'active') result = result.filter(j => j.effectiveStatus === 'published' || j.effectiveStatus === 'reopened');
+    else if (quickFilter === 'archived') result = result.filter(j => j.publishStatus === 'archived');
     else if (quickFilter === 'needsReview') result = result.filter(j => j.counts.new > 0);
     else if (quickFilter !== 'all') result = result.filter(j => j.effectiveStatus === quickFilter);
 
@@ -544,6 +551,7 @@ export default function RecruitmentJobSelectionPage() {
                 : f.key === 'draft' ? enrichedJobs.filter(j => j.effectiveStatus === 'draft').length
                 : f.key === 'expired' ? summary.expired
                 : f.key === 'closed' ? summary.closed
+                : f.key === 'archived' ? enrichedJobs.filter(j => j.publishStatus === 'archived').length
                 : summary.needsReview;
               return (
                 <button
@@ -641,7 +649,6 @@ export default function RecruitmentJobSelectionPage() {
                   <SelectItem value="all">Semua Tipe</SelectItem>
                   <SelectItem value="fulltime">Full-time</SelectItem>
                   <SelectItem value="internship">Internship</SelectItem>
-                  <SelectItem value="contract">Kontrak</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
