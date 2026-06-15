@@ -264,8 +264,28 @@ export function LeaveSubmissionClient() {
     return doc(firestore, "brands", brandId, "divisions", divisionId);
   }, [firestore, brandId, divisionId]);
 
-  const { data: divisionMaster } =
+  const { data: divisionMasterRaw } =
     useDoc<DivisionMasterOrganization>(divisionDocRef);
+
+  // Brand-level fallback for staff without a division
+  const brandDocRef = useMemoFirebase(() => {
+    if (!firestore || !brandId || divisionMasterRaw) return null;
+    return doc(firestore, "brands", brandId);
+  }, [firestore, brandId, divisionMasterRaw]);
+  const { data: brandDoc } = useDoc<any>(brandDocRef);
+
+  const divisionMaster = useMemo((): DivisionMasterOrganization | null => {
+    if (divisionMasterRaw) return divisionMasterRaw;
+    if (brandDoc?.brandManagerId) {
+      return {
+        managerId: brandDoc.brandManagerId,
+        managerName: brandDoc.brandManagerName || null,
+        managerDirectSupervisorId: brandDoc.brandManagerDirectorId || null,
+        managerDirectSupervisorName: brandDoc.brandManagerDirectorName || null,
+      } as DivisionMasterOrganization;
+    }
+    return null;
+  }, [divisionMasterRaw, brandDoc]);
 
   // Fetch balance
   const balanceDocRef = useMemoFirebase(() => {

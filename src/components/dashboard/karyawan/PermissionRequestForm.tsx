@@ -422,10 +422,31 @@ export function PermissionRequestForm({
     useCollection<DivisionMasterOrganization>(divisionNameQuery);
 
   // Merge: prefer name-query result, fallback to doc-by-ID (same as OvertimeSubmissionForm)
-  const divisionMaster = useMemo(
+  const divisionMasterRaw = useMemo(
     () => divisionsByName?.[0] || divisionDocById || null,
     [divisionsByName, divisionDocById],
   );
+
+  // Brand-level fallback: for staff in brands without divisions, read brandManagerId from brand doc
+  const brandDocRef = useMemoFirebase(() => {
+    if (!firestore || !staffBrandId || divisionMasterRaw || isUserManagement) return null;
+    return doc(firestore, "brands", staffBrandId);
+  }, [firestore, staffBrandId, divisionMasterRaw, isUserManagement]);
+  const { data: brandDoc } = useDoc<any>(brandDocRef);
+
+  const divisionMaster = useMemo((): DivisionMasterOrganization | null => {
+    if (divisionMasterRaw) return divisionMasterRaw;
+    if (brandDoc?.brandManagerId) {
+      // Synthesize a DivisionMasterOrganization from brand-level manager
+      return {
+        managerId: brandDoc.brandManagerId,
+        managerName: brandDoc.brandManagerName || null,
+        managerDirectSupervisorId: brandDoc.brandManagerDirectorId || null,
+        managerDirectSupervisorName: brandDoc.brandManagerDirectorName || null,
+      } as DivisionMasterOrganization;
+    }
+    return null;
+  }, [divisionMasterRaw, brandDoc]);
 
   // Layer 3: users collection fallback (identical to Lembur)
   const allUsersQuery = useMemoFirebase(() => {

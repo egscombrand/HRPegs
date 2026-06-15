@@ -202,16 +202,22 @@ export function resolveApprovalTarget(
   }
 
   // Default: staff — try all known manager fields from masterOrganization
+  // Also check brand-level manager stored on brand doc (for brands without divisions)
+  const brandManagerUid = (masterOrganization as any)?.brandManagerId || null;
+  const brandManagerName = (masterOrganization as any)?.brandManagerName || null;
+
   const masterManagerUid =
     masterOrganization?.managerId ||
     masterOrganization?.managerUid ||
     masterOrganization?.supervisorUid ||
     masterOrganization?.directSupervisorUid ||
+    brandManagerUid ||
     null;
   const masterManagerName =
     masterOrganization?.managerName ||
     masterOrganization?.supervisorName ||
     masterOrganization?.directSupervisorName ||
+    brandManagerName ||
     null;
 
   if (masterManagerUid) {
@@ -281,11 +287,13 @@ export function resolvePermissionManager(
     return { uid: null, name: null, reason: "Employee missing" };
 
   // Prefer master organization structure (latest org mapping)
-  if (masterOrganization && masterOrganization.managerId) {
+  const masterMgrUid = masterOrganization?.managerId || (masterOrganization as any)?.brandManagerId || null;
+  const masterMgrName = masterOrganization?.managerName || (masterOrganization as any)?.brandManagerName || null;
+  if (masterOrganization && masterMgrUid) {
     return {
-      uid: masterOrganization.managerId || null,
-      name: masterOrganization.managerName || null,
-      role: "division_manager",
+      uid: masterMgrUid,
+      name: masterMgrName || null,
+      role: masterOrganization.managerId ? "division_manager" : "brand_manager",
     };
   }
 

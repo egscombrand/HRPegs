@@ -166,13 +166,15 @@ export function CandidateFitAnalysis({
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
+  // CV is available if any source exists
+  const hasCv = !!(profile.cvUrl || (profile as any).cvFileId || application.cvUrl || application.cvFileId);
+
   const handleAnalyze = async () => {
-    if (!profile.cvUrl) {
+    if (!hasCv) {
       toast({
         variant: "destructive",
         title: "CV Tidak Ditemukan",
-        description:
-          "Kandidat ini belum mengunggah CV. Analisis tidak dapat dilakukan.",
+        description: "Kandidat ini belum mengunggah CV. Analisis tidak dapat dilakukan.",
       });
       return;
     }
@@ -184,12 +186,12 @@ export function CandidateFitAnalysis({
       const result = await getCandidateAnalysis(application.id!);
       setAnalysis(result);
     } catch (e: any) {
-      setError("Gagal melakukan analisis. Silakan coba lagi.");
+      const msg = e.message || "Terjadi kesalahan saat berkomunikasi dengan AI.";
+      setError(msg);
       toast({
         variant: "destructive",
         title: "Analisis Gagal",
-        description:
-          e.message || "Terjadi kesalahan saat berkomunikasi dengan AI.",
+        description: msg,
       });
     } finally {
       setIsLoading(false);
@@ -233,7 +235,7 @@ export function CandidateFitAnalysis({
           </div>
           <Button
             onClick={handleAnalyze}
-            disabled={isLoading || !profile.cvUrl}
+            disabled={isLoading || !hasCv}
           >
             {isLoading ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

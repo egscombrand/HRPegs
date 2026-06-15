@@ -969,10 +969,29 @@ export function OvertimeSubmissionForm({
   const { data: divisionDocById } =
     useDoc<DivisionMasterOrganization>(divisionDocRef);
 
-  const divisionMaster = useMemo(() => {
-    // Prefer result from name query, fallback to doc-by-ID
+  const divisionMasterRaw = useMemo(() => {
     return divisionsResult?.[0] || divisionDocById || null;
   }, [divisionsResult, divisionDocById]);
+
+  // Brand-level fallback: for staff in brands without divisions
+  const brandDocRef = useMemoFirebase(() => {
+    if (!firestore || !staffBrandId || divisionMasterRaw) return null;
+    return doc(firestore, "brands", staffBrandId);
+  }, [firestore, staffBrandId, divisionMasterRaw]);
+  const { data: brandDoc } = useDoc<any>(brandDocRef);
+
+  const divisionMaster = useMemo((): DivisionMasterOrganization | null => {
+    if (divisionMasterRaw) return divisionMasterRaw;
+    if (brandDoc?.brandManagerId) {
+      return {
+        managerId: brandDoc.brandManagerId,
+        managerName: brandDoc.brandManagerName || null,
+        managerDirectSupervisorId: brandDoc.brandManagerDirectorId || null,
+        managerDirectSupervisorName: brandDoc.brandManagerDirectorName || null,
+      } as DivisionMasterOrganization;
+    }
+    return null;
+  }, [divisionMasterRaw, brandDoc]);
 
   const coordinatorsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -1445,7 +1464,9 @@ export function OvertimeSubmissionForm({
           reason: submission.reason,
           location: submission.location,
           employeeNotes: submission.employeeNotes || "",
-          attachments: submission.attachments || [],
+          attachments: (submission.attachments || []).map((a: any) =>
+            typeof a === "string" ? a : (a.fileUrl || a.url || a.driveFileId || "")
+          ).filter(Boolean),
           overtimeCoordinatorUid:
             (submission as any).overtimeCoordinatorUid || "",
           overtimeInstructionNote:

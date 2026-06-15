@@ -148,7 +148,7 @@ export function StrukturOrganisasiClient() {
           </TabsTrigger>
           <TabsTrigger value="division_manager" className="flex gap-2">
             <UserCheck className="h-4 w-4" />
-            Manager Divisi
+            Penempatan Manager
           </TabsTrigger>
           <TabsTrigger value="hierarchy" className="flex gap-2">
             <Network className="h-4 w-4" />
@@ -250,26 +250,44 @@ function SyncRelationshipsButton({
           : staff.brandId;
         const staffDivisionId = staff.divisionId;
 
-        if (!staffBrandId || !staffDivisionId) {
+        if (!staffBrandId) {
           skippedCount++;
           continue;
         }
 
-        const masterDiv = divisionsMaster.get(
-          `${staffBrandId}_${staffDivisionId}`,
-        );
+        // Try division-level manager first, fallback to brand-level manager
+        let masterDiv = staffDivisionId
+          ? divisionsMaster.get(`${staffBrandId}_${staffDivisionId}`)
+          : null;
+
+        // If no division or no division manager, check for brand-level manager
+        if (!masterDiv?.managerId) {
+          const brandSnap = await getDocs(
+            query(collection(firestore, "brands"), where("__name__", "==", staffBrandId))
+          );
+          const brandDoc = brandSnap.docs[0]?.data();
+          if (brandDoc?.brandManagerId) {
+            masterDiv = {
+              managerId: brandDoc.brandManagerId,
+              managerName: brandDoc.brandManagerName,
+              managerDirectSupervisorId: brandDoc.brandManagerDirectorId || null,
+              managerDirectSupervisorName: brandDoc.brandManagerDirectorName || null,
+            };
+          }
+        }
+
         if (!masterDiv) {
           skippedCount++;
-          problems.push(
-            `${staff.fullName} - Divisi tidak ditemukan di master data.`,
-          );
+          if (staffDivisionId) {
+            problems.push(`${staff.fullName} - Divisi tidak ditemukan di master data.`);
+          }
           continue;
         }
 
         if (!masterDiv.managerId) {
           skippedCount++;
           problems.push(
-            `${staff.fullName} - Divisinya belum memiliki Manager Divisi aktif.`,
+            `${staff.fullName} - Belum memiliki Manager aktif.`,
           );
           continue;
         }
@@ -532,12 +550,18 @@ function HierarchyPreview({
         {/* Scopes Mapping */}
         <div className="ml-5 mt-5 space-y-4 border-l border-slate-200 pl-5 dark:border-slate-700">
           {currentScopes.map((scope, sIdx) => {
+            const isWholeBrand =
+              scope.isWholeBrandScope ||
+              !scope.divisionIds ||
+              scope.divisionIds.length === 0 ||
+              scope.divisionIds.includes("all") ||
+              ["seluruh_brand", "brand", "all", "multi_brand"].includes(scope.scopeType);
+
             const managersInScope = users.filter(
               (u) =>
                 u.structuralLevel === "division_manager" &&
                 u.brandId === scope.brandId &&
-                (scope.divisionIds.includes("all") ||
-                  scope.divisionIds.includes(u.divisionId!)),
+                (isWholeBrand || (scope.divisionIds ?? []).includes(u.divisionId!)),
             );
 
             return (
@@ -551,9 +575,9 @@ function HierarchyPreview({
                     variant="outline"
                     className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
                   >
-                    {scope.divisionIds.includes("all")
-                      ? "Seluruh Divisi"
-                      : scope.divisionNames.join(", ")}
+                    {isWholeBrand
+                      ? "Seluruh Brand / Unit"
+                      : (scope.divisionNames ?? scope.divisionIds ?? []).join(", ")}
                   </Badge>
                 </div>
 
@@ -719,6 +743,35 @@ function ManagementTab({
     setCurrentScopes([]);
   };
 
+  // Null-safe scope badge renderer used in both Add and Edit dialogs
+  const renderScopeBadge = (scope: ManagementScope) => {
+    const isWhole =
+      scope.isWholeBrandScope ||
+      !scope.divisionIds ||
+      scope.divisionIds.length === 0 ||
+      scope.divisionIds.includes("all") ||
+      ["seluruh_brand", "brand", "all", "multi_brand"].includes(scope.scopeType);
+
+    if (isWhole) {
+      return (
+        <Badge className="rounded-full bg-teal-100 px-3 py-1 text-xs font-semibold text-teal-700 dark:bg-teal-900/50 dark:text-teal-200">
+          Seluruh Brand / Unit
+        </Badge>
+      );
+    }
+
+    return (
+      <div className="flex flex-wrap gap-2 items-center">
+        <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Divisi:</span>
+        {(scope.divisionNames ?? scope.divisionIds ?? []).map((dn, i) => (
+          <Badge key={i} variant="secondary" className="border-slate-200 bg-slate-100 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+            {dn}
+          </Badge>
+        ))}
+      </div>
+    );
+  };
+
   const handleAddScope = () => {
     if (!selectedBrand) return;
     const brand = brands.find((b) => b.id === selectedBrand);
@@ -736,43 +789,38 @@ function ManagementTab({
     }
 
     const isAllBrands = selectedBrand === "all";
-    const hasNoDivisions = selectedBrand !== "all" && divisions.length === 0;
+    // Brand-only: no divisions available, or user explicitly chose "Seluruh Brand", or no division selected
     const isBrandLevel =
       isAllBrands ||
       isBrandScope ||
-      hasNoDivisions ||
+      divisions.length === 0 ||
       selectedDivisions.length === 0;
 
-    const finalDivisionIds = isBrandLevel ? ["all"] : selectedDivisions;
-    const finalDivisionNames = isAllBrands
-      ? ["Semua Brand / Perusahaan"]
-      : isBrandLevel
-        ? ["Seluruh Brand / Perusahaan"]
-        : divisions
-            .filter((d: Division) => selectedDivisions.includes(d.id!))
-            .map((d: Division) => d.name);
+    const hasDivisionSelection = !isBrandLevel && selectedDivisions.length > 0;
 
     const newScope: ManagementScope = {
       brandId: selectedBrand,
-      brandName:
-        selectedBrand === "all" ? "Semua Brand" : brand?.name || "Unknown",
-      divisionIds: finalDivisionIds,
-      divisionNames: finalDivisionNames,
-      divisionId: isBrandLevel ? null : selectedDivisions[0] || null,
-      divisionName: isBrandLevel
-        ? null
-        : divisions.find((d) => d.id === selectedDivisions[0])?.name || null,
+      brandName: selectedBrand === "all" ? "Semua Brand" : brand?.name || "Unknown",
+      // Only populate divisionIds/Names when specific divisions are chosen
+      divisionIds: hasDivisionSelection ? selectedDivisions : null,
+      divisionNames: hasDivisionSelection
+        ? divisions.filter((d: Division) => selectedDivisions.includes(d.id!)).map((d: Division) => d.name)
+        : null,
+      divisionId: hasDivisionSelection ? (selectedDivisions[0] || null) : null,
+      divisionName: hasDivisionSelection
+        ? (divisions.find((d) => d.id === selectedDivisions[0])?.name || null)
+        : null,
       isWholeBrandScope: isBrandLevel,
       scopeType: isAllBrands
         ? "multi_brand"
-        : isBrandLevel
-          ? "seluruh_brand"
-          : "divisi_tertentu",
+        : hasDivisionSelection
+          ? "divisi_tertentu"
+          : "seluruh_brand",
       scopeLabel: isAllBrands
         ? "Seluruh Brand"
-        : isBrandLevel
-          ? "Seluruh Brand / Unit"
-          : "Divisi Tertentu",
+        : hasDivisionSelection
+          ? "Divisi Tertentu"
+          : "Seluruh Brand / Unit",
     };
 
     setCurrentScopes([...currentScopes, newScope]);
@@ -814,23 +862,23 @@ function ManagementTab({
       };
 
       if (primaryScope) {
-        const isAllBrands = primaryScope.scopeType === "all" || primaryScope.brandId === "all";
-        const isSelectedDivisions = primaryScope.scopeType === "selected_divisions";
+        const isAllBrands =
+          primaryScope.scopeType === "all" ||
+          primaryScope.scopeType === "multi_brand" ||
+          primaryScope.brandId === "all";
+        const hasSpecificDivision =
+          primaryScope.scopeType === "divisi_tertentu" &&
+          (primaryScope.divisionId || (primaryScope.divisionIds?.length ?? 0) > 0);
 
-        if (!isAllBrands) {
-          empProfilePatch.brandId = primaryScope.brandId;
-          empProfilePatch.brandName = primaryScope.brandName;
-        } else {
-          empProfilePatch.brandId = null;
-          empProfilePatch.brandName = "Semua Brand / Perusahaan";
-        }
+        empProfilePatch.brandId = isAllBrands ? null : (primaryScope.brandId || null);
+        empProfilePatch.brandName = isAllBrands ? "Semua Brand / Perusahaan" : (primaryScope.brandName || null);
 
-        if (isSelectedDivisions && (primaryScope.divisionIds?.length ?? 0) > 0 && primaryScope.divisionIds![0] !== "all") {
-          empProfilePatch.divisionId = primaryScope.divisionIds![0];
-          empProfilePatch.divisionName = primaryScope.divisionNames?.[0] || "Divisi";
+        if (hasSpecificDivision) {
+          empProfilePatch.divisionId = primaryScope.divisionId || primaryScope.divisionIds?.[0] || null;
+          empProfilePatch.divisionName = primaryScope.divisionName || primaryScope.divisionNames?.[0] || null;
         } else {
           empProfilePatch.divisionId = null;
-          empProfilePatch.divisionName = isAllBrands ? "Semua Brand / Perusahaan" : "Seluruh Brand / Perusahaan";
+          empProfilePatch.divisionName = null;
         }
       }
 
@@ -1056,9 +1104,14 @@ function ManagementTab({
                                       htmlFor="add-brand-scope"
                                       className="cursor-pointer text-sm font-semibold leading-none text-teal-600 dark:text-teal-400"
                                     >
-                                      Seluruh Brand / Perusahaan
+                                      Seluruh Brand / Unit (tanpa pilih divisi)
                                     </label>
                                   </div>
+                                  {!isBrandScope && selectedDivisions.length === 0 && (
+                                    <p className="text-[10px] text-amber-600 dark:text-amber-400 italic mb-2 px-1">
+                                      Tidak ada divisi dipilih → scope berlaku untuk seluruh brand.
+                                    </p>
+                                  )}
                                   {divisions.map((div: Division) => (
                                     <div
                                       key={div.id}
@@ -1173,26 +1226,7 @@ function ManagementTab({
                                 </Button>
                               </div>
                               <div className="flex flex-wrap gap-2">
-                                {scope.divisionIds.includes("all") ? (
-                                  <Badge className="rounded-full bg-teal-100 px-3 py-1 text-xs font-semibold text-teal-700 dark:bg-teal-900/50 dark:text-teal-200">
-                                    Seluruh Brand / Perusahaan
-                                  </Badge>
-                                ) : (
-                                  <div className="flex flex-wrap gap-2 items-center">
-                                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
-                                      Divisi:
-                                    </span>
-                                    {scope.divisionNames.map((dn, i) => (
-                                      <Badge
-                                        key={i}
-                                        variant="secondary"
-                                        className="border-slate-200 bg-slate-100 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
-                                      >
-                                        {dn}
-                                      </Badge>
-                                    ))}
-                                  </div>
-                                )}
+                                {renderScopeBadge(scope)}
                               </div>
                             </div>
                           ))}
@@ -1277,9 +1311,13 @@ function ManagementTab({
                             {scope.brandName}
                           </p>
                           <p className="mt-1 text-xs text-teal-600/80 dark:text-teal-300/70">
-                            {scope.divisionIds.includes("all")
-                              ? "Seluruh Brand / Perusahaan"
-                              : scope.divisionNames.join(", ")}
+                            {scope.isWholeBrandScope ||
+                             !scope.divisionIds ||
+                             scope.divisionIds.length === 0 ||
+                             scope.divisionIds.includes("all") ||
+                             ["seluruh_brand", "brand", "all", "multi_brand"].includes(scope.scopeType)
+                              ? "Seluruh Brand / Unit"
+                              : (scope.divisionNames ?? []).join(", ")}
                           </p>
                         </div>
                       </div>
@@ -1418,9 +1456,14 @@ function ManagementTab({
                                   htmlFor="edit-brand-scope"
                                   className="cursor-pointer text-sm font-semibold leading-none text-teal-600 dark:text-teal-400"
                                 >
-                                  Seluruh Brand / Perusahaan
+                                  Seluruh Brand / Unit (tanpa pilih divisi)
                                 </label>
                               </div>
+                              {!isBrandScope && selectedDivisions.length === 0 && (
+                                <p className="text-[10px] text-amber-600 dark:text-amber-400 italic mb-2 px-1">
+                                  Tidak ada divisi dipilih → scope berlaku untuk seluruh brand.
+                                </p>
+                              )}
                               {divisions.map((div: Division) => (
                                 <div
                                   key={div.id}
@@ -1472,13 +1515,7 @@ function ManagementTab({
                       size="lg"
                       className="h-12 w-full gap-2 rounded-xl bg-teal-500 font-semibold hover:bg-teal-600"
                       onClick={handleAddScope}
-                      disabled={
-                        !selectedBrand ||
-                        (selectedBrand !== "all" &&
-                          divisions.length > 0 &&
-                          !isBrandScope &&
-                          selectedDivisions.length === 0)
-                      }
+                      disabled={!selectedBrand}
                     >
                       <Plus className="h-5 w-5 mr-3" />
                       Perbarui Scope
@@ -1518,21 +1555,7 @@ function ManagementTab({
                                 </Button>
                               </div>
                               <div className="flex flex-wrap gap-2">
-                                {scope.divisionIds.includes("all") ? (
-                                  <Badge className="rounded-full bg-teal-100 px-3 py-1 text-xs font-semibold text-teal-700 dark:bg-teal-900/50 dark:text-teal-200">
-                                    Seluruh Unit Kerja / Divisi
-                                  </Badge>
-                                ) : (
-                                  scope.divisionNames.map((dn, i) => (
-                                    <Badge
-                                      key={i}
-                                      variant="secondary"
-                                      className="border-slate-200 bg-slate-100 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
-                                    >
-                                      {dn}
-                                    </Badge>
-                                  ))
-                                )}
+                                {renderScopeBadge(scope)}
                               </div>
                             </div>
                           );
@@ -1598,198 +1621,174 @@ function DivisionManagerTab({
   const { toast } = useToast();
   const [selectedBrand, setSelectedBrand] = useState<string>("");
   const [selectedDivision, setSelectedDivision] = useState<string>("");
+  // "division" = Manager Divisi, "brand" = Manager Brand/Unit tanpa divisi
+  const [placementType, setPlacementType] = useState<"division" | "brand">("division");
   const [isPlacementOpen, setIsPlacementOpen] = useState(false);
-  // Filter only active employees (role == 'karyawan')
+
   const activeEmployees = useMemo(() => {
     return users.filter((u) => {
-      // Role must be 'karyawan'
       if (u.role !== "karyawan") return false;
-
-      // Level must NOT be management (Director already set)
       if (u.structuralLevel === "management") return false;
-
-      // Status checks (robust check for multiple field possibilities)
-      const isStatusActive =
+      return (
         u.isActive === true ||
         (u as any).status?.toLowerCase() === "active" ||
         (u as any).status?.toLowerCase() === "aktif" ||
         (u as any).employmentStatus?.toLowerCase() === "active" ||
-        (u as any).employmentStatus?.toLowerCase() === "aktif" ||
-        (u as any).employeeStatus?.toLowerCase() === "active";
-
-      return isStatusActive;
+        (u as any).employmentStatus?.toLowerCase() === "aktif"
+      );
     });
   }, [users]);
 
-  const [potentialDirectors, setPotentialDirectors] = useState<UserProfile[]>(
-    [],
-  );
+  const [potentialDirectors, setPotentialDirectors] = useState<UserProfile[]>([]);
   const [selectedDirectorUid, setSelectedDirectorUid] = useState<string>("");
   const [selectedManagerUid, setSelectedManagerUid] = useState<string>("");
   const [tempDivisions, setTempDivisions] = useState<Division[]>([]);
 
   const handleOpenPlacement = (
     brandId: string,
-    divId: string,
+    divId: string,      // empty string = brand-level manager
     brandDivs: Division[],
   ) => {
+    const isBrandLevel = !divId;
     setSelectedBrand(brandId);
     setSelectedDivision(divId);
     setTempDivisions(brandDivs);
+    setPlacementType(isBrandLevel ? "brand" : "division");
 
-    // Find matching Management (Directors) for this brand/division
+    // Find matching directors for this brand (any scope)
     const matches = managementUsers.filter((dir) =>
-      dir.managementScopes?.some(
-        (s) =>
-          (s.brandId === brandId || s.brandId === "all") &&
-          (s.divisionIds.includes(divId) || s.divisionIds.includes("all")),
-      ),
+      dir.managementScopes?.some((s) => {
+        const brandMatch = s.brandId === brandId || s.brandId === "all" ||
+          (s.brandIds ?? []).includes(brandId);
+        if (!brandMatch) return false;
+        if (isBrandLevel) return true;   // For brand-level, any brand-matching director qualifies
+        return (s.divisionIds ?? []).includes(divId) || (s.divisionIds ?? []).includes("all") ||
+          ["seluruh_brand", "brand", "all", "multi_brand"].includes(s.scopeType);
+      }),
     );
 
     setPotentialDirectors(matches);
-    if (matches.length === 1) setSelectedDirectorUid(matches[0].uid);
-    else setSelectedDirectorUid("");
+    setSelectedDirectorUid(matches.length === 1 ? matches[0].uid : "");
 
-    // Find current manager if any
-    const current = users.find(
-      (u) =>
-        u.structuralLevel === "division_manager" &&
-        u.brandId === brandId &&
-        u.divisionId === divId,
+    // Find current manager
+    const current = users.find((u) =>
+      u.structuralLevel === "division_manager" &&
+      u.brandId === brandId &&
+      (isBrandLevel ? (!u.divisionId || (u as any).isWholeBrandScope) : u.divisionId === divId),
     );
     setSelectedManagerUid(current?.uid || "");
-
     setIsPlacementOpen(true);
   };
 
   const handleSavePlacement = async () => {
-    if (!selectedManagerUid || !selectedBrand || !selectedDivision) return;
+    if (!selectedManagerUid || !selectedBrand) return;
+
+    const isBrandLevel = placementType === "brand";
+    if (!isBrandLevel && !selectedDivision) return;
 
     try {
       const manager = users.find((u) => u.uid === selectedManagerUid);
       const brand = brands.find((b) => b.id === selectedBrand);
-      const division = tempDivisions.find((d) => d.id === selectedDivision);
-      const director = potentialDirectors.find(
-        (d) => d.uid === selectedDirectorUid,
-      );
+      const division = isBrandLevel ? null : tempDivisions.find((d) => d.id === selectedDivision);
+      const director = potentialDirectors.find((d) => d.uid === selectedDirectorUid);
 
-      if (!manager || !brand || !division) return;
+      if (!manager || !brand) return;
+      if (!isBrandLevel && !division) return;
 
-      const oldManager = users.find(
-        (u) =>
-          u.structuralLevel === "division_manager" &&
-          u.brandId === selectedBrand &&
-          u.divisionId === selectedDivision,
-      );
+      const workRoleLabel = isBrandLevel
+        ? `Manager ${brand.name}`
+        : `Manager Divisi ${division!.name}`;
+      const scopeLabel = isBrandLevel ? "Seluruh Brand / Unit" : `Divisi ${division!.name}`;
 
-      // 1. Update Master Organization (Division Doc)
-      const divDocRef = doc(
-        firestore,
-        "brands",
-        selectedBrand,
-        "divisions",
-        selectedDivision,
+      // 1. Clear old manager for this scope if different
+      const oldManager = users.find((u) =>
+        u.structuralLevel === "division_manager" &&
+        u.brandId === selectedBrand &&
+        (isBrandLevel
+          ? (!u.divisionId || (u as any).isWholeBrandScope)
+          : u.divisionId === selectedDivision),
       );
-      await setDoc(
-        divDocRef,
-        {
-          managerId: manager.uid,
-          managerName: manager.fullName,
-          managerEmployeeId: (manager as any).employeeId || "",
-          managerDirectSupervisorId: director?.uid || null,
-          managerDirectSupervisorName: director?.fullName || null,
-          managerDirectSupervisorTitle: director?.workRole || null,
-          brandId: selectedBrand,
-          divisionId: selectedDivision,
-          divisionName: division.name,
-        },
-        { merge: true },
-      );
-
-      // 2. Clear old manager if different
       if (oldManager && oldManager.uid !== selectedManagerUid) {
-        const oldResetData = {
+        const resetData = {
           isDivisionManager: false,
           structuralLevel: "staff",
           structuralPosition: "staff",
           workRole: "Staff",
+          isWholeBrandScope: false,
           updatedAt: serverTimestamp(),
         };
-        await updateDoc(doc(firestore, "users", oldManager.uid), oldResetData);
+        await updateDoc(doc(firestore, "users", oldManager.uid), resetData);
+        await setDoc(doc(firestore, "employee_profiles", oldManager.uid), resetData, { merge: true });
+      }
+
+      // 2. Write master organization record
+      if (isBrandLevel) {
+        // Brand-level: write directly to brand document
+        await setDoc(doc(firestore, "brands", selectedBrand), {
+          brandManagerId: manager.uid,
+          brandManagerName: manager.fullName,
+          brandManagerDirectorId: director?.uid || null,
+          brandManagerDirectorName: director?.fullName || null,
+          brandManagerDirectorTitle: director?.workRole || null,
+          brandManagerScope: "seluruh_brand",
+        }, { merge: true });
+      } else {
+        // Division-level: write to division subdocument
         await setDoc(
-          doc(firestore, "employee_profiles", oldManager.uid),
-          oldResetData,
+          doc(firestore, "brands", selectedBrand, "divisions", selectedDivision),
+          {
+            managerId: manager.uid,
+            managerName: manager.fullName,
+            managerEmployeeId: (manager as any).employeeId || "",
+            managerDirectSupervisorId: director?.uid || null,
+            managerDirectSupervisorName: director?.fullName || null,
+            managerDirectSupervisorTitle: director?.workRole || null,
+            brandId: selectedBrand,
+            divisionId: selectedDivision,
+            divisionName: division!.name,
+          },
           { merge: true },
         );
       }
 
-      // 3. Set new manager
-      const updateData = {
+      // 3. Update manager's user profile
+      const hrdInfo = {
+        brandId: selectedBrand,
+        brandName: brand.name,
+        divisionId: isBrandLevel ? null : selectedDivision,
+        divisionName: isBrandLevel ? null : division!.name,
         structuralLevel: "division_manager",
         structuralPosition: "division_manager",
         isDivisionManager: true,
-        brandId: selectedBrand,
-        brandName: brand.name,
-        divisionId: selectedDivision,
-        divisionName: division.name,
-        workRole: `Manager Divisi ${division.name}`,
-        position: `Manager Divisi ${division.name}`,
+        isWholeBrandScope: isBrandLevel,
+        scopeType: isBrandLevel ? "seluruh_brand" : "divisi_tertentu",
+        workRole: workRoleLabel,
+        position: workRoleLabel,
         directSupervisorUid: director?.uid || null,
         directSupervisorName: director?.fullName || null,
         directManagerId: director?.uid || null,
         directManagerName: director?.fullName || null,
-        directManagerTitle: director?.workRole || null,
+      };
+
+      const updateData = {
+        ...hrdInfo,
         updatedAt: serverTimestamp(),
       };
 
-      await updateDoc(
-        doc(firestore, "users", selectedManagerUid),
-        updateData as any,
-      );
-      // Also write comprehensive HRD employment info and manager fields
-      await setDoc(
-        doc(firestore, "employee_profiles", selectedManagerUid),
-        {
-          ...updateData,
+      await updateDoc(doc(firestore, "users", selectedManagerUid), updateData as any);
+      await setDoc(doc(firestore, "employee_profiles", selectedManagerUid), {
+        ...updateData,
+        managerUid: manager.uid,
+        managerName: manager.fullName,
+        hrdEmploymentInfo: {
+          ...hrdInfo,
           managerUid: manager.uid,
           managerName: manager.fullName,
-          hrdEmploymentInfo: {
-            brandId: selectedBrand,
-            brandName: brand.name,
-            divisionId: selectedDivision,
-            divisionName: division.name,
-            structuralLevel: "division_manager",
-            structuralPosition: "division_manager",
-            isDivisionManager: true,
-            workRole: `Manager Divisi ${division.name}`,
-            position: `Manager Divisi ${division.name}`,
-            directSupervisorUid: director?.uid || null,
-            directSupervisorName: director?.fullName || null,
-            directManagerId: director?.uid || null,
-            directManagerName: director?.fullName || null,
-            managerUid: manager.uid,
-            managerName: manager.fullName,
-          },
         },
-        { merge: true },
-      );
-
-      // Ensure users/{uid} also has nested hrdEmploymentInfo for consistency
+      }, { merge: true });
       await updateDoc(doc(firestore, "users", selectedManagerUid), {
         hrdEmploymentInfo: {
-          brandId: selectedBrand,
-          brandName: brand.name,
-          divisionId: selectedDivision,
-          divisionName: division.name,
-          structuralLevel: "division_manager",
-          structuralPosition: "division_manager",
-          isDivisionManager: true,
-          workRole: `Manager Divisi ${division.name}`,
-          position: `Manager Divisi ${division.name}`,
-          directSupervisorUid: director?.uid || null,
-          directSupervisorName: director?.fullName || null,
-          directManagerId: director?.uid || null,
-          directManagerName: director?.fullName || null,
+          ...hrdInfo,
           managerUid: manager.uid,
           managerName: manager.fullName,
         },
@@ -1797,15 +1796,11 @@ function DivisionManagerTab({
 
       toast({
         title: "Berhasil",
-        description: `Manager Divisi ${division.name} telah ditetapkan.`,
+        description: `${workRoleLabel} telah ditetapkan untuk ${scopeLabel}.`,
       });
       setIsPlacementOpen(false);
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Gagal",
-        description: error.message,
-      });
+      toast({ variant: "destructive", title: "Gagal", description: error.message });
     }
   };
 
@@ -1816,10 +1811,9 @@ function DivisionManagerTab({
           <UserCheck className="h-6 w-6" />
         </div>
         <div>
-          <h3 className="text-lg font-semibold text-slate-950 dark:text-white">Penempatan Manager Divisi</h3>
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Penempatan Manager & Penanggung Jawab Unit</h3>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Tentukan penanggung jawab untuk setiap divisi di masing-masing
-            brand.
+            Tetapkan manager untuk setiap divisi atau brand/unit (tanpa divisi).
           </p>
         </div>
       </div>
@@ -1831,6 +1825,7 @@ function DivisionManagerTab({
             brand={brand}
             users={users}
             onOpenPlacement={handleOpenPlacement}
+            onOpenBrandPlacement={(brandId) => handleOpenPlacement(brandId, "", [])}
           />
         ))}
       </div>
@@ -1839,19 +1834,19 @@ function DivisionManagerTab({
       <Dialog open={isPlacementOpen} onOpenChange={setIsPlacementOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Pilih Manager Divisi</DialogTitle>
+            <DialogTitle>
+              {placementType === "brand" ? "Tetapkan Manager Brand / Unit" : "Pilih Manager Divisi"}
+            </DialogTitle>
             <DialogDescription>
-              Tentukan siapa yang akan menjabat sebagai Manager Divisi untuk
-              unit ini.
+              {placementType === "brand"
+                ? "Manager Brand/Unit bertanggung jawab atas seluruh brand tanpa divisi."
+                : "Tentukan siapa yang akan menjabat sebagai Manager Divisi untuk unit ini."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-6 py-4">
             <div className="space-y-2">
               <Label>User / Karyawan</Label>
-              <Select
-                value={selectedManagerUid}
-                onValueChange={setSelectedManagerUid}
-              >
+              <Select value={selectedManagerUid} onValueChange={setSelectedManagerUid}>
                 <SelectTrigger className="h-14 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-base text-slate-900 dark:text-white">
                   <SelectValue placeholder="Pilih karyawan aktif..." />
                 </SelectTrigger>
@@ -1859,13 +1854,10 @@ function DivisionManagerTab({
                   {activeEmployees.map((u) => (
                     <SelectItem key={u.uid} value={u.uid}>
                       <div className="flex flex-col py-1">
-                        <span className="font-bold text-base">
-                          {u.fullName} ({u.email})
-                        </span>
+                        <span className="font-bold text-base">{u.fullName} ({u.email})</span>
                         {(u.brandName || u.divisionName) && (
                           <span className="text-[10px] text-slate-500 font-bold uppercase">
-                            {u.brandName || "Tanpa Brand"} —{" "}
-                            {u.divisionName || "Tanpa Divisi"}
+                            {u.brandName || "Tanpa Brand"}{u.divisionName ? ` — ${u.divisionName}` : ""}
                           </span>
                         )}
                       </div>
@@ -1881,39 +1873,32 @@ function DivisionManagerTab({
             </div>
 
             <div className="space-y-2">
-              <Label>Atasan Langsung (Direktur/Manajemen)</Label>
+              <Label>Atasan Langsung / Direktur (opsional)</Label>
               {potentialDirectors.length > 0 ? (
-                <Select
-                  value={selectedDirectorUid}
-                  onValueChange={setSelectedDirectorUid}
-                >
-                  <SelectTrigger>
+                <Select value={selectedDirectorUid} onValueChange={setSelectedDirectorUid}>
+                  <SelectTrigger className="border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
                     <SelectValue placeholder="Pilih Direktur..." />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="">— Tanpa Atasan Langsung —</SelectItem>
                     {potentialDirectors.map((d) => (
                       <SelectItem key={d.uid} value={d.uid}>
-                        {d.fullName} ({d.workRole})
+                        {d.fullName}{d.workRole ? ` (${d.workRole})` : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               ) : (
-                <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 text-amber-500 text-xs flex gap-2 items-center">
-                  <AlertCircle className="h-4 w-4" />
-                  Belum ada Direktur/Manajemen yang membawahi divisi ini.
+                <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-500/5 border border-amber-200 dark:border-amber-500/20 text-amber-700 dark:text-amber-500 text-xs flex gap-2 items-center">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  Belum ada Direktur/Manajemen yang tercatat. Bisa diatur kemudian di tab Direktur/Manajemen.
                 </div>
               )}
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsPlacementOpen(false)}>
-              Batal
-            </Button>
-            <Button
-              onClick={handleSavePlacement}
-              disabled={!selectedManagerUid}
-            >
+            <Button variant="outline" onClick={() => setIsPlacementOpen(false)}>Batal</Button>
+            <Button onClick={handleSavePlacement} disabled={!selectedManagerUid}>
               Simpan Penempatan
             </Button>
           </DialogFooter>
@@ -1928,18 +1913,17 @@ function BrandDivisionCard({
   brand,
   users,
   onOpenPlacement,
+  onOpenBrandPlacement,
 }: {
   brand: Brand;
   users: UserProfile[];
-  onOpenPlacement: (
-    brandId: string,
-    divId: string,
-    brandDivs: Division[],
-  ) => void;
+  onOpenPlacement: (brandId: string, divId: string, brandDivs: Division[]) => void;
+  onOpenBrandPlacement: (brandId: string) => void;
 }) {
   const firestore = useFirestore();
   const [divisions, setDivisions] = useState<Division[]>([]);
   const [loading, setLoading] = useState(true);
+  const [brandData, setBrandData] = useState<any>(null);
 
   useEffect(() => {
     const fetchDivs = async () => {
@@ -1949,10 +1933,12 @@ function BrandDivisionCard({
           collection(firestore, "brands", brand.id, "divisions"),
           where("isActive", "==", true),
         );
-        const snap = await getDocs(q);
-        setDivisions(
-          snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as Division),
-        );
+        const [snap, brandSnap] = await Promise.all([
+          getDocs(q),
+          getDocs(query(collection(firestore, "brands"), where("__name__", "==", brand.id))),
+        ]);
+        setDivisions(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as Division));
+        if (brandSnap.docs.length > 0) setBrandData(brandSnap.docs[0].data());
       } finally {
         setLoading(false);
       }
@@ -1960,10 +1946,20 @@ function BrandDivisionCard({
     fetchDivs();
   }, [brand.id, firestore]);
 
+  // Brand-level manager (no division)
+  const brandLevelManager = users.find(
+    (u) =>
+      u.structuralLevel === "division_manager" &&
+      u.brandId === brand.id &&
+      ((u as any).isWholeBrandScope || !u.divisionId),
+  ) || (brandData?.brandManagerId
+    ? users.find((u) => u.uid === brandData.brandManagerId)
+    : null);
+
   return (
     <Card className="h-fit border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <CardHeader className="bg-slate-50/50 pb-4 dark:bg-slate-900/50">
-        <CardTitle className="text-md flex items-center gap-2">
+      <CardHeader className="bg-slate-50/50 pb-4 dark:bg-slate-800/30">
+        <CardTitle className="text-md flex items-center gap-2 text-slate-900 dark:text-white">
           <Building2 className="h-4 w-4 text-teal-500" />
           {brand.name}
         </CardTitle>
@@ -1975,77 +1971,135 @@ function BrandDivisionCard({
             <Skeleton className="h-12 w-full" />
           </div>
         ) : divisions.length > 0 ? (
-          divisions.map((div) => {
-            const currentManager = users.find(
-              (u) =>
-                u.structuralLevel === "division_manager" &&
-                u.brandId === brand.id &&
-                u.divisionId === div.id,
-            );
+          <>
+            {divisions.map((div) => {
+              const currentManager = users.find(
+                (u) =>
+                  u.structuralLevel === "division_manager" &&
+                  u.brandId === brand.id &&
+                  u.divisionId === div.id,
+              );
 
-            return (
-              <div
-                key={div.id}
-                className="flex flex-col gap-2 p-3 rounded-lg border border-slate-800 bg-slate-950/50"
-              >
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-semibold">{div.name}</span>
-                  {!currentManager && (
-                    <Badge
+              return (
+                <div
+                  key={div.id}
+                  className="flex flex-col gap-2 p-3 rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50"
+                >
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{div.name}</span>
+                    {!currentManager && (
+                      <Badge variant="outline" className="text-[9px] text-amber-500 border-amber-500/30 bg-amber-500/5">
+                        Kosong
+                      </Badge>
+                    )}
+                  </div>
+
+                  {currentManager ? (
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="h-8 w-8 rounded-full bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
+                          {currentManager.fullName.charAt(0)}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium text-slate-900 dark:text-white">{currentManager.fullName}</span>
+                          <span className="text-[10px] text-slate-500 truncate max-w-[120px]">
+                            Supervisor: {currentManager.directSupervisorName || "Belum Ada"}
+                          </span>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => onOpenPlacement(brand.id!, div.id!, divisions)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
                       variant="outline"
-                      className="text-[9px] text-amber-500 border-amber-500/30 bg-amber-500/5"
+                      size="sm"
+                      className="w-full text-xs h-8"
+                      onClick={() => onOpenPlacement(brand.id!, div.id!, divisions)}
                     >
-                      Kosong
-                    </Badge>
+                      Pilih Manager
+                    </Button>
                   )}
                 </div>
-
-                {currentManager ? (
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <div className="h-8 w-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-500 text-xs">
-                        {currentManager.fullName.charAt(0)}
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-sm font-medium">
-                          {currentManager.fullName}
-                        </span>
-                        <span className="text-[10px] text-slate-500 truncate max-w-[120px]">
-                          Supervisor:{" "}
-                          {currentManager.directSupervisorName || "Belum Ada"}
-                        </span>
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() =>
-                        onOpenPlacement(brand.id!, div.id!, divisions)
-                      }
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full text-xs h-8"
-                    onClick={() =>
-                      onOpenPlacement(brand.id!, div.id!, divisions)
-                    }
-                  >
-                    Pilih Manager
-                  </Button>
-                )}
-              </div>
-            );
-          })
+              );
+            })}
+          </>
         ) : (
-          <p className="text-xs text-slate-500 italic text-center p-4">
-            Belum ada divisi di brand ini.
-          </p>
+          <div className="flex flex-col gap-3">
+            <p className="text-xs text-slate-500 dark:text-slate-400 text-center">
+              Brand ini belum memiliki divisi. Anda tetap dapat menetapkan Manager Brand / Unit.
+            </p>
+
+            {brandLevelManager ? (
+              <div className="flex flex-col gap-2 p-3 rounded-lg border border-teal-200 bg-teal-50 dark:border-teal-800/50 dark:bg-teal-900/10">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-semibold text-teal-700 dark:text-teal-400 uppercase tracking-wide">Manager Brand</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => onOpenBrandPlacement(brand.id!)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-full bg-teal-100 dark:bg-teal-500/20 flex items-center justify-center text-teal-600 dark:text-teal-400 text-xs font-semibold">
+                    {brandLevelManager.fullName?.charAt(0) || "?"}
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium text-slate-900 dark:text-white">{brandLevelManager.fullName}</span>
+                    <span className="text-[10px] text-slate-500">Seluruh Brand / Unit</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full text-xs h-9 border-dashed"
+                onClick={() => onOpenBrandPlacement(brand.id!)}
+              >
+                <UserCheck className="h-3.5 w-3.5 mr-1.5" />
+                Tetapkan Manager Brand
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* Also show brand-level manager section if brand HAS divisions (optional penanggung jawab) */}
+        {divisions.length > 0 && (
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-slate-400 uppercase font-semibold tracking-wide">Penanggung Jawab Brand</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 text-[10px] px-2"
+                onClick={() => onOpenBrandPlacement(brand.id!)}
+              >
+                {brandLevelManager ? <Pencil className="h-3 w-3 mr-1" /> : null}
+                {brandLevelManager ? "Ganti" : "Tetapkan"}
+              </Button>
+            </div>
+            {brandLevelManager && (
+              <div className="flex items-center gap-2 mt-1.5">
+                <div className="h-6 w-6 rounded-full bg-teal-100 dark:bg-teal-500/20 flex items-center justify-center text-teal-600 dark:text-teal-400 text-[10px] font-semibold">
+                  {brandLevelManager.fullName?.charAt(0) || "?"}
+                </div>
+                <span className="text-xs text-slate-700 dark:text-slate-300">{brandLevelManager.fullName}</span>
+              </div>
+            )}
+            {!brandLevelManager && (
+              <p className="text-[10px] text-slate-400 italic mt-1">Belum ditetapkan</p>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>
@@ -2090,10 +2144,10 @@ function HierarchyTab({
                     {manager.fullName.charAt(0)}
                   </div>
                   <div>
-                    <h4 className="font-black text-white">
+                    <h4 className="font-black text-slate-900 dark:text-white">
                       {manager.fullName}
                     </h4>
-                    <p className="text-xs text-emerald-400 uppercase tracking-widest font-bold">
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400 uppercase tracking-widest font-bold">
                       {manager.workRole || "Management"}
                     </p>
                   </div>
@@ -2130,7 +2184,7 @@ function HierarchyTab({
                     </div>
 
                     {/* Connection to Staff */}
-                    <div className="w-px h-6 bg-slate-700"></div>
+                    <div className="w-px h-6 bg-slate-300 dark:bg-slate-700"></div>
 
                     {/* Staff list */}
                     <div className="w-full space-y-2">
@@ -2177,7 +2231,7 @@ function HierarchyTab({
         {/* Orphan Division Managers (No Director assigned) */}
         {divisionManagers.filter((dm) => !dm.directSupervisorUid).length >
           0 && (
-          <div className="space-y-6 pt-10 border-t border-slate-800/50">
+          <div className="space-y-6 pt-10 border-t border-slate-200 dark:border-slate-800/50">
             <div className="flex items-center gap-2 justify-center text-amber-500">
               <AlertCircle className="h-4 w-4" />
               <span className="text-xs font-bold uppercase tracking-widest">

@@ -5,71 +5,100 @@ import type { CandidateFitAnalysisOutput, Job, JobApplication, Profile } from "@
 import { extractCvText } from "@/lib/cv/extract-cv-text";
 import admin from '@/lib/firebase/admin';
 
-/**
- * Server action to get candidate analysis.
- * It orchestrates fetching data, extracting CV text, and calling the AI flow.
- */
+// Maps internal error codes (thrown by extractCvText) to user-friendly messages.
+function humanizeError(error: any): string {
+    const msg: string = error?.message || '';
+
+    if (msg.includes('CV_NOT_FOUND'))
+        return 'CV kandidat belum tersedia atau belum berhasil diunggah. Minta kandidat untuk mengupload ulang CV-nya.';
+
+    if (msg.includes('CV_INACCESSIBLE'))
+        return 'File CV tidak bisa diakses server. Coba upload ulang CV kandidat atau periksa hak akses file di Google Drive.';
+
+    if (msg.includes('CONFIG_ERROR') || msg.includes('GEMINI_API_KEY'))
+        return 'GEMINI_API_KEY belum terkonfigurasi di server. Hubungi administrator sistem.';
+
+    if (msg.includes('PDF_PARSE_ERROR'))
+        return 'File CV tidak bisa dibaca. Pastikan file adalah PDF yang valid dan tidak terproteksi password.';
+
+    if (msg.includes('Invalid URL'))
+        return 'Link CV tidak valid. Periksa dokumen kandidat atau minta kandidat upload ulang.';
+
+    if (msg.includes('domain is not allowed'))
+        return 'URL CV berasal dari domain yang tidak diizinkan. Pastikan file disimpan di Firebase Storage atau Google Drive yang terhubung.';
+
+    if (msg.includes('Application not found'))
+        return 'Data lamaran tidak ditemukan. Coba muat ulang halaman.';
+
+    if (msg.includes('profile not found') || msg.includes('Candidate profile'))
+        return 'Profil kandidat belum lengkap atau belum ditemukan.';
+
+    if (msg.includes('Job not found'))
+        return 'Data lowongan tidak ditemukan.';
+
+    return msg || 'Terjadi kesalahan tidak dikenal saat analisis. Coba lagi beberapa saat.';
+}
+
 export async function getCandidateAnalysis(applicationId: string): Promise<CandidateFitAnalysisOutput> {
     const db = admin.firestore();
 
+    console.log(`[analyze-candidate] Starting analysis for applicationId=${applicationId}`);
+
     try {
-        // 1. Fetch application, job, and profile data
-        const appRef = db.collection('applications').doc(applicationId);
-        const appSnap = await appRef.get();
-        if (!appSnap.exists) {
-            throw new Error('Application not found.');
-        }
+        // 1. Fetch application
+        const appSnap = await db.collection('applications').doc(applicationId).get();
+        if (!appSnap.exists) throw new Error('Application not found.');
         const application = { id: appSnap.id, ...appSnap.data() } as JobApplication;
 
-        const jobRef = db.collection('jobs').doc(application.jobId);
-        const jobSnap = await jobRef.get();
-        if (!jobSnap.exists) {
-            throw new Error('Job not found.');
-        }
+        // 2. Fetch job
+        const jobSnap = await db.collection('jobs').doc(application.jobId).get();
+        if (!jobSnap.exists) throw new Error('Job not found.');
         const job = jobSnap.data() as Job;
 
-        const profileRef = db.collection('profiles').doc(application.candidateUid);
-        const profileSnap = await profileRef.get();
-        if (!profileSnap.exists) {
-            throw new Error('Candidate profile not found.');
-        }
+        // 3. Fetch profile
+        const profileSnap = await db.collection('profiles').doc(application.candidateUid).get();
+        if (!profileSnap.exists) throw new Error('Candidate profile not found.');
         const profile = profileSnap.data() as Profile;
 
-        // 2. Extract text from CV (uses caching mechanism)
+        console.log(`[analyze-candidate] Data fetched. cvUrl=${profile.cvUrl || '(none)'}, cvFileId=${profile.cvFileId || '(none)'}`);
+
+        // 4. Extract CV text (multi-source with caching)
         const { cvText, ...cvMeta } = await extractCvText(application, profile);
 
-        // 3. Prepare structured profile data as supplemental info
+        // 5. Build structured profile supplement
         const candidateProfileJson = {
             skills: profile.skills || [],
-            workExperience: profile.workExperience?.map(exp => ({
+            workExperience: (profile.workExperience || []).map(exp => ({
                 company: exp.company,
                 position: exp.position,
                 jobType: exp.jobType,
                 startDate: exp.startDate,
                 endDate: exp.endDate,
                 isCurrent: exp.isCurrent,
-                description: exp.description
-            })) || [],
-            education: profile.education?.map(edu => ({
+                description: exp.description,
+            })),
+            education: (profile.education || []).map(edu => ({
                 institution: edu.institution,
                 level: edu.level,
-                fieldOfStudy: edu.fieldOfStudy
-            })) || []
+                fieldOfStudy: edu.fieldOfStudy,
+            })),
         };
-        
-        // 4. Call the Genkit flow with the correct data
+
+        console.log(`[analyze-candidate] CV extracted: ${cvMeta.charCount} chars from ${cvMeta.source}. Calling Gemini…`);
+
+        // 6. Call AI
         const analysisResult = await analyzeCandidateFit({
             jobRequirementsHtml: job.specialRequirementsHtml,
-            cvText: cvText,
-            cvMeta: cvMeta,
-            candidateProfileJson: candidateProfileJson,
+            cvText,
+            cvMeta,
+            candidateProfileJson,
         });
 
+        console.log(`[analyze-candidate] Analysis complete for applicationId=${applicationId}`);
         return analysisResult;
 
     } catch (error: any) {
-        console.error(`[Server Action Error] getCandidateAnalysis for app ${applicationId}:`, error);
-        // Re-throw the error to be caught by the client component
-        throw new Error(error.message || 'An unknown error occurred during analysis.');
+        console.error(`[analyze-candidate] Error for applicationId=${applicationId}:`, error?.message);
+        throw new Error(humanizeError(error));
     }
 }

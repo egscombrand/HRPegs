@@ -753,34 +753,52 @@ export type InviteBatch = {
   updatedAt: Timestamp;
 };
 
+export type JobDeadlineExtension = {
+  oldDeadline: Timestamp;
+  newDeadline: Timestamp;
+  reason: string;
+  extendedBy: string;
+  extendedAt: Timestamp;
+};
+
 export type Job = {
   id?: string;
   position: string;
   slug: string;
+  baseSlug?: string;
+  jobCode?: string;
   statusJob: "fulltime" | "internship" | "contract";
-  division: string;
+  // Division is now optional — brands without divisions omit these
+  division?: string | null;
+  divisionId?: string | null;
+  divisionName?: string | null;
+  scopeType?: "brand" | "division";
   location: string;
   workMode?: "onsite" | "hybrid" | "remote";
   brandId: string;
-  brandName?: string; // Denormalized for convenience
+  brandName?: string;
   coverImageUrl?: string;
   generalRequirementsHtml: string;
   specialRequirementsHtml: string;
-  publishStatus: "draft" | "published" | "closed";
+  publishStatus: "draft" | "published" | "closed" | "expired" | "reopened" | "archived";
   applyDeadline?: Timestamp;
+  applicationDeadline?: Timestamp; // alias kept for backward compat
+  originalDeadline?: Timestamp;
+  deadlineExtended?: boolean;
+  extensionHistory?: JobDeadlineExtension[];
   numberOfOpenings?: number;
   createdAt: Timestamp;
   updatedAt: Timestamp;
   createdBy: string;
   updatedBy: string;
   assignedUserIds?: string[];
-  tags?: string[]; // Added for panelist suggestions
+  tags?: string[];
   interviewTemplate?: {
     meetingLink?: string;
     meetingPublished?: boolean;
     defaultStartDate?: Timestamp;
-    workdayStartTime?: string; // "HH:mm"
-    workdayEndTime?: string; // "HH:mm"
+    workdayStartTime?: string;
+    workdayEndTime?: string;
     slotDurationMinutes?: number;
     breakMinutes?: number;
   };

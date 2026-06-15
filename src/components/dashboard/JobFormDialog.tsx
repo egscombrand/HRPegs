@@ -6,11 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { doc, collection, serverTimestamp, query, where, Timestamp } from 'firebase/firestore';
 import { uploadFile } from '@/lib/storage/storage-adapter';
-import { 
-  validateStorageFile, 
-  compressImage, 
-  handleStorageError 
-} from "@/lib/storage-utils";
+import { validateStorageFile, compressImage, handleStorageError } from "@/lib/storage-utils";
 import { useFirestore, setDocumentNonBlocking, useFirebaseApp, useCollection, useMemoFirebase } from '@/firebase';
 import { useAuth } from '@/providers/auth-provider';
 import { Button } from '@/components/ui/button';
@@ -23,26 +19,36 @@ import {
 } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, UploadCloud } from 'lucide-react';
+import { Loader2, UploadCloud, Info } from 'lucide-react';
 import type { Job, Brand, Division } from '@/lib/types';
 import { RichTextEditor } from '../ui/RichTextEditor';
-
 import { GoogleDatePicker } from '../ui/google-date-picker';
 
-const slugify = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+// Slug helpers
+const slugify = (text: string) =>
+  text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+
+const generateShortId = () => Math.random().toString(36).substring(2, 6);
+
+const generateJobCode = (position: string, brandName: string) => {
+  const pos = position.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 3);
+  const brand = brandName.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 3);
+  const num = Math.floor(Math.random() * 900 + 100);
+  return `${pos}-${brand}-${num}`;
+};
 
 const formSchema = z.object({
-  position: z.string().min(3, { message: 'Position is required.' }),
+  position: z.string().min(3, { message: 'Posisi harus diisi.' }),
   statusJob: z.enum(['fulltime', 'internship', 'contract']),
-  division: z.string().min(2, { message: 'Division is required.' }),
-  location: z.string().min(2, { message: 'Location is required.' }),
-  brandId: z.string({ required_error: 'Company/Brand is required.' }),
+  divisionId: z.string().optional().nullable(),
+  location: z.string().min(2, { message: 'Lokasi harus diisi.' }),
+  brandId: z.string({ required_error: 'Brand/Perusahaan wajib dipilih.' }),
   workMode: z.enum(['onsite', 'hybrid', 'remote']).optional(),
   applyDeadline: z.date().optional().nullable(),
-  numberOfOpenings: z.coerce.number().int().min(1, 'Must be at least 1').optional().nullable(),
+  numberOfOpenings: z.coerce.number().int().min(1, 'Minimal 1').optional().nullable(),
   coverImage: z.any().optional(),
-  generalRequirementsHtml: z.string().min(10, { message: 'General requirements are required.' }),
-  specialRequirementsHtml: z.string().min(10, { message: 'Special requirements are required.' }),
+  generalRequirementsHtml: z.string().min(10, { message: 'Persyaratan umum harus diisi.' }),
+  specialRequirementsHtml: z.string().min(10, { message: 'Persyaratan khusus harus diisi.' }),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -61,14 +67,14 @@ export function JobFormDialog({ open, onOpenChange, job, brands }: JobFormDialog
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const mode = job ? 'Edit' : 'Create';
+  const mode = job ? 'Edit' : 'Buat';
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       position: '',
       statusJob: 'fulltime',
-      division: '',
+      divisionId: null,
       location: '',
       brandId: undefined,
       workMode: 'onsite',
@@ -84,26 +90,29 @@ export function JobFormDialog({ open, onOpenChange, job, brands }: JobFormDialog
   const divisionsQuery = useMemoFirebase(() => {
     if (!selectedBrandId) return null;
     return query(
-        collection(firestore, 'brands', selectedBrandId, 'divisions'),
-        where('isActive', '==', true)
+      collection(firestore, 'brands', selectedBrandId, 'divisions'),
+      where('isActive', '==', true)
     );
   }, [selectedBrandId, firestore]);
 
   const { data: divisions, isLoading: isLoadingDivisions } = useCollection<Division>(divisionsQuery);
-  
+
+  const hasDivisions = !isLoadingDivisions && !!divisions && divisions.length > 0;
+  const noDivisions = !isLoadingDivisions && selectedBrandId && divisions?.length === 0;
+
+  // Reset division when brand changes
   useEffect(() => {
-    if(form.formState.isDirty) {
-        form.setValue('division', '');
+    if (form.formState.isDirty) {
+      form.setValue('divisionId', null);
     }
   }, [selectedBrandId, form]);
 
-  // Clean up object URL for image preview to prevent memory leaks
   useEffect(() => {
     return () => {
-        if (imagePreview && imagePreview.startsWith('blob:')) {
-            URL.revokeObjectURL(imagePreview);
-        }
-    }
+      if (imagePreview && imagePreview.startsWith('blob:')) {
+        URL.revokeObjectURL(imagePreview);
+      }
+    };
   }, [imagePreview]);
 
   useEffect(() => {
@@ -111,18 +120,17 @@ export function JobFormDialog({ open, onOpenChange, job, brands }: JobFormDialog
       if (job) {
         form.reset({
           ...job,
+          divisionId: job.divisionId || null,
           applyDeadline: job.applyDeadline ? job.applyDeadline.toDate() : null,
           numberOfOpenings: job.numberOfOpenings ?? 1,
-          coverImage: undefined, // Don't repopulate file input
+          coverImage: undefined,
         });
-        if (job.coverImageUrl) {
-          setImagePreview(job.coverImageUrl);
-        } else {
-          setImagePreview(null);
-        }
+        setImagePreview(job.coverImageUrl || null);
       } else {
         form.reset({
-          position: '', statusJob: 'fulltime', division: '', location: '', brandId: undefined, workMode: 'onsite', generalRequirementsHtml: '', specialRequirementsHtml: '', applyDeadline: null, numberOfOpenings: 1
+          position: '', statusJob: 'fulltime', divisionId: null, location: '',
+          brandId: undefined, workMode: 'onsite', applyDeadline: null,
+          numberOfOpenings: 1, generalRequirementsHtml: '', specialRequirementsHtml: '',
         });
         setImagePreview(null);
       }
@@ -132,51 +140,29 @@ export function JobFormDialog({ open, onOpenChange, job, brands }: JobFormDialog
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-
     const validation = validateStorageFile(file);
     if (!validation.isValid) {
-      toast({ 
-        variant: 'destructive', 
-        title: 'File Tidak Valid', 
-        description: validation.message 
-      });
+      toast({ variant: 'destructive', title: 'File Tidak Valid', description: validation.message });
       return;
     }
-    
-    // Create a URL for preview
-    const objectUrl = URL.createObjectURL(file);
-    setImagePreview(objectUrl);
+    setImagePreview(URL.createObjectURL(file));
     form.setValue('coverImage', file);
   };
 
   const uploadCoverImage = async (jobId: string, imageFile: File): Promise<string> => {
     const processedFile = await compressImage(imageFile);
     const filePath = `jobs/${jobId}/cover-${Date.now()}-${processedFile.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
-
     const result = await uploadFile(processedFile, filePath, userProfile?.uid || 'system', {
-      category: 'job_cover',
-      ownerUid: userProfile?.uid || 'system',
-      compress: false // Already compressed
+      category: 'job_cover', ownerUid: userProfile?.uid || 'system', compress: false,
     });
-
-    // Use the server-side proxy route that requires no end-user auth.
-    // /api/storage/google-drive-preview uses the service account, works on
-    // both the admin dashboard and public career pages.
-    if (result.fileId) {
-      return `/api/storage/google-drive-preview?fileId=${result.fileId}`;
-    }
-
-    // Firebase Storage: downloadUrl is a public HTTPS URL — use directly
-    if (result.downloadUrl) {
-      return result.downloadUrl;
-    }
-
+    if (result.fileId) return `/api/storage/google-drive-preview?fileId=${result.fileId}`;
+    if (result.downloadUrl) return result.downloadUrl;
     return "";
   };
 
   const onSubmit = async (values: FormValues) => {
     if (!userProfile) {
-      toast({ variant: 'destructive', title: 'Error', description: 'You must be logged in.' });
+      toast({ variant: 'destructive', title: 'Error', description: 'Anda harus login.' });
       return;
     }
     setLoading(true);
@@ -189,29 +175,54 @@ export function JobFormDialog({ open, onOpenChange, job, brands }: JobFormDialog
         finalCoverImageUrl = await uploadCoverImage(jobId, values.coverImage);
       }
 
-      const brandName = brands.find(b => b.id === values.brandId)?.name || '';
+      const brand = brands.find(b => b.id === values.brandId);
+      const brandName = brand?.name || '';
+
+      // Resolve division info
+      const selectedDiv = values.divisionId
+        ? divisions?.find(d => d.id === values.divisionId)
+        : null;
+      const divisionName = selectedDiv?.name || null;
+      const divisionId = values.divisionId || null;
+      const scopeType: Job['scopeType'] = divisionId ? 'division' : 'brand';
+
+      // Slug: keep existing on edit, generate new on create/duplicate
+      const shortId = generateShortId();
+      const baseSlug = slugify(values.position);
+      const slug = job?.slug || `${baseSlug}-${shortId}`;
+      const jobCode = job?.jobCode || generateJobCode(values.position, brandName);
 
       const { coverImage, ...restOfValues } = values;
 
       const jobData: Omit<Job, 'id'> = {
         ...restOfValues,
+        division: divisionName || undefined,  // keep legacy field
+        divisionId,
+        divisionName,
+        scopeType,
         numberOfOpenings: values.numberOfOpenings || 1,
         applyDeadline: values.applyDeadline ? Timestamp.fromDate(values.applyDeadline) : undefined,
         coverImageUrl: finalCoverImageUrl,
-        slug: job?.slug || `${slugify(values.position)}-${slugify(brandName)}-${Math.random().toString(36).substring(2, 7)}`,
+        slug,
+        baseSlug,
+        jobCode,
         publishStatus: job?.publishStatus || 'draft',
         createdAt: job?.createdAt || serverTimestamp() as any,
         updatedAt: serverTimestamp() as any,
         createdBy: job?.createdBy || userProfile.uid,
         updatedBy: userProfile.uid,
         brandName,
+        // Preserve deadline history
+        originalDeadline: job?.originalDeadline || (job?.applyDeadline ?? undefined),
+        deadlineExtended: job?.deadlineExtended ?? false,
+        extensionHistory: job?.extensionHistory ?? [],
       };
 
       await setDocumentNonBlocking(doc(firestore, 'jobs', jobId), jobData, { merge: true });
 
       toast({
-        title: `Job ${mode === 'Edit' ? 'Updated' : 'Created'}`,
-        description: `The job "${values.position}" has been saved.`,
+        title: `Lowongan ${mode === 'Edit' ? 'Diperbarui' : 'Dibuat'}`,
+        description: `Lowongan "${values.position}" telah disimpan.`,
       });
       onOpenChange(false);
     } catch (error: any) {
@@ -227,57 +238,28 @@ export function JobFormDialog({ open, onOpenChange, job, brands }: JobFormDialog
         <DialogHeader className="p-6 pb-0">
           <DialogTitle>{mode} Job Posting</DialogTitle>
           <DialogDescription>
-            Fill in the job details below. Click save when you're done.
+            Isi detail lowongan di bawah ini. Klik Simpan jika sudah selesai.
           </DialogDescription>
         </DialogHeader>
         <div className="flex-grow overflow-y-auto px-6">
           <Form {...form}>
             <form id="job-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Position */}
                 <FormField control={form.control} name="position" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Position</FormLabel>
-                    <FormControl><Input placeholder="e.g., Frontend Developer" {...field} /></FormControl>
+                    <FormLabel>Posisi <span className="text-red-500">*</span></FormLabel>
+                    <FormControl><Input placeholder="cth. Staff Finance" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
-                <FormField
-                  control={form.control}
-                  name="division"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Division</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value}
-                        disabled={!selectedBrandId || isLoadingDivisions}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder={
-                              isLoadingDivisions ? "Loading divisions..." :
-                              !selectedBrandId ? "Select a brand first" : 
-                              "Select a division"
-                            } />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {!isLoadingDivisions && divisions && divisions.map((div) => (
-                              <SelectItem key={div.id!} value={div.name}>
-                                {div.name}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+
+                {/* Brand */}
                 <FormField control={form.control} name="brandId" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Company / Brand</FormLabel>
+                    <FormLabel>Brand / Perusahaan <span className="text-red-500">*</span></FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl><SelectTrigger><SelectValue placeholder="Select a brand" /></SelectTrigger></FormControl>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Pilih brand" /></SelectTrigger></FormControl>
                       <SelectContent>
                         {brands.map(b => <SelectItem key={b.id} value={b.id!}>{b.name}</SelectItem>)}
                       </SelectContent>
@@ -285,32 +267,76 @@ export function JobFormDialog({ open, onOpenChange, job, brands }: JobFormDialog
                     <FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="location" render={({ field }) => (
+
+                {/* Division — optional */}
+                <FormField control={form.control} name="divisionId" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Location</FormLabel>
-                    <FormControl><Input placeholder="e.g., Yogyakarta" {...field} /></FormControl>
+                    <FormLabel>Divisi <span className="text-slate-400 text-xs font-normal">(opsional)</span></FormLabel>
+                    {noDivisions ? (
+                      <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800/50 dark:bg-blue-950/20 px-3 py-2 text-xs text-blue-700 dark:text-blue-400">
+                        <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                        Brand ini tidak memiliki divisi. Lowongan akan dibuat untuk level Brand/Unit.
+                      </div>
+                    ) : (
+                      <Select
+                        onValueChange={(v) => field.onChange(v === '__none__' ? null : v)}
+                        value={field.value || '__none__'}
+                        disabled={!selectedBrandId || isLoadingDivisions}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder={
+                              isLoadingDivisions ? "Memuat divisi..." :
+                              !selectedBrandId ? "Pilih brand terlebih dahulu" :
+                              "Pilih divisi (opsional)"
+                            } />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="__none__">— Tanpa Divisi (Level Brand) —</SelectItem>
+                          {hasDivisions && divisions!.map((div) => (
+                            <SelectItem key={div.id!} value={div.id!}>
+                              {div.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )} />
+
+                {/* Location */}
+                <FormField control={form.control} name="location" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Lokasi <span className="text-red-500">*</span></FormLabel>
+                    <FormControl><Input placeholder="cth. Yogyakarta" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+
+                {/* Job Type */}
                 <FormField control={form.control} name="statusJob" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Job Type</FormLabel>
+                    <FormLabel>Tipe Pekerjaan</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl><SelectTrigger><SelectValue placeholder="Select job type" /></SelectTrigger></FormControl>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Pilih tipe" /></SelectTrigger></FormControl>
                       <SelectContent>
                         <SelectItem value="fulltime">Full-time</SelectItem>
-                        <SelectItem value="internship">Internship</SelectItem>
-                        <SelectItem value="contract">Contract</SelectItem>
+                        <SelectItem value="internship">Internship / Magang</SelectItem>
+                        <SelectItem value="contract">Kontrak</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
                   </FormItem>
                 )} />
+
+                {/* Work Mode */}
                 <FormField control={form.control} name="workMode" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Work Mode</FormLabel>
+                    <FormLabel>Mode Kerja</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl><SelectTrigger><SelectValue placeholder="Select work mode" /></SelectTrigger></FormControl>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Pilih mode kerja" /></SelectTrigger></FormControl>
                       <SelectContent>
                         <SelectItem value="onsite">On-site</SelectItem>
                         <SelectItem value="hybrid">Hybrid</SelectItem>
@@ -320,45 +346,37 @@ export function JobFormDialog({ open, onOpenChange, job, brands }: JobFormDialog
                     <FormMessage />
                   </FormItem>
                 )} />
-                <FormField
-                  control={form.control}
-                  name="applyDeadline"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col pt-2">
-                      <FormLabel>Application Deadline</FormLabel>
-                      <FormControl>
-                        <GoogleDatePicker
-                          value={field.value}
-                          onChange={field.onChange}
-                          portalled={false}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="numberOfOpenings"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col pt-2">
-                      <FormLabel>Jumlah yang dibutuhkan</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          placeholder="e.g., 1"
-                          {...field}
-                          value={field.value ?? ""}
-                          onChange={e => field.onChange(e.target.value === '' ? null : Number(e.target.value))}
-                        />
-                      </FormControl>
-                       <FormDescription>Berapa orang yang dibutuhkan untuk posisi ini.</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+
+                {/* Deadline */}
+                <FormField control={form.control} name="applyDeadline" render={({ field }) => (
+                  <FormItem className="flex flex-col pt-2">
+                    <FormLabel>Deadline Lamaran</FormLabel>
+                    <FormControl>
+                      <GoogleDatePicker value={field.value} onChange={field.onChange} portalled={false} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+
+                {/* Openings */}
+                <FormField control={form.control} name="numberOfOpenings" render={({ field }) => (
+                  <FormItem className="flex flex-col pt-2">
+                    <FormLabel>Jumlah yang Dibutuhkan</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number" placeholder="cth. 2"
+                        {...field}
+                        value={field.value ?? ""}
+                        onChange={e => field.onChange(e.target.value === '' ? null : Number(e.target.value))}
+                      />
+                    </FormControl>
+                    <FormDescription>Berapa orang yang dibutuhkan untuk posisi ini.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )} />
               </div>
 
+              {/* Cover Image */}
               <FormField control={form.control} name="coverImage" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Cover Image</FormLabel>
@@ -366,10 +384,7 @@ export function JobFormDialog({ open, onOpenChange, job, brands }: JobFormDialog
                     <div className="mt-2 space-y-4">
                       <div className="relative w-full h-64 rounded-lg border border-input bg-slate-50 dark:bg-slate-900 overflow-hidden flex items-center justify-center">
                         {imagePreview ? (
-                          <img
-                            src={imagePreview}
-                            alt="Cover preview"
-                            className="w-full h-full object-contain object-center p-4"
+                          <img src={imagePreview} alt="Cover preview" className="w-full h-full object-contain object-center p-4"
                             onError={(e) => {
                               e.currentTarget.style.display = 'none';
                               const fallback = e.currentTarget.parentElement?.querySelector<HTMLElement>('.fallback-preview');
@@ -380,60 +395,50 @@ export function JobFormDialog({ open, onOpenChange, job, brands }: JobFormDialog
                         <div className="fallback-preview hidden absolute inset-0 flex items-center justify-center">
                           <div className="text-center text-muted-foreground">
                             <UploadCloud className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                            <p className="text-sm">No preview</p>
+                            <p className="text-sm">Tidak ada preview</p>
                           </div>
                         </div>
                       </div>
-                      <div className="text-center">
-                        {!imagePreview && <UploadCloud className="mx-auto h-12 w-12 text-muted-foreground mb-4" />}
-                      <div className="rounded-lg border border-dashed border-input bg-slate-50 dark:bg-slate-900 px-6 py-8">
-                        <div className="text-center">
-                          <div className="flex text-sm leading-6 text-muted-foreground justify-center">
-                            <label htmlFor="cover-image-upload" className="relative cursor-pointer rounded-md font-semibold text-primary focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 hover:text-primary/80">
-                              <span>Upload a file</span>
-                              <input id="cover-image-upload" name={field.name} type="file" className="sr-only" onChange={handleFileChange} accept="image/png, image/jpeg, image/jpg, image/webp" />
-                            </label>
-                            <p className="pl-1">or drag and drop</p>
-                          </div>
-                          <p className="text-xs leading-5 text-muted-foreground mt-2">PNG, JPG, JPEG, WEBP up to 5MB. Recommended: 1200x600px or larger.</p>
+                      <div className="rounded-lg border border-dashed border-input bg-slate-50 dark:bg-slate-900 px-6 py-8 text-center">
+                        <div className="flex text-sm leading-6 text-muted-foreground justify-center">
+                          <label htmlFor="cover-image-upload" className="relative cursor-pointer rounded-md font-semibold text-primary hover:text-primary/80">
+                            <span>Upload file</span>
+                            <input id="cover-image-upload" name={field.name} type="file" className="sr-only" onChange={handleFileChange} accept="image/png, image/jpeg, image/jpg, image/webp" />
+                          </label>
+                          <p className="pl-1">atau drag & drop</p>
                         </div>
-                      </div>
+                        <p className="text-xs leading-5 text-muted-foreground mt-2">PNG, JPG, JPEG, WEBP maks. 5MB. Rekomendasi: 1200x600px.</p>
                       </div>
                     </div>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
-              
-              <Controller
-                control={form.control}
-                name="generalRequirementsHtml"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>General Requirements</FormLabel>
-                    <RichTextEditor {...field} placeholder="List general job requirements..." />
-                    <FormMessage />
-                  </FormItem>
+
+              {/* Rich Text Fields */}
+              <Controller control={form.control} name="generalRequirementsHtml" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Persyaratan Umum</FormLabel>
+                  <RichTextEditor {...field} placeholder="Daftar persyaratan umum pekerjaan..." />
+                  <FormMessage />
+                </FormItem>
               )} />
-              
-              <Controller
-                control={form.control}
-                name="specialRequirementsHtml"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Special Requirements</FormLabel>
-                    <RichTextEditor {...field} placeholder="List special or technical job requirements..." />
-                    <FormMessage />
-                  </FormItem>
+
+              <Controller control={form.control} name="specialRequirementsHtml" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Persyaratan Khusus</FormLabel>
+                  <RichTextEditor {...field} placeholder="Daftar persyaratan teknis atau khusus..." />
+                  <FormMessage />
+                </FormItem>
               )} />
             </form>
           </Form>
         </div>
         <DialogFooter className="flex-shrink-0 p-6 pt-4 border-t">
-          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Batal</Button>
           <Button type="submit" form="job-form" disabled={loading}>
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Save
+            Simpan
           </Button>
         </DialogFooter>
       </DialogContent>

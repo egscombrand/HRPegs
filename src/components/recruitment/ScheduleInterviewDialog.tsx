@@ -11,9 +11,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2, Save } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import type { UserProfile, Job, Brand } from '@/lib/types';
+import type { UserProfile, Job } from '@/lib/types';
 import { add, format } from 'date-fns';
-import { PanelistPickerSimple } from './PanelistPickerSimple';
 
 export const scheduleSchema = z.object({
   dateTime: z.coerce.date({ required_error: 'Tanggal dan waktu harus diisi.' }),
@@ -28,7 +27,6 @@ export const scheduleSchema = z.object({
     z.string().url({ message: "URL meeting tidak valid." }).optional().or(z.literal(''))
   ),
   notes: z.string().optional(),
-  panelists: z.array(z.object({ value: z.string(), label: z.string() })).min(1, 'Minimal harus ada 1 panelis.'),
 });
 
 export type ScheduleInterviewData = z.infer<typeof scheduleSchema>;
@@ -41,21 +39,19 @@ interface ScheduleInterviewDialogProps {
   candidateName: string;
   recruiter: UserProfile;
   job: Job;
-  allUsers: UserProfile[];
-  allBrands: Brand[];
 }
 
-export function ScheduleInterviewDialog({ open, onOpenChange, onConfirm, initialData, candidateName, recruiter, job, allUsers, allBrands }: ScheduleInterviewDialogProps) {
+export function ScheduleInterviewDialog({ open, onOpenChange, onConfirm, initialData, candidateName, recruiter, job }: ScheduleInterviewDialogProps) {
   const [isSaving, setIsSaving] = useState(false);
-  
+
   const form = useForm<ScheduleInterviewData>({
     resolver: zodResolver(scheduleSchema),
   });
-  
+
   const { watch } = form;
   const startTime = watch('dateTime');
   const duration = watch('duration');
-  
+
   const endTime = useMemo(() => {
     if (startTime && duration) {
         return add(startTime, { minutes: duration });
@@ -72,10 +68,9 @@ export function ScheduleInterviewDialog({ open, onOpenChange, onConfirm, initial
         duration: initialData?.duration || job?.interviewTemplate?.slotDurationMinutes || 30,
         meetingLink: initialData?.meetingLink || templateLink,
         notes: initialData?.notes || '',
-        panelists: initialData?.panelists || [{ value: recruiter.uid, label: recruiter.fullName }],
       });
     }
-  }, [open, initialData, form, recruiter, job]);
+  }, [open, initialData, form, job]);
 
   const handleSubmit = async (values: ScheduleInterviewData) => {
     setIsSaving(true);
@@ -138,23 +133,6 @@ export function ScheduleInterviewDialog({ open, onOpenChange, onConfirm, initial
                 )}
                 />
 
-                <FormField
-                    control={form.control}
-                    name="panelists"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>Panelis</FormLabel>
-                        <PanelistPickerSimple 
-                            allUsers={allUsers}
-                            allBrands={allBrands}
-                            selectedIds={field.value?.map(p => p.value) || []}
-                            onChange={(ids) => field.onChange(ids.map(id => ({ value: id, label: allUsers.find(u => u.uid === id)?.fullName || ''})))}
-                        />
-                        <FormMessage />
-                        </FormItem>
-                    )}
-                />
-                
                 <FormField
                 control={form.control}
                 name="notes"

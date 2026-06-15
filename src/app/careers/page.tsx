@@ -4,7 +4,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowRight, FileText, Search, User, UserCheck, ShieldCheck, BarChart, Globe, Menu, Users, Loader2, TrendingUp, Globe2, CheckSquare, MapPin } from 'lucide-react';
+import { ArrowRight, FileText, Search, User, UserCheck, ShieldCheck, BarChart, Globe, Menu, Users, Loader2, TrendingUp, Globe2, CheckSquare, MapPin, Briefcase } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -368,17 +368,30 @@ const HeroSection = ({ backgroundImageUrl }: { backgroundImageUrl?: string }) =>
 // --- Job Explorer Section ---
 const JobExplorerSection = () => {
     const [isClient, setIsClient] = React.useState(false);
-    React.useEffect(() => {
-        setIsClient(true);
-    }, []);
-    
+    React.useEffect(() => { setIsClient(true); }, []);
+
     return (
-        <section id="lowongan" className="w-full scroll-mt-20 pt-36 pb-16 lg:pt-24 lg:pb-24">
+        <section id="lowongan" className="relative w-full scroll-mt-20 pt-36 pb-20 lg:pt-28 lg:pb-28 overflow-hidden">
+            {/* Soft background gradient */}
+            <div className="absolute inset-0 -z-10 bg-gradient-to-b from-teal-50/60 via-background to-background dark:from-teal-950/20 dark:via-background dark:to-background" />
+            {/* Decorative blobs */}
+            <div className="absolute -top-32 -left-40 w-[500px] h-[500px] rounded-full bg-teal-200/20 dark:bg-teal-900/10 blur-[100px] -z-10" />
+            <div className="absolute top-10 -right-32 w-[400px] h-[400px] rounded-full bg-cyan-200/15 dark:bg-cyan-900/10 blur-[120px] -z-10" />
+
             <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+                {/* Section header */}
                 <div className="mx-auto max-w-2xl text-center">
-                    <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">{t.JobExplorer.title}</h2>
-                    <p className="mt-4 text-lg text-muted-foreground">{t.JobExplorer.subtitle}</p>
+                    <div className="inline-flex items-center gap-2 rounded-full border border-teal-200/60 dark:border-teal-800/60 bg-teal-50 dark:bg-teal-950/40 px-4 py-1.5 text-[11px] font-bold uppercase tracking-widest text-teal-600 dark:text-teal-400 mb-5">
+                        <Briefcase className="h-3.5 w-3.5" /> Lowongan Aktif
+                    </div>
+                    <h2 className="text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white sm:text-5xl">
+                        {t.JobExplorer.title}
+                    </h2>
+                    <p className="mt-4 text-lg text-slate-500 dark:text-slate-400 leading-relaxed">
+                        {t.JobExplorer.subtitle}
+                    </p>
                 </div>
+
                 {isClient ? <DynamicJobExplorerClient /> : <JobExplorerSkeleton />}
             </div>
         </section>
