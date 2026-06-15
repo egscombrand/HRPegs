@@ -51,7 +51,7 @@ export function CandidateLoginForm({ onSwitchToRegister }: { onSwitchToRegister?
 
     if (userDocSnap.exists()) {
       const userProfile = userDocSnap.data() as UserProfile;
-      if (ROLES_INTERNAL.includes(userProfile.role)) {
+      if (userProfile.role !== 'kandidat' && ROLES_INTERNAL.includes(userProfile.role as any)) {
         await auth.signOut();
         toast({
           variant: 'destructive',

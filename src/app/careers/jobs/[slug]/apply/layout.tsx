@@ -29,7 +29,7 @@ export default function CandidateApplyLayout({
       return;
     }
     
-    if (ROLES_INTERNAL.includes(userProfile.role)) {
+    if (userProfile.role !== 'kandidat' && ROLES_INTERNAL.includes(userProfile.role as any)) {
       // Logged in, but is an internal user. Redirect to admin portal.
       // This path is outside the i18n segment, so we need to use window.location for a full redirect.
       window.location.href = '/admin';

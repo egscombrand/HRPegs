@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import React, { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
+import Image from "next/image";
 import { useAuth } from "@/providers/auth-provider";
 import {
   useAuth as useFirebaseAuth,
@@ -14,7 +15,7 @@ import {
 } from "@/firebase";
 import { doc, collection, query, where } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
-import { LogOut, ArrowLeft, Leaf, Bell, ChevronDown } from "lucide-react";
+import { LogOut, ArrowLeft, Bell, ChevronDown } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -346,19 +347,16 @@ export function CandidatePortalLayout({ children }: { children: ReactNode }) {
         className="bg-sidebar text-sidebar-foreground border-r border-sidebar-border"
       >
         <SidebarHeader className="border-b border-sidebar-border p-0">
-          <div className="flex h-16 items-center px-4">
-            <Link href="/careers/portal" className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-accent">
-                <Leaf className="h-6 w-6 text-primary" />
-              </div>
-              <div className="leading-tight group-data-[state=collapsed]:hidden">
-                <div className="font-semibold text-foreground text-base">
-                  Environesia Karir
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Portal Kandidat
-                </div>
-              </div>
+          <div className="flex items-center justify-center px-[18px] py-6">
+            <Link href="/careers/portal" className="flex items-center justify-center w-full">
+              <Image
+                src="/images/Environesia Vacancies.png"
+                alt="Environesia Vacancies"
+                width={200}
+                height={62}
+                className="w-[200px] h-auto object-contain group-data-[state=collapsed]:w-[48px] group-data-[state=collapsed]:h-auto"
+                priority
+              />
             </Link>
           </div>
         </SidebarHeader>
