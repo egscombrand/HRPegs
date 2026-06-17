@@ -92,6 +92,7 @@ export function CandidateRegisterForm({ onSwitchToLogin }: { onSwitchToLogin?: (
       const profileData = {
           fullName: values.fullName,
           email: values.email,
+          phone: values.whatsappNumber,
           whatsappNumber: values.whatsappNumber,
           profileStatus: 'draft',
           profileStep: 1,

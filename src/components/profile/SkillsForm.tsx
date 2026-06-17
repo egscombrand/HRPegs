@@ -59,6 +59,7 @@ import {
   limit,
   getDocs,
   updateDoc,
+  arrayUnion,
 } from "firebase/firestore";
 import { uploadFile } from "@/lib/storage/storage-adapter";
 import {
@@ -79,6 +80,14 @@ import {
   SelectValue,
 } from "../ui/select";
 
+const certFileObjectSchema = z.object({
+  url: z.string(),
+  fileId: z.string().optional(),
+  fileName: z.string().optional(),
+  mimeType: z.string().optional(),
+  googleDriveWebViewLink: z.string().optional(),
+});
+
 const certificationSchema = z.object({
   id: z.string(),
   name: z.string().min(1, "Nama sertifikasi harus diisi"),
@@ -91,7 +100,7 @@ const certificationSchema = z.object({
     .regex(/^\d{4}-\d{2}$/, { message: "Gunakan format YYYY-MM" })
     .optional()
     .or(z.literal("")),
-  imageUrl: z.string().optional().or(z.literal("")),
+  imageUrl: z.union([z.string(), certFileObjectSchema]).optional(),
 });
 
 const formSchema = z.object({
@@ -261,6 +270,10 @@ function FileUploadField({
           metadataUpdate.ijazahFileId = fileId;
           metadataUpdate.ijazahFileName = processedFile.name;
           metadataUpdate.ijazahGoogleDriveWebViewLink = result.webViewLink;
+        } else if (pathPrefix.startsWith("cert_") && fileId) {
+          // Register cert fileId immediately so /api/storage/view can verify ownership
+          // before the user clicks Simpan & Lanjut
+          metadataUpdate.certFileIds = arrayUnion(fileId);
         }
 
         await setDocumentNonBlocking(profileRef, metadataUpdate, {
@@ -593,8 +606,24 @@ export function SkillsForm({
     }
     setIsSaving(true);
     try {
+      // Normalize cert imageUrl: FileUploadField returns an object but Firestore
+      // needs a consistent structure so /api/storage/view can find the fileId.
+      const normalizedCerts = (values.certifications || []).map((cert) => {
+        const img = cert.imageUrl;
+        if (img && typeof img === "object" && "url" in img) {
+          return {
+            ...cert,
+            imageUrl: img.url || "",
+            imageFileId: img.fileId || null,
+            imageFileName: img.fileName || null,
+            imageGoogleDriveWebViewLink: img.googleDriveWebViewLink || null,
+          };
+        }
+        return cert;
+      });
+
       const payload: any = {
-        certifications: values.certifications,
+        certifications: normalizedCerts,
         profileStatus: "draft",
         profileStep: 6,
         updatedAt: serverTimestamp() as Timestamp,

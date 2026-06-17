@@ -1309,11 +1309,21 @@ export type Address = {
   street?: string;
   rt?: string;
   rw?: string;
+  postalCode?: string;
+  // Legacy flat name fields (kept for backward compat)
   village?: string;
   district?: string;
   city?: string;
   province?: string;
-  postalCode?: string;
+  // Structured region fields with codes from wilayah.id
+  provinceCode?: string;
+  provinceName?: string;
+  regencyCode?: string;
+  regencyName?: string;
+  districtCode?: string;
+  districtName?: string;
+  villageCode?: string;
+  villageName?: string;
 };
 
 export type DocumentType =
@@ -1384,6 +1394,7 @@ export type Profile = {
   nickname: string;
   email: string;
   phone: string;
+  whatsappNumber?: string; // synced from phone; also set on registration
   eKtpNumber: string;
   nikHash?: string;
   gender: "Laki-laki" | "Perempuan";

@@ -41,11 +41,44 @@ export function extractFileIdFromUrl(url?: string | null): string | null {
  * Open secure file with Firebase authentication.
  * Fetches from /api/storage/view with Bearer token.
  * Used for candidate documents and employee documents.
+ *
+ * Accepts a fileId string or a file metadata object with one of:
+ * fileId, driveFileId, secureFileId, or a URL containing fileId.
  */
 export async function openSecureFile(
-  fileId: string | null | undefined,
+  fileIdOrMeta:
+    | string
+    | null
+    | undefined
+    | {
+        fileId?: string;
+        driveFileId?: string;
+        secureFileId?: string;
+        fileUrl?: string;
+        downloadUrl?: string;
+        url?: string;
+      },
   fileName?: string,
 ): Promise<void> {
+  // Resolve fileId from various input shapes
+  let fileId: string | null | undefined;
+  if (!fileIdOrMeta) {
+    fileId = null;
+  } else if (typeof fileIdOrMeta === "string") {
+    // If the string looks like a URL, extract fileId from it; otherwise use it directly
+    fileId = fileIdOrMeta.includes("/") || fileIdOrMeta.includes("?")
+      ? extractFileIdFromUrl(fileIdOrMeta)
+      : fileIdOrMeta;
+  } else {
+    fileId =
+      fileIdOrMeta.fileId ||
+      fileIdOrMeta.driveFileId ||
+      fileIdOrMeta.secureFileId ||
+      extractFileIdFromUrl(fileIdOrMeta.fileUrl) ||
+      extractFileIdFromUrl(fileIdOrMeta.downloadUrl) ||
+      extractFileIdFromUrl(fileIdOrMeta.url) ||
+      null;
+  }
   if (!fileId) {
     throw new Error("FileId tidak ditemukan untuk dokumen ini.");
   }
@@ -82,7 +115,7 @@ export async function openSecureFile(
           "Sesi telah berakhir. Silakan login kembali untuk melihat dokumen.";
       } else if (response.status === 403) {
         errorMessage =
-          "File belum tercatat sebagai milik akun ini. Silakan klik Simpan & Lanjut atau unggah ulang.";
+          "File sertifikat belum tersimpan. Klik Simpan & Lanjut terlebih dahulu agar file terdaftar ke akun Anda.";
       } else if (response.status === 404) {
         errorMessage =
           "Dokumen tidak ditemukan. File mungkin telah dihapus atau fileId tidak valid.";

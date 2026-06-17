@@ -33,16 +33,33 @@ import { parseDateValue } from "@/lib/utils";
 import { useFirestore, setDocumentNonBlocking } from "@/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { doc } from "firebase/firestore";
+import {
+  RegionCascadeSelect,
+  type RegionValue,
+  emptyRegionValue,
+} from "./RegionCascadeSelect";
 
-const addressObjectSchema = z.object({
-  street: z.string().min(5, "Alamat jalan harus diisi."),
-  rt: z.string().min(1, "RT harus diisi."),
-  rw: z.string().min(1, "RW harus diisi."),
-  village: z.string().min(2, "Kelurahan/Desa harus diisi."),
-  district: z.string().min(2, "Kecamatan harus diisi."),
-  city: z.string().min(2, "Kota/Kabupaten harus diisi."),
-  province: z.string().min(2, "Provinsi harus diisi."),
-  postalCode: z.string().min(5, "Kode Pos harus diisi."),
+// ── Zod schema ──────────────────────────────────────────────────────────────
+
+const addressRegionSchema = z.object({
+  provinceCode: z.string().min(1, "Provinsi harus dipilih."),
+  provinceName: z.string().min(1, "Provinsi harus dipilih."),
+  regencyCode: z.string().min(1, "Kota/Kabupaten harus dipilih."),
+  regencyName: z.string().min(1, "Kota/Kabupaten harus dipilih."),
+  districtCode: z.string().min(1, "Kecamatan harus dipilih."),
+  districtName: z.string().min(1, "Kecamatan harus dipilih."),
+  villageCode: z.string().min(1, "Kelurahan/Desa harus dipilih."),
+  villageName: z.string().min(1, "Kelurahan/Desa harus dipilih."),
+  street: z.string().min(5, "Alamat jalan harus diisi (min 5 karakter)."),
+  rt: z
+    .string()
+    .regex(/^\d{1,3}$/, "RT hanya angka, maks 3 digit.")
+    .min(1, "RT harus diisi."),
+  rw: z
+    .string()
+    .regex(/^\d{1,3}$/, "RW hanya angka, maks 3 digit.")
+    .min(1, "RW harus diisi."),
+  postalCode: z.string().regex(/^\d{5}$/, "Kode Pos harus 5 digit angka."),
 });
 
 const personalDataSchema = z
@@ -59,9 +76,9 @@ const personalDataSchema = z
     }),
     birthPlace: z.string().min(2, { message: "Tempat lahir harus diisi." }),
     birthDate: z.coerce.date({ required_error: "Tanggal lahir harus diisi." }),
-    addressKtp: addressObjectSchema,
+    addressKtp: addressRegionSchema,
     isDomicileSameAsKtp: z.boolean().default(true),
-    addressDomicile: addressObjectSchema.deepPartial().optional(),
+    addressDomicile: addressRegionSchema.partial().optional(),
     hasNpwp: z.boolean().default(false),
     npwpNumber: z.string().optional().or(z.literal("")),
     willingToWfo: z.enum(["ya", "tidak"], {
@@ -81,24 +98,16 @@ const personalDataSchema = z
   })
   .superRefine((data, ctx) => {
     if (!data.isDomicileSameAsKtp) {
-      const domicileResult = addressObjectSchema.safeParse(
-        data.addressDomicile,
-      );
-      if (!domicileResult.success) {
-        domicileResult.error.errors.forEach((error) => {
-          ctx.addIssue({
-            ...error,
-            path: ["addressDomicile", ...error.path],
-          });
+      const result = addressRegionSchema.safeParse(data.addressDomicile);
+      if (!result.success) {
+        result.error.errors.forEach((e) => {
+          ctx.addIssue({ ...e, path: ["addressDomicile", ...e.path] });
         });
       }
     }
     if (data.hasNpwp) {
-      const npwpDigits = data.npwpNumber?.replace(/[\.\-]/g, "");
-      if (
-        !npwpDigits ||
-        (npwpDigits.length !== 15 && npwpDigits.length !== 16)
-      ) {
+      const digits = data.npwpNumber?.replace(/[\.\-]/g, "");
+      if (!digits || (digits.length !== 15 && digits.length !== 16)) {
         ctx.addIssue({
           path: ["npwpNumber"],
           message: "NPWP tidak valid. Harap masukkan 15 atau 16 digit.",
@@ -110,29 +119,223 @@ const personalDataSchema = z
 
 type FormValues = z.infer<typeof personalDataSchema>;
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 interface PersonalDataFormProps {
   initialData: Partial<Profile>;
   onSaveSuccess: () => void;
 }
 
-const addressDefaultValues: Address = {
+const addressDefaultValues = {
+  provinceCode: "",
+  provinceName: "",
+  regencyCode: "",
+  regencyName: "",
+  districtCode: "",
+  districtName: "",
+  villageCode: "",
+  villageName: "",
   street: "",
   rt: "",
   rw: "",
-  village: "",
-  district: "",
-  city: "",
-  province: "",
   postalCode: "",
 };
 
-const getAddressObject = (address: any): Address => {
-  if (typeof address === "string")
-    return { ...addressDefaultValues, street: address };
-  return address
-    ? { ...addressDefaultValues, ...address }
-    : addressDefaultValues;
-};
+function getAddressFormValues(raw: any): typeof addressDefaultValues {
+  if (!raw) return { ...addressDefaultValues };
+  if (typeof raw === "string") return { ...addressDefaultValues, street: raw };
+  return {
+    provinceCode: raw.provinceCode || "",
+    provinceName: raw.provinceName || raw.province || "",
+    regencyCode: raw.regencyCode || "",
+    regencyName: raw.regencyName || raw.city || "",
+    districtCode: raw.districtCode || "",
+    districtName: raw.districtName || raw.district || "",
+    villageCode: raw.villageCode || "",
+    villageName: raw.villageName || raw.village || "",
+    street: raw.street || "",
+    rt: raw.rt || "",
+    rw: raw.rw || "",
+    postalCode: raw.postalCode || "",
+  };
+}
+
+function regionFromFormAddress(addr: typeof addressDefaultValues): RegionValue {
+  return {
+    provinceCode: addr.provinceCode,
+    provinceName: addr.provinceName,
+    regencyCode: addr.regencyCode,
+    regencyName: addr.regencyName,
+    districtCode: addr.districtCode,
+    districtName: addr.districtName,
+    villageCode: addr.villageCode,
+    villageName: addr.villageName,
+  };
+}
+
+// ── AddressSection sub-component ────────────────────────────────────────────
+
+interface AddressSectionProps {
+  prefix: "addressKtp" | "addressDomicile";
+  form: ReturnType<typeof useForm<FormValues>>;
+  disabled?: boolean;
+}
+
+function AddressSection({ prefix, form, disabled }: AddressSectionProps) {
+  const addr = form.watch(prefix) as typeof addressDefaultValues | undefined;
+  const errors = (form.formState.errors as any)[prefix];
+
+  const regionValue: RegionValue = addr
+    ? regionFromFormAddress(addr as typeof addressDefaultValues)
+    : emptyRegionValue;
+
+  const handleRegionChange = (region: RegionValue) => {
+    // Validate only the field that now has a value (so existing errors clear if fixed).
+    // For fields that were reset to '' (downstream cascades), clear errors instead of
+    // validating — avoids showing "harus dipilih" before user has a chance to choose.
+    form.setValue(`${prefix}.provinceCode` as any, region.provinceCode, {
+      shouldValidate: !!region.provinceCode,
+    });
+    form.setValue(`${prefix}.provinceName` as any, region.provinceName);
+
+    form.setValue(`${prefix}.regencyCode` as any, region.regencyCode, {
+      shouldValidate: !!region.regencyCode,
+    });
+    form.setValue(`${prefix}.regencyName` as any, region.regencyName);
+    if (!region.regencyCode) form.clearErrors(`${prefix}.regencyCode` as any);
+
+    form.setValue(`${prefix}.districtCode` as any, region.districtCode, {
+      shouldValidate: !!region.districtCode,
+    });
+    form.setValue(`${prefix}.districtName` as any, region.districtName);
+    if (!region.districtCode) form.clearErrors(`${prefix}.districtCode` as any);
+
+    form.setValue(`${prefix}.villageCode` as any, region.villageCode, {
+      shouldValidate: !!region.villageCode,
+    });
+    form.setValue(`${prefix}.villageName` as any, region.villageName);
+    if (!region.villageCode) form.clearErrors(`${prefix}.villageCode` as any);
+  };
+
+  return (
+    <div className="p-4 border rounded-lg space-y-4">
+      {/* Region dropdowns */}
+      <RegionCascadeSelect
+        value={regionValue}
+        onChange={handleRegionChange}
+        disabled={disabled}
+        errors={{
+          province: errors?.provinceCode?.message,
+          regency: errors?.regencyCode?.message,
+          district: errors?.districtCode?.message,
+          village: errors?.villageCode?.message,
+        }}
+      />
+
+      {/* Manual fields */}
+      <FormField
+        control={form.control}
+        name={`${prefix}.street` as any}
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>
+              Jalan / Detail Alamat <span className="text-destructive">*</span>
+            </FormLabel>
+            <FormControl>
+              <Textarea
+                {...field}
+                value={field.value ?? ""}
+                placeholder="Nama jalan, nomor rumah, RT/RW, dll..."
+                disabled={disabled}
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <div className="grid grid-cols-3 gap-4">
+        <FormField
+          control={form.control}
+          name={`${prefix}.rt` as any}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>
+                RT <span className="text-destructive">*</span>
+              </FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="001"
+                  maxLength={3}
+                  {...field}
+                  value={field.value ?? ""}
+                  disabled={disabled}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/\D/g, "").slice(0, 3);
+                    field.onChange(v);
+                  }}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name={`${prefix}.rw` as any}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>
+                RW <span className="text-destructive">*</span>
+              </FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="002"
+                  maxLength={3}
+                  {...field}
+                  value={field.value ?? ""}
+                  disabled={disabled}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/\D/g, "").slice(0, 3);
+                    field.onChange(v);
+                  }}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name={`${prefix}.postalCode` as any}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>
+                Kode Pos <span className="text-destructive">*</span>
+              </FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="55281"
+                  maxLength={5}
+                  {...field}
+                  value={field.value ?? ""}
+                  disabled={disabled}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/\D/g, "").slice(0, 5);
+                    field.onChange(v);
+                  }}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ── Main Form ────────────────────────────────────────────────────────────────
 
 export function PersonalDataForm({
   initialData,
@@ -149,14 +352,14 @@ export function PersonalDataForm({
       fullName: initialData.fullName || "",
       nickname: initialData.nickname || "",
       email: initialData.email || "",
-      phone: initialData.phone || "",
+      phone: initialData.phone || (initialData as any).whatsappNumber || (initialData as any).noTelp || (initialData as any).mobileNumber || "",
       eKtpNumber: initialData.eKtpNumber || "",
       gender: initialData.gender,
       birthPlace: initialData.birthPlace || "",
       birthDate: parseDateValue(initialData.birthDate) || undefined,
-      addressKtp: getAddressObject(initialData.addressKtp),
+      addressKtp: getAddressFormValues(initialData.addressKtp),
       isDomicileSameAsKtp: initialData.isDomicileSameAsKtp ?? true,
-      addressDomicile: getAddressObject(initialData.addressDomicile),
+      addressDomicile: getAddressFormValues(initialData.addressDomicile),
       hasNpwp: initialData.hasNpwp || false,
       npwpNumber: initialData.npwpNumber || "",
       willingToWfo:
@@ -174,52 +377,61 @@ export function PersonalDataForm({
   const hasNpwp = form.watch("hasNpwp");
   const addressKtp = form.watch("addressKtp");
 
+  // Auto-sync domicile when "same as KTP" is checked
   useEffect(() => {
-    if (isDomicileSameAsKtp) {
-      form.setValue("addressDomicile", addressKtp, { shouldValidate: true });
+    if (isDomicileSameAsKtp && addressKtp) {
+      form.setValue("addressDomicile", addressKtp as any, {
+        shouldValidate: false,
+      });
     }
   }, [isDomicileSameAsKtp, addressKtp, form]);
 
   const onInvalid = (errors: FieldErrors<FormValues>) => {
     console.error("Form validation errors:", errors);
-    const firstErrorKey = Object.keys(errors)[0] as
-      | keyof FormValues
-      | undefined;
-    if (firstErrorKey) {
-      const readableFieldName = firstErrorKey
-        .replace(/([A-Z])/g, " $1")
-        .replace(/\./g, " -> ")
-        .replace(/^./, (str) => str.toUpperCase());
+    const firstKey = Object.keys(errors)[0] as keyof FormValues | undefined;
+    if (firstKey) {
       toast({
         variant: "destructive",
         title: "Validasi Gagal",
-        description: `Harap periksa kembali isian Anda. Kolom "${readableFieldName}" sepertinya belum valid.`,
+        description: `Harap periksa kembali isian Anda. Ada kolom yang belum lengkap atau tidak valid.`,
       });
-      try {
-        form.setFocus(firstErrorKey as any);
-      } catch (e) {
-        console.warn("Could not set focus on invalid field:", firstErrorKey);
-      }
     }
   };
 
-  const cleanUndefinedValues = (value: any): any => {
-    if (value === undefined) return undefined;
-    if (value === null) return null;
-    if (Array.isArray(value)) {
-      return value
-        .map(cleanUndefinedValues)
-        .filter((item) => item !== undefined);
-    }
-    if (typeof value === "object" && value !== null) {
+  const cleanUndefined = (val: any): any => {
+    if (val === undefined) return null;
+    if (val === null) return null;
+    if (Array.isArray(val)) return val.map(cleanUndefined).filter((v) => v !== undefined);
+    if (typeof val === "object") {
       return Object.fromEntries(
-        Object.entries(value)
-          .map(([key, nestedValue]) => [key, cleanUndefinedValues(nestedValue)])
-          .filter(([, nestedValue]) => nestedValue !== undefined),
+        Object.entries(val)
+          .map(([k, v]) => [k, cleanUndefined(v)])
+          .filter(([, v]) => v !== undefined),
       );
     }
-    return value;
+    return val;
   };
+
+  const buildAddress = (addr: typeof addressDefaultValues): Address => ({
+    street: addr.street || "",
+    rt: addr.rt || "",
+    rw: addr.rw || "",
+    postalCode: addr.postalCode || "",
+    // New structured region
+    provinceCode: addr.provinceCode || "",
+    provinceName: addr.provinceName || "",
+    regencyCode: addr.regencyCode || "",
+    regencyName: addr.regencyName || "",
+    districtCode: addr.districtCode || "",
+    districtName: addr.districtName || "",
+    villageCode: addr.villageCode || "",
+    villageName: addr.villageName || "",
+    // Legacy backward-compat aliases
+    province: addr.provinceName || "",
+    city: addr.regencyName || "",
+    district: addr.districtName || "",
+    village: addr.villageName || "",
+  });
 
   const handleSubmit = async (values: FormValues) => {
     if (!firebaseUser) {
@@ -232,24 +444,29 @@ export function PersonalDataForm({
     }
     setIsSaving(true);
     try {
-      const { willingToWfo, ...restOfValues } = values;
+      const ktpAddr = buildAddress(values.addressKtp as typeof addressDefaultValues);
+      const domicileAddr = values.isDomicileSameAsKtp
+        ? ktpAddr
+        : buildAddress(values.addressDomicile as typeof addressDefaultValues);
+
+      const { willingToWfo, addressKtp: _ktp, addressDomicile: _dom, ...rest } = values;
       const dataToSave: Partial<Profile> = {
-        ...restOfValues,
+        ...rest,
         willingToWfo: willingToWfo === "ya",
         birthDate: Timestamp.fromDate(values.birthDate!),
-        addressDomicile: values.isDomicileSameAsKtp
-          ? values.addressKtp
-          : (values.addressDomicile as Address),
+        addressKtp: ktpAddr,
+        addressDomicile: domicileAddr,
+        isDomicileSameAsKtp: values.isDomicileSameAsKtp,
+        // Keep whatsappNumber in sync with phone so both fields are consistent
+        whatsappNumber: values.phone || "",
         profileStatus: "draft",
         profileStep: 2,
         updatedAt: serverTimestamp() as Timestamp,
       };
 
-      const cleanDataToSave = cleanUndefinedValues(dataToSave);
+      const clean = cleanUndefined(dataToSave);
       const profileDocRef = doc(firestore, "profiles", firebaseUser.uid);
-      await setDocumentNonBlocking(profileDocRef, cleanDataToSave, {
-        merge: true,
-      });
+      await setDocumentNonBlocking(profileDocRef, clean, { merge: true });
 
       toast({
         title: "Data Pribadi Disimpan",
@@ -272,9 +489,8 @@ export function PersonalDataForm({
       <CardHeader>
         <CardTitle>Informasi Pribadi</CardTitle>
         <CardDescription>
-          Pastikan semua data yang Anda masukkan sudah benar. NB: Kolom dengan
-          tanda <span className="text-destructive">*</span> adalah kolom yang
-          wajib diisi.
+          Pastikan semua data yang Anda masukkan sudah benar. Kolom dengan tanda{" "}
+          <span className="text-destructive">*</span> wajib diisi.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -283,6 +499,7 @@ export function PersonalDataForm({
             onSubmit={form.handleSubmit(handleSubmit, onInvalid)}
             className="space-y-8"
           >
+            {/* ── Data Diri ── */}
             <div className="space-y-6">
               <h3 className="text-xl font-semibold tracking-tight border-b pb-2">
                 Data Diri
@@ -309,8 +526,7 @@ export function PersonalDataForm({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        Nama Panggilan{" "}
-                        <span className="text-destructive">*</span>
+                        Nama Panggilan <span className="text-destructive">*</span>
                       </FormLabel>
                       <FormControl>
                         <Input {...field} value={field.value ?? ""} />
@@ -342,8 +558,7 @@ export function PersonalDataForm({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        Nomor Telepon{" "}
-                        <span className="text-destructive">*</span>
+                        Nomor Telepon <span className="text-destructive">*</span>
                       </FormLabel>
                       <FormControl>
                         <Input
@@ -383,8 +598,7 @@ export function PersonalDataForm({
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
                       <FormLabel>
-                        Tanggal Lahir{" "}
-                        <span className="text-destructive">*</span>
+                        Tanggal Lahir <span className="text-destructive">*</span>
                       </FormLabel>
                       <FormControl>
                         <GoogleDatePicker
@@ -412,6 +626,9 @@ export function PersonalDataForm({
                           {...field}
                           maxLength={16}
                           value={field.value ?? ""}
+                          onChange={(e) =>
+                            field.onChange(e.target.value.replace(/\D/g, "").slice(0, 16))
+                          }
                         />
                       </FormControl>
                       <FormMessage />
@@ -424,8 +641,7 @@ export function PersonalDataForm({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        Jenis Kelamin{" "}
-                        <span className="text-destructive">*</span>
+                        Jenis Kelamin <span className="text-destructive">*</span>
                       </FormLabel>
                       <FormControl>
                         <RadioGroup
@@ -437,17 +653,13 @@ export function PersonalDataForm({
                             <FormControl>
                               <RadioGroupItem value="Laki-laki" />
                             </FormControl>
-                            <FormLabel className="font-normal">
-                              Laki-laki
-                            </FormLabel>
+                            <FormLabel className="font-normal">Laki-laki</FormLabel>
                           </FormItem>
                           <FormItem className="flex items-center space-x-2 space-y-0">
                             <FormControl>
                               <RadioGroupItem value="Perempuan" />
                             </FormControl>
-                            <FormLabel className="font-normal">
-                              Perempuan
-                            </FormLabel>
+                            <FormLabel className="font-normal">Perempuan</FormLabel>
                           </FormItem>
                         </RadioGroup>
                       </FormControl>
@@ -457,175 +669,22 @@ export function PersonalDataForm({
                 />
               </div>
             </div>
+
+            {/* ── Alamat ── */}
             <div className="space-y-6">
               <h3 className="text-xl font-semibold tracking-tight border-b pb-2">
                 Alamat
               </h3>
-              <div className="space-y-4">
-                <FormLabel>
+
+              {/* KTP Address */}
+              <div className="space-y-3">
+                <FormLabel className="text-base font-semibold">
                   Alamat Sesuai KTP <span className="text-destructive">*</span>
                 </FormLabel>
-                <div className="p-4 border rounded-lg space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="addressKtp.street"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          Jalan <span className="text-destructive">*</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Textarea
-                            {...field}
-                            placeholder="Masukkan nama jalan, nomor rumah, dll..."
-                            value={field.value ?? ""}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="addressKtp.rt"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>
-                            RT <span className="text-destructive">*</span>
-                          </FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder="001"
-                              {...field}
-                              value={field.value ?? ""}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="addressKtp.rw"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>
-                            RW <span className="text-destructive">*</span>
-                          </FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder="002"
-                              {...field}
-                              value={field.value ?? ""}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  <FormField
-                    control={form.control}
-                    name="addressKtp.village"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          Kelurahan/Desa{" "}
-                          <span className="text-destructive">*</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="Caturtunggal"
-                            {...field}
-                            value={field.value ?? ""}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="addressKtp.district"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          Kecamatan <span className="text-destructive">*</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="Depok"
-                            {...field}
-                            value={field.value ?? ""}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="addressKtp.city"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>
-                            Kota/Kabupaten{" "}
-                            <span className="text-destructive">*</span>
-                          </FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder="Sleman"
-                              {...field}
-                              value={field.value ?? ""}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="addressKtp.province"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>
-                            Provinsi <span className="text-destructive">*</span>
-                          </FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder="D.I. Yogyakarta"
-                              {...field}
-                              value={field.value ?? ""}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  <FormField
-                    control={form.control}
-                    name="addressKtp.postalCode"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          Kode Pos <span className="text-destructive">*</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="55281"
-                            {...field}
-                            value={field.value ?? ""}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                <AddressSection prefix="addressKtp" form={form} />
               </div>
+
+              {/* Same as KTP checkbox */}
               <FormField
                 control={form.control}
                 name="isDomicileSameAsKtp"
@@ -637,193 +696,33 @@ export function PersonalDataForm({
                         onCheckedChange={field.onChange}
                       />
                     </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel>
-                        Alamat domisili sama dengan alamat KTP
-                      </FormLabel>
-                    </div>
+                    <FormLabel className="font-normal cursor-pointer">
+                      Alamat domisili sama dengan alamat KTP
+                    </FormLabel>
                   </FormItem>
                 )}
               />
-              <div className="space-y-4">
-                <FormLabel>
+
+              {/* Domicile Address */}
+              <div className="space-y-3">
+                <FormLabel className="text-base font-semibold">
                   Alamat Domisili <span className="text-destructive">*</span>
                 </FormLabel>
                 {isDomicileSameAsKtp ? (
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-muted-foreground italic">
                     Alamat domisili mengikuti alamat KTP.
                   </p>
-                ) : null}
-                <div className="p-4 border rounded-lg space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="addressDomicile.street"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          Jalan <span className="text-destructive">*</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Textarea
-                            {...field}
-                            value={field.value ?? ""}
-                            placeholder="Masukkan nama jalan, nomor rumah, dll..."
-                            disabled={isDomicileSameAsKtp}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                ) : (
+                  <AddressSection
+                    prefix="addressDomicile"
+                    form={form}
+                    disabled={false}
                   />
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="addressDomicile.rt"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>
-                            RT <span className="text-destructive">*</span>
-                          </FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder="001"
-                              {...field}
-                              value={field.value ?? ""}
-                              disabled={isDomicileSameAsKtp}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="addressDomicile.rw"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>
-                            RW <span className="text-destructive">*</span>
-                          </FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder="002"
-                              {...field}
-                              value={field.value ?? ""}
-                              disabled={isDomicileSameAsKtp}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  <FormField
-                    control={form.control}
-                    name="addressDomicile.village"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          Kelurahan/Desa{" "}
-                          <span className="text-destructive">*</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="Caturtunggal"
-                            {...field}
-                            value={field.value ?? ""}
-                            disabled={isDomicileSameAsKtp}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="addressDomicile.district"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          Kecamatan <span className="text-destructive">*</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="Depok"
-                            {...field}
-                            value={field.value ?? ""}
-                            disabled={isDomicileSameAsKtp}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="addressDomicile.city"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>
-                            Kota/Kabupaten{" "}
-                            <span className="text-destructive">*</span>
-                          </FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder="Sleman"
-                              {...field}
-                              value={field.value ?? ""}
-                              disabled={isDomicileSameAsKtp}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="addressDomicile.province"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>
-                            Provinsi <span className="text-destructive">*</span>
-                          </FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder="D.I. Yogyakarta"
-                              {...field}
-                              value={field.value ?? ""}
-                              disabled={isDomicileSameAsKtp}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  <FormField
-                    control={form.control}
-                    name="addressDomicile.postalCode"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          Kode Pos <span className="text-destructive">*</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="55281"
-                            {...field}
-                            value={field.value ?? ""}
-                            disabled={isDomicileSameAsKtp}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                )}
               </div>
             </div>
+
+            {/* ── Informasi Tambahan ── */}
             <div className="space-y-6">
               <h3 className="text-xl font-semibold tracking-tight border-b pb-2">
                 Informasi Tambahan
@@ -839,9 +738,9 @@ export function PersonalDataForm({
                         onCheckedChange={field.onChange}
                       />
                     </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel>Saya memiliki NPWP</FormLabel>
-                    </div>
+                    <FormLabel className="font-normal cursor-pointer">
+                      Saya memiliki NPWP
+                    </FormLabel>
                   </FormItem>
                 )}
               />
@@ -936,6 +835,7 @@ export function PersonalDataForm({
                 />
               </div>
             </div>
+
             <div className="flex justify-end pt-4">
               <Button type="submit" disabled={isSaving}>
                 {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

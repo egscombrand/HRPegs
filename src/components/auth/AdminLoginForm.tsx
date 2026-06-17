@@ -161,7 +161,7 @@ export function AdminLoginForm() {
   return (
     <>
       <Form {...form}>
-        <div className="space-y-6 w-full">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 w-full">
           {/* Email Field */}
           <FormField
             control={form.control}
@@ -254,8 +254,7 @@ export function AdminLoginForm() {
 
           {/* Submit Button */}
           <button
-            type="button"
-            onClick={() => form.handleSubmit(onSubmit)()}
+            type="submit"
             disabled={loading}
             className="w-full h-11 mt-8 rounded-lg font-bold text-sm transition-all flex items-center justify-center gap-2 bg-teal-600 dark:bg-teal-600 text-white hover:bg-teal-700 dark:hover:bg-teal-700 disabled:opacity-70 disabled:cursor-not-allowed"
           >
@@ -292,7 +291,7 @@ export function AdminLoginForm() {
               Kembali ke Halaman Depan
             </button>
           </Link>
-        </div>
+        </form>
       </Form>
 
       {/* Forgot Password Dialog */}

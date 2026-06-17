@@ -354,7 +354,7 @@ export function CandidatePortalLayout({ children }: { children: ReactNode }) {
                 alt="Environesia Vacancies"
                 width={200}
                 height={62}
-                className="w-[200px] h-auto object-contain group-data-[state=collapsed]:w-[48px] group-data-[state=collapsed]:h-auto"
+                className="h-12 w-auto object-contain group-data-[state=collapsed]:h-8 group-data-[state=collapsed]:w-auto"
                 priority
               />
             </Link>
