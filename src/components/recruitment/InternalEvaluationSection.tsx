@@ -354,10 +354,12 @@ export function InternalEvaluationSection({
             </div>
             <div>
               <CardTitle className="text-3xl font-black tracking-tighter uppercase text-slate-900 dark:text-slate-100">
-                Evaluasi Internal
+                {isHRD ? "Evaluasi Internal" : "Rekomendasi Penilai"}
               </CardTitle>
               <CardDescription className="text-slate-600 font-bold italic dark:text-slate-400">
-                Panel kendali & monitoring kualitatif tim rekrutmen.
+                {isHRD
+                  ? "Panel kendali & monitoring kualitatif tim rekrutmen."
+                  : "Berikan rekomendasi sebagai bahan pertimbangan HRD."}
               </CardDescription>
             </div>
           </div>
@@ -740,7 +742,9 @@ export function InternalEvaluationSection({
                   <span className="font-semibold">
                     {application.internalReviewConfig?.reviewLocked
                       ? "Evaluasi telah dikunci oleh HRD."
-                      : "Penilaian ini bersifat rahasia."}
+                      : isHRD
+                        ? "Penilaian ini bersifat rahasia."
+                        : "Rekomendasi ini hanya sebagai bahan pertimbangan HRD."}
                   </span>
                 </div>
                 <Button
@@ -761,8 +765,8 @@ export function InternalEvaluationSection({
                     : application.internalReviewConfig?.reviewLocked
                       ? "TERKUNCI"
                       : myReview
-                        ? "UPDATE EVALUASI"
-                        : "KIRIM EVALUASI"}
+                        ? isHRD ? "UPDATE EVALUASI" : "UPDATE REKOMENDASI"
+                        : isHRD ? "KIRIM EVALUASI" : "KIRIM REKOMENDASI"}
                 </Button>
               </div>
             </div>

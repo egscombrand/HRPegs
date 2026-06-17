@@ -265,7 +265,8 @@ export function DashboardLayout({
       userProfile,
       employeeProfile,
     );
-    const userCanReview = canUserReview(userProfile) || menuRoleKey === "manager";
+    const userCanReview =
+      canUserReview(userProfile, employeeProfile) || menuRoleKey === "manager";
 
     // Check if user is management-level (director, management, structuralLevel=management)
     const isManagementLevel =
@@ -276,30 +277,41 @@ export function DashboardLayout({
       .map((group: MenuGroup) => ({
         ...group,
         items: group.items.filter((item) => {
-          // When navSettings is the authority, trust its filtering and skip secondary filters
-          // Only apply business rule filters (recruitment assignment checks)
-          if (hasNavigationSettings) {
-            if (
-              item.key === "recruitment.tasks" &&
-              (isAssignmentLoading || !hasAnyAssignment)
-            ) {
-              return false;
-            }
+          // Keys that require review authority — enforced regardless of navSettings.
+          // navSettings (Access & Roles) can enable/disable these, but business eligibility
+          // always wins: if canUserReview() is false, never show review items.
+          const reviewKeys = [
+            "review.reports",
+            "manager.overtime_approval",
+            "manager.permission_approval",
+            "manager.leave_approval",
+            "review.business_trip_approval",
+          ];
+          if (reviewKeys.includes(item.key) && !userCanReview) {
+            return false;
+          }
 
-            // navSettings is the authority - don't apply eligibility checks
+          // recruitment.tasks requires an active panelist/job assignment — always enforced.
+          if (
+            item.key === "recruitment.tasks" &&
+            (isAssignmentLoading || !hasAnyAssignment)
+          ) {
+            return false;
+          }
+
+          // When navSettings is the authority, it already filtered visible items — trust it.
+          if (hasNavigationSettings) {
             return true;
           }
 
           // Fallback filters when navSettings is NOT configured
           if (item.key === "employee.leave") {
-            // Manager/director who is an employee: let navSettings decide (bypass eligibility)
             if (isManagerOrDirector && isActiveEmployee) return true;
             return leaveStatus.isEligible;
           }
 
           if (item.key === "management.business_trip_missions") {
             if (roleKey === "super-admin") return true;
-            // Show for management-level users (director, management structuralLevel)
             if (isManagementLevel) return true;
             const title = (
               employeeProfile?.jobTitle ||
@@ -313,23 +325,12 @@ export function DashboardLayout({
             return !!userProfile?.isDivisionManager;
           }
 
-          const reviewKeys = [
-            "review.reports",
-            "manager.overtime_approval",
-            "manager.permission_approval",
-            "manager.leave_approval",
+          const hrdOnlyReviewKeys = [
             "hrd.permission_approval",
             "hrd.overtime_approval",
             "hrd.leave_approval",
           ];
-          if (reviewKeys.includes(item.key) && !userCanReview) {
-            return false;
-          }
-
-          if (
-            item.key === "recruitment.tasks" &&
-            (isAssignmentLoading || !hasAnyAssignment)
-          ) {
+          if (hrdOnlyReviewKeys.includes(item.key) && !userCanReview) {
             return false;
           }
 
@@ -337,11 +338,7 @@ export function DashboardLayout({
         }),
       }))
       .filter((group) => {
-        if (hasNavigationSettings) {
-          // navSettings already filtered items, just remove empty groups
-          return group.items.length > 0;
-        }
-        // Fallback: filter Review group when navSettings not configured
+        // Review group is never shown to non-reviewers, regardless of navSettings
         if (group.title === "Review" && !userCanReview) {
           return false;
         }
@@ -454,6 +451,38 @@ export function DashboardLayout({
             };
           })
           .filter((g) => g.items.length > 0);
+      }
+    }
+
+    // Move recruitment.tasks out of Personal and into "Tugas Khusus".
+    // It is a team assignment — not a personal employee menu.
+    {
+      const recruitmentTaskItem: MenuItem = {
+        key: "recruitment.tasks",
+        href: "/admin/recruitment/my-tasks",
+        label: "Tugas Rekrutmen",
+        icon: createElement(Briefcase),
+      };
+      // Remove from any group that currently holds it
+      let hasRecruitmentTask = false;
+      currentConfig = currentConfig.map((group) => {
+        const filtered = group.items.filter((item) => item.key !== "recruitment.tasks");
+        if (filtered.length !== group.items.length) hasRecruitmentTask = true;
+        return { ...group, items: filtered };
+      }).filter((g) => g.items.length > 0);
+
+      // Re-inject under "Tugas Khusus" if the item was present (meaning assignment check passed)
+      if (hasRecruitmentTask) {
+        const existingIdx = currentConfig.findIndex((g) => g.title === "Tugas Khusus");
+        if (existingIdx >= 0) {
+          currentConfig = currentConfig.map((g, i) =>
+            i === existingIdx
+              ? { ...g, items: [...g.items.filter((item) => item.key !== "recruitment.tasks"), recruitmentTaskItem] }
+              : g,
+          );
+        } else {
+          currentConfig = [...currentConfig, { title: "Tugas Khusus", items: [recruitmentTaskItem] }];
+        }
       }
     }
 

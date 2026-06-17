@@ -24,31 +24,42 @@ export function isActiveEmployeeEligibleForLeave(
 /**
  * Helper to check if a user has authority to review/approve requests.
  * Used for sidebar visibility and page guards.
- * 
+ *
  * Eligible Reviewers:
- * 1. Super Admin
- * 2. HRD
- * 3. Manager (Role-based)
- * 4. Division Manager (Field-based: isDivisionManager === true)
+ * 1. super-admin / hrd / manager roles
+ * 2. Structural level: director / direktur / direksi / management / manajemen
+ * 3. employeeProfile.isDivisionManager === true
+ * 4. employeeProfile.isDirectSupervisor === true
+ * 5. employeeProfile.reviewerForInterns === true
+ *
+ * NOTE: stale userProfile.managedDivision / managedBrandId strings are intentionally
+ * NOT used here — they are not maintained and grant unintended access.
  */
-export function canUserReview(user: UserProfile | null): boolean {
+export function canUserReview(
+  user: UserProfile | null,
+  employeeProfile?: EmployeeProfile | null,
+): boolean {
   if (!user) return false;
-  
-  // Must be active to perform reviews
   if (!user.isActive) return false;
 
-  // 1. Check explicit roles that have inherent review power
-  const rolesWithReviewAccess = ['super-admin', 'hrd', 'manager'];
-  if (rolesWithReviewAccess.includes(user.role)) return true;
+  // 1. Role-based — always authoritative
+  if (['super-admin', 'hrd', 'manager'].includes(user.role)) return true;
 
-  // 2. Check for Division Manager privilege on 'karyawan' role
-  // Project logic uses isDivisionManager field (boolean) to identify employee-level reviewers
-  if (user.role === 'karyawan' && user.isDivisionManager === true) return true;
+  // 2. Structural level (from employeeProfile first, then userProfile fallback)
+  const structural = (
+    (employeeProfile as any)?.structuralLevel ||
+    (user as any)?.structuralLevel ||
+    ''
+  ).toLowerCase();
+  if (/director|direktur|direksi|management|manajemen/.test(structural)) return true;
 
-  // 3. Optional: Fallback check for managed division fields (security in depth)
-  // Only if they actually have content in these strings
-  if (user.managedDivision && user.managedDivision.trim() !== "") return true;
-  if (user.managedBrandId && user.managedBrandId.length > 0) return true;
+  // 3. Explicit reviewer flags from employeeProfile (authoritative, not stale)
+  if ((employeeProfile as any)?.isDivisionManager === true) return true;
+  if ((employeeProfile as any)?.isDirectSupervisor === true) return true;
+  if ((employeeProfile as any)?.reviewerForInterns === true) return true;
+
+  // 4. userProfile.isDivisionManager as secondary check (kept for backwards-compat)
+  if (user.isDivisionManager === true) return true;
 
   return false;
 }

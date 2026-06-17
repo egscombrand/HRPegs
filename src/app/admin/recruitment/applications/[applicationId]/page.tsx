@@ -61,6 +61,7 @@ import {
   Clock,
   MapPin,
   Eye,
+  ExternalLink,
 } from "lucide-react";
 import {
   Card,
@@ -80,6 +81,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getInitials, cn } from "@/lib/utils";
 import { format, differenceInMinutes, add, isBefore } from "date-fns";
+import { id as idLocale } from "date-fns/locale";
 import { ApplicationProgressStepper } from "@/components/recruitment/ApplicationProgressStepper";
 import { CandidateDocumentsCard } from "@/components/recruitment/CandidateDocumentsCard";
 import { CandidateFitAnalysis } from "@/components/recruitment/CandidateFitAnalysis";
@@ -1013,6 +1015,7 @@ export default function ApplicationDetailPage() {
                 application.candidateStatus === "lolos" ||
                 application.finalDecisionLocked
               }
+              isPrivilegedRecruiter={isPrivilegedRecruiter}
             />
             <Card>
               <CardHeader>
@@ -1110,10 +1113,70 @@ export default function ApplicationDetailPage() {
 
             <ApplicationProgressStepper currentStatus={displayStatus} />
 
-            <UnifiedInternalDecision
-              application={application}
-              onStageChange={handleStageChange}
-            />
+            {/* Interview schedule summary card — visible to all internal users (panelists included) */}
+            {application.status === "interview" && (() => {
+              const iv = (application.interviews || [])
+                .filter(i => i.status === "scheduled")
+                .sort((a, b) => a.startAt.toMillis() - b.startAt.toMillis())[0] || null;
+              if (!iv) return null;
+              const ivStart = iv.startAt.toDate();
+              const ivEnd = iv.endAt.toDate();
+              const durationMins = differenceInMinutes(ivEnd, ivStart);
+              const link = iv.meetingPublished !== false ? iv.meetingLink : null;
+              return (
+                <Card className="border-teal-200 dark:border-teal-800 bg-teal-50/60 dark:bg-teal-900/20">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm flex items-center gap-2 text-teal-800 dark:text-teal-200">
+                      <Calendar className="h-4 w-4" />
+                      Jadwal Wawancara
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-teal-600/70 dark:text-teal-400/70 mb-0.5">Tanggal</p>
+                      <p className="font-semibold text-teal-900 dark:text-teal-100">
+                        {format(ivStart, "dd MMM yyyy", { locale: idLocale })}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-teal-600/70 dark:text-teal-400/70 mb-0.5">Waktu (WIB)</p>
+                      <p className="font-semibold text-teal-900 dark:text-teal-100">
+                        {format(ivStart, "HH:mm")} – {format(ivEnd, "HH:mm")}
+                        <span className="text-teal-600/70 dark:text-teal-400/70 font-normal ml-1">({durationMins} mnt)</span>
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-teal-600/70 dark:text-teal-400/70 mb-0.5">Status</p>
+                      <p className="font-semibold text-teal-900 dark:text-teal-100 capitalize">{iv.status.replace("_", " ")}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-teal-600/70 dark:text-teal-400/70 mb-1">Link Meeting</p>
+                      {link ? (
+                        <a
+                          href={link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-teal-700 dark:text-teal-300 hover:underline"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          Buka Link Wawancara
+                        </a>
+                      ) : (
+                        <span className="text-xs text-teal-600/60 dark:text-teal-400/60 italic">Link belum tersedia</span>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })()}
+
+            {/* Keputusan Internal — only for HRD / super-admin */}
+            {isPrivilegedRecruiter && (
+              <UnifiedInternalDecision
+                application={application}
+                onStageChange={handleStageChange}
+              />
+            )}
 
             <div className="grid grid-cols-1 xl:grid-cols-[200px_1fr] gap-10 items-start pt-4">
               <div className="xl:sticky xl:top-24 hidden xl:block">

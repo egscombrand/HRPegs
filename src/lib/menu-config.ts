@@ -796,7 +796,7 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
   ],
   karyawan: [
     {
-      title: "Karyawan",
+      // No title = no section header — Dashboard sits at the top as a standalone item
       items: [
         {
           key: "employee.dashboard",
@@ -804,17 +804,16 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
           label: "Dashboard",
           icon: createElement(LayoutDashboard),
         },
+      ],
+    },
+    {
+      title: "Personal",
+      items: [
         {
           key: "employee.profile",
           href: "/admin/karyawan/profile",
           label: "Data Diri Karyawan",
           icon: createElement(User),
-        },
-        {
-          key: "employee.overtime",
-          href: "/admin/karyawan/pengajuan-lembur",
-          label: "Pengajuan Lembur",
-          icon: createElement(FileClock),
         },
         {
           key: "employee.permission",
@@ -823,31 +822,28 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
           icon: createElement(FileHeart),
         },
         {
-          key: "employee.dinas.confirmation",
-          href: "/admin/karyawan/konfirmasi-dinas",
-          label: "Konfirmasi & Laporan Dinas",
-          icon: createElement(MapPin),
-        },
-        {
           key: "employee.leave",
           href: "/admin/karyawan/pengajuan-cuti",
           label: "Pengajuan Cuti",
           icon: createElement(CalendarOff),
         },
-      ],
-    },
-    {
-      title: "Tugas Saya",
-      items: [
         {
-          key: "recruitment.tasks",
-          href: "/admin/recruitment/my-tasks",
-          label: "Tugas Rekrutmen",
-          icon: createElement(Briefcase),
+          key: "employee.overtime",
+          href: "/admin/karyawan/pengajuan-lembur",
+          label: "Pengajuan Lembur",
+          icon: createElement(FileClock),
+        },
+        {
+          key: "employee.dinas.confirmation",
+          href: "/admin/karyawan/konfirmasi-dinas",
+          label: "Konfirmasi & Laporan Dinas",
+          icon: createElement(MapPin),
         },
       ],
     },
-    REVIEW_ITEMS,
+    // NOTE: REVIEW_ITEMS and recruitment.tasks intentionally excluded from karyawan default.
+    // Review menu is injected dynamically by DashboardLayout only when canUserReview() is true.
+    // recruitment.tasks is injected under "Tugas Khusus" only when user has an active assignment.
   ],
 
   "karyawan-magang": [
@@ -884,12 +880,7 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
           label: "Konfirmasi & Laporan Dinas",
           icon: createElement(MapPin),
         },
-        {
-          key: "recruitment.tasks",
-          href: "/admin/recruitment/my-tasks",
-          label: "Tugas Rekrutmen",
-          icon: createElement(Briefcase),
-        },
+        // NOTE: recruitment.tasks intentionally excluded — magang are not part of recruitment team.
       ],
     },
     {
@@ -950,12 +941,7 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
           label: "Konfirmasi & Laporan Dinas",
           icon: createElement(MapPin),
         },
-        {
-          key: "recruitment.tasks",
-          href: "/admin/recruitment/my-tasks",
-          label: "Tugas Rekrutmen",
-          icon: createElement(Briefcase),
-        },
+        // NOTE: recruitment.tasks intentionally excluded — karyawan-training are not recruitment staff.
       ],
     },
   ],

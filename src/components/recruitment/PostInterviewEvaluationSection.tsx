@@ -399,10 +399,12 @@ export function PostInterviewEvaluationSection({
             </div>
             <div>
               <CardTitle className="text-3xl font-black tracking-tighter uppercase text-slate-900 dark:text-slate-100">
-                Evaluasi Pasca-Wawancara
+                {isHRD ? "Evaluasi Pasca-Wawancara" : "Rekomendasi Penilai"}
               </CardTitle>
               <CardDescription className="text-teal-700 dark:text-teal-400 font-bold italic">
-                Penilaian berdasarkan hasil interview langsung
+                {isHRD
+                  ? "Penilaian berdasarkan hasil interview langsung"
+                  : "Berikan rekomendasi pasca-wawancara sebagai bahan pertimbangan HRD."}
               </CardDescription>
             </div>
           </div>
@@ -589,7 +591,9 @@ export function PostInterviewEvaluationSection({
               <div className="flex items-center gap-3 text-sm text-teal-700 dark:text-teal-300">
                 <ShieldCheck className="w-5 h-5 text-teal-600 dark:text-teal-400" />
                 <span className="font-semibold italic">
-                  Penilaian interview bersifat final dan rahasia.
+                  {isHRD
+                    ? "Penilaian interview bersifat final dan rahasia."
+                    : "Rekomendasi ini hanya sebagai bahan pertimbangan HRD."}
                 </span>
               </div>
               <Button
@@ -600,7 +604,9 @@ export function PostInterviewEvaluationSection({
                 {isSubmitting ? (
                   <Loader2 className="mr-3 h-5 w-5 animate-spin" />
                 ) : null}
-                {myReview ? "UPDATE EVALUASI" : "KIRIM EVALUASI INTERVIEW"}
+                {myReview
+                  ? isHRD ? "UPDATE EVALUASI" : "UPDATE REKOMENDASI"
+                  : isHRD ? "KIRIM EVALUASI INTERVIEW" : "KIRIM REKOMENDASI"}
               </Button>
             </div>
           </div>

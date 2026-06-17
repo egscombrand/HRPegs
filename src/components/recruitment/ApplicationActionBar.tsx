@@ -25,6 +25,7 @@ interface ApplicationActionBarProps {
   ) => Promise<boolean>;
   onSendOfferClick: () => void;
   actionsLocked?: boolean;
+  isPrivilegedRecruiter?: boolean;
 }
 
 const getStageActions = (currentStatus: JobApplication["status"]) => {
@@ -52,6 +53,7 @@ export function ApplicationActionBar({
   onStageChange,
   onSendOfferClick,
   actionsLocked,
+  isPrivilegedRecruiter = false,
 }: ApplicationActionBarProps) {
   const [stageChangeDialogOpen, setStageChangeDialogOpen] = useState(false);
   const [targetStage, setTargetStage] = useState<
@@ -83,6 +85,9 @@ export function ApplicationActionBar({
   const backAndSkipActions = otherActions.filter(
     (stage) => !finalStageActions.includes(stage),
   );
+
+  // Reviewers / panelists do not get the action menu — only HRD/super-admin
+  if (!isPrivilegedRecruiter) return null;
 
   return (
     <>
