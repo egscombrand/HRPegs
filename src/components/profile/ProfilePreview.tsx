@@ -492,12 +492,21 @@ export function ProfilePreview({
               <Separator />
               <div className="grid md:grid-cols-2 gap-6">
                 <InfoRow
-                  label="Ketersediaan"
-                  value={
-                    profile.availability === "Lainnya"
+                  label="Siap Bergabung"
+                  value={(() => {
+                    if (profile.availableStartDate) {
+                      const d = parseDateValue(profile.availableStartDate);
+                      if (!d) return profile.availabilityLabel || "-";
+                      const dateStr = format(d, "d MMMM yyyy", { locale: idLocale });
+                      return profile.availabilityLabel && profile.availabilityType !== 'custom'
+                        ? `${dateStr} (${profile.availabilityLabel})`
+                        : dateStr;
+                    }
+                    // legacy fallback
+                    return profile.availability === "Lainnya"
                       ? profile.availabilityOther
-                      : profile.availability
-                  }
+                      : profile.availability;
+                  })()}
                 />
                 <div>
                   <InfoRow

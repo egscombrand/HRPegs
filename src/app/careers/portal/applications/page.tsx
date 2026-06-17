@@ -39,6 +39,7 @@ import type {
   AssessmentSession,
   Offering,
 } from "@/lib/types";
+import { getCandidateDisplayStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import {
   format,
@@ -82,6 +83,10 @@ import {
   Loader2,
   Clock,
   Download,
+  MapPin,
+  Info,
+  CheckCircle2,
+  ChevronDown,
 } from "lucide-react";
 import { generateOfferingPDF } from "@/lib/recruitment/pdf-generator";
 import { cn } from "@/lib/utils";
@@ -96,10 +101,14 @@ function ApplicationCard({
   application,
   job,
   hasCompletedTest,
+  isOpen,
+  onToggle,
 }: {
   application: JobApplication;
   job?: Job;
   hasCompletedTest: boolean;
+  isOpen: boolean;
+  onToggle: () => void;
 }) {
   const [now, setNow] = useState(new Date());
   const [isDeciding, setIsDeciding] = React.useState(false);
@@ -707,33 +716,21 @@ function ApplicationCard({
     "document_submission",
   ].includes(application.status);
   const hasFinalPositive = application.candidateStatus === "lolos";
-  const hasInternalEvaluation =
-    !!application.postInterviewDecision ||
-    !!application.recruitmentInternalDecision;
 
-  // Status mapping for candidates
-  const displayStatus = useMemo(() => {
-    if (application.candidateStatus === "lolos") {
-      return { text: "Lolos ke Tahap Berikutnya", color: "bg-emerald-600" };
-    }
-    if (isHired || isOffered) return { text: "Lolos", color: "bg-green-600" };
+  // True only when post-interview evaluation has actually been submitted by the panel.
+  // recruitmentInternalDecision is a PRE-interview decision and must NOT trigger "done".
+  const isInterviewActuallyDone =
+    application.interviewCompleted === true ||
+    !!application.interviewCompletedAt ||
+    !!application.interviewCompletionSource ||
+    (application.postInterviewEvaluation?.submissions ?? 0) > 0 ||
+    !!application.postInterviewDecision;
 
-    const internalPra = application.recruitmentInternalDecision?.status;
-    const internalPasca = application.postInterviewDecision?.status;
-
-    if (
-      internalPasca === "lanjut" ||
-      internalPra === "lanjut_ke_tahap_selanjutnya"
-    ) {
-      return { text: "Lolos ke Tahap Berikutnya", color: "bg-emerald-600" };
-    }
-
-    // Everything else (pending, tidak_lanjut, or processing) is mapped to 'Menunggu' or 'Ditinjau'
-    return {
-      text: "Menunggu Hasil Evaluasi",
-      color: "bg-secondary text-secondary-foreground",
-    };
-  }, [application, isHired, isOffered]);
+  // Status shown to candidate — uses helper that never exposes HRD internal decisions
+  const displayStatus = useMemo(
+    () => getCandidateDisplayStatus(application),
+    [application],
+  );
 
   if (isOffered) {
     const salaryLabel =
@@ -1989,6 +1986,40 @@ function ApplicationCard({
   }
 
   if (isAssessmentStage) {
+    // If candidate already completed the test globally, don't ask them to re-test
+    if (hasCompletedTest || application.personalityTestCompleted) {
+      // Show "awaiting review" — the test result will be applied automatically
+      return (
+        <Card className="flex flex-col border-teal-200">
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
+              <div>
+                <CardTitle className="text-xl">{application.jobPosition}</CardTitle>
+                <CardDescription>Lamaran sedang dalam proses evaluasi.</CardDescription>
+              </div>
+              <Badge className="w-fit bg-teal-600 text-white">Dalam Evaluasi</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="flex-grow">
+            <div className="p-4 rounded-lg border border-teal-200 bg-teal-50 dark:border-teal-800 dark:bg-teal-900/20">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="h-5 w-5 text-teal-600 shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-semibold text-teal-800 dark:text-teal-200 mb-1">
+                    Tes Kepribadian: Selesai
+                  </h3>
+                  <p className="text-sm text-teal-700 dark:text-teal-300 leading-relaxed">
+                    Lamaran Anda telah diterima. Hasil tes kepribadian yang sudah Anda
+                    selesaikan akan digunakan dalam proses evaluasi posisi ini.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+
     return (
       <Card className="flex flex-col border-yellow-500/50">
         <CardHeader>
@@ -2034,350 +2065,747 @@ function ApplicationCard({
   }
 
   if (isInterviewStage) {
-    if (hasInternalEvaluation) {
+    // ── Shared preparation tips box ───────────────────────────────────────────
+    const PrepTips = () => (
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm">
+        <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">
+          Persiapan Sebelum Wawancara
+        </p>
+        <ul className="space-y-2 text-sm text-slate-700 dark:text-slate-300">
+          {[
+            "Pastikan koneksi internet Anda stabil sebelum sesi dimulai.",
+            "Gunakan perangkat dengan kamera dan mikrofon yang berfungsi dengan baik.",
+            "Masuk ke ruang wawancara 5–10 menit sebelum jadwal yang ditentukan.",
+            "Siapkan CV, portofolio, dan dokumen pendukung jika diperlukan.",
+            "Gunakan nama asli sesuai profil kandidat Anda saat bergabung.",
+          ].map((tip, i) => (
+            <li key={i} className="flex items-start gap-2">
+              <Check className="h-4 w-4 text-teal-500 shrink-0 mt-0.5" />
+              <span>{tip}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+
+    // ── Interview selection timeline ───────────────────────────────────────────
+    const InterviewTimeline = ({ active }: { active: "scheduled" | "done" | "waiting" }) => {
+      const stages = [
+        { label: "Lamaran & Tes Kepribadian", done: true },
+        { label: "Evaluasi Tim Rekrutmen", done: true },
+        { label: "Wawancara", done: active === "done", active: active !== "done" },
+        { label: "Keputusan Akhir", done: false },
+      ];
       return (
-        <div className="p-6 rounded-2xl border border-indigo-200 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-900 dark:text-indigo-100">
-          <h3 className="font-bold text-lg flex items-center gap-3">
-            <Users className="h-6 w-6" />
-            Wawancara telah selesai
-          </h3>
-          <div className="mt-4 space-y-4 text-sm leading-relaxed">
-            <p>
-              Terima kasih, Anda telah menyelesaikan tahap wawancara. Saat ini
-              tim rekrutmen kami sedang melakukan evaluasi lebih lanjut terhadap
-              hasil wawancara Anda.
-            </p>
-            <p>
-              Kami akan menginformasikan hasilnya melalui portal ini setelah
-              proses penilaian selesai. Mohon menunggu informasi selanjutnya.
-            </p>
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm">
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">
+            Tahapan Seleksi
+          </p>
+          <ol className="space-y-2">
+            {stages.map((s, i) => (
+              <li key={i} className="flex items-center gap-3">
+                <div className={cn(
+                  "h-6 w-6 rounded-full flex items-center justify-center shrink-0 text-[10px] font-bold",
+                  s.done
+                    ? "bg-teal-500 text-white"
+                    : s.active
+                    ? "bg-teal-50 dark:bg-teal-900/40 border-2 border-teal-500 text-teal-600"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-400"
+                )}>
+                  {s.done ? <Check className="h-3 w-3" /> : i + 1}
+                </div>
+                <span className={cn(
+                  "text-sm",
+                  s.done ? "text-teal-700 dark:text-teal-400 font-medium" :
+                  s.active ? "text-slate-900 dark:text-white font-semibold" :
+                  "text-slate-400"
+                )}>
+                  {s.label}
+                  {s.active && (
+                    <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 text-[10px] font-bold uppercase tracking-wide">
+                      Aktif
+                    </span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      );
+    };
+
+    // ── DONE state ────────────────────────────────────────────────────────────
+    if (isInterviewActuallyDone) {
+      return (
+        <div className="space-y-4">
+          <div className="rounded-xl border border-indigo-200 bg-indigo-50 dark:bg-indigo-900/20 p-5 shadow-sm">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-full bg-indigo-100 dark:bg-indigo-800/40 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+              </div>
+              <div>
+                <p className="font-bold text-indigo-900 dark:text-indigo-100">Wawancara Telah Selesai</p>
+                <p className="text-sm text-indigo-700 dark:text-indigo-300 mt-1 leading-relaxed">
+                  Terima kasih, Anda telah menyelesaikan tahap wawancara. Tim rekrutmen kami
+                  sedang melakukan evaluasi terhadap hasil wawancara Anda. Seluruh pembaruan
+                  status akan ditampilkan melalui portal ini.
+                </p>
+              </div>
+            </div>
           </div>
+          <InterviewTimeline active="done" />
         </div>
       );
     }
 
+    // ── SCHEDULED state ───────────────────────────────────────────────────────
     if (scheduledInterview) {
       const interviewStart = scheduledInterview.startAt.toDate();
       const interviewEnd = scheduledInterview.endAt.toDate();
       const twoHoursInMs = 2 * 60 * 60 * 1000;
-
       const isActuallyCompleted =
         (application.postInterviewEvaluation?.submissions ?? 0) > 0 ||
         now.getTime() > interviewEnd.getTime() + twoHoursInMs;
 
-      if (!isActuallyCompleted) {
-        // Before or during interview
-        const isDuring = now >= interviewStart && now < interviewEnd;
-
+      if (isActuallyCompleted) {
         return (
-          <div
-            className={cn(
-              "p-6 rounded-2xl border",
-              isDuring
-                ? "border-amber-200 bg-amber-50 dark:bg-amber-900/20 text-amber-900 dark:text-amber-100"
-                : "border-blue-200 bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-100 shadow-sm",
-            )}
-          >
-            <h3 className="font-bold text-lg flex items-center gap-3">
-              {isDuring ? (
-                <Clock className="h-6 w-6 animate-spin" />
-              ) : (
-                <Calendar className="h-6 w-6" />
-              )}
-              {isDuring
-                ? "Wawancara Sedang Berlangsung"
-                : "Jadwal Wawancara Tersedia"}
-            </h3>
-            <div className="mt-4 space-y-4 text-sm leading-relaxed">
-              <p>
-                {isDuring
-                  ? "Tahap wawancara Anda sedang berlangsung. Silakan mengikuti sesi sesuai jadwal yang telah ditentukan."
-                  : `Anda dijadwalkan untuk mengikuti tahap wawancara untuk posisi ${application.jobPosition}.`}
-              </p>
-
-              {!isDuring && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white/50 dark:bg-black/20 p-4 rounded-xl border border-blue-100 dark:border-blue-800">
-                  <div>
-                    <p className="text-[10px] font-black uppercase text-blue-500/60 mb-1">
-                      Hari & Tanggal
-                    </p>
-                    <p className="font-bold">
-                      {format(interviewStart, "eeee, dd MMMM yyyy", {
-                        locale: id,
-                      })}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-black uppercase text-blue-500/60 mb-1">
-                      Jam (WIB)
-                    </p>
-                    <p className="font-bold">
-                      {format(interviewStart, "HH:mm")} -{" "}
-                      {format(interviewEnd, "HH:mm")} (
-                      {differenceInMinutes(interviewEnd, interviewStart)} mnt)
-                    </p>
-                  </div>
-                  {scheduledInterview.meetingLink && (
-                    <div className="sm:col-span-2 pt-2">
-                      <p className="text-[10px] font-black uppercase text-blue-500/60 mb-2">
-                        Link Wawancara
-                      </p>
-                      <Button asChild size="sm" className="w-full sm:w-auto">
-                        <a
-                          href={scheduledInterview.meetingLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          <LinkIcon className="mr-2 h-4 w-4" /> Gabung Sesi
-                          Wawancara
-                        </a>
-                      </Button>
-                    </div>
-                  )}
+          <div className="space-y-4">
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50 dark:bg-indigo-900/20 p-5 shadow-sm">
+              <div className="flex items-start gap-3">
+                <div className="h-10 w-10 rounded-full bg-indigo-100 dark:bg-indigo-800/40 flex items-center justify-center shrink-0">
+                  <Users className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
                 </div>
-              )}
-              {!isDuring && (
-                <p className="italic text-xs text-blue-700/70 dark:text-blue-300/60">
-                  Mohon pastikan Anda hadir tepat waktu dan mempersiapkan diri
-                  dengan baik.
-                </p>
-              )}
+                <div>
+                  <p className="font-bold text-indigo-900 dark:text-indigo-100">Sedang Dalam Evaluasi</p>
+                  <p className="text-sm text-indigo-700 dark:text-indigo-300 mt-1 leading-relaxed">
+                    Terima kasih telah mengikuti sesi wawancara. Tim rekrutmen kami sedang
+                    meninjau seluruh hasil evaluasi. Pembaruan status akan ditampilkan di portal ini.
+                  </p>
+                </div>
+              </div>
             </div>
-          </div>
-        );
-      } else {
-        // After interview (completed manually or by time)
-        const isLolos = application.postInterviewDecision?.status === "lanjut";
-
-        return (
-          <div className="p-6 rounded-2xl border border-indigo-200 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-900 dark:text-indigo-100">
-            <h3 className="font-bold text-lg flex items-center gap-3">
-              <Users className="h-6 w-6" />
-              {isLolos ? "Tahap Wawancara Selesai" : "Sedang Ditinjau"}
-            </h3>
-            <div className="mt-4 space-y-4 text-sm leading-relaxed">
-              <p>
-                Terima kasih telah mengikuti wawancara. Saat ini tim kami sedang
-                meninjau hasil evaluasi Anda.
-              </p>
-              <p>
-                Kami akan memberikan informasi perkembangan selanjutnya melalui
-                portal ini atau email apabila terdapat pembaruan status. Terima
-                kasih atas pengertian dan antusiasme Anda.
-              </p>
-            </div>
+            <InterviewTimeline active="done" />
           </div>
         );
       }
-    } else if (job?.interviewTemplate?.defaultStartDate) {
-      const template = job.interviewTemplate;
-      const templateDate = template.defaultStartDate!.toDate();
-      const templateTime = template.workdayStartTime || "N/A";
-      const templateLink = template.meetingLink;
+
+      // Before or during interview
+      const isDuring = now >= interviewStart && now < interviewEnd;
+      const durationMins = differenceInMinutes(interviewEnd, interviewStart);
+      // All interviews for this candidate at this stage
+      const allScheduled = (application.interviews || []).filter(i => i.status === "scheduled");
 
       return (
-        <div className="p-4 rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-100">
-          <h3 className="font-semibold text-lg flex items-center gap-2 text-blue-800 dark:text-blue-100">
-            <Calendar className="h-5 w-5" /> Jadwal Wawancara Tersedia
-          </h3>
-          <div className="text-sm mt-3 space-y-3 text-blue-800/90 dark:text-blue-200/90 text-justify">
-            <p>
-              Selamat! Anda telah lolos ke tahap wawancara. Berdasarkan jadwal
-              yang telah ditentukan oleh tim HRD, wawancara Anda akan
-              dilaksanakan pada:
-            </p>
-            <ul className="list-disc pl-5 font-semibold">
-              <li>
-                Tanggal:{" "}
-                {format(templateDate, "eeee, dd MMMM yyyy", { locale: id })}
-              </li>
-              <li>Waktu: {templateTime} WIB</li>
-              <li>Media: Zoom Meeting</li>
-            </ul>
-            <p>
-              Silakan mempersiapkan diri dengan baik. Jika terdapat pembaruan
-              jadwal atau link wawancara, kami akan menginformasikannya melalui
-              portal ini dan email.
-            </p>
-            {templateLink && (
-              <div className="pt-2">
-                <Button asChild size="sm">
-                  <a
-                    href={templateLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <LinkIcon className="mr-2 h-4 w-4" /> Buka Link Wawancara
-                    (Template)
-                  </a>
-                </Button>
+        <div className="space-y-4">
+          {/* Header banner */}
+          <div className={cn(
+            "rounded-xl border p-5 shadow-sm",
+            isDuring
+              ? "border-amber-200 bg-amber-50 dark:bg-amber-900/20"
+              : "border-teal-200 bg-teal-50 dark:bg-teal-900/20"
+          )}>
+            <div className="flex items-start gap-3">
+              <div className={cn(
+                "h-10 w-10 rounded-full flex items-center justify-center shrink-0",
+                isDuring
+                  ? "bg-amber-100 dark:bg-amber-800/40"
+                  : "bg-teal-100 dark:bg-teal-800/40"
+              )}>
+                {isDuring
+                  ? <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400 animate-pulse" />
+                  : <Calendar className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+                }
               </div>
-            )}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className={cn("font-bold text-base",
+                    isDuring ? "text-amber-900 dark:text-amber-100" : "text-teal-900 dark:text-teal-100"
+                  )}>
+                    {isDuring ? "Wawancara Sedang Berlangsung" : "Jadwal Wawancara Anda Telah Tersedia"}
+                  </p>
+                  <Badge className={cn("text-[10px] px-2 py-0 font-semibold",
+                    isDuring
+                      ? "bg-amber-200 text-amber-800 dark:bg-amber-800/40 dark:text-amber-200 border-0"
+                      : "bg-teal-200 text-teal-800 dark:bg-teal-800/40 dark:text-teal-200 border-0"
+                  )}>
+                    {isDuring ? "Berlangsung" : "Tahap Wawancara"}
+                  </Badge>
+                </div>
+                <p className={cn("text-sm mt-1 leading-relaxed",
+                  isDuring ? "text-amber-800/80 dark:text-amber-200/80" : "text-teal-800/80 dark:text-teal-200/80"
+                )}>
+                  {isDuring
+                    ? "Sesi wawancara Anda sedang berlangsung. Silakan segera bergabung ke ruang wawancara."
+                    : "Selamat, Anda telah masuk ke tahap wawancara untuk posisi ini. Silakan periksa detail jadwal berikut dan pastikan Anda hadir sesuai waktu yang telah ditentukan."
+                  }
+                </p>
+              </div>
+            </div>
           </div>
-        </div>
-      );
-    } else {
-      // No interview scheduled yet for this 'interview' stage application
-      return (
-        <div className="p-4 rounded-md border border-muted-foreground/20 bg-muted/50 text-muted-foreground">
-          <h3 className="font-semibold text-lg flex items-center gap-2">
-            <Clock className="h-5 w-5" /> Menunggu Penjadwalan Wawancara
-          </h3>
-          <div className="text-sm mt-3 space-y-3">
-            <p>
-              Selamat! Anda telah lolos ke tahap wawancara. Tim HRD kami sedang
-              mengatur jadwal yang sesuai.
-            </p>
-            <p>
-              Anda akan menerima notifikasi di portal ini dan melalui email
-              setelah jadwal wawancara Anda dikonfirmasi. Mohon periksa secara
-              berkala.
-            </p>
+
+          {/* Interview card(s) — one per scheduled slot */}
+          {allScheduled.map((iv, idx) => {
+            const ivStart = iv.startAt.toDate();
+            const ivEnd = iv.endAt.toDate();
+            const ivDuration = differenceInMinutes(ivEnd, ivStart);
+            const isPublished = iv.meetingPublished !== false;
+            return (
+              <div key={iv.interviewId || idx} className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+                {/* Card header */}
+                <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 flex-wrap">
+                  <div>
+                    <p className="font-bold text-slate-900 dark:text-white">{application.jobPosition}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{application.brandName}</p>
+                  </div>
+                  <Badge variant="outline" className="border-teal-300 text-teal-700 dark:border-teal-700 dark:text-teal-300 text-[10px] font-semibold">
+                    Terjadwal
+                  </Badge>
+                </div>
+
+                {/* Detail grid */}
+                <div className="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                  <div className="flex items-start gap-3">
+                    <Calendar className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-0.5">Tanggal</p>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                        {format(ivStart, "eeee, dd MMMM yyyy", { locale: id })}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <Clock className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-0.5">Waktu (WIB)</p>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                        {format(ivStart, "HH.mm")} – {format(ivEnd, "HH.mm")} WIB
+                        <span className="ml-1.5 text-slate-400 font-normal">({ivDuration} menit)</span>
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <LinkIcon className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-0.5">Metode</p>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Online Meeting</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <MapPin className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-0.5">Media</p>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                        {iv.meetingLink ? (
+                          (() => {
+                            try {
+                              const host = new URL(iv.meetingLink).hostname.replace("www.", "");
+                              if (host.includes("zoom")) return "Zoom Meeting";
+                              if (host.includes("meet.google")) return "Google Meet";
+                              if (host.includes("teams")) return "Microsoft Teams";
+                              return "Online Meeting";
+                            } catch {
+                              return "Online Meeting";
+                            }
+                          })()
+                        ) : "Online Meeting"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* CTA */}
+                <div className="px-5 pb-5">
+                  {isPublished && iv.meetingLink ? (
+                    <Button asChild className="w-full sm:w-auto bg-teal-600 hover:bg-teal-700 text-white">
+                      <a href={iv.meetingLink} target="_blank" rel="noopener noreferrer">
+                        <LinkIcon className="mr-2 h-4 w-4" />
+                        Masuk ke Ruang Wawancara
+                      </a>
+                    </Button>
+                  ) : (
+                    <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-500 dark:text-slate-400">
+                      <Info className="h-4 w-4 shrink-0" />
+                      Link wawancara belum tersedia. Silakan pantau portal ini secara berkala.
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Info notice */}
+          <div className="flex items-start gap-2.5 px-4 py-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400">
+            <Info className="h-4 w-4 shrink-0 mt-0.5 text-slate-400" />
+            Seluruh pembaruan jadwal dan instruksi wawancara akan ditampilkan melalui portal ini. Silakan pantau halaman ini secara berkala.
           </div>
+
+          {!isDuring && <PrepTips />}
+          <InterviewTimeline active="scheduled" />
         </div>
       );
     }
-  }
 
-  return (
-    <Card className="flex flex-col">
-      <CardHeader>
-        <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
-          <div>
-            <CardTitle className="text-xl">{application.jobPosition}</CardTitle>
-            <CardDescription className="flex items-center gap-2 pt-1">
-              <Building className="h-4 w-4" /> {application.brandName}
-            </CardDescription>
-          </div>
-          <Badge className={cn("w-fit", displayStatus.color)}>
-            {displayStatus.text}
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="flex-grow space-y-4">
-        <Separator />
+    // ── TEMPLATE date only (no assigned slot) ─────────────────────────────────
+    if (job?.interviewTemplate?.defaultStartDate) {
+      const template = job.interviewTemplate;
+      const templateDate = template.defaultStartDate!.toDate();
+      const templateTime = template.workdayStartTime || "—";
+      const templateLink = template.meetingLink;
 
-        {isRejected ? (
-          <div className="p-4 rounded-md border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/20 text-slate-900 dark:text-slate-100">
-            <div className="flex items-center gap-3 mb-3">
-              <FileClock className="h-5 w-5 text-slate-500" />
-              <h3 className="font-semibold text-lg">Menunggu Hasil Evaluasi</h3>
+      return (
+        <div className="space-y-4">
+          <div className="rounded-xl border border-teal-200 bg-teal-50 dark:bg-teal-900/20 p-5 shadow-sm">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-full bg-teal-100 dark:bg-teal-800/40 flex items-center justify-center shrink-0">
+                <Calendar className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-bold text-base text-teal-900 dark:text-teal-100">
+                    Jadwal Wawancara Anda Telah Tersedia
+                  </p>
+                  <Badge className="bg-teal-200 text-teal-800 dark:bg-teal-800/40 dark:text-teal-200 border-0 text-[10px] font-semibold">
+                    Tahap Wawancara
+                  </Badge>
+                </div>
+                <p className="text-sm mt-1 leading-relaxed text-teal-800/80 dark:text-teal-200/80">
+                  Selamat, Anda telah masuk ke tahap wawancara untuk posisi ini. Silakan periksa detail jadwal berikut dan pastikan Anda hadir sesuai waktu yang telah ditentukan.
+                </p>
+              </div>
             </div>
-            <div className="text-sm space-y-3 text-slate-600 dark:text-slate-400 text-justify">
-              <p>
-                {application.offerStatus === "rejected"
-                  ? "Anda telah menolak penawaran kerja ini. Proses rekrutmen untuk posisi ini telah selesai."
-                  : "Terima kasih telah berpartisipasi dalam proses seleksi. Saat ini lamaran Anda sedang dalam tahap evaluasi lanjutan oleh tim kami."}
-              </p>
-              {application.offerStatus !== "rejected" && (
-                <>
-                  <p>
-                    Lamaran Anda telah kami terima dengan baik dan saat ini
-                    sedang dalam proses evaluasi oleh tim rekrutmen kami. Kami
-                    sedang meninjau kesesuaian profil dan hasil tahapan seleksi
-                    Anda untuk menentukan proses selanjutnya.
+          </div>
+
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <p className="font-bold text-slate-900 dark:text-white">{application.jobPosition}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{application.brandName}</p>
+              </div>
+              <Badge variant="outline" className="border-teal-300 text-teal-700 dark:border-teal-700 dark:text-teal-300 text-[10px] font-semibold">
+                Terjadwal
+              </Badge>
+            </div>
+            <div className="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+              <div className="flex items-start gap-3">
+                <Calendar className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-0.5">Tanggal</p>
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                    {format(templateDate, "eeee, dd MMMM yyyy", { locale: id })}
                   </p>
-                  <p>
-                    Mohon menunggu informasi berikutnya yang akan kami sampaikan
-                    melalui portal ini. Kami akan memberikan informasi
-                    perkembangan selanjutnya melalui portal ini atau email
-                    apabila terdapat pembaruan status. Terima kasih atas
-                    kesabaran dan minat Anda.
-                  </p>
-                </>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <Clock className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-0.5">Waktu (WIB)</p>
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{templateTime} WIB</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <LinkIcon className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-0.5">Metode</p>
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Online Meeting</p>
+                </div>
+              </div>
+            </div>
+            <div className="px-5 pb-5">
+              {templateLink ? (
+                <Button asChild className="w-full sm:w-auto bg-teal-600 hover:bg-teal-700 text-white">
+                  <a href={templateLink} target="_blank" rel="noopener noreferrer">
+                    <LinkIcon className="mr-2 h-4 w-4" />
+                    Masuk ke Ruang Wawancara
+                  </a>
+                </Button>
+              ) : (
+                <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-500 dark:text-slate-400">
+                  <Info className="h-4 w-4 shrink-0" />
+                  Link wawancara belum tersedia. Silakan pantau portal ini secara berkala.
+                </div>
               )}
             </div>
           </div>
-        ) : hasFinalPositive ? (
-          <div className="p-4 rounded-md border border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-900/20 text-emerald-900 dark:text-emerald-100">
-            <h3 className="font-semibold text-lg flex items-center gap-2 text-emerald-800 dark:text-emerald-100">
-              <Check className="h-5 w-5" /> Selamat! Anda lolos ke tahap
-              berikutnya
-            </h3>
-            <div className="text-sm mt-3 space-y-3 text-emerald-900/90 dark:text-emerald-200/90 text-justify">
-              <p>
-                Hasil evaluasi wawancara Anda telah dinyatakan lolos. Silakan
-                tunggu informasi lanjutan mengenai tahap Offering yang akan
-                segera kami kirimkan.
-              </p>
-              <p>
-                Kami akan menghubungi Anda melalui portal ini atau email setelah
-                detail penawaran siap.
-              </p>
-            </div>
-            {isProcessing && !hasCompletedTest && (
-              <div className="mt-4 pt-4 border-t border-blue-200/50 dark:border-blue-800/50">
-                <p className="font-bold text-blue-900 dark:text-blue-200">
-                  Percepat proses Anda
-                </p>
-                <p className="text-xs mt-1">
-                  Selesaikan tes kepribadian untuk mempercepat proses screening.
-                  Hasil tes ini akan berlaku untuk semua lamaran Anda.
-                </p>
-                <Button asChild size="sm" className="mt-3">
-                  <Link href="/careers/portal/assessment/personality">
-                    Lanjut ke Tes Kepribadian{" "}
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
-                </Button>
-              </div>
-            )}
+
+          <div className="flex items-start gap-2.5 px-4 py-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400">
+            <Info className="h-4 w-4 shrink-0 mt-0.5 text-slate-400" />
+            Seluruh pembaruan jadwal dan instruksi wawancara akan ditampilkan melalui portal ini. Silakan pantau halaman ini secara berkala.
           </div>
-        ) : null}
-      </CardContent>
-      <CardFooter className="bg-muted/50 p-4 border-t flex flex-col sm:flex-row justify-between items-center min-h-[76px] gap-4">
-        <div className="flex-1">
-          {isInterviewStage && scheduledInterview ? (
-            <div>
-              <p className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
-                <Calendar className="h-3.5 w-3.5" /> JADWAL WAWANCARA
-              </p>
-              <p className="text-sm font-semibold">
-                {format(
-                  scheduledInterview.startAt.toDate(),
-                  "eeee, dd MMM yyyy",
-                  { locale: id },
-                )}
-              </p>
-              <p className="text-sm font-semibold">
-                {format(scheduledInterview.startAt.toDate(), "HH:mm", {
-                  locale: id,
-                })}{" "}
-                - {format(scheduledInterview.endAt.toDate(), "HH:mm")} WIB
-              </p>
+
+          <PrepTips />
+          <InterviewTimeline active="scheduled" />
+        </div>
+      );
+    }
+
+    // ── NO SCHEDULE YET ───────────────────────────────────────────────────────
+    return (
+      <div className="space-y-4">
+        <div className="rounded-xl border border-indigo-200 bg-indigo-50 dark:bg-indigo-900/20 p-5 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="h-10 w-10 rounded-full bg-indigo-100 dark:bg-indigo-800/40 flex items-center justify-center shrink-0">
+              <Calendar className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
             </div>
-          ) : application.submittedAt ? (
             <div>
-              <p className="text-xs text-muted-foreground">Lamaran Dikirim:</p>
-              <p className="text-sm font-semibold">
-                {format(
-                  application.submittedAt.toDate(),
-                  "dd MMM yyyy, HH:mm",
-                  { locale: id },
-                )}{" "}
-                WIB
+              <p className="font-bold text-indigo-900 dark:text-indigo-100">Anda Lanjut ke Tahap Wawancara</p>
+              <p className="text-sm text-indigo-700 dark:text-indigo-300 mt-1 leading-relaxed">
+                Selamat, lamaran Anda telah dilanjutkan ke tahap wawancara. Tim rekrutmen sedang
+                menyiapkan jadwal wawancara untuk Anda.
               </p>
+              <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-100 dark:bg-indigo-800/40 border border-indigo-200 dark:border-indigo-700">
+                <Clock className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-300">
+                  Menunggu Jadwal Wawancara
+                </span>
+              </div>
             </div>
-          ) : (
-            <div></div> // Placeholder for alignment
-          )}
+          </div>
         </div>
 
-        <div className="flex-shrink-0 w-full sm:w-auto">
-          {isInterviewStage && scheduledInterview && (
-            <Button asChild size="sm" className="w-full">
-              <a
-                href={scheduledInterview.meetingLink}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <LinkIcon className="mr-2 h-4 w-4" /> Buka Link Wawancara
-              </a>
-            </Button>
-          )}
+        <div className="flex items-start gap-2.5 px-4 py-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400">
+          <Info className="h-4 w-4 shrink-0 mt-0.5 text-slate-400" />
+          Seluruh pembaruan jadwal dan instruksi wawancara akan ditampilkan melalui portal ini. Silakan pantau halaman ini secara berkala.
         </div>
-      </CardFooter>
+
+        <PrepTips />
+        <InterviewTimeline active="waiting" />
+      </div>
+    );
+  }
+
+  // 4-stage recruitment timeline (Lamaran & Tes Kepribadian are one combined first stage)
+  const TIMELINE_STAGES = [
+    { key: "start",    label: "Lamaran & Tes Kepribadian", icon: FileText },
+    { key: "eval",     label: "Evaluasi HRD",              icon: Search  },
+    { key: "interview",label: "Wawancara",                 icon: Users   },
+    { key: "decision", label: "Keputusan Akhir",           icon: Award   },
+  ] as const;
+
+  const stageIndex = (status: string): number => {
+    // Stage 0: submitted / tes_kepribadian (still in initial flow)
+    if (["submitted", "tes_kepribadian"].includes(status)) return 0;
+    // Stage 1 (active = idx 1): screening / verification / document_submission
+    if (["screening", "verification", "document_submission"].includes(status)) return 1;
+    // Stage 2: interview
+    if (status === "interview") return 2;
+    // Stage 3: offered / hired / rejected → Keputusan Akhir
+    return 3;
+  };
+  // When isProcessing && hasCompletedTest, show stage 1 as active (stage 0 done)
+  const currentStageIdx = (isProcessing && hasCompletedTest)
+    ? 1
+    : stageIndex(application.status);
+
+  const jobTypeLabel =
+    application.jobType === "fulltime" ? "Full-time" :
+    application.jobType === "internship" ? "Internship" :
+    application.jobType ?? null;
+
+  return (
+    <Card className="rounded-xl shadow-sm overflow-hidden">
+      {/* ── Always-visible summary row ── */}
+      <div className="px-5 py-4">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-3">
+          {/* Left: position + meta */}
+          <div className="space-y-1 min-w-0">
+            <h3 className="font-semibold text-base leading-snug">
+              {application.jobPosition}
+            </h3>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <Building className="h-3.5 w-3.5 shrink-0" />
+                {application.brandName}
+              </span>
+              {application.location && (
+                <span className="flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5 shrink-0" />
+                  {application.location}
+                </span>
+              )}
+              {jobTypeLabel && (
+                <span className="flex items-center gap-1.5">
+                  <Briefcase className="h-3.5 w-3.5 shrink-0" />
+                  {jobTypeLabel}
+                </span>
+              )}
+            </div>
+          </div>
+          {/* Right: status badge */}
+          <Badge className={cn("w-fit shrink-0 self-start", displayStatus.color)}>
+            {displayStatus.text}
+          </Badge>
+        </div>
+
+        {/* Bottom row: submit date + toggle button */}
+        <div className="flex items-center justify-between mt-3 gap-2">
+          <p className="text-xs text-muted-foreground">
+            {application.submittedAt
+              ? `Dikirim ${format(application.submittedAt.toDate(), "d MMM yyyy", { locale: id })}`
+              : ""}
+          </p>
+          <button
+            onClick={onToggle}
+            className="inline-flex items-center gap-1 text-xs font-medium text-teal-600 hover:text-teal-700 dark:text-teal-400 dark:hover:text-teal-300 transition-colors select-none"
+          >
+            {isOpen ? "Tutup Detail" : "Lihat Detail Lamaran"}
+            <ChevronDown
+              className={cn(
+                "h-3.5 w-3.5 transition-transform duration-300",
+                isOpen && "rotate-180",
+              )}
+            />
+          </button>
+        </div>
+      </div>
+
+      {/* ── Collapsible detail section ── */}
+      <div
+        className={cn(
+          "grid transition-all duration-300 ease-in-out",
+          isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+        )}
+      >
+        <div className="overflow-hidden">
+          <div className="border-t bg-slate-50 dark:bg-slate-900/40 px-5 py-5 space-y-5">
+
+            {/* Timeline */}
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                Tahapan Rekrutmen
+              </p>
+              <div className="flex items-start justify-between gap-1">
+                {TIMELINE_STAGES.map((stage, idx) => {
+                  const isDone = idx < currentStageIdx;
+                  const isCurrent = idx === currentStageIdx;
+                  const Icon = stage.icon;
+                  return (
+                    <div
+                      key={stage.key}
+                      className="flex flex-1 flex-col items-center gap-1.5 min-w-[60px]"
+                    >
+                      <div className="relative flex items-center w-full justify-center">
+                        {idx > 0 && (
+                          <div
+                            className={cn(
+                              "absolute right-1/2 top-3 h-0.5 w-full -translate-y-px",
+                              isDone || isCurrent
+                                ? "bg-teal-500"
+                                : "bg-slate-200 dark:bg-slate-700",
+                            )}
+                          />
+                        )}
+                        <div
+                          className={cn(
+                            "relative z-10 flex h-6 w-6 items-center justify-center rounded-full border-2 transition-colors",
+                            isDone
+                              ? "border-teal-500 bg-teal-500 text-white"
+                              : isCurrent
+                                ? "border-teal-500 bg-white dark:bg-slate-900 text-teal-600"
+                                : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-400",
+                          )}
+                        >
+                          {isDone ? (
+                            <Check className="h-3 w-3" />
+                          ) : (
+                            <Icon className="h-3 w-3" />
+                          )}
+                        </div>
+                      </div>
+                      <p
+                        className={cn(
+                          "text-center text-[10px] leading-tight font-medium",
+                          isCurrent
+                            ? "text-teal-600 dark:text-teal-400"
+                            : isDone
+                              ? "text-slate-600 dark:text-slate-300"
+                              : "text-slate-400 dark:text-slate-600",
+                        )}
+                      >
+                        {stage.label}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <Separator className="border-slate-200 dark:border-slate-700" />
+
+            {/* Status content block */}
+            {isRejected ? (
+              <div className="p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50">
+                <div className="flex items-center gap-2 mb-2">
+                  <FileClock className="h-4 w-4 text-slate-500" />
+                  <h3 className="font-semibold text-sm">
+                    {application.offerStatus === "rejected"
+                      ? "Penawaran Ditolak"
+                      : "Proses Seleksi Selesai"}
+                  </h3>
+                </div>
+                <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                  {application.offerStatus === "rejected"
+                    ? "Anda telah menolak penawaran kerja ini. Proses rekrutmen untuk posisi ini telah selesai."
+                    : "Terima kasih telah berpartisipasi dalam proses seleksi. Pantau portal ini untuk melihat pembaruan status terbaru dari tim rekrutmen."}
+                </p>
+              </div>
+            ) : hasFinalPositive ? (
+              <div className="p-4 rounded-lg border border-emerald-200 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-900/20">
+                <h3 className="font-semibold text-sm flex items-center gap-2 text-emerald-800 dark:text-emerald-100 mb-2">
+                  <Check className="h-4 w-4" /> Selamat! Anda lolos ke tahap berikutnya
+                </h3>
+                <p className="text-sm text-emerald-900/80 dark:text-emerald-200/80 leading-relaxed">
+                  Hasil evaluasi wawancara Anda dinyatakan lolos. Pantau portal ini
+                  untuk melihat informasi lanjutan mengenai tahap Offering.
+                </p>
+              </div>
+            ) : isProcessing && hasCompletedTest ? (
+              <div className="space-y-3">
+                <div className="p-4 rounded-lg border border-teal-200 bg-teal-50 dark:border-teal-800 dark:bg-teal-900/20">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle2 className="h-5 w-5 text-teal-600 shrink-0 mt-0.5" />
+                    <div className="space-y-1.5">
+                      <h3 className="font-semibold text-sm text-teal-800 dark:text-teal-100">
+                        Lamaran &amp; Tes Kepribadian Selesai — Dalam Evaluasi
+                      </h3>
+                      {application.personalityTestCompleted ? (
+                        <p className="text-sm text-teal-700 dark:text-teal-300 leading-relaxed">
+                          Lamaran Anda telah diterima. Hasil tes kepribadian yang sudah
+                          Anda selesaikan sebelumnya akan digunakan dalam proses evaluasi
+                          posisi ini.
+                        </p>
+                      ) : (
+                        <p className="text-sm text-teal-700 dark:text-teal-300 leading-relaxed">
+                          Lamaran dan hasil tes kepribadian Anda telah diterima. Saat ini
+                          data Anda sedang ditinjau oleh tim rekrutmen melalui sistem HRP.
+                        </p>
+                      )}
+                      <p className="text-sm text-teal-700/80 dark:text-teal-400 leading-relaxed">
+                        Pantau portal ini untuk melihat pembaruan status atau jadwal
+                        wawancara.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-2.5 rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30 p-3">
+                  <Info className="h-4 w-4 shrink-0 text-blue-500 mt-0.5" />
+                  <p className="text-xs text-blue-800 dark:text-blue-300 leading-relaxed">
+                    Semua informasi seleksi akan ditampilkan di portal ini. Anda tidak
+                    perlu mengirim ulang lamaran selama status masih dalam proses.
+                    Pastikan data profil Anda tetap akurat agar proses seleksi berjalan
+                    lancar.
+                  </p>
+                </div>
+              </div>
+            ) : isProcessing && !hasCompletedTest ? (
+              <div className="p-4 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20">
+                <div className="flex items-start gap-3">
+                  <Clock className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <h3 className="font-semibold text-sm text-amber-800 dark:text-amber-100 mb-1">
+                      Langkah Selanjutnya: Selesaikan Tes Kepribadian
+                    </h3>
+                    <p className="text-sm text-amber-700 dark:text-amber-300 leading-relaxed mb-3">
+                      Lamaran Anda telah diterima. Untuk melanjutkan proses seleksi,
+                      silakan selesaikan tes kepribadian terlebih dahulu.
+                    </p>
+                    <Button
+                      asChild
+                      size="sm"
+                      className="bg-teal-600 hover:bg-teal-700 text-white"
+                    >
+                      <Link href="/careers/portal/assessment/personality">
+                        Mulai Tes Kepribadian{" "}
+                        <ArrowRight className="ml-2 h-3.5 w-3.5" />
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Interview schedule (shown inside detail if available) */}
+            {isInterviewStage && scheduledInterview && (
+              <div className="p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5 mb-2">
+                  <Calendar className="h-3.5 w-3.5" /> Jadwal Wawancara
+                </p>
+                <p className="text-sm font-semibold">
+                  {format(
+                    scheduledInterview.startAt.toDate(),
+                    "eeee, d MMMM yyyy",
+                    { locale: id },
+                  )}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {format(scheduledInterview.startAt.toDate(), "HH:mm", {
+                    locale: id,
+                  })}{" "}
+                  –{" "}
+                  {format(scheduledInterview.endAt.toDate(), "HH:mm")} WIB
+                </p>
+                {scheduledInterview.meetingLink && (
+                  <Button
+                    asChild
+                    size="sm"
+                    className="mt-3 bg-teal-600 hover:bg-teal-700 text-white"
+                  >
+                    <a
+                      href={scheduledInterview.meetingLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <LinkIcon className="mr-1.5 h-3.5 w-3.5" /> Lihat Jadwal
+                      Wawancara
+                    </a>
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {/* Secondary actions */}
+            <div className="flex flex-wrap gap-2 pt-1">
+              {isProcessing && !hasCompletedTest && (
+                <Button asChild size="sm" variant="outline">
+                  <Link href="/careers/portal/profile">Perbarui Profil</Link>
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
     </Card>
+  );
+}
+
+// Wrapper that owns accordion open-state so only one card is expanded at a time
+function ApplicationsList({
+  applications,
+  jobMap,
+  hasCompletedTest,
+}: {
+  applications: JobApplication[];
+  jobMap: Map<string, Job>;
+  hasCompletedTest: boolean;
+}) {
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  return (
+    <div className="space-y-3">
+      {applications.map((app) => {
+        const job = jobMap.get(app.jobId);
+        const id = app.id ?? "";
+        return (
+          <ApplicationCard
+            key={id}
+            application={app}
+            job={job}
+            hasCompletedTest={hasCompletedTest}
+            isOpen={openId === id}
+            onToggle={() => setOpenId(openId === id ? null : id)}
+          />
+        );
+      })}
+    </div>
   );
 }
 
@@ -2459,9 +2887,22 @@ export default function ApplicationsPage() {
   const { data: submittedSessions, isLoading: sessionsLoading } =
     useCollection<AssessmentSession>(sessionsQuery);
 
+  // Candidate-level personality test record (1 per candidate)
+  const candidateTestDocRef = useMemoFirebase(
+    () => (uid ? doc(firestore, "candidate_personality_tests", uid) : null),
+    [uid, firestore],
+  );
+  const { data: candidateTestDoc } = useDoc<{ status: string }>(candidateTestDocRef);
+
   const hasCompletedTest = useMemo(
-    () => (submittedSessions?.length ?? 0) > 0,
-    [submittedSessions],
+    () =>
+      // Primary: candidate-level test record
+      (candidateTestDoc?.status === "completed") ||
+      // Fallback: any submitted assessment session for this candidate
+      (submittedSessions?.length ?? 0) > 0 ||
+      // Fallback: any application where test was marked done
+      (applications || []).some((app) => app.personalityTestCompleted === true),
+    [candidateTestDoc, submittedSessions, applications],
   );
 
   const sortedApplications = useMemo(() => {
@@ -2495,45 +2936,34 @@ export default function ApplicationsPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Lamaran Saya</h1>
         <p className="text-muted-foreground">
-          Riwayat dan status lamaran pekerjaan yang telah Anda kirimkan atau
-          simpan sebagai draf.
+          Seluruh perkembangan seleksi akan diperbarui melalui portal ini.
+          Silakan tinjau halaman ini secara berkala untuk melihat status
+          terbaru, jadwal wawancara, dan informasi lanjutan dari tim
+          rekrutmen.
         </p>
       </div>
 
       {isLoading ? (
         <ApplicationsPageSkeleton />
       ) : sortedApplications && sortedApplications.length > 0 ? (
-        <div className="space-y-6">
-          {sortedApplications.map((app) => {
-            const job = jobMap.get(app.jobId);
-            return (
-              <ApplicationCard
-                key={app.id}
-                application={app}
-                job={job}
-                hasCompletedTest={hasCompletedTest}
-              />
-            );
-          })}
-        </div>
+        <ApplicationsList
+          applications={sortedApplications}
+          jobMap={jobMap}
+          hasCompletedTest={hasCompletedTest}
+        />
       ) : (
-        <Card className="h-64 flex flex-col items-center justify-center text-center">
-          <CardHeader>
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-              <Briefcase className="h-6 w-6 text-muted-foreground" />
-            </div>
-            <CardTitle className="mt-4">Anda Belum Pernah Melamar</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">
-              Semua lamaran Anda akan muncul di sini.
-            </p>
-          </CardContent>
-          <CardFooter>
-            <Button asChild>
-              <Link href="/careers/portal/jobs">Cari Lowongan Sekarang</Link>
-            </Button>
-          </CardFooter>
+        <Card className="flex flex-col items-center justify-center py-16 text-center rounded-xl">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-muted mb-4">
+            <Briefcase className="h-7 w-7 text-muted-foreground" />
+          </div>
+          <h3 className="text-lg font-semibold mb-2">Belum Ada Lamaran</h3>
+          <p className="text-sm text-muted-foreground max-w-xs mb-6">
+            Anda belum pernah mengirimkan lamaran. Temukan lowongan yang sesuai
+            dan mulai perjalanan karier Anda bersama kami.
+          </p>
+          <Button asChild className="bg-teal-600 hover:bg-teal-700 text-white">
+            <Link href="/careers/portal/jobs">Lihat Lowongan</Link>
+          </Button>
         </Card>
       )}
     </div>

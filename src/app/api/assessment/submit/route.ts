@@ -219,16 +219,79 @@ export async function POST(req: NextRequest) {
         candidateEmail,
     });
 
-    // --- 8. Update Application Status if linked ---
-    if (session.applicationId) {
-      const appRef = db.collection('applications').doc(session.applicationId);
-      const appDoc = await appRef.get();
-      // Check if application is in the personality test stage
-      if (appDoc.exists && appDoc.data()?.status === 'tes_kepribadian') {
-        await appRef.update({
+    // --- 8. Save candidate-level personality test record (1 per candidate) ---
+    const candidateTestRef = db.collection('candidate_personality_tests').doc(session.candidateUid);
+    await candidateTestRef.set({
+      status: 'completed',
+      sessionId: sessionId,
+      completedAt: Timestamp.now(),
+      discType,
+      mbtiArchetype: mbtiArchetype ?? null,
+      updatedAt: Timestamp.now(),
+    });
+
+    // --- 9. Update linked application + ALL other waiting applications of this candidate ---
+    let jobPosition: string | null = null;
+    try {
+      // Update all applications of this candidate that are still in 'tes_kepribadian'
+      const allCandidateAppsSnap = await db.collection('applications')
+        .where('candidateUid', '==', session.candidateUid)
+        .where('status', '==', 'tes_kepribadian')
+        .get();
+
+      const appBatch = db.batch();
+      allCandidateAppsSnap.docs.forEach((appDoc) => {
+        appBatch.update(appDoc.ref, {
           status: 'screening',
+          personalityTestCompleted: true,
+          personalityTestResultId: sessionId,
           updatedAt: Timestamp.now(),
         });
+        // Capture jobPosition from the linked application
+        if (session.applicationId && appDoc.id === session.applicationId) {
+          jobPosition = appDoc.data()?.jobPosition || null;
+        }
+      });
+      await appBatch.commit();
+
+      // Also ensure the linked app's jobPosition is captured even if status wasn't tes_kepribadian
+      if (!jobPosition && session.applicationId) {
+        const linkedAppDoc = await db.collection('applications').doc(session.applicationId).get();
+        if (linkedAppDoc.exists) {
+          jobPosition = linkedAppDoc.data()?.jobPosition || null;
+        }
+      }
+    } catch (appUpdateError) {
+      console.error('Failed to update application statuses after test:', appUpdateError);
+    }
+
+    // --- 10. Notify HRD that personality test was completed ---
+    if (session.applicationId) {
+      try {
+        await db.collection('hrd_notifications').add({
+          type: 'status_update',
+          module: 'recruitment',
+          title: 'Tes kepribadian selesai',
+          message: `${candidateName || 'Kandidat'} telah menyelesaikan tes kepribadian${jobPosition ? ` untuk posisi ${jobPosition}` : ''}.`,
+          targetType: 'application',
+          targetId: session.applicationId,
+          actionUrl: `/admin/recruitment/applications/${session.applicationId}`,
+          isRead: false,
+          createdAt: Timestamp.now(),
+          createdBy: session.candidateUid,
+          notificationType: 'recruitment',
+          recruitmentEvent: 'personality_test_completed',
+          priority: 'action_required',
+          notifStatus: 'action_required',
+          meta: {
+            applicationId: session.applicationId,
+            candidateUid: session.candidateUid,
+            candidateName,
+            jobTitle: jobPosition,
+          },
+        });
+      } catch (notifError) {
+        console.error('Failed to send test-completion HRD notification:', notifError);
       }
     }
 

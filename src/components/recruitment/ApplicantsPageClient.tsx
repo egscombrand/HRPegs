@@ -8,6 +8,7 @@ import {
   Eye, Search, X, Users, CheckCircle2, Clock, AlertTriangle, TrendingUp,
   LayoutGrid, Pencil, ChevronDown, Link as LinkIcon, BarChart3, Briefcase,
 } from 'lucide-react';
+import { MultiApplicationBadge } from './MultiApplicationBadge';
 import { ApplicationStatusBadge, statusDisplayLabels } from '@/components/recruitment/ApplicationStatusBadge';
 import { Checkbox } from '@/components/ui/checkbox';
 import Link from 'next/link';
@@ -20,7 +21,7 @@ import { useToast } from '@/hooks/use-toast';
 import { ORDERED_RECRUITMENT_STAGES } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { setDocumentNonBlocking, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { doc, serverTimestamp, Timestamp, query, collection, where, writeBatch } from 'firebase/firestore';
+import { doc, serverTimestamp, Timestamp, query, collection, where, writeBatch, getDocs } from 'firebase/firestore';
 import type { ScheduleInterviewData } from './ScheduleInterviewDialog';
 import { ScheduleInterviewDialog } from './ScheduleInterviewDialog';
 import { EditInterviewTemplateDialog } from './EditInterviewTemplateDialog';
@@ -121,11 +122,46 @@ export function ApplicantsPageClient({ applications, job, onJobUpdate, allBrands
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
   const [isSingleScheduleOpen, setIsSingleScheduleOpen] = useState(false);
   const [activeApplication, setActiveApplication] = useState<JobApplication | null>(null);
+  // Map: candidateUid → all OTHER applications (not in this job)
+  const [multiAppMap, setMultiAppMap] = useState<Map<string, Pick<JobApplication, 'id' | 'jobPosition' | 'brandName' | 'status'>[]>>(new Map());
 
   const firestore = useFirestore();
   const { toast } = useToast();
 
   const isPrivilegedRecruiter = userProfile?.role === 'super-admin' || userProfile?.role === 'hrd';
+
+  // Fetch multi-application data: for each candidateUid in this job's applicants,
+  // query all their applications across all jobs (grouped, no per-row query).
+  useEffect(() => {
+    if (!isPrivilegedRecruiter || applications.length === 0) return;
+    const currentJobId = job?.id;
+    const uids = [...new Set(applications.map(a => a.candidateUid).filter(Boolean))];
+    if (uids.length === 0) return;
+
+    const CHUNK = 30;
+    const chunks: string[][] = [];
+    for (let i = 0; i < uids.length; i += CHUNK) chunks.push(uids.slice(i, i + CHUNK));
+
+    (async () => {
+      const results: JobApplication[] = [];
+      await Promise.all(
+        chunks.map(async chunk => {
+          const snap = await getDocs(
+            query(collection(firestore, 'applications'), where('candidateUid', 'in', chunk))
+          );
+          snap.forEach(d => results.push({ id: d.id, ...d.data() } as JobApplication));
+        })
+      );
+      const map = new Map<string, Pick<JobApplication, 'id' | 'jobPosition' | 'brandName' | 'status'>[]>();
+      results.forEach(a => {
+        if (a.jobId === currentJobId) return; // skip current job
+        const list = map.get(a.candidateUid) || [];
+        list.push({ id: a.id, jobPosition: a.jobPosition, brandName: a.brandName, status: a.status });
+        map.set(a.candidateUid, list);
+      });
+      setMultiAppMap(map);
+    })();
+  }, [applications, firestore, isPrivilegedRecruiter, job?.id]);
 
   const { data: usersToFilter } = useCollection<UserProfile>(
     useMemoFirebase(() => {
@@ -517,7 +553,12 @@ export function ApplicantsPageClient({ applications, job, onJobUpdate, allBrands
                         </td>
                       )}
                       <td className="px-5 py-4 align-middle">
-                        <p className="text-base font-bold text-slate-900 dark:text-white">{app.candidateName}</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-base font-bold text-slate-900 dark:text-white">{app.candidateName}</p>
+                          {isPrivilegedRecruiter && (
+                            <MultiApplicationBadge otherApplications={multiAppMap.get(app.candidateUid) || []} />
+                          )}
+                        </div>
                       </td>
                       <td className="px-5 py-4 align-middle">
                         <ApplicationStatusBadge status={app.status} />

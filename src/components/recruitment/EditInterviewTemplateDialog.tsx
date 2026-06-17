@@ -14,13 +14,17 @@ import type { UserProfile, Job, Brand } from '@/lib/types';
 import { GoogleDatePicker } from '../ui/google-date-picker';
 import { Timestamp } from 'firebase/firestore';
 
+const TIME_REGEX = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+
 const templateSchema = z.object({
   meetingLink: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal('')),
   slotDurationMinutes: z.coerce.number().int().min(5),
   breakMinutes: z.coerce.number().int().min(0),
-  workdayStartTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Format waktu harus HH:MM."),
-  workdayEndTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Format waktu harus HH:MM."),
+  workdayStartTime: z.string().regex(TIME_REGEX, "Format waktu harus HH:MM."),
+  workdayEndTime: z.string().regex(TIME_REGEX, "Format waktu harus HH:MM."),
   defaultStartDate: z.date().optional(),
+  lunchBreakStart: z.string().regex(TIME_REGEX, "Format waktu harus HH:MM.").optional().or(z.literal('')),
+  lunchBreakEnd: z.string().regex(TIME_REGEX, "Format waktu harus HH:MM.").optional().or(z.literal('')),
 });
 
 type FormValues = z.infer<typeof templateSchema>;
@@ -51,6 +55,8 @@ export function EditInterviewTemplateDialog({ open, onOpenChange, job, initialTe
         workdayStartTime: template?.workdayStartTime || '09:00',
         workdayEndTime: template?.workdayEndTime || '17:00',
         defaultStartDate: template?.defaultStartDate?.toDate(),
+        lunchBreakStart: template?.lunchBreakStart || '',
+        lunchBreakEnd: template?.lunchBreakEnd || '',
       });
     }
   }, [open, job, initialTemplateData, form]);
@@ -91,8 +97,13 @@ export function EditInterviewTemplateDialog({ open, onOpenChange, job, initialTe
                         <FormField control={form.control} name="workdayEndTime" render={({ field }) => ( <FormItem><FormLabel>Workday End Time</FormLabel><FormControl><Input type="time" {...field} /></FormControl><FormMessage /></FormItem>)} />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                        <FormField control={form.control} name="slotDurationMinutes" render={({ field }) => (<FormItem><FormLabel>Slot Duration (minutes)</FormLabel><Select onValueChange={(v) => field.onChange(parseInt(v))} value={String(field.value)}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent portalled={false}><SelectItem value="15">15</SelectItem><SelectItem value="30">30</SelectItem><SelectItem value="45">45</SelectItem><SelectItem value="60">60</SelectItem><SelectItem value="90">90</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
-                        <FormField control={form.control} name="breakMinutes" render={({ field }) => (<FormItem><FormLabel>Break (minutes)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                        <FormField control={form.control} name="slotDurationMinutes" render={({ field }) => (<FormItem><FormLabel>Durasi Slot (menit)</FormLabel><Select onValueChange={(v) => field.onChange(parseInt(v))} value={String(field.value)}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent portalled={false}><SelectItem value="15">15</SelectItem><SelectItem value="30">30</SelectItem><SelectItem value="45">45</SelectItem><SelectItem value="60">60</SelectItem><SelectItem value="90">90</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
+                        <FormField control={form.control} name="breakMinutes" render={({ field }) => (<FormItem><FormLabel>Jeda antar Slot (menit)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                    </div>
+                    <p className="text-xs text-muted-foreground font-medium pt-1">Istirahat Makan Siang (opsional)</p>
+                    <div className="grid grid-cols-2 gap-4">
+                        <FormField control={form.control} name="lunchBreakStart" render={({ field }) => (<FormItem><FormLabel>Mulai Istirahat</FormLabel><FormControl><Input type="time" {...field} value={field.value || ''} placeholder="12:00" /></FormControl><FormMessage /></FormItem>)} />
+                        <FormField control={form.control} name="lunchBreakEnd" render={({ field }) => (<FormItem><FormLabel>Selesai Istirahat</FormLabel><FormControl><Input type="time" {...field} value={field.value || ''} placeholder="13:00" /></FormControl><FormMessage /></FormItem>)} />
                     </div>
                   </fieldset>
                 </form>

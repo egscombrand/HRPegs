@@ -21,6 +21,43 @@ import { useToast } from '@/hooks/use-toast';
 import { isPast, differenceInDays, format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { isApplicationActive, MAX_ACTIVE_APPLICATIONS } from '@/lib/application-rules';
+
+/**
+ * Extract a clean city name from a raw location label.
+ * Returns the matched canonical city, or the trimmed raw value as fallback.
+ */
+function normalizeCity(raw?: string | null): string {
+  if (!raw) return '';
+  const s = raw.toLowerCase();
+
+  // Order matters: check longer / more specific patterns first
+  const CITY_PATTERNS: [RegExp, string][] = [
+    [/yogyakarta|yogya\b|jogja|jogyakarta/, 'Yogyakarta'],
+    [/surakarta|solo\b|kota solo|surakarte/, 'Surakarta'],
+    [/semarang/, 'Semarang'],
+    [/jakarta/, 'Jakarta'],
+    [/bandung/, 'Bandung'],
+    [/surabaya/, 'Surabaya'],
+    [/malang/, 'Malang'],
+    [/medan/, 'Medan'],
+    [/makassar/, 'Makassar'],
+    [/denpasar|bali\b/, 'Bali'],
+    [/bekasi/, 'Bekasi'],
+    [/tangerang/, 'Tangerang'],
+    [/depok/, 'Depok'],
+    [/bogor/, 'Bogor'],
+    [/remote/, 'Remote'],
+  ];
+
+  for (const [pattern, city] of CITY_PATTERNS) {
+    if (pattern.test(s)) return city;
+  }
+
+  // Fallback: return the raw value trimmed (capitalise first letter)
+  const trimmed = raw.trim();
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+}
 
 interface JobCardProps {
   job: Job;
@@ -70,9 +107,13 @@ const JobCard = ({ job, isSaved, onToggleSave, applicationStatus }: JobCardProps
 
         {/* Badges Row */}
         <div className="flex flex-wrap gap-1.5">
-          <Badge variant="outline" className="text-xs py-1 px-2 border-slate-300 dark:border-slate-700 gap-1">
+          <Badge
+            variant="outline"
+            className="text-xs py-1 px-2 border-slate-300 dark:border-slate-700 gap-1"
+            title={job.location || undefined}
+          >
             <MapPin className="h-3 w-3" />
-            {job.location}
+            {normalizeCity(job.location)}
           </Badge>
           {divisionLabel && (
             <Badge variant="outline" className="text-xs py-1 px-2 border-slate-300 dark:border-slate-700">
@@ -242,6 +283,11 @@ export default function CandidateJobsPage() {
     return map;
   }, [applications]);
 
+  const activeApplicationCount = useMemo(
+    () => (applications || []).filter((app) => isApplicationActive(app.status)).length,
+    [applications],
+  );
+
   useEffect(() => {
     const fetchSavedJobDetails = async () => {
       if (savedJobIdsForQuery.length === 0) {
@@ -270,8 +316,12 @@ export default function CandidateJobsPage() {
   }, [savedJobIdsForQuery, firestore, isLoadingSavedJobs, toast]);
 
   const locations = useMemo(() => {
-    const locs = new Set(jobs?.map(j => j.location).filter(Boolean) || []);
-    return Array.from(locs).sort();
+    const cities = new Set<string>();
+    jobs?.forEach(j => {
+      const city = normalizeCity(j.location);
+      if (city) cities.add(city);
+    });
+    return Array.from(cities).sort((a, b) => a.localeCompare(b, 'id'));
   }, [jobs]);
 
   const hasActiveFilters = searchTerm || brandFilter !== 'all' || locationFilter !== 'all' ||
@@ -285,7 +335,7 @@ export default function CandidateJobsPage() {
       const matchesSearch = job.position.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            (job.brandName || '').toLowerCase().includes(searchTerm.toLowerCase());
       const matchesBrand = brandFilter === 'all' || job.brandId === brandFilter;
-      const matchesLocation = locationFilter === 'all' || job.location === locationFilter;
+      const matchesLocation = locationFilter === 'all' || normalizeCity(job.location) === locationFilter;
       const matchesType = typeFilter === 'all' || job.statusJob === typeFilter;
       const matchesMode = modeFilter === 'all' || job.workMode === modeFilter;
       return matchesSearch && matchesBrand && matchesLocation && matchesType && matchesMode;
@@ -526,6 +576,36 @@ export default function CandidateJobsPage() {
                   {isLoading ? 'Mencari lowongan...' : `${sortedJobs.length} lowongan ditemukan`}
                 </p>
               </div>
+
+              {/* Active application info banner */}
+              {activeApplicationCount > 0 && (
+                <div className={cn(
+                  "flex items-center gap-2.5 rounded-xl border px-4 py-3 text-sm",
+                  activeApplicationCount >= MAX_ACTIVE_APPLICATIONS
+                    ? "border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/20"
+                    : "border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20",
+                )}>
+                  <Briefcase className={cn(
+                    "h-4 w-4 shrink-0",
+                    activeApplicationCount >= MAX_ACTIVE_APPLICATIONS ? "text-red-600" : "text-amber-600",
+                  )} />
+                  <p className={cn(
+                    "flex-1",
+                    activeApplicationCount >= MAX_ACTIVE_APPLICATIONS
+                      ? "text-red-700 dark:text-red-400"
+                      : "text-amber-700 dark:text-amber-400",
+                  )}>
+                    {activeApplicationCount >= MAX_ACTIVE_APPLICATIONS ? (
+                      <>Anda sudah mencapai batas <strong>{MAX_ACTIVE_APPLICATIONS} lamaran aktif</strong>. Selesaikan lamaran yang ada sebelum melamar posisi baru.</>
+                    ) : (
+                      <>Anda memiliki <strong>{activeApplicationCount} lamaran aktif</strong>. Anda masih dapat melamar {MAX_ACTIVE_APPLICATIONS - activeApplicationCount} posisi lagi.</>
+                    )}
+                  </p>
+                  <Button asChild variant="ghost" size="sm" className="h-7 shrink-0 text-xs">
+                    <Link href="/careers/portal/applications">Lihat</Link>
+                  </Button>
+                </div>
+              )}
 
               {isLoading ? (
                 <div className="space-y-3">

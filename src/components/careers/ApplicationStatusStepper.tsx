@@ -3,61 +3,56 @@
 import {
   Check,
   Lock,
-  Pencil,
   Hourglass,
   Calendar,
   FileText,
   Award,
+  Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import type { JobApplication, JobApplicationStatus } from "@/lib/types";
-import { statusDisplayLabels } from "@/components/recruitment/ApplicationStatusBadge";
 import { Skeleton } from "../ui/skeleton";
 import { format } from "date-fns";
-
 import { useMemo } from "react";
 
-// The key stages a candidate sees, in order.
-const candidateStages = [
-  "application",
+// 4 canonical stages shown to the candidate
+const CANDIDATE_STAGES = [
+  "start",
+  "eval",
   "interview",
-  "offering",
-  "hired",
+  "decision",
 ] as const;
 
-function mapStage(status: JobApplicationStatus): CandidateStage {
-  const applicationStages: JobApplicationStatus[] = [
-    "draft",
-    "submitted",
-    "tes_kepribadian",
-    "screening",
-    "verification",
-    "document_submission",
-  ];
+type CandidateStage = (typeof CANDIDATE_STAGES)[number];
+type StepStatus = "completed" | "active" | "waiting" | "locked";
 
-  if (applicationStages.includes(status)) return "application";
+// Map a Firestore status → candidate stage, given whether the test is done
+function mapStage(
+  status: JobApplicationStatus,
+  hasCompletedTest: boolean,
+): CandidateStage {
+  if (["submitted", "tes_kepribadian"].includes(status)) return "start";
+  if (["screening", "verification", "document_submission"].includes(status)) {
+    return hasCompletedTest ? "eval" : "start";
+  }
   if (status === "interview") return "interview";
-  if (status === "offered") return "offering";
-  if (status === "hired") return "hired";
-  return "application";
+  if (["offered", "hired", "rejected"].includes(status)) return "decision";
+  return "start";
 }
-
-type CandidateStage = (typeof candidateStages)[number];
-
-type StepStatus = "completed" | "active" | "locked" | "waiting";
 
 interface ApplicationStatusStepperProps {
   application: JobApplication | null;
   highestStatus: JobApplicationStatus | null;
   isProfileComplete: boolean;
+  hasCompletedTest: boolean;
   isLoading: boolean;
 }
 
 const StepperSkeleton = () => (
   <div className="space-y-6">
-    {[...Array(5)].map((_, i) => (
+    {[...Array(4)].map((_, i) => (
       <div key={i} className="flex items-start gap-4">
         <Skeleton className="h-10 w-10 rounded-full" />
         <div className="flex-grow pt-1 space-y-2">
@@ -69,190 +64,159 @@ const StepperSkeleton = () => (
   </div>
 );
 
+const STAGE_META: Record<
+  CandidateStage,
+  { label: string; icon: React.ElementType }
+> = {
+  start:     { label: "Lamaran & Tes Kepribadian", icon: FileText  },
+  eval:      { label: "Evaluasi HRD",              icon: Search    },
+  interview: { label: "Wawancara",                 icon: Calendar  },
+  decision:  { label: "Keputusan Akhir",           icon: Award     },
+};
+
 export function ApplicationStatusStepper({
   application,
   highestStatus,
   isProfileComplete,
+  hasCompletedTest,
   isLoading,
 }: ApplicationStatusStepperProps) {
-  if (isLoading) {
-    return <StepperSkeleton />;
-  }
+  if (isLoading) return <StepperSkeleton />;
 
-  const getStepDetails = (
-    stage: CandidateStage,
-  ): { status: StepStatus; cta?: React.ReactNode; reason?: string } => {
-    if (!highestStatus) {
-      // Case where user has account but never applied
-      if (!isProfileComplete) {
-        return {
-          status: "locked",
-          reason: "Lengkapi profil Anda untuk dapat memulai proses seleksi.",
-        };
-      }
-      return {
-        status: "locked",
-        reason: "Lamar pekerjaan pertama Anda untuk memulai proses seleksi.",
-      };
-    }
+  const currentStage: CandidateStage | null = highestStatus
+    ? mapStage(highestStatus, hasCompletedTest)
+    : null;
 
-    const currentStage = mapStage(highestStatus);
-    const stepIndex = candidateStages.indexOf(stage);
-    const currentStageIndex = candidateStages.indexOf(currentStage);
+  const currentStageIdx = currentStage
+    ? CANDIDATE_STAGES.indexOf(currentStage)
+    : -1;
 
-    if (highestStatus === "rejected") {
-      if (stage === "application") {
-        return {
-          status: "waiting",
-          reason:
-            "Lamaran Anda ditolak. Silakan coba lagi dengan posisi lain atau perbarui dokumen Anda.",
-        };
-      }
-      return {
-        status: "locked",
-        reason: "Lamaran belum mencapai tahap ini.",
-      };
-    }
+  const isRejected = highestStatus === "rejected";
 
-    if (stepIndex < currentStageIndex) {
-      return { status: "completed" };
-    }
-
-    if (stepIndex === currentStageIndex) {
-      switch (stage) {
-        case "application":
-          if (highestStatus === "tes_kepribadian") {
-            return {
-              status: "active",
-              reason: "Tes kepribadian Anda perlu diselesaikan.",
-              cta: (
-                <Button asChild size="sm">
-                  <Link href="/careers/portal/assessment/personality">
-                    Kerjakan Tes
-                  </Link>
-                </Button>
-              ),
-            };
-          }
-          if (highestStatus === "document_submission") {
-            return {
-              status: "active",
-              reason:
-                "Lengkapi dokumen lamaran Anda untuk melanjutkan proses seleksi.",
-              cta: (
-                <Button asChild size="sm">
-                  <Link href="/careers/portal/documents">Unggah Dokumen</Link>
-                </Button>
-              ),
-            };
-          }
-          if (highestStatus === "verification") {
-            return {
-              status: "waiting",
-              reason:
-                "Dokumen dan hasil tes Anda sedang diverifikasi oleh HRD.",
-            };
-          }
-          if (highestStatus === "screening" || highestStatus === "submitted") {
-            return {
-              status: "waiting",
-              reason: "Lamaran Anda sedang ditinjau oleh tim HRD.",
-            };
-          }
+  const getStepDetails = useMemo(
+    () =>
+      (stage: CandidateStage): { status: StepStatus; reason?: string; cta?: React.ReactNode } => {
+        if (!highestStatus) {
           return {
-            status: "waiting",
-            reason:
-              "Aplikasi Anda sedang diproses. Pastikan profil dan dokumen sudah lengkap.",
+            status: "locked",
+            reason: isProfileComplete
+              ? "Lamar pekerjaan pertama Anda untuk memulai proses seleksi."
+              : "Lengkapi profil Anda untuk dapat memulai proses seleksi.",
           };
-        case "interview":
-          const isEvaluated = application?.postInterviewDecision != null;
+        }
 
-          const getMostRelevantInterview = () => {
-            if (!application?.interviews || application.interviews.length === 0)
-              return null;
-            const now = new Date();
-            const scheduledInterviews = application.interviews.filter(
-              (i) => i.status === "scheduled",
-            );
-            if (scheduledInterviews.length === 0) return null;
+        const stageIdx = CANDIDATE_STAGES.indexOf(stage);
 
-            const upcoming = scheduledInterviews
-              .filter((i) => i.startAt.toDate() >= now)
-              .sort(
-                (a, b) =>
-                  a.startAt.toDate().getTime() - b.startAt.toDate().getTime(),
+        if (isRejected) {
+          return stageIdx === 0
+            ? { status: "waiting", reason: "Lamaran ini tidak dilanjutkan. Silakan coba posisi lain." }
+            : { status: "locked", reason: "Lamaran belum mencapai tahap ini." };
+        }
+
+        if (stageIdx < currentStageIdx) return { status: "completed" };
+
+        if (stageIdx === currentStageIdx) {
+          switch (stage) {
+            case "start":
+              if (highestStatus === "tes_kepribadian") {
+                return {
+                  status: "active",
+                  reason: "Selesaikan tes kepribadian untuk melanjutkan proses seleksi.",
+                  cta: (
+                    <Button asChild size="sm">
+                      <Link href="/careers/portal/assessment/personality">
+                        Kerjakan Tes
+                      </Link>
+                    </Button>
+                  ),
+                };
+              }
+              return {
+                status: "active",
+                reason: "Lamaran diterima. Pantau portal ini untuk pembaruan status.",
+              };
+
+            case "eval":
+              return {
+                status: "active",
+                reason:
+                  "Lamaran dan hasil tes kepribadian Anda sedang ditinjau oleh tim rekrutmen melalui sistem HRP.",
+              };
+
+            case "interview": {
+              const now = new Date();
+              const scheduled = application?.interviews
+                ?.filter((i) => i.status === "scheduled")
+                .sort(
+                  (a, b) =>
+                    a.startAt.toDate().getTime() - b.startAt.toDate().getTime(),
+                );
+              const upcoming = scheduled?.find(
+                (i) => i.startAt.toDate() >= now,
               );
-
-            if (upcoming.length > 0) return upcoming[0];
-
-            const past = scheduledInterviews
-              .filter((i) => i.startAt.toDate() < now)
-              .sort(
-                (a, b) =>
-                  b.startAt.toDate().getTime() - a.startAt.toDate().getTime(),
-              );
-
-            return past.length > 0 ? past[0] : null;
-          };
-          const scheduledInterview = getMostRelevantInterview();
-
-          if (scheduledInterview) {
-            const isPast = scheduledInterview.startAt.toDate() < new Date();
-
-            if (isPast && !isEvaluated) {
+              if (upcoming) {
+                return {
+                  status: "active",
+                  reason: `Wawancara terjadwal: ${format(
+                    upcoming.startAt.toDate(),
+                    "dd MMM yyyy, HH:mm",
+                  )} WIB`,
+                  cta: (
+                    <Button asChild size="sm">
+                      <Link href="/careers/portal/interviews">Lihat Detail</Link>
+                    </Button>
+                  ),
+                };
+              }
+              if (scheduled && scheduled.length > 0) {
+                return {
+                  status: "waiting",
+                  reason: "Wawancara selesai, sedang dalam peninjauan.",
+                };
+              }
               return {
                 status: "waiting",
-                reason: "Wawancara selesai, sedang ditinjau.",
+                reason:
+                  "Menunggu jadwal wawancara. Pantau portal ini secara berkala.",
               };
             }
 
-            return {
-              status: "active",
-              reason: `Wawancara terjadwal: ${format(
-                scheduledInterview.startAt.toDate(),
-                "dd MMM yyyy, HH:mm",
-              )}`,
-              cta: (
-                <Button asChild size="sm">
-                  <Link href="/careers/portal/interviews">Lihat Detail</Link>
-                </Button>
-              ),
-            };
+            case "decision":
+              if (application?.status === "offered") {
+                return {
+                  status: "active",
+                  reason:
+                    "Anda menerima penawaran kerja. Tinjau dan berikan keputusan di halaman Lamaran Saya.",
+                  cta: (
+                    <Button asChild size="sm">
+                      <Link href="/careers/portal/applications">
+                        Lihat Penawaran
+                      </Link>
+                    </Button>
+                  ),
+                };
+              }
+              if (application?.status === "hired") {
+                return {
+                  status: "active",
+                  reason:
+                    application.offerStatus === "accepted"
+                      ? "Selamat! Penawaran diterima. Menunggu aktivasi akun oleh HRD."
+                      : "Proses akhir sedang disiapkan oleh HRD.",
+                };
+              }
+              return { status: "waiting", reason: "Proses keputusan akhir sedang berlangsung." };
           }
-          return {
-            status: "waiting",
-            reason:
-              "Menunggu jadwal wawancara dari HRD. Jadwal akan muncul di halaman Jadwal Wawancara.",
-          };
-        case "offering":
-          return {
-            status: "active",
-            reason:
-              "Anda telah menerima penawaran kerja. Tinjau dan berikan keputusan di halaman Lamaran Saya.",
-            cta: (
-              <Button asChild size="sm">
-                <Link href="/careers/portal/applications">Lihat Penawaran</Link>
-              </Button>
-            ),
-          };
-        case "hired":
-          return {
-            status: "waiting",
-            reason:
-              application?.offerStatus === "accepted"
-                ? "Selamat! Penawaran diterima. Menunggu aktivasi akun oleh HRD."
-                : "Proses akhir sedang disiapkan oleh HRD.",
-          };
-        default:
-          return { status: "locked" };
-      }
-    }
+        }
 
-    return {
-      status: "locked",
-      reason: "Selesaikan tahap sebelumnya untuk melanjutkan.",
-    };
-  };
+        return {
+          status: "locked",
+          reason: "Selesaikan tahap sebelumnya untuk melanjutkan.",
+        };
+      },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [highestStatus, currentStageIdx, isRejected, application, isProfileComplete],
+  );
 
   if (!highestStatus && isProfileComplete) {
     return (
@@ -284,53 +248,45 @@ export function ApplicationStatusStepper({
 
   return (
     <div className="space-y-6">
-      {candidateStages.map((stage) => {
-        const stepDetails = getStepDetails(stage);
+      {CANDIDATE_STAGES.map((stage) => {
+        const details = getStepDetails(stage);
+        const meta = STAGE_META[stage];
         const Icon =
-          stepDetails.status === "completed"
+          details.status === "completed"
             ? Check
-            : stage === "interview"
-              ? Calendar
-              : stage === "offering"
-                ? Award
-                : stage === "application"
-                  ? FileText
-                  : stepDetails.status === "active"
-                    ? Pencil
-                    : stepDetails.status === "waiting"
-                      ? Hourglass
-                      : Lock;
-        const stageLabel = {
-          application: "Application",
-          interview: "Interview",
-          offering: "Offering",
-          hired: "Hired",
-        }[stage];
+            : details.status === "locked"
+              ? Lock
+              : details.status === "waiting"
+                ? Hourglass
+                : meta.icon;
 
         return (
           <div key={stage} className="flex items-start gap-4">
             <div
               className={cn(
-                "flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2",
-                stepDetails.status === "completed" &&
-                  "bg-primary border-primary text-primary-foreground",
-                stepDetails.status === "active" &&
-                  "bg-primary/10 border-primary text-primary",
-                (stepDetails.status === "locked" ||
-                  stepDetails.status === "waiting") &&
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
+                details.status === "completed" &&
+                  "bg-teal-500 border-teal-500 text-white",
+                details.status === "active" &&
+                  "bg-teal-50 dark:bg-teal-950/20 border-teal-500 text-teal-600",
+                details.status === "waiting" &&
+                  "bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-500",
+                details.status === "locked" &&
                   "bg-muted border-border text-muted-foreground",
               )}
             >
               <Icon className="h-5 w-5" />
             </div>
             <div className="flex-grow pt-1">
-              <h4 className="font-semibold capitalize">{stageLabel}</h4>
-              <p className="text-sm text-muted-foreground">
-                {stepDetails.reason}
-              </p>
+              <h4 className="font-semibold text-sm">{meta.label}</h4>
+              {details.reason && (
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  {details.reason}
+                </p>
+              )}
             </div>
-            {stepDetails.cta && (
-              <div className="flex-shrink-0">{stepDetails.cta}</div>
+            {details.cta && (
+              <div className="flex-shrink-0">{details.cta}</div>
             )}
           </div>
         );

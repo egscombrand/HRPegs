@@ -55,8 +55,6 @@ import {
   query,
   collection,
   where,
-  orderBy,
-  limit,
   getDocs,
   updateDoc,
   arrayUnion,
@@ -675,15 +673,19 @@ export function SkillsForm({
 
       // Sync to Active Application (if any) to ensure HRD sees current documents
       try {
+        // No orderBy to avoid composite index requirement; sort client-side
         const appsQuery = query(
           collection(firestore, "applications"),
           where("candidateUid", "==", firebaseUser.uid),
-          orderBy("createdAt", "desc"),
-          limit(1)
         );
         const appSnap = await getDocs(appsQuery);
         if (!appSnap.empty) {
-          const appDoc = appSnap.docs[0];
+          const sorted = appSnap.docs.sort((a, b) => {
+            const aTs = a.data().createdAt?.toMillis?.() ?? 0;
+            const bTs = b.data().createdAt?.toMillis?.() ?? 0;
+            return bTs - aTs;
+          });
+          const appDoc = sorted[0];
           const appRef = doc(firestore, "applications", appDoc.id);
           
           // Sync only document fields that are present in payload

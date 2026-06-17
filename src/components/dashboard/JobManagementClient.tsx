@@ -744,7 +744,8 @@ export function JobManagementClient() {
 
   const brandMap = useMemo(() => new Map((brands || []).map(b => [b.id!, b.name])), [brands]);
   const userProfileMap = useMemo(() => new Map((users || []).map(u => [u.uid, u])), [users]);
-  const assignableUsers = useMemo(() => (users || []).filter(u => u.role === 'manager' || u.role === 'karyawan'), [users]);
+  // All active internal users that can be added to a recruitment team
+  const assignableUsers = useMemo(() => (users || []).filter(u => ['hrd', 'super-admin', 'manager', 'karyawan'].includes(u.role)), [users]);
 
   const appCountsByJob = useMemo(() => {
     const counts = new Map<string, { total: number; new: number; inProgress: number; interview: number; offered: number; hired: number; rejected: number }>();

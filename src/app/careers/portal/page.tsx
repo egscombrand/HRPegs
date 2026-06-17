@@ -22,13 +22,13 @@ import { id as idLocale } from 'date-fns/locale';
 
 const STATUS_LABEL: Record<string, string> = {
   draft: 'Draf',
-  submitted: 'Melamar',
+  submitted: 'Lamaran Dikirim',
   tes_kepribadian: 'Tes Kepribadian',
-  screening: 'Screening Awal',
-  verification: 'Verifikasi',
-  document_submission: 'Pengumpulan Dokumen',
+  screening: 'Dalam Evaluasi',
+  verification: 'Dalam Evaluasi',
+  document_submission: 'Dalam Evaluasi',
   interview: 'Wawancara',
-  offered: 'Penawaran',
+  offered: 'Penawaran Kerja',
   hired: 'Diterima',
   rejected: 'Tidak Dilanjutkan',
 };
@@ -45,31 +45,13 @@ const STATUS_COLOR: Record<string, string> = {
   rejected: 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400',
 };
 
-// Simplified candidate-facing timeline stages
+// 4-stage candidate-facing timeline (matches Lamaran Saya page)
 const TIMELINE_STAGES = [
-  { key: 'submitted', label: 'Melamar' },
-  { key: 'verification', label: 'Verifikasi' },
-  { key: 'tes_kepribadian', label: 'Tes & Screening' },
-  { key: 'interview', label: 'Wawancara' },
-  { key: 'offered', label: 'Penawaran' },
-  { key: 'hired', label: 'Diterima' },
+  { key: 'start',     label: 'Lamaran & Tes Kepribadian' },
+  { key: 'eval',      label: 'Evaluasi HRD'              },
+  { key: 'interview', label: 'Wawancara'                 },
+  { key: 'decision',  label: 'Keputusan Akhir'           },
 ];
-
-// Map actual status to simplified timeline stage index
-function getTimelineIndex(status: string): number {
-  const map: Record<string, number> = {
-    submitted: 0,
-    verification: 1,
-    screening: 2,
-    tes_kepribadian: 2,
-    document_submission: 2,
-    interview: 3,
-    offered: 4,
-    hired: 5,
-    rejected: -1,
-  };
-  return map[status] ?? 0;
-}
 
 export default function CandidateDashboardPage() {
   const { userProfile } = useAuth();
@@ -160,8 +142,21 @@ export default function CandidateDashboardPage() {
   }, [isProfileComplete, hasFinishedTest, stats.total]);
 
   const firstName = userProfile?.fullName?.split(' ')[0] || 'Kandidat';
-  const timelineIndex = highestStatusApp ? getTimelineIndex(highestStatusApp.status) : -1;
   const isRejected = highestStatusApp?.status === 'rejected';
+
+  // Map application status → 4-stage timeline index (0-3), -1 = rejected/none
+  const timelineIndex = useMemo(() => {
+    if (!highestStatusApp || isRejected) return -1;
+    const s = highestStatusApp.status;
+    if (['submitted', 'tes_kepribadian'].includes(s)) return 0;
+    // Once test is done and still in processing stages → stage 0 complete, stage 1 active
+    if (['screening', 'verification', 'document_submission'].includes(s)) {
+      return hasFinishedTest ? 1 : 0;
+    }
+    if (s === 'interview') return 2;
+    if (['offered', 'hired'].includes(s)) return 3;
+    return 0;
+  }, [highestStatusApp, isRejected, hasFinishedTest]);
 
   return (
     <div className="space-y-6 pb-8">
@@ -307,8 +302,9 @@ export default function CandidateDashboardPage() {
                 ) : (
                   <div className="relative">
                     <div className="flex items-center justify-between relative">
-                      {/* connecting line */}
+                      {/* base connecting line */}
                       <div className="absolute top-4 left-0 right-0 h-0.5 bg-slate-200 dark:bg-slate-800 z-0" />
+                      {/* filled progress line */}
                       <div
                         className="absolute top-4 left-0 h-0.5 bg-teal-500 z-0 transition-all duration-500"
                         style={{ width: timelineIndex >= 0 ? `${(timelineIndex / (TIMELINE_STAGES.length - 1)) * 100}%` : '0%' }}
@@ -320,16 +316,18 @@ export default function CandidateDashboardPage() {
                           <div key={stage.key} className="flex flex-col items-center gap-2 z-10 flex-1">
                             <div className={cn(
                               'h-8 w-8 rounded-full border-2 flex items-center justify-center transition-all',
-                              done ? 'bg-teal-500 border-teal-500 text-white' :
+                              done  ? 'bg-teal-500 border-teal-500 text-white' :
                               active ? 'bg-white dark:bg-slate-900 border-teal-500 text-teal-600 ring-4 ring-teal-100 dark:ring-teal-950' :
-                              'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-400'
+                                       'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-400'
                             )}>
                               {done ? <CheckCircle2 className="h-4 w-4" /> : <span className="text-xs font-bold">{i + 1}</span>}
                             </div>
-                            <span className={cn('text-[10px] text-center leading-tight max-w-[56px]',
+                            <span className={cn(
+                              'text-[10px] text-center leading-tight',
+                              i === 0 ? 'max-w-[72px]' : 'max-w-[56px]',
                               active ? 'font-bold text-teal-600 dark:text-teal-400' :
-                              done ? 'text-slate-600 dark:text-slate-400' :
-                              'text-slate-400 dark:text-slate-600'
+                              done   ? 'text-slate-600 dark:text-slate-400' :
+                                       'text-slate-400 dark:text-slate-600'
                             )}>
                               {stage.label}
                             </span>

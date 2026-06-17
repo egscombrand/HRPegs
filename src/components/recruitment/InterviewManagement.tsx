@@ -335,10 +335,45 @@ export function InterviewManagement({ application, onUpdate, allUsers, allBrands
     }
   };
   
+  const handleMarkInterviewCompleted = async (interviewToComplete: ApplicationInterview) => {
+    if (!application || !userProfile) return;
+    setIsSubmitting(true);
+
+    const newInterviews = (application.interviews || []).map(iv =>
+      iv.interviewId === interviewToComplete.interviewId
+        ? { ...iv, status: 'completed' as const }
+        : iv,
+    );
+
+    const timelineEvent: ApplicationTimelineEvent = {
+      type: 'status_changed',
+      at: Timestamp.now(),
+      by: userProfile.uid,
+      meta: { note: 'Wawancara ditandai selesai oleh HRD.' },
+    };
+
+    try {
+      await updateDoc(doc(firestore, 'applications', application.id!), {
+        interviews: newInterviews,
+        interviewCompleted: true,
+        interviewCompletedAt: Timestamp.now(),
+        interviewCompletionSource: 'manual',
+        timeline: [...(application.timeline || []), timelineEvent],
+        updatedAt: serverTimestamp(),
+      });
+      onUpdate();
+      toast({ title: 'Wawancara Selesai', description: 'Status wawancara telah ditandai selesai.' });
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'Gagal', description: e.message });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   if (application.status !== 'interview') {
     return null;
   }
-  
+
   const isPrivilegedRecruiter = userProfile?.role === 'hrd' || userProfile?.role === 'super-admin';
   const title = isPrivilegedRecruiter ? 'Manajemen Wawancara' : 'Detail Jadwal Wawancara';
   const description = isPrivilegedRecruiter ? 'Atur, ubah, dan publikasikan jadwal wawancara untuk kandidat ini.' : 'Berikut adalah detail jadwal wawancara yang telah ditetapkan oleh tim HRD.';
@@ -396,7 +431,18 @@ export function InterviewManagement({ application, onUpdate, allUsers, allBrands
                                         <Edit className="h-4 w-4 mr-2" /> Edit
                                     </Button>
                                 )}
-                                <Badge variant={iv.status === 'scheduled' ? 'default' : 'secondary'} className="capitalize">{iv.status.replace('_', ' ')}</Badge>
+                                {isPrivilegedRecruiter && iv.status !== 'completed' && (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleMarkInterviewCompleted(iv)}
+                                        disabled={isSubmitting}
+                                        className="text-green-700 border-green-300 hover:bg-green-50"
+                                    >
+                                        Tandai Selesai
+                                    </Button>
+                                )}
+                                <Badge variant={iv.status === 'scheduled' ? 'default' : iv.status === 'completed' ? 'outline' : 'secondary'} className={`capitalize ${iv.status === 'completed' ? 'text-green-700 border-green-300' : ''}`}>{iv.status.replace('_', ' ')}</Badge>
                             </div>
                         </div>
                         {iv.status === 'reschedule_requested' && iv.rescheduleRequest && (

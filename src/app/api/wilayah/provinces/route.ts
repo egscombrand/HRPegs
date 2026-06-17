@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 const BASE = 'https://wilayah.id/api';
 const CACHE_TTL = 24 * 60 * 60; // 24 hours in seconds
 
-export const revalidate = CACHE_TTL;
+export const revalidate = 86400; // 24 hours
 
 export async function GET() {
   try {

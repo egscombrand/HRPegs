@@ -334,9 +334,24 @@ service cloud.firestore {
         }
         function isInternalStatusUpdate() {
             let changedKeys = request.resource.data.diff(resource.data).affectedKeys();
-            let allowedKeys = ['status', 'candidateStatus', 'finalDecisionLocked', 'decisionAt', 'updatedAt', 'personalityTestAssignedAt', 'cvVerified', 'ijazahVerified', 'timeline', 'interviews', 'allPanelistIds', 'offerStatus', 'offeredSalary', 'probationDurationMonths', 'contractStartDate', 'contractDurationMonths', 'contractEndDate', 'offerDescription', 'workDays', 'offerNotes', 'internalAccessEnabled', 'internalReviewSummary'];
+            let allowedKeys = [
+              'status', 'candidateStatus', 'finalDecisionLocked', 'decisionAt', 'updatedAt',
+              'personalityTestAssignedAt', 'cvVerified', 'ijazahVerified',
+              'timeline', 'interviews', 'allPanelistIds',
+              'offerStatus', 'offeredSalary', 'probationDurationMonths',
+              'contractStartDate', 'contractDurationMonths', 'contractEndDate',
+              'offerDescription', 'workDays', 'offerNotes',
+              'internalAccessEnabled', 'internalReviewSummary',
+              // Candidate-visible status fields (set by HRD, never exposes internal decisions)
+              'candidateVisibleStatus', 'candidateVisibleMessage',
+              'candidateVisibleStage', 'candidateVisibleTimeline',
+              'recruitmentDecisionAt', 'recruitmentDecisionBy', 'recruitmentDecisionByName',
+              // Interview completion fields
+              'interviewCompleted', 'interviewCompletedAt', 'interviewCompletionSource',
+              'postInterviewEvaluation', 'postInterviewDecision'
+            ];
             let hrdOnlyKeys = ['internalReviewConfig', 'recruitmentInternalDecision'];
-            
+
             if (changedKeys.hasAny(hrdOnlyKeys)) {
                 return isHrd() || isSuperAdmin();
             }

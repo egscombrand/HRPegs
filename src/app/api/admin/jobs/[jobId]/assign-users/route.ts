@@ -63,7 +63,7 @@ export async function POST(
   }
 
   try {
-    const { userIds }: { userIds: string[] } = await req.json();
+    const { userIds, assignedStaffSnapshot }: { userIds: string[]; assignedStaffSnapshot?: any[] } = await req.json();
     const db = admin.firestore();
     const batch = db.batch();
 
@@ -79,12 +79,17 @@ export async function POST(
     // 2. Identify newly added users
     const addedUserIds = userIds.filter((id) => !existingUserIds.has(id));
 
-    // 3. Update the Job document with the new full list
-    batch.update(jobRef, {
+    // 3. Update the Job document with the new full list + optional snapshot
+    const jobUpdate: Record<string, any> = {
       assignedUserIds: userIds,
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: authResult.uid,
-    });
+    };
+    if (assignedStaffSnapshot && assignedStaffSnapshot.length > 0) {
+      // Audit snapshot from fresh employee_profiles — UI always reads from live data
+      jobUpdate.assignedStaffSnapshot = assignedStaffSnapshot;
+    }
+    batch.update(jobRef, jobUpdate);
 
     // 4. Create notifications for newly added users
     addedUserIds.forEach((userId) => {

@@ -62,7 +62,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { NotificationPanel } from "../dashboard/NotificationPanel";
+import { CandidateNotificationPanel } from "./CandidateNotificationPanel";
 
 function UserNav() {
   const { userProfile } = useAuth();
@@ -326,7 +326,7 @@ export function CandidatePortalLayout({ children }: { children: ReactNode }) {
         return highestStatusIndex >= interviewStageIndex
           ? { locked: false, reason: "" }
           : {
-              locked: true,
+              locked: true, 
               reason: "Jadwal akan muncul di sini setelah diatur oleh HRD.",
             };
       default:
@@ -513,7 +513,7 @@ export function CandidatePortalLayout({ children }: { children: ReactNode }) {
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-80 h-[50vh] p-0" align="end">
-                <NotificationPanel />
+                <CandidateNotificationPanel />
               </PopoverContent>
             </Popover>
             <UserNav />

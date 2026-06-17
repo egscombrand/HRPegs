@@ -43,10 +43,12 @@ export function parseDateValue(value: unknown): Date | null {
 
 export interface ScheduleConfig {
   startDate: Date;
-  startTime: string; // "HH:mm"
+  startTime: string;       // "HH:mm"
   slotDuration: number;
-  buffer: number;
-  workdayEndTime: string; // "HH:mm"
+  buffer: number;          // minutes between slots
+  workdayEndTime: string;  // "HH:mm"
+  lunchBreakStart?: string; // "HH:mm" — slots overlapping this range are skipped
+  lunchBreakEnd?: string;   // "HH:mm"
 }
 
 export interface GeneratedSlot {
@@ -55,32 +57,47 @@ export interface GeneratedSlot {
   endAt: Date;
 }
 
+function toMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function dateToMinutes(d: Date): number {
+  return d.getHours() * 60 + d.getMinutes();
+}
+
 export function generateTimeSlots(
   candidates: JobApplication[],
   config: ScheduleConfig,
 ): GeneratedSlot[] {
-  const { startDate, startTime, slotDuration, buffer, workdayEndTime } = config;
+  const { startDate, startTime, slotDuration, buffer, workdayEndTime, lunchBreakStart, lunchBreakEnd } = config;
+
+  const [startHour, startMinute] = startTime.split(":").map(Number);
+  const endMins = toMinutes(workdayEndTime);
+  const lunchStart = lunchBreakStart ? toMinutes(lunchBreakStart) : null;
+  const lunchEnd   = lunchBreakEnd   ? toMinutes(lunchBreakEnd)   : null;
 
   let currentDay = new Date(startDate);
-  const [startHour, startMinute] = startTime.split(":").map(Number);
   currentDay.setHours(startHour, startMinute, 0, 0);
-
-  const [endHour, endMinute] = workdayEndTime.split(":").map(Number);
-
   let currentTime = new Date(currentDay);
 
   const slots: GeneratedSlot[] = [];
 
   for (const candidate of candidates) {
-    const slotEndTime = add(currentTime, { minutes: slotDuration });
+    // Skip over lunch break: if slot start or end falls inside lunch, jump to lunchEnd
+    if (lunchStart !== null && lunchEnd !== null) {
+      const slotStartMins = dateToMinutes(currentTime);
+      const slotEndMins   = slotStartMins + slotDuration;
+      if (slotStartMins < lunchEnd && slotEndMins > lunchStart) {
+        // Overlaps lunch — advance to lunchEnd
+        currentTime.setHours(Math.floor(lunchEnd / 60), lunchEnd % 60, 0, 0);
+      }
+    }
 
-    // Check if the slot exceeds the workday end time
-    if (
-      slotEndTime.getHours() > endHour ||
-      (slotEndTime.getHours() === endHour &&
-        slotEndTime.getMinutes() > endMinute)
-    ) {
-      // Move to the next day and reset the time
+    const slotEndMins = dateToMinutes(currentTime) + slotDuration;
+
+    // If slot would exceed workday end, roll over to next day
+    if (slotEndMins > endMins) {
       currentDay = addDays(currentDay, 1);
       currentDay.setHours(startHour, startMinute, 0, 0);
       currentTime = new Date(currentDay);
@@ -92,7 +109,6 @@ export function generateTimeSlots(
       endAt: add(currentTime, { minutes: slotDuration }),
     });
 
-    // Move to the start of the next slot
     currentTime = add(currentTime, { minutes: slotDuration + buffer });
   }
 

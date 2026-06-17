@@ -521,12 +521,21 @@ export function CandidateStepContent({
               icon={Clock}
             />
             <InfoBlock
-              label="Ketersediaan Kerja"
-              value={
-                profile.availability === "Lainnya"
+              label="Siap Bergabung"
+              value={(() => {
+                if (profile.availableStartDate) {
+                  const d = parseDateValue(profile.availableStartDate);
+                  if (!d) return profile.availabilityLabel || "-";
+                  const dateStr = format(d, "d MMMM yyyy", { locale: idLocale });
+                  return profile.availabilityLabel && profile.availabilityType !== 'custom'
+                    ? `${dateStr} (${profile.availabilityLabel})`
+                    : dateStr;
+                }
+                // legacy fallback
+                return profile.availability === "Lainnya"
                   ? profile.availabilityOther
-                  : profile.availability
-              }
+                  : profile.availability;
+              })()}
               icon={Clock}
             />
 

@@ -20,7 +20,6 @@ import {
   type PostInterviewDecisionStatus,
   type Notification as ApplicationNotification,
 } from "@/lib/types";
-import { statusDisplayLabels } from "@/components/recruitment/ApplicationStatusBadge";
 import { useToast } from "@/hooks/use-toast";
 import {
   Lock,
@@ -142,6 +141,8 @@ export function UnifiedInternalDecision({
         }
       }
 
+      const isLanjut = praDecision === "lanjut_ke_tahap_selanjutnya";
+
       await updateDocumentNonBlocking(appRef, {
         recruitmentInternalDecision: {
           status: praDecision,
@@ -150,17 +151,20 @@ export function UnifiedInternalDecision({
           decidedByName: userProfile.fullName,
           decidedAt: serverTimestamp(),
         },
-        candidateStatus:
-          praDecision === "lanjut_ke_tahap_selanjutnya"
-            ? "interview_scheduled"
-            : "menunggu",
-        "internalReviewConfig.reviewLocked": true,
+        // Internal decisions: only "lanjut" is visible to candidates.
+        // pending_internal and tidak_dilanjutkan stay hidden — candidate sees "Dalam Evaluasi".
+        candidateVisibleStatus: isLanjut ? "lanjut_tahap_berikutnya" : "dalam_evaluasi",
+        candidateStatus: isLanjut ? "interview_scheduled" : "menunggu",
+        // Replace full object instead of dot-path to satisfy affectedKeys() in Firestore rules
+        internalReviewConfig: {
+          ...(application.internalReviewConfig || {}),
+          reviewLocked: true,
+        },
         updatedAt: serverTimestamp(),
       });
 
-      // Send Notif to Candidate if Lolos ke interview
-      if (praDecision === "lanjut_ke_tahap_selanjutnya") {
-        const nextStageLabel = statusDisplayLabels.interview;
+      // Send notification ONLY for "Lanjut" — never for pending or tidak_dilanjutkan
+      if (isLanjut) {
         const notifRef = collection(
           firestore,
           "users",
@@ -169,9 +173,9 @@ export function UnifiedInternalDecision({
         );
         await addDoc(notifRef, {
           userId: application.candidateUid,
-          type: "stage_advanced",
-          title: `Anda lolos ke tahap ${nextStageLabel}`,
-          message: `Lamaran Anda untuk posisi ${application.jobPosition} telah lolos ke tahap ${nextStageLabel}.`,
+          type: "advanced_to_interview",
+          title: "Anda Lanjut ke Tahap Wawancara",
+          message: `Lamaran Anda untuk posisi ${application.jobPosition} telah dilanjutkan ke tahap wawancara. Silakan pantau portal ini untuk melihat jadwal dan instruksi lanjutan.`,
           module: "recruitment",
           targetType: "application",
           targetId: application.id!,
@@ -246,9 +250,8 @@ export function UnifiedInternalDecision({
 
       await updateDocumentNonBlocking(appRef, updatePayload);
 
-      // Send Notif to Candidate if Lolos
+      // Send notification to candidate only for "lanjut" (offered stage) — not for pending/tidak_lanjut
       if (pascaDecision === "lanjut") {
-        const nextStageLabel = statusDisplayLabels.offered;
         const notifRef = collection(
           firestore,
           "users",
@@ -258,8 +261,8 @@ export function UnifiedInternalDecision({
         await addDoc(notifRef, {
           userId: application.candidateUid,
           type: "stage_advanced",
-          title: `Anda lolos ke tahap ${nextStageLabel}`,
-          message: `Lamaran Anda untuk posisi ${application.jobPosition} telah lolos ke tahap ${nextStageLabel}.`,
+          title: "Selamat! Anda Menerima Penawaran Kerja",
+          message: `Lamaran Anda untuk posisi ${application.jobPosition} telah lolos ke tahap penawaran kerja. Silakan buka portal untuk melihat detail penawaran dari tim rekrutmen.`,
           module: "recruitment",
           targetType: "application",
           targetId: application.id!,

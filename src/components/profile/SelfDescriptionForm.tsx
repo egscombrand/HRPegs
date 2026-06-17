@@ -15,12 +15,20 @@ import { useFirestore, setDocumentNonBlocking } from '@/firebase';
 import { doc, serverTimestamp, Timestamp, writeBatch } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Checkbox } from '../ui/checkbox';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../ui/select';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
-import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
+import { Alert, AlertDescription } from '../ui/alert';
 import { Separator } from '../ui/separator';
+import { format, addDays, addMonths, startOfDay } from 'date-fns';
+import { id as idLocale } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 
-const availabilityOptions = ['Secepatnya', '1 minggu', '2 minggu', '1 bulan', '3 bulan', '6 bulan', 'Lainnya'] as const;
+const SHORTCUTS = [
+  { label: 'Secepatnya', type: 'immediate' as const, getDate: () => new Date() },
+  { label: '1 Minggu',   type: 'shortcut' as const, getDate: () => addDays(new Date(), 7) },
+  { label: '2 Minggu',   type: 'shortcut' as const, getDate: () => addDays(new Date(), 14) },
+  { label: '1 Bulan',    type: 'shortcut' as const, getDate: () => addMonths(new Date(), 1) },
+  { label: '3 Bulan',    type: 'shortcut' as const, getDate: () => addMonths(new Date(), 3) },
+] as const;
 
 const formSchema = z.object({
   selfDescription: z.string().min(20, { message: "Deskripsi diri harus diisi, minimal 20 karakter." }),
@@ -29,8 +37,12 @@ const formSchema = z.object({
   motivation: z.string().min(20, { message: "Motivasi dan alasan harus diisi, minimal 20 karakter." }),
   workStyle: z.string().optional(),
   improvementArea: z.string().optional(),
-  availability: z.enum(availabilityOptions, { required_error: 'Ketersediaan harus dipilih.' }),
-  availabilityOther: z.string().optional(),
+  availableStartDate: z.date({
+    required_error: 'Tanggal siap bergabung wajib dipilih.',
+    invalid_type_error: 'Tanggal tidak valid.',
+  }).refine(d => d >= startOfDay(new Date()), { message: 'Tanggal tidak boleh sebelum hari ini.' }),
+  availabilityType: z.enum(['immediate', 'shortcut', 'custom']),
+  availabilityLabel: z.string().min(1),
   usedToDeadline: z.enum(['ya', 'tidak'], { required_error: 'Pilihan ini harus diisi.' }),
   deadlineExperience: z.string().optional(),
   declaration: z.literal(true, {
@@ -44,11 +56,7 @@ const formSchema = z.object({
 }, {
     message: 'Ceritakan pengalaman Anda dengan target/deadline (minimal 10 karakter).',
     path: ['deadlineExperience'],
-}).refine(data => data.availability === 'Lainnya' ? (data.availabilityOther && data.availabilityOther.length > 0) : true, {
-    message: "Harap sebutkan waktu ketersediaan Anda.",
-    path: ["availabilityOther"],
 });
-
 
 type FormValues = z.infer<typeof formSchema>;
 
@@ -60,8 +68,12 @@ interface SelfDescriptionFormProps {
         motivation?: string;
         workStyle?: string;
         improvementArea?: string;
-        availability?: typeof availabilityOptions[number];
+        /** Legacy dropdown value — kept for backward-compat defaultValue init */
+        availability?: string;
         availabilityOther?: string;
+        availableStartDate?: Timestamp | Date | string;
+        availabilityType?: 'immediate' | 'shortcut' | 'custom';
+        availabilityLabel?: string;
         usedToDeadline?: boolean;
         deadlineExperience?: string;
     };
@@ -69,11 +81,29 @@ interface SelfDescriptionFormProps {
     onBack: () => void;
 }
 
+function resolveInitialDate(raw?: Timestamp | Date | string | null): Date | undefined {
+    if (!raw) return undefined;
+    if (raw instanceof Date) return raw;
+    if (raw instanceof Timestamp) return raw.toDate();
+    if (typeof raw === 'string') {
+        const d = new Date(raw);
+        return isNaN(d.getTime()) ? undefined : d;
+    }
+    return undefined;
+}
+
 export function SelfDescriptionForm({ initialData, onFinish, onBack }: SelfDescriptionFormProps) {
     const [isSaving, setIsSaving] = useState(false);
+    const [activeShortcut, setActiveShortcut] = useState<string | null>(
+        initialData?.availabilityLabel && initialData?.availabilityType !== 'custom'
+            ? initialData.availabilityLabel
+            : null
+    );
     const { firebaseUser } = useAuth();
     const firestore = useFirestore();
     const { toast } = useToast();
+
+    const initialDate = resolveInitialDate(initialData?.availableStartDate);
 
     const form = useForm<FormValues>({
         resolver: zodResolver(formSchema),
@@ -84,16 +114,17 @@ export function SelfDescriptionForm({ initialData, onFinish, onBack }: SelfDescr
             motivation: initialData?.motivation || '',
             workStyle: initialData?.workStyle || '',
             improvementArea: initialData?.improvementArea || '',
-            availability: initialData?.availability,
-            availabilityOther: initialData?.availabilityOther || '',
+            availableStartDate: initialDate,
+            availabilityType: (initialData?.availabilityType as any) || 'custom',
+            availabilityLabel: initialData?.availabilityLabel || '',
             usedToDeadline: initialData?.usedToDeadline === true ? 'ya' : (initialData?.usedToDeadline === false ? 'tidak' : undefined),
             deadlineExperience: initialData?.deadlineExperience || '',
-            declaration: false,
+            declaration: false as unknown as true,
         },
     });
 
     const usedToDeadline = form.watch('usedToDeadline');
-    const availability = form.watch('availability');
+    const availableStartDate = form.watch('availableStartDate');
 
     const handleSubmit = async (values: FormValues) => {
         if (!firebaseUser) {
@@ -102,8 +133,8 @@ export function SelfDescriptionForm({ initialData, onFinish, onBack }: SelfDescr
         }
         setIsSaving(true);
         try {
-            const { declaration, usedToDeadline, ...rest } = values;
-            
+            const { declaration, usedToDeadline, availableStartDate, availabilityType, availabilityLabel, ...rest } = values;
+
             const batch = writeBatch(firestore);
             const now = serverTimestamp();
 
@@ -111,6 +142,9 @@ export function SelfDescriptionForm({ initialData, onFinish, onBack }: SelfDescr
             const profilePayload = {
                 ...rest,
                 usedToDeadline: usedToDeadline === 'ya',
+                availableStartDate: Timestamp.fromDate(availableStartDate),
+                availabilityType,
+                availabilityLabel,
                 profileStatus: 'completed',
                 profileStep: 6,
                 updatedAt: now,
@@ -194,10 +228,58 @@ export function SelfDescriptionForm({ initialData, onFinish, onBack }: SelfDescr
                         <section className="space-y-6">
                              <h3 className="text-lg font-semibold border-b pb-2">Kesiapan Kerja</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <FormField control={form.control} name="availability" render={({ field }) => (<FormItem><FormLabel>Kapan Anda dapat mulai bergabung? <span className="text-destructive">*</span></FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Pilih ketersediaan" /></SelectTrigger></FormControl><SelectContent>{availabilityOptions.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}</SelectContent></Select><FormMessage /></FormItem>)} />
-                                {availability === 'Lainnya' && (
-                                    <FormField control={form.control} name="availabilityOther" render={({ field }) => (<FormItem><FormLabel>Sebutkan waktu ketersediaan Anda <span className="text-destructive">*</span></FormLabel><FormControl><Input {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
-                                )}
+                                <FormField
+                                    control={form.control}
+                                    name="availableStartDate"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Tanggal siap mulai bergabung <span className="text-destructive">*</span></FormLabel>
+                                            {/* Shortcut chips */}
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {SHORTCUTS.map((sc) => (
+                                                    <button
+                                                        key={sc.label}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const d = sc.getDate();
+                                                            field.onChange(d);
+                                                            setActiveShortcut(sc.label);
+                                                            form.setValue('availabilityType', sc.type);
+                                                            form.setValue('availabilityLabel', sc.label);
+                                                        }}
+                                                        className={cn(
+                                                            "px-2.5 py-1 text-xs rounded-full border transition-colors",
+                                                            activeShortcut === sc.label
+                                                                ? "bg-teal-600 text-white border-teal-600"
+                                                                : "bg-background text-muted-foreground border-border hover:border-teal-500 hover:text-teal-600"
+                                                        )}
+                                                    >
+                                                        {sc.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            {/* Native date input */}
+                                            <FormControl>
+                                                <input
+                                                    type="date"
+                                                    min={format(new Date(), 'yyyy-MM-dd')}
+                                                    value={field.value ? format(field.value, 'yyyy-MM-dd') : ''}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        if (!val) return;
+                                                        const d = new Date(val + 'T00:00:00');
+                                                        field.onChange(d);
+                                                        setActiveShortcut(null);
+                                                        form.setValue('availabilityType', 'custom');
+                                                        form.setValue('availabilityLabel', format(d, "d MMMM yyyy", { locale: idLocale }));
+                                                    }}
+                                                    className="h-[42px] w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm transition-colors focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-teal-400 dark:focus:ring-teal-400"
+                                                />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <FormField control={form.control} name="usedToDeadline" render={({ field }) => (<FormItem><FormLabel>Apakah Anda terbiasa bekerja dengan target/deadline? <span className="text-destructive">*</span></FormLabel><FormControl><RadioGroup onValueChange={field.onChange} value={field.value} className="flex items-center space-x-4 pt-2"><FormItem className="flex items-center space-x-2 space-y-0"><FormControl><RadioGroupItem value="ya" /></FormControl><FormLabel className="font-normal">Ya</FormLabel></FormItem><FormItem className="flex items-center space-x-2 space-y-0"><FormControl><RadioGroupItem value="tidak" /></FormControl><FormLabel className="font-normal">Tidak</FormLabel></FormItem></RadioGroup></FormControl><FormMessage /></FormItem>)} />

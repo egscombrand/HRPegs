@@ -116,6 +116,7 @@ import {
   CandidateStepNav,
   CandidateStepContent,
 } from "@/components/recruitment/CandidateStepView";
+import { MultiApplicationAlert } from "@/components/recruitment/MultiApplicationAlert";
 
 function ApplicationDetailSkeleton() {
   return <Skeleton className="h-[500px] w-full" />;
@@ -323,6 +324,21 @@ export default function ApplicationDetailPage() {
   }, [firestore, application]);
   const { data: assessmentSessions, isLoading: isLoadingSessions } =
     useCollection<AssessmentSession>(assessmentSessionsQuery);
+
+  // Query all applications by this candidate (for multi-application indicator)
+  const candidateApplicationsQuery = useMemoFirebase(() => {
+    if (!application?.candidateUid) return null;
+    return query(
+      collection(firestore, "applications"),
+      where("candidateUid", "==", application.candidateUid),
+    );
+  }, [firestore, application?.candidateUid]);
+  const { data: candidateAllApplications } = useCollection<JobApplication>(candidateApplicationsQuery);
+
+  const otherApplications = useMemo(() => {
+    if (!candidateAllApplications || !applicationId) return [];
+    return candidateAllApplications.filter(a => a.id !== applicationId);
+  }, [candidateAllApplications, applicationId]);
 
   const offeringsQuery = useMemoFirebase(() => {
     if (!applicationId) return null;
@@ -1083,6 +1099,14 @@ export default function ApplicationDetailPage() {
                 </div>
               </CardHeader>
             </Card>
+
+            {otherApplications.length > 0 && (
+              <MultiApplicationAlert
+                currentApplicationId={applicationId}
+                currentJobPosition={application.jobPosition}
+                otherApplications={otherApplications}
+              />
+            )}
 
             <ApplicationProgressStepper currentStatus={displayStatus} />
 

@@ -808,10 +808,12 @@ export type Job = {
     meetingLink?: string;
     meetingPublished?: boolean;
     defaultStartDate?: Timestamp;
-    workdayStartTime?: string;
-    workdayEndTime?: string;
+    workdayStartTime?: string;   // "HH:mm"
+    workdayEndTime?: string;     // "HH:mm"
     slotDurationMinutes?: number;
-    breakMinutes?: number;
+    breakMinutes?: number;       // buffer between slots
+    lunchBreakStart?: string;    // "HH:mm" — slots during this range are skipped
+    lunchBreakEnd?: string;      // "HH:mm"
   };
 };
 
@@ -1020,6 +1022,10 @@ export type JobApplication = {
   location: string;
   status: JobApplicationStatus;
   personalityTestAssignedAt?: Timestamp;
+  // Candidate-level personality test tracking (Tugas 4: 1 test per candidate)
+  personalityTestCompleted?: boolean;   // true = test was already done before this application
+  personalityTestRequired?: boolean;    // false = test skipped (pre-tested candidate)
+  personalityTestResultId?: string;     // assessment_sessions/{id} of the completed test
   createdAt: Timestamp;
   updatedAt: Timestamp;
   submittedAt?: Timestamp;
@@ -1042,6 +1048,8 @@ export type JobApplication = {
   internalReviewConfig?: InternalReviewConfig;
   internalReviewSummary?: InternalReviewSummary;
   recruitmentInternalDecision?: RecruitmentInternalDecision;
+  // Candidate-facing status — never exposes HRD internal decisions to the portal
+  candidateVisibleStatus?: CandidateVisibleStatus;
 
   // --- Post-Interview Features ---
   postInterviewEvaluation?: PostInterviewEvaluationSummary;
@@ -1163,6 +1171,71 @@ export interface RecruitmentInternalDecision {
   decidedBy: string;
   decidedByName?: string;
   decidedAt: Timestamp;
+}
+
+// What the candidate sees — never exposes HRD-internal states
+export type CandidateVisibleStatus =
+  | "dalam_evaluasi"
+  | "lanjut_tahap_berikutnya"
+  | "wawancara_dijadwalkan"
+  | "penawaran_diterima"
+  | "diterima"
+  | "selesai";
+
+/**
+ * Returns the status label shown to the candidate.
+ * Internal HRD decisions (pending_internal, tidak_dilanjutkan) are hidden — candidate stays "Dalam Evaluasi".
+ */
+export function getCandidateDisplayStatus(application: {
+  status: JobApplicationStatus;
+  candidateStatus?: string;
+  candidateVisibleStatus?: CandidateVisibleStatus;
+  internalAccessEnabled?: boolean;
+}): { text: string; color: string } {
+  // Hired with access granted
+  if (
+    application.status === "hired" &&
+    application.internalAccessEnabled === true
+  ) {
+    return { text: "Diterima", color: "bg-green-600" };
+  }
+  // Offered stage
+  if (application.status === "offered") {
+    return { text: "Penawaran Kerja", color: "bg-blue-600" };
+  }
+  // Interview stage — actual status always takes priority over candidateVisibleStatus
+  // "lanjut_tahap_berikutnya" is a transient marker; once in interview the badge should reflect the stage
+  if (application.status === "interview") {
+    return { text: "Tahap Wawancara", color: "bg-indigo-600" };
+  }
+  // Explicit candidateVisibleStatus set by HRD (only when not yet in interview stage)
+  if (application.candidateVisibleStatus === "lanjut_tahap_berikutnya") {
+    return { text: "Lolos ke Tahap Selanjutnya", color: "bg-emerald-600" };
+  }
+  if (application.candidateVisibleStatus === "wawancara_dijadwalkan") {
+    return { text: "Wawancara Dijadwalkan", color: "bg-indigo-600" };
+  }
+  // candidateStatus lolos (post-interview pasca decision: lanjut)
+  if (application.candidateStatus === "lolos") {
+    return { text: "Lolos ke Tahap Selanjutnya", color: "bg-emerald-600" };
+  }
+  // All processing stages (submitted, tes_kepribadian, screening, verification, document_submission)
+  // including pending_internal and tidak_dilanjutkan_saat_ini → always show "Dalam Evaluasi"
+  const processingStatuses: JobApplicationStatus[] = [
+    "submitted",
+    "tes_kepribadian",
+    "screening",
+    "verification",
+    "document_submission",
+  ];
+  if (processingStatuses.includes(application.status as JobApplicationStatus)) {
+    return { text: "Dalam Evaluasi", color: "bg-teal-600" };
+  }
+  // Rejected (candidate rejected offer, or final rejection shown after hire offer flow)
+  if (application.status === "rejected") {
+    return { text: "Proses Selesai", color: "bg-slate-500" };
+  }
+  return { text: "Dalam Evaluasi", color: "bg-teal-600" };
 }
 
 export type PostInterviewDecisionStatus = "lanjut" | "pending" | "tidak_lanjut";
@@ -1420,15 +1493,13 @@ export type Profile = {
   motivation?: string;
   workStyle?: string;
   improvementArea?: string;
-  availability?:
-    | "Secepatnya"
-    | "1 minggu"
-    | "2 minggu"
-    | "1 bulan"
-    | "3 bulan"
-    | "6 bulan"
-    | "Lainnya";
+  /** @deprecated Use availableStartDate + availabilityType instead */
+  availability?: string;
+  /** @deprecated */
   availabilityOther?: string;
+  availableStartDate?: Timestamp;
+  availabilityType?: "immediate" | "shortcut" | "custom";
+  availabilityLabel?: string;
   usedToDeadline?: boolean;
   deadlineExperience?: string;
 
@@ -1450,6 +1521,19 @@ export type Profile = {
   profileStep?: number;
   updatedAt?: Timestamp;
   completedAt?: Timestamp | null;
+};
+
+// --- CANDIDATE PERSONALITY TEST (1 per candidate) ---
+
+export type CandidatePersonalityTestStatus = "not_started" | "completed";
+
+export type CandidatePersonalityTest = {
+  status: CandidatePersonalityTestStatus;
+  sessionId: string;          // assessment_sessions/{id}
+  completedAt: Timestamp;
+  discType?: string;
+  mbtiArchetype?: any;
+  updatedAt: Timestamp;
 };
 
 // --- ASSESSMENT TYPES ---
@@ -1662,6 +1746,23 @@ export interface InternWithReviewStatus extends EmployeeProfile {
 }
 
 // --- NOTIFICATION TYPES ---
+/** Broad category used for tab-filtering in the notification panel */
+export type NotificationType =
+  | "recruitment"
+  | "employee_request"
+  | "attendance"
+  | "system";
+
+/** Granular event within the recruitment category */
+export type RecruitmentEvent =
+  | "new_application"
+  | "application_stage_changed"
+  | "personality_test_completed"
+  | "interview_scheduled"
+  | "interview_updated"
+  | "job_deadline_near"
+  | "job_needs_extension";
+
 export type Notification = {
   id?: string;
   userId: string;
@@ -1685,12 +1786,21 @@ export type Notification = {
   isRead: boolean;
   createdAt: Timestamp;
   createdBy: string;
+  /** Category for tab-filtering */
+  notificationType?: NotificationType;
+  /** Fine-grained event within the recruitment category */
+  recruitmentEvent?: RecruitmentEvent;
+  /** Action urgency */
+  priority?: "normal" | "action_required";
+  /** Lifecycle status (unread handled via isRead; this adds action_required / resolved) */
+  notifStatus?: "unread" | "read" | "action_required" | "resolved";
   meta?: {
     jobId?: string;
     applicationId?: string;
     candidateUid?: string;
     candidateName?: string;
     jobTitle?: string;
+    brandName?: string;
     interviewDate?: string;
     interviewTime?: string;
     meetingLink?: string;

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useAuth } from '@/providers/auth-provider';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { collection, query, where, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
-import type { Job, JobApplication, Brand, UserProfile } from '@/lib/types';
+import type { Job, JobApplication, Brand, UserProfile, Notification } from '@/lib/types';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { useRoleGuard } from '@/hooks/useRoleGuard';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -14,7 +14,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   Eye, Users, Briefcase, CheckCircle2, XCircle, Clock, AlertTriangle,
   CalendarClock, ChevronDown, Edit, Copy, RefreshCw, EyeOff, Building2,
-  Tag, TrendingUp, UserCheck, Search, X, SlidersHorizontal,
+  Tag, TrendingUp, UserCheck, Search, X, SlidersHorizontal, Inbox,
 } from 'lucide-react';
 import { MENU_CONFIG } from '@/lib/menu-config';
 import { Badge } from '@/components/ui/badge';
@@ -398,6 +398,26 @@ export default function RecruitmentJobSelectionPage() {
     return [];
   }, [userProfile]);
 
+  // Unread recruitment notifications (new_application + personality_test_completed)
+  const recruitmentNotifsQuery = useMemoFirebase(() => {
+    if (!userProfile?.role || !['hrd', 'super-admin'].includes(userProfile.role)) return null;
+    return query(
+      collection(firestore, 'hrd_notifications'),
+      where('notificationType', '==', 'recruitment'),
+      where('isRead', '==', false),
+    );
+  }, [userProfile?.role, firestore]);
+  const { data: unreadRecruitmentNotifs } = useCollection<Notification>(recruitmentNotifsQuery);
+
+  const newApplicationCount = useMemo(
+    () => (unreadRecruitmentNotifs || []).filter(n => n.recruitmentEvent === 'new_application').length,
+    [unreadRecruitmentNotifs],
+  );
+  const testCompletedCount = useMemo(
+    () => (unreadRecruitmentNotifs || []).filter(n => n.recruitmentEvent === 'personality_test_completed').length,
+    [unreadRecruitmentNotifs],
+  );
+
   const isSuperAdmin = userProfile?.role === 'super-admin';
   const isLoading = isLoadingJobs || isLoadingApps || isLoadingBrands;
   const error = jobsError || appsError || brandsError;
@@ -540,6 +560,40 @@ export default function RecruitmentJobSelectionPage() {
             color="border-amber-200 dark:border-amber-900 text-amber-600 dark:text-amber-400"
             sub="lowongan" />
         </div>
+
+        {/* ── Recruitment notification alert ───────────────────── */}
+        {(newApplicationCount > 0 || testCompletedCount > 0) && (
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 rounded-xl border border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-950/30 px-4 py-3">
+            <div className="flex items-center gap-2.5 flex-1 min-w-0">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-teal-100 dark:bg-teal-900/50">
+                <Inbox className="h-4 w-4 text-teal-700 dark:text-teal-400" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-teal-900 dark:text-teal-100">
+                  {newApplicationCount > 0 && testCompletedCount > 0
+                    ? `${newApplicationCount} lamaran baru · ${testCompletedCount} tes selesai menunggu review`
+                    : newApplicationCount > 0
+                      ? `${newApplicationCount} lamaran baru menunggu review`
+                      : `${testCompletedCount} kandidat menyelesaikan tes kepribadian`}
+                </p>
+                <p className="text-xs text-teal-700/80 dark:text-teal-400 mt-0.5">
+                  Segera tinjau untuk melanjutkan proses seleksi.
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0 border-teal-300 dark:border-teal-700 text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/40"
+              onClick={() => {
+                setQuickFilter('needs_review');
+                setStatusFilter('all');
+              }}
+            >
+              Lihat Lamaran Baru
+            </Button>
+          </div>
+        )}
 
         {/* ── Toolbar ──────────────────────────────────────────── */}
         <div className="space-y-3">

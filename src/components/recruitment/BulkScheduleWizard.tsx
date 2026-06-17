@@ -51,17 +51,21 @@ const SortableCandidateItem = ({ candidate }: { candidate: JobApplication }) => 
 
 // --- Step 2: Schedule Configuration ---
 
+const TIME_REGEX = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+
 const scheduleConfigSchema = z.object({
   startDate: z.date({ required_error: 'Tanggal mulai harus diisi.' }),
-  startTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Format waktu harus HH:MM."),
+  startTime: z.string().regex(TIME_REGEX, "Format waktu harus HH:MM."),
   slotDuration: z.coerce.number().int().min(5, 'Durasi minimal 5 menit.'),
   buffer: z.coerce.number().int().min(0, 'Buffer tidak boleh negatif.'),
-  workdayEndTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Format waktu harus HH:MM."),
+  workdayEndTime: z.string().regex(TIME_REGEX, "Format waktu harus HH:MM."),
+  lunchBreakStart: z.string().regex(TIME_REGEX).optional().or(z.literal('')),
+  lunchBreakEnd: z.string().regex(TIME_REGEX).optional().or(z.literal('')),
   meetingLink: z.preprocess(
     (v) => {
         if (typeof v !== "string") return v;
         const s = v.trim();
-        if (!s || s.includes("...")) return ""; // Treat empty or placeholder as empty
+        if (!s || s.includes("...")) return "";
         return s;
     },
     z.string().url({ message: "URL meeting tidak valid." }).optional().or(z.literal(''))
@@ -110,6 +114,8 @@ export function BulkScheduleWizard({ isOpen, onOpenChange, candidates, recruiter
       slotDuration: job.interviewTemplate?.slotDurationMinutes || 30,
       buffer: job.interviewTemplate?.breakMinutes || 10,
       workdayEndTime: job.interviewTemplate?.workdayEndTime || '17:00',
+      lunchBreakStart: job.interviewTemplate?.lunchBreakStart || '',
+      lunchBreakEnd: job.interviewTemplate?.lunchBreakEnd || '',
       meetingLink: job.interviewTemplate?.meetingLink || '',
     },
   });
@@ -121,42 +127,34 @@ export function BulkScheduleWizard({ isOpen, onOpenChange, candidates, recruiter
     return generateTimeSlots(orderedCandidates, config);
   }, [step, orderedCandidates, scheduleForm]);
 
-    const watchedConfig = scheduleForm.watch(['startDate', 'startTime', 'slotDuration', 'buffer', 'workdayEndTime']);
-    const scheduleMetrics = useMemo(() => {
-        const [startDate, startTime, slotDuration, buffer, workdayEndTime] = watchedConfig;
-        
-        if (!startTime || !workdayEndTime || !slotDuration || !startDate) {
-            return null;
-        }
+  const watchedConfig = scheduleForm.watch(['startDate', 'startTime', 'slotDuration', 'buffer', 'workdayEndTime', 'lunchBreakStart', 'lunchBreakEnd']);
+  const scheduleMetrics = useMemo(() => {
+    const [startDate, startTime, slotDuration, buffer, workdayEndTime, lunchBreakStart, lunchBreakEnd] = watchedConfig;
 
-        try {
-            const totalCandidates = orderedCandidates.length;
-            if (totalCandidates === 0) return null;
+    if (!startTime || !workdayEndTime || !slotDuration || !startDate) return null;
 
-            const start = new Date(`1970-01-01T${startTime}`);
-            const end = new Date(`1970-01-01T${workdayEndTime}`);
-            const totalMinutesInWorkday = (end.getTime() - start.getTime()) / 60000;
-            const singleSlotTime = slotDuration + buffer;
-            
-            if (singleSlotTime <= 0 || totalMinutesInWorkday <= 0) {
-                return { slotsPerDay: 0, totalDays: 'N/A', estimatedCompletion: null };
-            }
+    try {
+      const totalCandidates = orderedCandidates.length;
+      if (totalCandidates === 0) return null;
 
-            const slotsPerDay = Math.floor(totalMinutesInWorkday / singleSlotTime);
-            const totalDays = slotsPerDay > 0 ? Math.ceil(totalCandidates / slotsPerDay) : 'N/A';
+      const toMins = (hhmm: string) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
+      let workMins = toMins(workdayEndTime) - toMins(startTime);
+      if (lunchBreakStart && lunchBreakEnd) {
+        workMins -= Math.max(0, toMins(lunchBreakEnd) - toMins(lunchBreakStart));
+      }
+      const singleSlotTime = slotDuration + buffer;
+      if (singleSlotTime <= 0 || workMins <= 0) return { slotsPerDay: 0, totalDays: 'N/A', estimatedCompletion: null };
 
-            const allSlots = generateTimeSlots(orderedCandidates, { startDate, startTime, slotDuration, buffer, workdayEndTime });
-            const lastSlot = allSlots[allSlots.length - 1];
-            
-            return {
-                slotsPerDay,
-                totalDays,
-                estimatedCompletion: lastSlot ? lastSlot.endAt : null,
-            };
-        } catch (e) {
-            return { slotsPerDay: 0, totalDays: 'N/A', estimatedCompletion: null };
-        }
-    }, [watchedConfig, orderedCandidates]);
+      const slotsPerDay = Math.floor(workMins / singleSlotTime);
+      const totalDays = slotsPerDay > 0 ? Math.ceil(totalCandidates / slotsPerDay) : 'N/A';
+      const allSlots = generateTimeSlots(orderedCandidates, { startDate, startTime, slotDuration, buffer, workdayEndTime, lunchBreakStart: lunchBreakStart || undefined, lunchBreakEnd: lunchBreakEnd || undefined });
+      const lastSlot = allSlots[allSlots.length - 1];
+
+      return { slotsPerDay, totalDays, estimatedCompletion: lastSlot ? lastSlot.endAt : null };
+    } catch {
+      return { slotsPerDay: 0, totalDays: 'N/A', estimatedCompletion: null };
+    }
+  }, [watchedConfig, orderedCandidates]);
 
   const totalSlotsNeeded = orderedCandidates.length;
   const slotsGeneratedCount = generatedSlots.length;
@@ -216,6 +214,8 @@ export function BulkScheduleWizard({ isOpen, onOpenChange, candidates, recruiter
 
         batch.update(appRef, {
             status: 'interview',
+            candidateVisibleStatus: 'wawancara_dijadwalkan',
+            interviewCompleted: false,
             interviews: [
                 // Keep non-canceled existing interviews, then add the new one
                 ...(slot.candidate.interviews || []).filter(iv => iv.status !== 'canceled'),
@@ -317,7 +317,11 @@ export function BulkScheduleWizard({ isOpen, onOpenChange, candidates, recruiter
                     <FormField control={scheduleForm.control} name="slotDuration" render={({ field }) => (<FormItem><FormLabel>Durasi per Slot (menit)</FormLabel><Select onValueChange={(v) => field.onChange(parseInt(v))} value={String(field.value)}><FormControl><SelectTrigger><SelectValue/></SelectTrigger></FormControl><SelectContent portalled={false}><SelectItem value="15">15</SelectItem><SelectItem value="20">20</SelectItem><SelectItem value="30">30</SelectItem><SelectItem value="45">45</SelectItem><SelectItem value="60">60</SelectItem><SelectItem value="90">90</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
                     <FormField control={scheduleForm.control} name="buffer" render={({ field }) => (<FormItem><FormLabel>Jeda antar Slot (menit)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>)} />
                 </div>
-                 <FormField control={scheduleForm.control} name="meetingLink" render={({ field }) => ( <FormItem><FormLabel>Link Meeting untuk Job ini</FormLabel><FormControl><Input placeholder="https://zoom.us/j/..." {...field} /></FormControl><FormMessage /></FormItem>)} />
+                <div className="grid grid-cols-2 gap-4">
+                    <FormField control={scheduleForm.control} name="lunchBreakStart" render={({ field }) => (<FormItem><FormLabel>Mulai Istirahat (opsional)</FormLabel><FormControl><Input type="time" {...field} value={field.value || ''} placeholder="12:00" /></FormControl><FormMessage /></FormItem>)} />
+                    <FormField control={scheduleForm.control} name="lunchBreakEnd" render={({ field }) => (<FormItem><FormLabel>Selesai Istirahat (opsional)</FormLabel><FormControl><Input type="time" {...field} value={field.value || ''} placeholder="13:00" /></FormControl><FormMessage /></FormItem>)} />
+                </div>
+                <FormField control={scheduleForm.control} name="meetingLink" render={({ field }) => ( <FormItem><FormLabel>Link Meeting (dipakai semua kandidat)</FormLabel><FormControl><Input placeholder="https://zoom.us/j/..." {...field} /></FormControl><FormMessage /></FormItem>)} />
                  {scheduleMetrics && (
                     <Card className="bg-muted/50">
                         <CardHeader className="py-3">
