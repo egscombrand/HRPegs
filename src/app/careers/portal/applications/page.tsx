@@ -702,12 +702,27 @@ function ApplicationCard({
     return null;
   }, [application.interviews]);
 
-  const isRejected = application.status === "rejected";
+  // HRD internal negative post-interview decision — candidate must NOT see this.
+  // Old code used to set application.status="rejected" when HRD chose "tidak_lanjut";
+  // detect by the decision field so the portal freezes at "Evaluasi Setelah Wawancara".
+  // Pre-interview "tidak_dilanjutkan_saat_ini"/"pending_internal" never changes
+  // application.status, so we only guard the "rejected" edge case there.
+  const isHRDInternalRejection =
+    application.postInterviewDecision?.status === "tidak_lanjut" ||
+    (["tidak_dilanjutkan_saat_ini", "pending_internal"].includes(
+      application.recruitmentInternalDecision?.status ?? ""
+    ) &&
+      application.status === "rejected");
+
+  // Only surface "Proses Selesai" to candidates who rejected an offer themselves.
+  const isRejected = application.status === "rejected" && !isHRDInternalRejection;
+
   const isHired =
     application.status === "hired" &&
     application.internalAccessEnabled === true;
   const isOffered = application.status === "offered";
-  const isInterviewStage = application.status === "interview";
+  // Include the HRD-internally-rejected case so we fall into the interview display path.
+  const isInterviewStage = application.status === "interview" || isHRDInternalRejection;
   const isAssessmentStage = application.status === "tes_kepribadian";
   const isProcessing = [
     "submitted",
@@ -717,14 +732,18 @@ function ApplicationCard({
   ].includes(application.status);
   const hasFinalPositive = application.candidateStatus === "lolos";
 
-  // True only when post-interview evaluation has actually been submitted by the panel.
-  // recruitmentInternalDecision is a PRE-interview decision and must NOT trigger "done".
+  // True when the interview is physically complete from the candidate's viewpoint.
+  // Internal "tidak_lanjut" decision always triggers this so the candidate sees the
+  // neutral "Menunggu Keputusan Akhir" state rather than an active interview card.
+  // Note: !!postInterviewDecision alone is intentionally NOT used — only "lanjut" or
+  // an explicit internal rejection should transition this flag.
   const isInterviewActuallyDone =
+    isHRDInternalRejection ||
     application.interviewCompleted === true ||
     !!application.interviewCompletedAt ||
     !!application.interviewCompletionSource ||
     (application.postInterviewEvaluation?.submissions ?? 0) > 0 ||
-    !!application.postInterviewDecision;
+    application.postInterviewDecision?.status === "lanjut";
 
   // Status shown to candidate — uses helper that never exposes HRD internal decisions
   const displayStatus = useMemo(
@@ -2088,45 +2107,108 @@ function ApplicationCard({
       </div>
     );
 
-    // ── Interview selection timeline ───────────────────────────────────────────
+    // ── Selection timeline — horizontal desktop / vertical mobile ────────────
     const InterviewTimeline = ({ active }: { active: "scheduled" | "done" | "waiting" }) => {
-      const stages = [
-        { label: "Lamaran & Tes Kepribadian", done: true },
-        { label: "Evaluasi Tim Rekrutmen", done: true },
-        { label: "Wawancara", done: active === "done", active: active !== "done" },
-        { label: "Keputusan Akhir", done: false },
+      type StageState = "done" | "active" | "pending";
+      const stages: { label: string; sublabel: string; state: StageState }[] = [
+        { label: "Lamaran & Tes Kepribadian", sublabel: "Selesai", state: "done" },
+        { label: "Evaluasi Tim Rekrutmen", sublabel: "Selesai", state: "done" },
+        {
+          label: "Wawancara",
+          sublabel: active === "done" ? "Selesai" : "Sedang Ditinjau",
+          state: active === "done" ? "done" : "active",
+        },
+        {
+          label: "Keputusan Akhir",
+          sublabel: active === "done" ? "Menunggu Keputusan Akhir" : "Menunggu",
+          state: active === "done" ? "active" : "pending",
+        },
       ];
+
+      const dotClass = (state: StageState) =>
+        cn(
+          "flex items-center justify-center rounded-full shrink-0 font-bold",
+          // desktop: smaller dot inline; mobile: slightly bigger
+          "h-7 w-7 text-xs sm:h-8 sm:w-8",
+          state === "done" && "bg-emerald-500 text-white",
+          state === "active" && "bg-white dark:bg-slate-900 border-2 border-indigo-500 text-indigo-600 dark:text-indigo-400",
+          state === "pending" && "bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700",
+        );
+
+      const labelClass = (state: StageState) =>
+        cn(
+          "text-sm font-semibold leading-tight",
+          state === "done" && "text-emerald-700 dark:text-emerald-400",
+          state === "active" && "text-slate-900 dark:text-white",
+          state === "pending" && "text-slate-400 dark:text-slate-500",
+        );
+
+      const sublabelClass = (state: StageState) =>
+        cn(
+          "text-[11px] mt-0.5",
+          state === "done" && "text-emerald-600/80 dark:text-emerald-500/80",
+          state === "active" && "text-indigo-600 dark:text-indigo-400 font-semibold",
+          state === "pending" && "text-slate-400 dark:text-slate-600",
+        );
+
+      const connectorClass = (prevState: StageState) =>
+        cn(
+          "shrink-0 rounded-full",
+          // vertical connector on mobile, horizontal on desktop
+          "hidden sm:block h-0.5 flex-1",
+          prevState === "done" ? "bg-emerald-400 dark:bg-emerald-600" : "bg-slate-200 dark:bg-slate-700",
+        );
+
+      const mobileConnectorClass = (prevState: StageState) =>
+        cn(
+          "sm:hidden w-0.5 h-4 rounded-full ml-3.5",
+          prevState === "done" ? "bg-emerald-400 dark:bg-emerald-600" : "bg-slate-200 dark:bg-slate-700",
+        );
+
       return (
         <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm">
-          <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-4">
             Tahapan Seleksi
           </p>
-          <ol className="space-y-2">
+
+          {/* ── Desktop: horizontal stepper ── */}
+          <div className="hidden sm:flex items-center gap-0">
             {stages.map((s, i) => (
-              <li key={i} className="flex items-center gap-3">
-                <div className={cn(
-                  "h-6 w-6 rounded-full flex items-center justify-center shrink-0 text-[10px] font-bold",
-                  s.done
-                    ? "bg-teal-500 text-white"
-                    : s.active
-                    ? "bg-teal-50 dark:bg-teal-900/40 border-2 border-teal-500 text-teal-600"
-                    : "bg-slate-100 dark:bg-slate-800 text-slate-400"
-                )}>
-                  {s.done ? <Check className="h-3 w-3" /> : i + 1}
+              <React.Fragment key={i}>
+                <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
+                  <div className={dotClass(s.state)}>
+                    {s.state === "done" ? <Check className="h-3.5 w-3.5" /> : i + 1}
+                  </div>
+                  <span className={cn(labelClass(s.state), "text-center text-[12px] sm:text-xs leading-tight px-1")}>
+                    {s.label}
+                  </span>
+                  <span className={cn(sublabelClass(s.state), "text-center text-[10px]")}>
+                    {s.sublabel}
+                  </span>
                 </div>
-                <span className={cn(
-                  "text-sm",
-                  s.done ? "text-teal-700 dark:text-teal-400 font-medium" :
-                  s.active ? "text-slate-900 dark:text-white font-semibold" :
-                  "text-slate-400"
-                )}>
-                  {s.label}
-                  {s.active && (
-                    <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 text-[10px] font-bold uppercase tracking-wide">
-                      Aktif
-                    </span>
-                  )}
-                </span>
+                {i < stages.length - 1 && (
+                  <div className={connectorClass(s.state)} />
+                )}
+              </React.Fragment>
+            ))}
+          </div>
+
+          {/* ── Mobile: vertical stepper ── */}
+          <ol className="flex flex-col sm:hidden">
+            {stages.map((s, i) => (
+              <li key={i}>
+                <div className="flex items-start gap-3">
+                  <div className={dotClass(s.state)}>
+                    {s.state === "done" ? <Check className="h-3.5 w-3.5" /> : i + 1}
+                  </div>
+                  <div className="pt-0.5 pb-1">
+                    <p className={labelClass(s.state)}>{s.label}</p>
+                    <p className={sublabelClass(s.state)}>{s.sublabel}</p>
+                  </div>
+                </div>
+                {i < stages.length - 1 && (
+                  <div className={mobileConnectorClass(s.state)} />
+                )}
               </li>
             ))}
           </ol>
@@ -2137,23 +2219,52 @@ function ApplicationCard({
     // ── DONE state ────────────────────────────────────────────────────────────
     if (isInterviewActuallyDone) {
       return (
-        <div className="space-y-4">
-          <div className="rounded-xl border border-indigo-200 bg-indigo-50 dark:bg-indigo-900/20 p-5 shadow-sm">
-            <div className="flex items-start gap-3">
-              <div className="h-10 w-10 rounded-full bg-indigo-100 dark:bg-indigo-800/40 flex items-center justify-center shrink-0">
-                <CheckCircle2 className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+        <div className="space-y-3">
+          {/* Status card */}
+          <div className="rounded-xl border border-indigo-200 bg-indigo-50 dark:bg-indigo-950/40 dark:border-indigo-800 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-indigo-100 dark:border-indigo-800/50 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-full bg-indigo-100 dark:bg-indigo-800/60 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                </div>
+                <p className="font-bold text-indigo-900 dark:text-indigo-100 text-base">
+                  Wawancara Telah Selesai
+                </p>
               </div>
-              <div>
-                <p className="font-bold text-indigo-900 dark:text-indigo-100">Wawancara Telah Selesai</p>
-                <p className="text-sm text-indigo-700 dark:text-indigo-300 mt-1 leading-relaxed">
-                  Terima kasih, Anda telah menyelesaikan tahap wawancara. Tim rekrutmen kami
-                  sedang melakukan evaluasi terhadap hasil wawancara Anda. Seluruh pembaruan
-                  status akan ditampilkan melalui portal ini.
+              <Badge className="bg-indigo-600 hover:bg-indigo-600 text-white text-xs font-semibold px-3 py-1">
+                Menunggu Keputusan Akhir
+              </Badge>
+            </div>
+            <div className="px-5 py-4">
+              <p className="text-sm text-indigo-800 dark:text-indigo-300 leading-relaxed">
+                Terima kasih, Anda telah menyelesaikan tahap wawancara. Saat ini tim rekrutmen
+                sedang melakukan peninjauan akhir terhadap hasil wawancara Anda. Seluruh
+                pembaruan status seleksi akan ditampilkan melalui portal ini. Silakan pantau
+                halaman ini secara berkala.
+              </p>
+            </div>
+          </div>
+
+          {/* Timeline — horizontal desktop / vertical mobile */}
+          <InterviewTimeline active="done" />
+
+          {/* Info box */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm">
+            <div className="flex items-start gap-3">
+              <div className="h-8 w-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                <Info className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                  Status saat ini: Menunggu hasil evaluasi akhir.
+                </p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Seluruh informasi lanjutan akan ditampilkan melalui portal ini. Anda tidak perlu
+                  mengirim ulang lamaran selama status masih dalam proses.
                 </p>
               </div>
             </div>
           </div>
-          <InterviewTimeline active="done" />
         </div>
       );
     }
@@ -2169,22 +2280,47 @@ function ApplicationCard({
 
       if (isActuallyCompleted) {
         return (
-          <div className="space-y-4">
-            <div className="rounded-xl border border-indigo-200 bg-indigo-50 dark:bg-indigo-900/20 p-5 shadow-sm">
-              <div className="flex items-start gap-3">
-                <div className="h-10 w-10 rounded-full bg-indigo-100 dark:bg-indigo-800/40 flex items-center justify-center shrink-0">
-                  <Users className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+          <div className="space-y-3">
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50 dark:bg-indigo-950/40 dark:border-indigo-800 shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-indigo-100 dark:border-indigo-800/50 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-full bg-indigo-100 dark:bg-indigo-800/60 flex items-center justify-center shrink-0">
+                    <CheckCircle2 className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                  </div>
+                  <p className="font-bold text-indigo-900 dark:text-indigo-100 text-base">
+                    Wawancara Telah Selesai
+                  </p>
                 </div>
-                <div>
-                  <p className="font-bold text-indigo-900 dark:text-indigo-100">Sedang Dalam Evaluasi</p>
-                  <p className="text-sm text-indigo-700 dark:text-indigo-300 mt-1 leading-relaxed">
-                    Terima kasih telah mengikuti sesi wawancara. Tim rekrutmen kami sedang
-                    meninjau seluruh hasil evaluasi. Pembaruan status akan ditampilkan di portal ini.
+                <Badge className="bg-indigo-600 hover:bg-indigo-600 text-white text-xs font-semibold px-3 py-1">
+                  Menunggu Keputusan Akhir
+                </Badge>
+              </div>
+              <div className="px-5 py-4">
+                <p className="text-sm text-indigo-800 dark:text-indigo-300 leading-relaxed">
+                  Terima kasih, Anda telah menyelesaikan tahap wawancara. Saat ini tim rekrutmen
+                  sedang melakukan peninjauan akhir terhadap hasil wawancara Anda. Seluruh
+                  pembaruan status seleksi akan ditampilkan melalui portal ini. Silakan pantau
+                  halaman ini secara berkala.
+                </p>
+              </div>
+            </div>
+            <InterviewTimeline active="done" />
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm">
+              <div className="flex items-start gap-3">
+                <div className="h-8 w-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                  <Info className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                    Status saat ini: Menunggu hasil evaluasi akhir.
+                  </p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Seluruh informasi lanjutan akan ditampilkan melalui portal ini. Anda tidak perlu
+                    mengirim ulang lamaran selama status masih dalam proses.
                   </p>
                 </div>
               </div>
             </div>
-            <InterviewTimeline active="done" />
           </div>
         );
       }
@@ -2482,19 +2618,19 @@ function ApplicationCard({
   ] as const;
 
   const stageIndex = (status: string): number => {
-    // Stage 0: submitted / tes_kepribadian (still in initial flow)
     if (["submitted", "tes_kepribadian"].includes(status)) return 0;
-    // Stage 1 (active = idx 1): screening / verification / document_submission
     if (["screening", "verification", "document_submission"].includes(status)) return 1;
-    // Stage 2: interview
     if (status === "interview") return 2;
-    // Stage 3: offered / hired / rejected → Keputusan Akhir
+    // offered / hired → Keputusan Akhir active
     return 3;
   };
-  // When isProcessing && hasCompletedTest, show stage 1 as active (stage 0 done)
-  const currentStageIdx = (isProcessing && hasCompletedTest)
-    ? 1
-    : stageIndex(application.status);
+  // HRD internal negative decisions: freeze timeline at interview stage (stage 2 active).
+  // Never advance to "Keputusan Akhir" just because status flipped to "rejected" internally.
+  const currentStageIdx = isHRDInternalRejection
+    ? 2
+    : (isProcessing && hasCompletedTest)
+      ? 1
+      : stageIndex(application.status);
 
   const jobTypeLabel =
     application.jobType === "fulltime" ? "Full-time" :
@@ -2632,7 +2768,29 @@ function ApplicationCard({
             <Separator className="border-slate-200 dark:border-slate-700" />
 
             {/* Status content block */}
-            {isRejected ? (
+            {isHRDInternalRejection ? (
+              <div className="rounded-xl border border-indigo-200 bg-indigo-50 dark:bg-indigo-950/40 dark:border-indigo-800 shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b border-indigo-100 dark:border-indigo-800/50 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                    <p className="font-semibold text-sm text-indigo-900 dark:text-indigo-100">
+                      Evaluasi Setelah Wawancara
+                    </p>
+                  </div>
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-600 text-white">
+                    Dalam Evaluasi
+                  </span>
+                </div>
+                <div className="px-4 py-3">
+                  <p className="text-sm text-indigo-800 dark:text-indigo-300 leading-relaxed">
+                    Terima kasih, Anda telah menyelesaikan tahap wawancara. Saat ini tim
+                    rekrutmen sedang meninjau hasil wawancara dan data pendukung Anda.
+                    Seluruh pembaruan status seleksi akan ditampilkan melalui portal ini.
+                    Silakan pantau halaman ini secara berkala.
+                  </p>
+                </div>
+              </div>
+            ) : isRejected ? (
               <div className="p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50">
                 <div className="flex items-center gap-2 mb-2">
                   <FileClock className="h-4 w-4 text-slate-500" />

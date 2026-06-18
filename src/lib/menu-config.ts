@@ -763,6 +763,17 @@ export const MENU_CONFIG: Record<string, MenuGroup[]> = {
     },
   ],
   manager: [
+    {
+      // No title — Dashboard sits at the top without a section header
+      items: [
+        {
+          key: "employee.dashboard",
+          href: "/admin/karyawan/dashboard",
+          label: "Dashboard",
+          icon: createElement(LayoutDashboard),
+        },
+      ],
+    },
     MANAGEMENT_MENU_ITEMS,
     {
       title: "Manager",

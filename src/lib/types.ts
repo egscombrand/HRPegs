@@ -1184,19 +1184,42 @@ export type CandidateVisibleStatus =
 
 /**
  * Returns the status label shown to the candidate.
- * Internal HRD decisions (pending_internal, tidak_dilanjutkan) are hidden — candidate stays "Dalam Evaluasi".
+ * Internal HRD decisions (pending_internal, tidak_dilanjutkan, tidak_lanjut) are ALWAYS hidden —
+ * the candidate sees the last safe neutral state based on their stage.
  */
 export function getCandidateDisplayStatus(application: {
   status: JobApplicationStatus;
   candidateStatus?: string;
   candidateVisibleStatus?: CandidateVisibleStatus;
   internalAccessEnabled?: boolean;
+  postInterviewDecision?: { status: string };
+  recruitmentInternalDecision?: { status: string };
 }): { text: string; color: string } {
+  // Detect internal HRD rejections — must never surface to candidate.
+  // Covers both post-interview ("tidak_lanjut") and pre-interview ("tidak_dilanjutkan_saat_ini" / "pending_internal").
+  const INTERNAL_NEGATIVE: string[] = [
+    "tidak_lanjut",
+    "tidak_dilanjutkan_saat_ini",
+    "pending_internal",
+  ];
+  const isInternalNegative =
+    INTERNAL_NEGATIVE.includes(application.postInterviewDecision?.status ?? "") ||
+    INTERNAL_NEGATIVE.includes(application.recruitmentInternalDecision?.status ?? "");
+
+  if (isInternalNegative) {
+    // Post-interview internal decision → candidate was in interview stage
+    if (
+      application.postInterviewDecision?.status &&
+      INTERNAL_NEGATIVE.includes(application.postInterviewDecision.status)
+    ) {
+      return { text: "Dalam Evaluasi", color: "bg-indigo-600" };
+    }
+    // Pre-interview internal decision → candidate was in evaluation/screening stage
+    return { text: "Dalam Evaluasi", color: "bg-teal-600" };
+  }
+
   // Hired with access granted
-  if (
-    application.status === "hired" &&
-    application.internalAccessEnabled === true
-  ) {
+  if (application.status === "hired" && application.internalAccessEnabled === true) {
     return { text: "Diterima", color: "bg-green-600" };
   }
   // Offered stage
@@ -1204,7 +1227,6 @@ export function getCandidateDisplayStatus(application: {
     return { text: "Penawaran Kerja", color: "bg-blue-600" };
   }
   // Interview stage — actual status always takes priority over candidateVisibleStatus
-  // "lanjut_tahap_berikutnya" is a transient marker; once in interview the badge should reflect the stage
   if (application.status === "interview") {
     return { text: "Tahap Wawancara", color: "bg-indigo-600" };
   }
@@ -1219,8 +1241,7 @@ export function getCandidateDisplayStatus(application: {
   if (application.candidateStatus === "lolos") {
     return { text: "Lolos ke Tahap Selanjutnya", color: "bg-emerald-600" };
   }
-  // All processing stages (submitted, tes_kepribadian, screening, verification, document_submission)
-  // including pending_internal and tidak_dilanjutkan_saat_ini → always show "Dalam Evaluasi"
+  // All processing stages → "Dalam Evaluasi"
   const processingStatuses: JobApplicationStatus[] = [
     "submitted",
     "tes_kepribadian",
@@ -1231,7 +1252,8 @@ export function getCandidateDisplayStatus(application: {
   if (processingStatuses.includes(application.status as JobApplicationStatus)) {
     return { text: "Dalam Evaluasi", color: "bg-teal-600" };
   }
-  // Rejected (candidate rejected offer, or final rejection shown after hire offer flow)
+  // "rejected" only reaches here when the candidate themselves rejected an offer
+  // (all internal HRD rejections are caught above by isInternalNegative).
   if (application.status === "rejected") {
     return { text: "Proses Selesai", color: "bg-slate-500" };
   }

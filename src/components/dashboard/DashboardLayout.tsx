@@ -486,6 +486,97 @@ export function DashboardLayout({
       }
     }
 
+    // ── Canonical sidebar rebuild for karyawan / manager roles ─────────────────
+    // Problem: when navigation_settings (Access & Roles) is active, the sidebar is
+    // built from ALL_MENU_GROUPS filtered by visible keys. This can produce legacy
+    // section names like "Karyawan" with Dashboard and Pengajuan Lembur inside, and
+    // the order is determined by ALL_MENU_GROUPS — not by the desired UX order.
+    //
+    // Fix: for employee-level roles, discard the group structure entirely and
+    // reassign every visible item to its canonical section purely by item key.
+    // navigation_settings still controls WHICH items are visible — it no longer
+    // controls section assignment or ordering.
+    //
+    // Applies to: karyawan, manager, and directors (menuRoleKey === "manager").
+    // Excluded: karyawan-magang, karyawan-training (custom section structure).
+    const applyCanonicalOrder =
+      roleKey === "karyawan" ||
+      roleKey === "manager" ||
+      menuRoleKey === "manager";
+
+    if (applyCanonicalOrder) {
+      // Build a flat map of key → MenuItem from all currently-visible items
+      const visibleItems = new Map<string, MenuItem>();
+      for (const group of currentConfig) {
+        for (const item of group.items) {
+          if (!visibleItems.has(item.key)) {
+            visibleItems.set(item.key, item);
+          }
+        }
+      }
+
+      // Keys that belong to canonical sections — everything else goes to "other" groups
+      const DASHBOARD_KEY = "employee.dashboard";
+      const PERSONAL_KEYS = [
+        "employee.profile",
+        "employee.permission",
+        "employee.leave",
+        "employee.overtime",
+        "employee.dinas.confirmation",
+      ];
+      const REVIEW_KEYS = [
+        "review.reports",
+        "manager.overtime_approval",
+        "manager.permission_approval",
+        "manager.leave_approval",
+        "review.business_trip_approval",
+      ];
+      const TUGAS_KEY = "recruitment.tasks";
+      const allCanonicalKeys = new Set([
+        DASHBOARD_KEY,
+        ...PERSONAL_KEYS,
+        ...REVIEW_KEYS,
+        TUGAS_KEY,
+      ]);
+
+      // Canonical sections — only included if the item is currently visible
+      const dashboardItem = visibleItems.get(DASHBOARD_KEY);
+      const personalItems = PERSONAL_KEYS
+        .map((k) => visibleItems.get(k))
+        .filter((item): item is MenuItem => !!item);
+      const reviewItems = REVIEW_KEYS
+        .map((k) => visibleItems.get(k))
+        .filter((item): item is MenuItem => !!item);
+      const tugasItem = visibleItems.get(TUGAS_KEY);
+
+      // Non-canonical items (e.g. Manager/My Team, Management/Perjalanan Dinas) —
+      // keep them in their existing groups, stripping any canonical items that
+      // accidentally ended up there (e.g. "Karyawan" section gets dropped entirely).
+      const otherGroups = currentConfig
+        .filter(
+          (g) =>
+            g.title &&
+            !["Personal", "Review", "Review Tim", "Tugas Khusus", "Karyawan"].includes(
+              g.title,
+            ),
+        )
+        .map((g) => ({
+          ...g,
+          items: g.items.filter((item) => !allCanonicalKeys.has(item.key)),
+        }))
+        .filter((g) => g.items.length > 0);
+
+      // Reconstruct in canonical order
+      const rebuilt: MenuGroup[] = [];
+      if (dashboardItem) rebuilt.push({ items: [dashboardItem] }); // no title = Utama
+      if (personalItems.length > 0) rebuilt.push({ title: "Personal", items: personalItems });
+      rebuilt.push(...otherGroups);  // role-specific (Manager, Management, etc.)
+      if (reviewItems.length > 0) rebuilt.push({ title: "Review Tim", items: reviewItems });
+      if (tugasItem) rebuilt.push({ title: "Tugas Khusus", items: [tugasItem] });
+
+      currentConfig = rebuilt;
+    }
+
     // Add badges
     currentConfig = currentConfig.map((group) => ({
       ...group,

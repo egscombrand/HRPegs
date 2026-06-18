@@ -201,13 +201,14 @@ export function UnifiedInternalDecision({
     try {
       const appRef = doc(firestore, "applications", application.id);
 
+      // "tidak_lanjut" is an internal HRD decision — the candidate must not know.
+      // Keep application.status as "interview" so the portal shows the neutral
+      // "Evaluasi Setelah Wawancara" state. Only "lanjut" advances the public stage.
       const nextStage =
-        pascaDecision === "lanjut" 
-          ? "offered" 
-          : pascaDecision === "tidak_lanjut" 
-            ? "rejected" 
-            : application.status;
-            
+        pascaDecision === "lanjut"
+          ? "offered"
+          : application.status;
+
       const updatePayload: any = {
         postInterviewDecision: {
           status: pascaDecision,
@@ -216,12 +217,11 @@ export function UnifiedInternalDecision({
           decidedByName: userProfile.fullName,
           decidedAt: serverTimestamp(),
         },
-        candidateStatus: 
-          pascaDecision === "lanjut" 
-            ? "lolos" 
-            : pascaDecision === "tidak_lanjut"
-              ? "rejected"
-              : "menunggu",
+        // Never expose internal rejection to candidate — keep neutral "menunggu".
+        candidateStatus:
+          pascaDecision === "lanjut"
+            ? "lolos"
+            : "menunggu",
         finalDecisionLocked: pascaDecision === "lanjut" || pascaDecision === "tidak_lanjut",
         status: nextStage,
         updatedAt: serverTimestamp(),
@@ -229,8 +229,8 @@ export function UnifiedInternalDecision({
           ...(application.timeline || []),
           {
             type:
-              pascaDecision === "lanjut" || pascaDecision === "tidak_lanjut" 
-                ? "stage_changed" 
+              pascaDecision === "lanjut"
+                ? "stage_changed"
                 : "status_changed",
             at: Timestamp.now(),
             by: userProfile.uid,
