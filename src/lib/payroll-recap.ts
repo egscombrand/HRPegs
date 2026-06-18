@@ -61,6 +61,18 @@ export interface CalendarAttendanceDetail {
     | 'Dinas'
     | 'Dinas + Tepat Waktu'
     | 'Dinas + Terlambat'
+    | 'Dinas + Libur Nasional'
+    | 'Dinas + Cuti Bersama'
+    | 'Dinas + Libur Perusahaan'
+    | 'Dinas + Akhir Pekan'
+    | 'Dinas + Libur Nasional + Tepat Waktu'
+    | 'Dinas + Libur Nasional + Terlambat'
+    | 'Dinas + Cuti Bersama + Tepat Waktu'
+    | 'Dinas + Cuti Bersama + Terlambat'
+    | 'Dinas + Libur Perusahaan + Tepat Waktu'
+    | 'Dinas + Libur Perusahaan + Terlambat'
+    | 'Dinas + Akhir Pekan + Tepat Waktu'
+    | 'Dinas + Akhir Pekan + Terlambat'
     | 'Alpha';
   tapInTime: string | null;
   tapOutTime: string | null;
@@ -83,6 +95,13 @@ export interface LeaveDetail {
   status: string;
   approvedBy?: string;
   spdNumber?: string;
+  // Dinas-specific fields
+  missionId?: string;
+  missionName?: string;
+  destination?: string;
+  activity?: string;
+  periodStart?: string;
+  periodEnd?: string;
 }
 
 export interface PayrollRecapRow {
@@ -252,12 +271,24 @@ export function mergeEmployeeIdentity(
     user?.email?.trim() ||
     '';
 
+  // Collect all candidate IDs for flexible matching — auth UID has highest priority
+  const authUid =
+    (profile as any).uid?.trim() ||
+    user?.uid?.trim() ||
+    employeeDoc?.uid?.trim() ||
+    '';
+  const docId = ((profile as any).id || '').trim();
+
   // Return enriched copy — don't mutate original
   return {
     ...profile,
     _resolvedName: resolvedName || null,
-    // Carry user/employee uid if profile doesn't have one
-    _uid: (profile as any).uid || (profile as any).id || user?.uid || employeeDoc?.uid || '',
+    // Primary matching ID: prefer auth UID over document ID
+    _uid: authUid || docId,
+    // Secondary fallback (document ID may differ from auth UID in some setups)
+    _docId: docId,
+    // All candidates for multi-key matching
+    _candidateIds: Array.from(new Set([authUid, docId].filter(Boolean))),
   };
 }
 
@@ -572,9 +603,10 @@ function getApprovedBy(record: any): string {
   return record?.approvedByName ||
     record?.approvedBy ||
     record?.approvedByDisplayName ||
+    record?.hrdApprovedByName ||
     record?.hrdName ||
     record?.hrdReviewedByName ||
-    record?.hrdApprovedByName ||
+    record?.approvedByName ||
     record?.managerName ||
     record?.managerApprovedByName ||
     record?.directorReviewedByName ||
@@ -584,9 +616,18 @@ function getApprovedBy(record: any): string {
 }
 
 function getLeaveKind(record: any): 'Izin' | 'Cuti' | 'Dinas' {
-  const raw = String(record?.category || record?.kind || record?.formType || record?.type || record?.leaveType || '').toLowerCase();
+  const category = String(record?.category || '').toLowerCase().trim();
+  const type = String(record?.type || '').toLowerCase().trim();
+
+  if (category === 'cuti') return 'Cuti';
+  if (category === 'dinas' || type === 'business_trip') return 'Dinas';
+
+  const raw = String(record?.kind || record?.formType || record?.leaveType || '').toLowerCase();
   if (raw.includes('cuti') || ['tahunan', 'besar', 'menikah', 'melahirkan'].includes(raw)) return 'Cuti';
   if (raw.includes('dinas') || raw.includes('business_trip')) return 'Dinas';
+
+  if (record?.leaveType) return 'Cuti';
+
   return 'Izin';
 }
 
@@ -605,6 +646,7 @@ function normalizeDateRange(record: any): { start: Date; end: Date } | null {
     record.startDate,
     record.leaveStartDate,
     record.departureDate,
+    record.tripStartDate,
     record.missionStartDate,
     record.date,
     record.overtimeDate,
@@ -613,11 +655,13 @@ function normalizeDateRange(record: any): { start: Date; end: Date } | null {
     record.endDate,
     record.leaveEndDate,
     record.returnDate,
+    record.tripEndDate,
     record.missionEndDate,
     record.date,
     record.startDate,
     record.leaveStartDate,
     record.departureDate,
+    record.tripStartDate,
     record.missionStartDate,
     record.overtimeDate,
   ];
@@ -634,6 +678,11 @@ function normalizeDateRange(record: any): { start: Date; end: Date } | null {
 
 function normalizeComparableId(value: any): string {
   return value == null ? '' : String(value).trim();
+}
+
+function normalizeForNameMatch(value: any): string {
+  if (!value) return '';
+  return String(value).toLowerCase().trim().replace(/\s+/g, ' ');
 }
 
 function collectParticipantCandidates(value: any): any[] {
@@ -659,6 +708,12 @@ function collectParticipantCandidates(value: any): any[] {
       value.assignedEmployeeIds,
       value.employees,
       value.travelers,
+      value.memberUids,       // ← business_trip_missions top-level UID array
+      value.memberDetails,    // ← business_trip_missions member detail objects
+      value.selectedEmployees,
+      value.assignedStaff,
+      value.teamMembers,
+      value.staff,
     ].flatMap(item => collectParticipantCandidates(item));
     return [...direct, ...nested];
   }
@@ -721,14 +776,22 @@ function isApprovedFinalRecord(record: any): boolean {
     record.staffConfirmationStatus,
     record.finalStatus,
   ].map(status => String(status || '').toLowerCase().trim()).filter(Boolean);
-  if (statuses.some(status => /reject|rejected|ditolak|cancel|cancelled|batal|revision|revisi/.test(status))) {
+  if (statuses.some(status => /reject|rejected|ditolak|cancel|cancelled|batal|revision|revisi|archived|declined_by_staff/.test(status))) {
     return false;
   }
   return statuses.some(isApprovedStatusValue);
 }
 
-function isRecordForEmployee(record: any, employeeId: string, normalizedEmployeeNumber: string): boolean {
-  const employeeIdValue = normalizeComparableId(employeeId);
+function isRecordForEmployee(
+  record: any,
+  employeeIds: string[],
+  normalizedEmployeeNumber: string,
+  employeeNames?: string[],
+  employeeEmails?: string[],
+): boolean {
+  const candidateIds = employeeIds.filter(Boolean).map(normalizeComparableId).filter(Boolean);
+
+  // 1. Direct UID / ID field match
   const directCandidates = [
     record.uid,
     record.id,
@@ -739,8 +802,9 @@ function isRecordForEmployee(record: any, employeeId: string, normalizedEmployee
     record.employeeId,
     record.userId,
   ].map(normalizeComparableId).filter(Boolean);
-  if (employeeIdValue && directCandidates.includes(employeeIdValue)) return true;
+  if (candidateIds.some(id => directCandidates.includes(id))) return true;
 
+  // 2. Participant / member array match (UIDs & NIKs)
   const participantCandidates = [
     record.members,
     record.participants,
@@ -748,9 +812,16 @@ function isRecordForEmployee(record: any, employeeId: string, normalizedEmployee
     record.assignedEmployeeIds,
     record.employees,
     record.travelers,
+    record.memberUids,
+    record.memberDetails,
+    record.selectedEmployees,
+    record.assignedStaff,
+    record.teamMembers,
+    record.staff,
   ].flatMap(item => collectParticipantCandidates(item)).map(normalizeComparableId).filter(Boolean);
-  if (employeeIdValue && participantCandidates.includes(employeeIdValue)) return true;
+  if (candidateIds.some(id => participantCandidates.includes(id))) return true;
 
+  // 3. NIK / employee number match
   if (normalizedEmployeeNumber) {
     const nikCandidates = [
       record.employeeNumber,
@@ -760,12 +831,53 @@ function isRecordForEmployee(record: any, employeeId: string, normalizedEmployee
     if (nikCandidates.includes(normalizedEmployeeNumber)) return true;
   }
 
+  // 4. Name fallback (case-insensitive, trimmed) — for dinas missions that only store names
+  if (employeeNames && employeeNames.length > 0) {
+    const recordNames = [
+      record.employeeName,
+      record.fullName,
+      record.name,
+      record.namaPegawai,
+      record.namaKaryawan,
+    ].map(normalizeForNameMatch).filter(Boolean);
+    if (employeeNames.some(n => n && recordNames.includes(normalizeForNameMatch(n)))) return true;
+
+    // Also check inside participant objects
+    const participantNameCandidates = [
+      record.members,
+      record.participants,
+      record.memberDetails,
+      record.selectedEmployees,
+      record.assignedStaff,
+      record.teamMembers,
+      record.staff,
+    ].flatMap((arr: any) => {
+      if (!Array.isArray(arr)) return [];
+      return arr.map((item: any) => [item?.employeeName, item?.fullName, item?.name].filter(Boolean)).flat();
+    }).map(normalizeForNameMatch).filter(Boolean);
+    if (employeeNames.some(n => n && participantNameCandidates.includes(normalizeForNameMatch(n)))) return true;
+  }
+
+  // 5. Email fallback
+  if (employeeEmails && employeeEmails.length > 0) {
+    const recordEmails = [record.email, record.employeeEmail].map(normalizeForNameMatch).filter(Boolean);
+    if (employeeEmails.some(e => e && recordEmails.includes(normalizeForNameMatch(e)))) return true;
+  }
+
   return false;
 }
 
-function isRecordInEmployeePeriod(record: any, employeeId: string, normalizedEmployeeNumber: string, effectiveStart: Date, effectiveEnd: Date): boolean {
+function isRecordInEmployeePeriod(
+  record: any,
+  employeeIds: string[],
+  normalizedEmployeeNumber: string,
+  effectiveStart: Date,
+  effectiveEnd: Date,
+  employeeNames?: string[],
+  employeeEmails?: string[],
+): boolean {
   if (!isApprovedFinalRecord(record)) return false;
-  if (!isRecordForEmployee(record, employeeId, normalizedEmployeeNumber)) return false;
+  if (!isRecordForEmployee(record, employeeIds, normalizedEmployeeNumber, employeeNames, employeeEmails)) return false;
 
   const range = normalizeDateRange(record);
   if (!range) return false;
@@ -774,17 +886,52 @@ function isRecordInEmployeePeriod(record: any, employeeId: string, normalizedEmp
     (isBefore(range.start, effectiveStart) && isAfter(range.end, effectiveEnd));
 }
 
-function mapApprovedAbsenceDetails(records: any[], employeeId: string, normalizedEmployeeNumber: string, effectiveStart: Date, effectiveEnd: Date): LeaveDetail[] {
+function mapApprovedAbsenceDetails(
+  records: any[],
+  employeeIds: string[],
+  normalizedEmployeeNumber: string,
+  effectiveStart: Date,
+  effectiveEnd: Date,
+  employeeNames?: string[],
+  employeeEmails?: string[],
+): LeaveDetail[] {
   const details: LeaveDetail[] = [];
   for (const record of records) {
-    if (!isRecordInEmployeePeriod(record, employeeId, normalizedEmployeeNumber, effectiveStart, effectiveEnd)) continue;
+    if (!isRecordInEmployeePeriod(record, employeeIds, normalizedEmployeeNumber, effectiveStart, effectiveEnd, employeeNames, employeeEmails)) continue;
     const range = normalizeDateRange(record);
     if (!range) continue;
 
     const kind = getLeaveKind(record);
     const days = eachDayOfInterval({ start: range.start, end: range.end })
       .filter(d => d >= startOfDay(effectiveStart) && d <= endOfDay(effectiveEnd))
-      .filter(d => !isWeekend(d));
+      // Dinas includes weekends — employee is still on official duty on Sat/Sun
+      .filter(d => kind === 'Dinas' ? true : !isWeekend(d));
+
+    // Build Dinas-specific metadata once per record (not per day)
+    const spdNumber = record.assignmentNumber || record.spdNumber || record.missionCode || '';
+    const missionId = record.id || record.missionId || '';
+    const missionName = record.missionName || record.title || record.name || '';
+    const destination = [
+      record.destinationCity,
+      record.destinationRegency,
+      record.destinationProvince,
+      record.destinationAddress,
+    ].filter(Boolean).join(', ');
+    const activity = record.activity || record.kegiatan || record.projectName || record.instructionNote || '';
+
+    // Build per-day keterangan for Dinas: include mission name + SPD number
+    const buildDinasKet = (): string => {
+      let s = 'Sedang menjalankan perjalanan dinas';
+      if (missionName) s += `: ${missionName}`;
+      if (spdNumber) s += ` — SPD: ${spdNumber}`;
+      s += '.';
+      if (destination) s += ` Tujuan: ${destination}.`;
+      if (activity) s += ` Kegiatan: ${activity}.`;
+      return s;
+    };
+
+    const periodStart = format(range.start, 'yyyy-MM-dd');
+    const periodEnd   = format(range.end,   'yyyy-MM-dd');
 
     for (const day of days) {
       details.push({
@@ -793,18 +940,13 @@ function mapApprovedAbsenceDetails(records: any[], employeeId: string, normalize
         formType: record.formType || record.type || record.leaveType || kind,
         reasonType: record.reasonType || '',
         keterangan: kind === 'Dinas'
-          ? [
-              record.missionName,
-              record.destinationCity || record.destinationRegency || record.destinationProvince || record.destinationAddress,
-              record.projectName,
-              record.instructionNote,
-              record.reason,
-            ].filter(Boolean).join(' - ')
+          ? buildDinasKet()
           : record.keterangan || record.notes || record.reason || record.leaveType || record.formType || '',
         days: 1,
         status: getRecordApprovalStatus(record),
         approvedBy: getApprovedBy(record),
-        spdNumber: record.assignmentNumber || record.spdNumber || record.missionCode || '',
+        spdNumber,
+        ...(kind === 'Dinas' ? { missionId, missionName, destination, activity, periodStart, periodEnd } : {}),
       });
     }
   }
@@ -818,7 +960,29 @@ function normalizeHolidayDetails(holidays: Array<string | HolidayDetail>): Holid
   });
 }
 
+const WEEKEND_DINAS_STATUSES: ReadonlySet<string> = new Set([
+  'Dinas + Akhir Pekan',
+  'Dinas + Akhir Pekan + Tepat Waktu',
+  'Dinas + Akhir Pekan + Terlambat',
+]);
+
+const WEEKDAY_HOLIDAY_DINAS_STATUSES: ReadonlySet<string> = new Set([
+  'Dinas + Libur Nasional',
+  'Dinas + Cuti Bersama',
+  'Dinas + Libur Perusahaan',
+  'Dinas + Libur Nasional + Tepat Waktu',
+  'Dinas + Libur Nasional + Terlambat',
+  'Dinas + Cuti Bersama + Tepat Waktu',
+  'Dinas + Cuti Bersama + Terlambat',
+  'Dinas + Libur Perusahaan + Tepat Waktu',
+  'Dinas + Libur Perusahaan + Terlambat',
+]);
+
 function isWorkdayStatus(status: CalendarAttendanceDetail['status']): boolean {
+  // Dinas on weekday holidays: counted as workday (official duty)
+  if (WEEKDAY_HOLIDAY_DINAS_STATUSES.has(status)) return true;
+  // Dinas on weekends: NOT a regular workday, only counted in dinas separately
+  if (WEEKEND_DINAS_STATUSES.has(status)) return false;
   return !['Belum Berjalan', 'Libur Nasional', 'Cuti Bersama', 'Libur Perusahaan', 'Akhir Pekan'].includes(status);
 }
 
@@ -878,6 +1042,26 @@ export function generateEmployeePayrollRecap(
   const employeeId = (employee as any)._uid || (employee as any).uid || (employee as any).id || '';
   const employeeNumber = resolveEmployeeNumber(employee);
   const normalizedEmployeeNumber = normalizeEmployeeNumber(employeeNumber);
+  // All candidate IDs for flexible leave/dinas matching
+  const employeeIds: string[] = (employee as any)._candidateIds?.length
+    ? (employee as any)._candidateIds
+    : [employeeId, (employee as any)._docId].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i);
+  // Candidate names for name-based fallback matching
+  const employeeNames: string[] = [
+    (employee as any)._resolvedName,
+    (employee as any).fullName,
+    (employee as any).namaLengkap,
+    (employee as any).name,
+    (employee as any).displayName,
+    (employee as any).dataDiriIdentitas?.fullName,
+    (employee as any).dataDiriIdentitas?.namaLengkap,
+  ].filter((n): n is string => Boolean(n && String(n).trim()));
+  // Candidate emails
+  const employeeEmails: string[] = [
+    (employee as any).email,
+    (employee as any).emailKantor,
+    (employee as any).workEmail,
+  ].filter((e): e is string => Boolean(e && String(e).trim()));
 
   // ── Effective date range ──
   let effectiveStart = startOfDay(period.startDate);
@@ -1045,14 +1229,20 @@ export function generateEmployeePayrollRecap(
   // ── Approved permissions in period ──
   const leaveDetails = mapApprovedAbsenceDetails(
     approvedPermissions,
-    employeeId,
+    employeeIds,
     normalizedEmployeeNumber,
     effectiveStart,
-    effectiveEnd
+    effectiveEnd,
+    employeeNames,
+    employeeEmails,
   ).sort((a, b) => a.date.localeCompare(b.date));
   const izin = leaveDetails.filter(d => d.type === 'Izin').length;
   const cuti = leaveDetails.filter(d => d.type === 'Cuti').length;
   const dinas = leaveDetails.filter(d => d.type === 'Dinas').length;
+  // DEBUG: log result for every employee that has any cuti/dinas/izin or who has matching leave records
+  if (typeof window !== 'undefined' && (cuti > 0 || dinas > 0 || izin > 0)) {
+    console.log(`[PAYROLL RESULT] ${resolveName(employee)} | ids:[${employeeIds.join(',')}] | nik:${normalizedEmployeeNumber} | izin:${izin} cuti:${cuti} dinas:${dinas}`);
+  }
 
   // ── Alpha: past working days only ──
   const effectiveWorkingDays = eachDayOfInterval({
@@ -1104,9 +1294,51 @@ export function generateEmployeePayrollRecap(
     let status: CalendarAttendanceDetail['status'] = 'Alpha';
     let keterangan = '';
 
+    // Helper: build the holiday suffix for keterangan
+    const holidaySuffix = (): string => {
+      if (holiday?.type === 'national_holiday') return ` Bertepatan dengan Libur Nasional: ${holiday.name}.`;
+      if (holiday?.type === 'collective_leave')  return ` Bertepatan dengan Cuti Bersama: ${holiday.name}.`;
+      if (holiday?.type === 'company_holiday')   return ` Bertepatan dengan Libur Perusahaan: ${holiday.name}.`;
+      if (isWeekend(day))                        return ' Bertepatan dengan Akhir Pekan.';
+      return '';
+    };
+
     if (dateStr > todayStr) {
       status = 'Belum Berjalan';
       keterangan = 'Tanggal belum berjalan dan belum masuk perhitungan payroll.';
+    } else if (dinas) {
+      // Dinas takes priority over holiday and weekend; combine status if needed
+      const dinasKet = dinas.keterangan || 'Sedang menjalankan perjalanan dinas approved.';
+      const attendancePart = isLate ? 'Terlambat' : 'Tepat Waktu';
+      const latePrefix = isLate ? `${timing?.notes || 'Terlambat dari batas toleransi.'} ` : '';
+
+      if (holiday?.type === 'national_holiday') {
+        status = hasAttendance
+          ? isLate ? 'Dinas + Libur Nasional + Terlambat' : 'Dinas + Libur Nasional + Tepat Waktu'
+          : 'Dinas + Libur Nasional';
+        keterangan = `${latePrefix}${dinasKet}${holidaySuffix()}`;
+      } else if (holiday?.type === 'collective_leave') {
+        status = hasAttendance
+          ? isLate ? 'Dinas + Cuti Bersama + Terlambat' : 'Dinas + Cuti Bersama + Tepat Waktu'
+          : 'Dinas + Cuti Bersama';
+        keterangan = `${latePrefix}${dinasKet}${holidaySuffix()}`;
+      } else if (holiday?.type === 'company_holiday') {
+        status = hasAttendance
+          ? isLate ? 'Dinas + Libur Perusahaan + Terlambat' : 'Dinas + Libur Perusahaan + Tepat Waktu'
+          : 'Dinas + Libur Perusahaan';
+        keterangan = `${latePrefix}${dinasKet}${holidaySuffix()}`;
+      } else if (isWeekend(day)) {
+        status = hasAttendance
+          ? isLate ? 'Dinas + Akhir Pekan + Terlambat' : 'Dinas + Akhir Pekan + Tepat Waktu'
+          : 'Dinas + Akhir Pekan';
+        keterangan = `${latePrefix}${dinasKet}${holidaySuffix()}`;
+      } else if (hasAttendance) {
+        status = isLate ? 'Dinas + Terlambat' : 'Dinas + Tepat Waktu';
+        keterangan = `${latePrefix}${dinasKet}`;
+      } else {
+        status = 'Dinas';
+        keterangan = dinasKet;
+      }
     } else if (holiday?.type === 'national_holiday') {
       status = 'Libur Nasional';
       keterangan = `${holiday.name}.`;
@@ -1125,14 +1357,6 @@ export function generateEmployeePayrollRecap(
     } else if (izin) {
       status = 'Izin';
       keterangan = izin.keterangan || 'Izin approved.';
-    } else if (dinas && hasAttendance) {
-      status = isLate ? 'Dinas + Terlambat' : 'Dinas + Tepat Waktu';
-      keterangan = isLate
-        ? `${timing?.notes || 'Terlambat dari batas toleransi.'} Sedang menjalankan perjalanan dinas approved.`
-        : 'Sedang menjalankan perjalanan dinas approved.';
-    } else if (dinas) {
-      status = 'Dinas';
-      keterangan = 'Sedang menjalankan perjalanan dinas approved.';
     } else if (alphaByDay.has(dateStr)) {
       status = 'Alpha';
       keterangan = 'Tidak ada data absen dan tidak ada izin/cuti/dinas approved.';
@@ -1155,14 +1379,15 @@ export function generateEmployeePayrollRecap(
   });
 
   const countedCalendarDetails = calendarDetails.filter(d => isWorkdayStatus(d.status));
+  // Use string-contains so all current and future compound statuses are covered
   const countedHadirDates = new Set(
     countedCalendarDetails
-      .filter(d => d.status === 'Tepat Waktu' || d.status === 'Terlambat' || d.status === 'Dinas + Tepat Waktu' || d.status === 'Dinas + Terlambat')
+      .filter(d => (d.status as string).includes('Tepat Waktu') || (d.status as string).includes('Terlambat'))
       .map(d => d.date)
   );
   const countedLateDates = new Set(
     countedCalendarDetails
-      .filter(d => d.status === 'Terlambat' || d.status === 'Dinas + Terlambat')
+      .filter(d => (d.status as string).includes('Terlambat'))
       .map(d => d.date)
   );
   const finalLateDetails = lateDetails
@@ -1188,7 +1413,7 @@ export function generateEmployeePayrollRecap(
     divisionId: (employee as any).divisionId,
     divisionName: resolveDivision(employee),
     hariKerja,
-    hadir: countedCalendarDetails.filter(d => d.status === 'Tepat Waktu' || d.status === 'Terlambat' || d.status === 'Dinas + Tepat Waktu' || d.status === 'Dinas + Terlambat').length,
+    hadir: countedHadirDates.size,
     terlambat: finalLateDetails.length,
     menitTerlambat: finalMenitTerlambat,
     lateDetails: finalLateDetails,
@@ -1200,7 +1425,8 @@ export function generateEmployeePayrollRecap(
     lupaHapOut,
     izin: countedCalendarDetails.filter(d => d.status === 'Izin').length,
     cuti: countedCalendarDetails.filter(d => d.status === 'Cuti').length,
-    dinas: countedCalendarDetails.filter(d => d.status === 'Dinas' || d.status === 'Dinas + Tepat Waktu' || d.status === 'Dinas + Terlambat').length,
+    // Count ALL dinas days including weekends and holidays (full trip duration)
+    dinas: calendarDetails.filter(d => (d.status as string).startsWith('Dinas')).length,
     alpha: finalAlphaDetails.length,
     totalJamKerja: Math.floor(finalTotalMinutes / 60),
     totalMenitLembur,

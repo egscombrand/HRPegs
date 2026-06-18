@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, type ReactNode } from "react";
+import { exportDetailXlsx, exportSummaryXlsx } from "@/lib/payroll-xlsx";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { useRoleGuard } from "@/hooks/useRoleGuard";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -33,7 +34,12 @@ import { useCollection, useFirestore, useMemoFirebase } from "@/firebase";
 import { collection, collectionGroup } from "firebase/firestore";
 import { format, eachDayOfInterval } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
-import { Download, AlertCircle, RotateCcw, CalendarDays, Info, Eye, FileSpreadsheet, Clock } from "lucide-react";
+import { Download, AlertCircle, RotateCcw, CalendarDays, Info, Eye, FileSpreadsheet, Clock, MapPin, Briefcase } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import type { EmployeeProfile, Brand } from "@/lib/types";
 import {
   calculatePayrollPeriod,
@@ -43,6 +49,7 @@ import {
   type HolidayDetail,
   type PeriodMode,
   type PayrollRecapRow,
+  type LeaveDetail,
 } from "@/lib/payroll-recap";
 import { Badge } from "@/components/ui/badge";
 
@@ -114,10 +121,6 @@ function formatDateId(dateStr: string) {
   return format(new Date(dateStr), "d MMMM yyyy", { locale: idLocale });
 }
 
-function escapeCsv(value: any) {
-  const text = value == null || value === "" ? "-" : String(value);
-  return `"${text.replace(/"/g, '""')}"`;
-}
 
 function statusBadgeClass(status: string) {
   switch (status) {
@@ -139,47 +142,179 @@ function statusBadgeClass(status: string) {
       return "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800";
     case "Cuti":
       return "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/20 dark:text-purple-300 dark:border-purple-800";
-    case "Dinas":
-    case "Dinas + Tepat Waktu":
-    case "Dinas + Hadir":
-    case "Dinas + Terlambat":
-      return "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-900/20 dark:text-teal-300 dark:border-teal-800";
     case "Alpha":
       return "bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800";
     default:
+      if (status.startsWith("Dinas"))
+        return "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-900/20 dark:text-teal-300 dark:border-teal-800";
       return "bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900/40 dark:text-slate-300 dark:border-slate-700";
   }
 }
 
 function calendarRowClass(status: string, index: number) {
   const zebra = index % 2 === 0 ? "bg-white dark:bg-slate-950/30" : "bg-slate-50/50 dark:bg-slate-900/20";
-  switch (status) {
-    case "Alpha":
-      return "bg-red-50/70 dark:bg-red-950/20";
-    case "Terlambat":
-    case "Dinas + Terlambat":
-      return "bg-orange-50/70 dark:bg-orange-950/20";
-    case "Izin":
-      return "bg-blue-50/70 dark:bg-blue-950/20";
-    case "Cuti":
-      return "bg-purple-50/70 dark:bg-purple-950/20";
-    case "Dinas":
-    case "Dinas + Tepat Waktu":
-    case "Dinas + Hadir":
-      return "bg-teal-50/70 dark:bg-teal-950/20";
-    case "Tepat Waktu":
-    case "Hadir":
-      return "bg-green-50/70 dark:bg-green-950/20";
-    case "Libur Nasional":
-    case "Cuti Bersama":
-    case "Libur Perusahaan":
-    case "Akhir Pekan":
-      return "bg-slate-100/70 dark:bg-slate-900/50";
-    case "Belum Berjalan":
-      return "bg-slate-50 dark:bg-slate-900/30";
-    default:
-      return zebra;
-  }
+  if (status === "Alpha") return "bg-red-50/70 dark:bg-red-950/20";
+  if (status === "Izin") return "bg-blue-50/70 dark:bg-blue-950/20";
+  if (status === "Cuti") return "bg-purple-50/70 dark:bg-purple-950/20";
+  if (status === "Tepat Waktu" || status === "Hadir") return "bg-green-50/70 dark:bg-green-950/20";
+  if (status.includes("Terlambat")) return "bg-orange-50/70 dark:bg-orange-950/20";
+  if (status.startsWith("Dinas")) return "bg-teal-50/70 dark:bg-teal-950/20";
+  if (["Libur Nasional", "Cuti Bersama", "Libur Perusahaan", "Akhir Pekan"].includes(status))
+    return "bg-slate-100/70 dark:bg-slate-900/50";
+  if (status === "Belum Berjalan") return "bg-slate-50 dark:bg-slate-900/30";
+  return zebra;
+}
+
+
+// ─── Dinas metadata helpers ────────────────────────────────────────────────
+
+type DinasMission = { key: string; detail: LeaveDetail; index: number };
+type DinasMeta = {
+  byDate: Map<string, LeaveDetail>;
+  indexMap: Map<string, number>;
+  missions: DinasMission[];
+};
+
+function buildDinasMeta(leaveDetails: LeaveDetail[]): DinasMeta {
+  const byDate = new Map<string, LeaveDetail>();
+  const missionOrder: string[] = [];
+  leaveDetails
+    .filter(d => d.type === "Dinas")
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .forEach(d => {
+      if (!byDate.has(d.date)) byDate.set(d.date, d);
+      const key = d.missionId || d.spdNumber || d.periodStart || "";
+      if (key && !missionOrder.includes(key)) missionOrder.push(key);
+    });
+  const indexMap = new Map(missionOrder.map((k, i) => [k, i + 1]));
+  const seen = new Set<string>();
+  const missions: DinasMission[] = [];
+  leaveDetails.filter(d => d.type === "Dinas").forEach(d => {
+    const key = d.missionId || d.spdNumber || d.periodStart || "";
+    if (key && !seen.has(key)) { seen.add(key); missions.push({ key, detail: d, index: indexMap.get(key)! }); }
+  });
+  return { byDate, indexMap, missions };
+}
+
+function getMissionKey(d: LeaveDetail | undefined): string {
+  return d?.missionId || d?.spdNumber || d?.periodStart || "";
+}
+
+function getDinasStatusLabel(status: string, missionIdx: number | undefined, total: number): string {
+  if (!status.startsWith("Dinas") || total <= 1 || !missionIdx) return status;
+  return status.replace(/^Dinas/, `Dinas ${missionIdx}`);
+}
+
+// ─── Dinas detail popover ─────────────────────────────────────────────────
+
+function DinasDetailPopover({ detail, index, total }: { detail: LeaveDetail; index?: number; total: number }) {
+  const fd = (ds: string) => { try { return format(new Date(ds), "d MMM yyyy", { locale: idLocale }); } catch { return ds; } };
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="sm"
+          className="h-5 w-5 shrink-0 rounded-full p-0 text-teal-500 hover:bg-teal-100 hover:text-teal-700 dark:text-teal-400 dark:hover:bg-teal-900/40">
+          <Info className="h-3 w-3" />
+          <span className="sr-only">Detail dinas</span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 p-3" side="left" align="start">
+        <div className="space-y-2 text-xs">
+          <div className="flex items-start gap-1.5 border-b border-slate-200 pb-2 dark:border-slate-700">
+            <Briefcase className="mt-0.5 h-3 w-3 shrink-0 text-teal-500" />
+            <div className="min-w-0">
+              {total > 1 && index && (
+                <Badge className="mb-1 h-4 bg-teal-600 px-1.5 text-[10px] text-white">Dinas {index}</Badge>
+              )}
+              <p className="font-semibold text-slate-800 dark:text-slate-200 break-words">
+                {detail.missionName || "Perjalanan Dinas"}
+              </p>
+            </div>
+          </div>
+          {detail.spdNumber && (
+            <div className="flex items-start gap-1.5">
+              <span className="shrink-0 font-medium text-slate-500 w-16">SPD</span>
+              <span className="text-slate-700 dark:text-slate-300">{detail.spdNumber}</span>
+            </div>
+          )}
+          {detail.periodStart && detail.periodEnd && (
+            <div className="flex items-start gap-1.5">
+              <span className="shrink-0 font-medium text-slate-500 w-16">Periode</span>
+              <span className="text-slate-700 dark:text-slate-300">{fd(detail.periodStart)} – {fd(detail.periodEnd)}</span>
+            </div>
+          )}
+          {detail.destination && (
+            <div className="flex items-start gap-1.5">
+              <MapPin className="mt-0.5 h-3 w-3 shrink-0 text-slate-400" />
+              <span className="text-slate-700 dark:text-slate-300 break-words">{detail.destination}</span>
+            </div>
+          )}
+          {detail.activity && (
+            <div className="flex items-start gap-1.5">
+              <span className="shrink-0 font-medium text-slate-500 w-16">Kegiatan</span>
+              <span className="text-slate-700 dark:text-slate-300 break-words">{detail.activity}</span>
+            </div>
+          )}
+          {detail.approvedBy && (
+            <div className="flex items-start gap-1.5">
+              <span className="shrink-0 font-medium text-slate-500 w-16">Disetujui</span>
+              <span className="text-slate-700 dark:text-slate-300">{detail.approvedBy}</span>
+            </div>
+          )}
+          <div className="flex items-start gap-1.5 border-t border-slate-200 pt-1.5 dark:border-slate-700">
+            <span className="shrink-0 font-medium text-slate-500 w-16">Status</span>
+            <span className="text-teal-600 font-medium">{detail.status}</span>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// ─── Dinas mission summary cards ──────────────────────────────────────────
+
+function DinasMissionCards({ missions }: { missions: DinasMission[] }) {
+  if (missions.length <= 1) return null;
+  const fd = (ds: string) => { try { return format(new Date(ds), "d MMM yyyy", { locale: idLocale }); } catch { return ds; } };
+  const TEAL_SHADES = ["bg-teal-50 border-teal-200 dark:bg-teal-950/30 dark:border-teal-800", "bg-cyan-50 border-cyan-200 dark:bg-cyan-950/30 dark:border-cyan-800"];
+  return (
+    <div className="rounded-lg border border-teal-200 bg-teal-50/60 p-3 dark:border-teal-800 dark:bg-teal-950/20">
+      <p className="mb-2 text-xs font-semibold text-teal-700 dark:text-teal-300">
+        {missions.length} perjalanan dinas dalam periode ini:
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {missions.map((m, i) => (
+          <div key={m.key} className={`rounded-md border p-2.5 text-xs ${TEAL_SHADES[i % TEAL_SHADES.length]}`}>
+            <div className="flex items-center gap-1.5 mb-1">
+              <Badge className="h-4 shrink-0 bg-teal-600 px-1.5 text-[10px] text-white">Dinas {m.index}</Badge>
+              <span className="min-w-0 truncate font-semibold text-teal-800 dark:text-teal-200">
+                {m.detail.missionName || "—"}
+              </span>
+            </div>
+            {m.detail.spdNumber && <p className="text-slate-500 dark:text-slate-400 truncate">SPD: {m.detail.spdNumber}</p>}
+            {m.detail.periodStart && m.detail.periodEnd && (
+              <p className="text-slate-500 dark:text-slate-400">
+                {fd(m.detail.periodStart)} – {fd(m.detail.periodEnd)}
+              </p>
+            )}
+            {m.detail.destination && (
+              <p className="flex items-center gap-1 text-slate-500 dark:text-slate-400 truncate">
+                <MapPin className="h-2.5 w-2.5 shrink-0" />{m.detail.destination}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Dinas mission row bg (different teal shade per mission) ──────────────
+
+function dinasMissionRowClass(missionIdx: number | undefined): string {
+  if (missionIdx === 2) return "bg-cyan-50/70 dark:bg-cyan-950/20";
+  if (missionIdx === 3) return "bg-sky-50/70 dark:bg-sky-950/20";
+  return "bg-teal-50/70 dark:bg-teal-950/20";
 }
 
 function EmptyState({ children }: { children: string }) {
@@ -235,7 +370,7 @@ function matchesCalendarFilter(status: string, filter: CalendarFilterValue) {
   if (filter === "Semua") return true;
   if (filter === "Tepat Waktu") return ["Tepat Waktu", "Dinas + Tepat Waktu"].includes(status);
   if (filter === "Terlambat") return ["Terlambat", "Dinas + Terlambat"].includes(status);
-  if (filter === "Izin/Cuti/Dinas") return ["Izin", "Cuti", "Dinas", "Dinas + Tepat Waktu", "Dinas + Terlambat", "Dinas + Hadir"].includes(status);
+  if (filter === "Izin/Cuti/Dinas") return ["Izin", "Cuti"].includes(status) || status.startsWith("Dinas");
   if (filter === "Libur") return ["Libur Nasional", "Cuti Bersama", "Libur Perusahaan", "Akhir Pekan"].includes(status);
   return status === filter;
 }
@@ -246,88 +381,120 @@ function CalendarSummaryTable({
   search,
   onFilterChange,
   onSearchChange,
+  leaveDetails = [],
 }: {
   rows: PayrollRecapRow["calendarDetails"];
   filter: CalendarFilterValue;
   search: string;
   onFilterChange: (value: CalendarFilterValue) => void;
   onSearchChange: (value: string) => void;
+  leaveDetails?: LeaveDetail[];
 }) {
+  const dinasMeta = useMemo(() => buildDinasMeta(leaveDetails), [leaveDetails]);
+
   const filteredRows = rows.filter(row => {
-    const query = search.trim().toLowerCase();
     const matchesFilter = matchesCalendarFilter(row.status, filter);
+    const query = search.trim().toLowerCase();
     if (!query) return matchesFilter;
+    const ld = dinasMeta.byDate.get(row.date);
     const haystack = [
-      formatDateId(row.date),
-      row.dayName,
-      row.status,
-      row.tapInTime || "",
-      row.tapOutTime || "",
-      row.keterangan || "",
+      formatDateId(row.date), row.dayName, row.status,
+      row.tapInTime || "", row.tapOutTime || "", row.keterangan || "",
+      ld?.missionName || "", ld?.spdNumber || "",
     ].join(" ").toLowerCase();
     return matchesFilter && haystack.includes(query);
   });
 
   return (
     <div className="space-y-3">
+      {/* Filter toolbar */}
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center">
-          <span className="shrink-0 text-xs font-semibold text-slate-500 dark:text-slate-400">Filter detail tanggal:</span>
+          <span className="shrink-0 text-xs font-semibold text-slate-500 dark:text-slate-400">Filter:</span>
           <div className="flex gap-1.5 overflow-x-auto pb-1 sm:pb-0">
             {CALENDAR_FILTERS.map(item => (
-              <Button
-                key={item.value}
-                type="button"
-                size="sm"
-                variant={filter === item.value ? "default" : "outline"}
+              <Button key={item.value} type="button" size="sm" variant={filter === item.value ? "default" : "outline"}
                 className={`h-7 shrink-0 rounded-full px-2.5 text-[11px] ${filter === item.value ? "bg-teal-600 text-white hover:bg-teal-700" : "bg-white dark:bg-slate-950"}`}
-                onClick={() => onFilterChange(item.value)}
-              >
+                onClick={() => onFilterChange(item.value)}>
                 {item.label}
               </Button>
             ))}
           </div>
         </div>
-        <Input
-          value={search}
-          onChange={e => onSearchChange(e.target.value)}
-          placeholder="Cari tanggal, status, atau keterangan..."
-          className="h-8 w-full text-xs lg:w-[320px]"
-        />
+        <Input value={search} onChange={e => onSearchChange(e.target.value)}
+          placeholder="Cari tanggal, status, keterangan, SPD..."
+          className="h-8 w-full text-xs lg:w-[300px]" />
       </div>
+
+      {/* Mission summary cards when Izin/Cuti/Dinas filter is active */}
+      {filter === "Izin/Cuti/Dinas" && <DinasMissionCards missions={dinasMeta.missions} />}
 
       {filteredRows.length === 0 ? (
         <EmptyState>Tidak ada data kalender yang sesuai filter.</EmptyState>
       ) : (
         <div className="max-h-[52vh] overflow-auto rounded-md border border-slate-200 dark:border-slate-800">
-          <Table className="min-w-[980px] table-fixed">
+          <Table className="min-w-[900px]">
             <TableHeader className="sticky top-0 z-10 bg-slate-50 shadow-[0_1px_0_rgba(148,163,184,0.25)] dark:bg-slate-900">
               <TableRow>
-                <TableHead className="w-[56px] text-center text-[10px] font-black uppercase text-slate-500">No</TableHead>
-                <TableHead className="w-[160px] text-[10px] font-black uppercase text-slate-500">Tanggal</TableHead>
-                <TableHead className="w-[120px] text-[10px] font-black uppercase text-slate-500">Hari</TableHead>
-                <TableHead className="w-[170px] text-[10px] font-black uppercase text-slate-500">Status</TableHead>
-                <TableHead className="w-[100px] text-[10px] font-black uppercase text-slate-500">Jam Masuk</TableHead>
-                <TableHead className="w-[100px] text-[10px] font-black uppercase text-slate-500">Jam Pulang</TableHead>
+                <TableHead className="w-10 text-center text-[10px] font-black uppercase text-slate-500">No</TableHead>
+                <TableHead className="w-32 text-[10px] font-black uppercase text-slate-500">Tanggal</TableHead>
+                <TableHead className="w-24 text-[10px] font-black uppercase text-slate-500">Hari</TableHead>
+                <TableHead className="w-44 text-[10px] font-black uppercase text-slate-500">Status</TableHead>
+                <TableHead className="w-20 text-[10px] font-black uppercase text-slate-500">Masuk</TableHead>
+                <TableHead className="w-20 text-[10px] font-black uppercase text-slate-500">Pulang</TableHead>
                 <TableHead className="text-[10px] font-black uppercase text-slate-500">Keterangan</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredRows.map((day, index) => (
-                <TableRow key={day.date} className={`border-slate-200 transition-colors dark:border-slate-800/50 ${calendarRowClass(day.status, index)}`}>
-                  <TableCell className="text-center text-xs tabular-nums text-slate-500">{index + 1}</TableCell>
-                  <TableCell className="whitespace-nowrap py-2.5 text-xs font-medium text-slate-800 dark:text-slate-200">{formatDateId(day.date)}</TableCell>
-                  <TableCell className="whitespace-nowrap py-2.5 text-xs text-slate-700 dark:text-slate-300">{day.dayName}</TableCell>
-                  <TableCell className="py-2.5">
-                    <Badge variant="outline" className={`whitespace-nowrap text-xs ${statusBadgeClass(day.status)}`}>
-                      {day.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap py-2.5 text-xs tabular-nums text-slate-700 dark:text-slate-300">{day.tapInTime || "-"}</TableCell>
-                  <TableCell className="whitespace-nowrap py-2.5 text-xs tabular-nums text-slate-700 dark:text-slate-300">{day.tapOutTime || "-"}</TableCell>
-                  <TableCell className="py-2.5 text-xs leading-5 text-slate-700 dark:text-slate-300">{day.keterangan || "-"}</TableCell>
-                </TableRow>
-              ))}
+              {filteredRows.map((day, index) => {
+                const isDinas = day.status.startsWith("Dinas");
+                const dinasDetail = isDinas ? dinasMeta.byDate.get(day.date) : undefined;
+                const mKey = getMissionKey(dinasDetail);
+                const mIdx = mKey ? dinasMeta.indexMap.get(mKey) : undefined;
+                const total = dinasMeta.missions.length;
+                const badgeLabel = getDinasStatusLabel(day.status, mIdx, total);
+                const rowBg = isDinas
+                  ? dinasMissionRowClass(mIdx)
+                  : calendarRowClass(day.status, index);
+
+                return (
+                  <TableRow key={day.date} className={`border-slate-200 transition-colors dark:border-slate-800/50 ${rowBg}`}>
+                    <TableCell className="text-center text-xs tabular-nums text-slate-500">{index + 1}</TableCell>
+                    <TableCell className="whitespace-nowrap py-2.5 text-xs font-medium text-slate-800 dark:text-slate-200">
+                      {formatDateId(day.date)}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap py-2.5 text-xs text-slate-700 dark:text-slate-300">{day.dayName}</TableCell>
+                    <TableCell className="py-2.5">
+                      <Badge variant="outline" className={`whitespace-nowrap text-[11px] ${statusBadgeClass(day.status)}`}>
+                        {badgeLabel}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap py-2.5 text-xs tabular-nums text-slate-700 dark:text-slate-300">
+                      {day.tapInTime || "-"}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap py-2.5 text-xs tabular-nums text-slate-700 dark:text-slate-300">
+                      {day.tapOutTime || "-"}
+                    </TableCell>
+                    {/* Keterangan: ringkas untuk dinas, truncate untuk non-dinas */}
+                    <TableCell className="py-2.5">
+                      {isDinas && dinasDetail ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-medium text-teal-700 dark:text-teal-300 truncate max-w-[260px]">
+                            {dinasDetail.missionName
+                              ? `${dinasDetail.missionName}${dinasDetail.spdNumber ? ` — ${dinasDetail.spdNumber}` : ""}`
+                              : (dinasDetail.spdNumber || "Perjalanan dinas approved")}
+                          </span>
+                          <DinasDetailPopover detail={dinasDetail} index={mIdx} total={total} />
+                        </div>
+                      ) : (
+                        <span className="line-clamp-2 text-xs leading-5 text-slate-700 dark:text-slate-300 max-w-xs">
+                          {day.keterangan || "-"}
+                        </span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
@@ -353,7 +520,7 @@ function AttendancePayrollDetailModal({
   const periodLabel = `${format(period.startDate, "d MMM yyyy", { locale: idLocale })} - ${format(period.endDate, "d MMM yyyy", { locale: idLocale })}`;
   const countedLeaveDates = new Set(
     row.calendarDetails
-      .filter(d => ["Izin", "Cuti", "Dinas", "Dinas + Tepat Waktu", "Dinas + Terlambat", "Dinas + Hadir"].includes(d.status))
+      .filter(d => ["Izin", "Cuti"].includes(d.status) || d.status.startsWith("Dinas"))
       .map(d => d.date)
   );
   const approvedLeaveDetails = row.leaveDetails.filter(d =>
@@ -363,20 +530,7 @@ function AttendancePayrollDetailModal({
   const totalTepatWaktu = row.calendarDetails.filter(d => ["Tepat Waktu", "Dinas + Tepat Waktu"].includes(d.status)).length;
 
   const exportDetail = () => {
-    const csvRows = [
-      ["Section", "Tanggal", "Hari", "Status/Jenis", "Jam Masuk", "Jam Pulang", "Batas Jam Masuk", "Menit Terlambat", "Sumber Data", "Keterangan", "Approval", "Disetujui Oleh"].map(escapeCsv).join(","),
-      ...row.calendarDetails.map(d => ["Ringkasan Kalender", formatDateId(d.date), d.dayName, d.status, d.tapInTime || "-", d.tapOutTime || "-", "-", "-", "-", d.keterangan || "-", "-", "-"].map(escapeCsv).join(",")),
-      ...row.hadirDetails.map(d => ["Hadir", formatDateId(d.date), d.dayName, d.status === "terlambat" ? "Terlambat" : "Tepat Waktu", d.tapInTime || "-", d.tapOutTime || "-", "-", d.lateMinutes || "-", d.source, d.notes || "-", "-", "-"].map(escapeCsv).join(",")),
-      ...row.lateDetails.map(d => ["Terlambat", formatDateId(d.date), format(new Date(d.date), "EEEE", { locale: idLocale }), "Terlambat", d.tapInTime, "-", d.scheduledStartTime || "-", d.lateMinutes, "-", `Terlambat ${d.lateMinutes} menit dari batas toleransi`, "-", "-"].map(escapeCsv).join(",")),
-      ...approvedLeaveDetails.map(d => ["Izin/Cuti/Dinas", formatDateId(d.date), format(new Date(d.date), "EEEE", { locale: idLocale }), d.type, "-", "-", "-", "-", "-", d.spdNumber ? `${d.keterangan || "-"} | Nomor SPD: ${d.spdNumber}` : d.keterangan || "-", d.status, d.approvedBy || "-"].map(escapeCsv).join(",")),
-      ...row.alphaDetails.map(d => ["Alpha", formatDateId(d.date), d.dayName, "Alpha", "-", "-", "-", "-", "-", d.keterangan, "-", "-"].map(escapeCsv).join(",")),
-    ];
-    const link = document.createElement("a");
-    link.href = encodeURI("data:text/csv;charset=utf-8," + csvRows.join("\n"));
-    link.download = `Detail_Absensi_Payroll_${row.employeeNumber || row.employeeId}_${format(period.startDate, "yyyyMMdd")}_${format(period.endDate, "yyyyMMdd")}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    exportDetailXlsx(row, period, approvedLeaveDetails, totalTepatWaktu);
   };
 
   return (
@@ -432,6 +586,7 @@ function AttendancePayrollDetailModal({
             search={calendarSearch}
             onFilterChange={setCalendarFilter}
             onSearchChange={setCalendarSearch}
+            leaveDetails={row.leaveDetails}
           />
         </div>
       </DialogContent>
@@ -605,10 +760,66 @@ export default function RekapAbsensiPayrollPage() {
       };
     });
 
+    const mappedLeaveRequests = (leaveRequests || []).map((leave: any) => ({ ...leave, category: "cuti" }));
+    const mappedMissions = (businessTripMissions || []).map((mission: any) => ({ ...mission, category: "dinas", type: "business_trip" }));
+
+    // ── DEBUG: diagnose cuti/dinas matching ──
+    console.log("[PAYROLL DEBUG] leaveRequests raw count:", (leaveRequests || []).length, "| businessTripMissions count:", (businessTripMissions || []).length, "| members subcollection count:", (businessTripMembers || []).length);
+    console.log("[PAYROLL DEBUG] mergedEmployees sample:", mergedEmployees.slice(0, 3).map((e: any) => ({ name: e._resolvedName, _uid: e._uid, _docId: e._docId, _candidateIds: e._candidateIds, empNo: e.employeeNumber || e.nomorIndukKaryawan })));
+    console.log("[PAYROLL DEBUG] leaveRequests full:", (leaveRequests || []).map((x: any) => ({
+      id: x.id,
+      employeeId: x.employeeId,
+      employeeUid: x.employeeUid,
+      userId: x.userId,
+      uid: x.uid,
+      employeeNumber: x.employeeNumber,
+      nomorIndukKaryawan: x.nomorIndukKaryawan,
+      employeeName: x.employeeName,
+      fullName: x.fullName,
+      name: x.name,
+      status: x.status,
+      hrdStatus: x.hrdStatus,
+      approvalStatus: x.approvalStatus,
+      startDate: x.startDate,
+      endDate: x.endDate,
+      leaveStartDate: x.leaveStartDate,
+      leaveEndDate: x.leaveEndDate,
+      date: x.date,
+      leaveType: x.leaveType,
+      reason: x.reason,
+    })));
+    console.log("[PAYROLL DEBUG] businessTripMissions full:", (businessTripMissions || []).map((x: any) => ({
+      id: x.id,
+      status: x.status,
+      missionStatus: x.missionStatus,
+      assignmentNumber: x.assignmentNumber,
+      spdNumber: x.spdNumber,
+      title: x.title,
+      missionName: x.missionName,
+      startDate: x.startDate,
+      endDate: x.endDate,
+      departureDate: x.departureDate,
+      returnDate: x.returnDate,
+      missionStartDate: x.missionStartDate,
+      missionEndDate: x.missionEndDate,
+      memberUids: x.memberUids,
+      memberDetails: x.memberDetails,
+      members: x.members,
+      participants: x.participants,
+      participantIds: x.participantIds,
+      assignedEmployeeIds: x.assignedEmployeeIds,
+      selectedEmployees: x.selectedEmployees,
+      assignedStaff: x.assignedStaff,
+      teamMembers: x.teamMembers,
+      staff: x.staff,
+      createdBy: x.createdBy,
+      requesterUid: x.requesterUid,
+    })));
+
     const approvedAbsences = [
       ...(permissionRequests || []),
-      ...(leaveRequests || []).map((leave: any) => ({ ...leave, category: "cuti" })),
-      ...(businessTripMissions || []).map((mission: any) => ({ ...mission, category: "dinas", type: "business_trip" })),
+      ...mappedLeaveRequests,
+      ...mappedMissions,
       ...enrichedBusinessTripMembers,
     ];
 
@@ -646,6 +857,10 @@ export default function RekapAbsensiPayrollPage() {
     izin: recapRows.reduce((s, r) => s + r.izin, 0),
   }), [recapRows]);
 
+  const exportPayrollSummary = () => {
+    exportSummaryXlsx(recapRows, activePeriod);
+  };
+
   if (!hasAccess) {
     return <DashboardLayout pageTitle="Rekap Absensi Payroll"><Skeleton className="h-[600px] w-full" /></DashboardLayout>;
   }
@@ -668,7 +883,7 @@ export default function RekapAbsensiPayrollPage() {
               Rekap kehadiran karyawan Web Absen
             </p>
           </div>
-          <Button variant="outline" className="gap-2 shrink-0">
+          <Button variant="outline" className="gap-2 shrink-0" onClick={exportPayrollSummary} disabled={recapRows.length === 0}>
             <Download className="h-4 w-4" />
             Export
           </Button>
@@ -839,6 +1054,8 @@ export default function RekapAbsensiPayrollPage() {
                     <TableHead className="text-[10px] uppercase font-black text-slate-500 h-11 text-right">Hadir</TableHead>
                     <TableHead className="text-[10px] uppercase font-black text-slate-500 h-11 text-right">Terlambat</TableHead>
                     <TableHead className="text-[10px] uppercase font-black text-slate-500 h-11 text-right">Izin</TableHead>
+                    <TableHead className="text-[10px] uppercase font-black text-slate-500 h-11 text-right">Cuti</TableHead>
+                    <TableHead className="text-[10px] uppercase font-black text-slate-500 h-11 text-right">Dinas</TableHead>
                     <TableHead className="text-[10px] uppercase font-black text-slate-500 h-11 text-right">Alpha</TableHead>
                     <TableHead className="text-[10px] uppercase font-black text-slate-500 h-11 text-right">Total Jam</TableHead>
                     <TableHead className="text-[10px] uppercase font-black text-slate-500 h-11 text-right pr-4">Aksi</TableHead>
@@ -882,6 +1099,20 @@ export default function RekapAbsensiPayrollPage() {
                         <TableCell className="text-right text-sm tabular-nums text-slate-700 dark:text-slate-300">
                           {row.izin || <span className="text-slate-400">—</span>}
                         </TableCell>
+                        <TableCell className="text-right text-sm tabular-nums text-slate-700 dark:text-slate-300">
+                          {row.cuti > 0 ? (
+                            <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/20 dark:text-purple-300 dark:border-purple-800 text-xs">
+                              {row.cuti}
+                            </Badge>
+                          ) : <span className="text-slate-400">—</span>}
+                        </TableCell>
+                        <TableCell className="text-right text-sm tabular-nums text-slate-700 dark:text-slate-300">
+                          {row.dinas > 0 ? (
+                            <Badge variant="outline" className="bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-900/20 dark:text-teal-300 dark:border-teal-800 text-xs">
+                              {row.dinas}
+                            </Badge>
+                          ) : <span className="text-slate-400">—</span>}
+                        </TableCell>
                         <TableCell className="text-right tabular-nums">
                           {row.alpha > 0 ? (
                             <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800">
@@ -907,7 +1138,7 @@ export default function RekapAbsensiPayrollPage() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={10} className="text-center py-10 text-slate-500 dark:text-slate-400">
+                      <TableCell colSpan={12} className="text-center py-10 text-slate-500 dark:text-slate-400">
                         <div className="flex flex-col items-center gap-2">
                           <AlertCircle className="h-6 w-6 text-slate-300 dark:text-slate-600" />
                           <p className="text-sm">Tidak ada data karyawan Web Absen untuk periode ini</p>
