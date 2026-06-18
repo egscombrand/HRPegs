@@ -201,13 +201,18 @@ export function UnifiedInternalDecision({
     try {
       const appRef = doc(firestore, "applications", application.id);
 
-      // "tidak_lanjut" is an internal HRD decision — the candidate must not know.
-      // Keep application.status as "interview" so the portal shows the neutral
-      // "Evaluasi Setelah Wawancara" state. Only "lanjut" advances the public stage.
+      // Only "lanjut" advances the public stage. "tidak_lanjut" and "pending" are
+      // internal HRD decisions — application.status stays at its current value
+      // so the candidate portal always shows "Evaluasi Setelah Wawancara".
       const nextStage =
         pascaDecision === "lanjut"
           ? "offered"
           : application.status;
+
+      // candidateVisibleStatus: "lanjut" makes the candidate visible as advancing;
+      // everything else keeps the neutral post-interview holding state.
+      const nextCandidateVisibleStatus =
+        pascaDecision === "lanjut" ? "lanjut_tahap_berikutnya" : "evaluasi_setelah_wawancara";
 
       const updatePayload: any = {
         postInterviewDecision: {
@@ -217,33 +222,44 @@ export function UnifiedInternalDecision({
           decidedByName: userProfile.fullName,
           decidedAt: serverTimestamp(),
         },
-        // Never expose internal rejection to candidate — keep neutral "menunggu".
-        candidateStatus:
-          pascaDecision === "lanjut"
-            ? "lolos"
-            : "menunggu",
-        finalDecisionLocked: pascaDecision === "lanjut" || pascaDecision === "tidak_lanjut",
+        candidateVisibleStatus: nextCandidateVisibleStatus,
+        // Only advance candidateStatus to "lolos" for "lanjut"; leave unchanged otherwise
+        // so the candidate never sees an internal rejection reflected in their status.
+        ...(pascaDecision === "lanjut" ? { candidateStatus: "lolos" } : {}),
+        // Lock final decision only when advancing to offering. For hold/reject, leave
+        // unlocked so HRD can revise the decision if needed.
+        finalDecisionLocked: pascaDecision === "lanjut",
         status: nextStage,
         updatedAt: serverTimestamp(),
-        timeline: [
-          ...(application.timeline || []),
+        // Public timeline only records stage advances. Internal decisions go to
+        // internalDecisionLog so they never surface in candidate-facing UIs.
+        ...(pascaDecision === "lanjut"
+          ? {
+              timeline: [
+                ...(application.timeline || []),
+                {
+                  type: "stage_changed",
+                  at: Timestamp.now(),
+                  by: userProfile.uid,
+                  meta: {
+                    from: application.status,
+                    to: nextStage,
+                    note: "Kandidat lolos pasca wawancara dan maju ke tahap offering.",
+                  },
+                },
+              ],
+            }
+          : {}),
+        // HRD-only audit log — never shown to candidates
+        internalDecisionLog: [
+          ...(application.internalDecisionLog || []),
           {
-            type:
-              pascaDecision === "lanjut"
-                ? "stage_changed"
-                : "status_changed",
-            at: Timestamp.now(),
-            by: userProfile.uid,
-            meta: {
-              from: application.status,
-              to: nextStage,
-              note:
-                pascaDecision === "lanjut"
-                  ? "Kandidat lolos pasca wawancara dan maju ke tahap offering."
-                  : pascaDecision === "pending"
-                    ? "Keputusan pasca wawancara ditunda; kandidat tetap berada di tahap wawancara."
-                    : "Kandidat tidak dilanjutkan setelah wawancara (Rejected).",
-            },
+            type: "post_interview_decision",
+            status: pascaDecision,
+            note: pascaNote,
+            decidedBy: userProfile.uid,
+            decidedByName: userProfile.fullName || "",
+            decidedAt: Timestamp.now(),
           },
         ],
       };

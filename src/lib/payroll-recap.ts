@@ -8,7 +8,8 @@ import {
   startOfMonth, endOfMonth, eachDayOfInterval, isWeekend,
   isWithinInterval, isBefore, isAfter, format, startOfDay, endOfDay,
 } from 'date-fns';
-import type { EmployeeProfile, AttendanceEvent } from '@/lib/types';
+import { id as idLocale } from 'date-fns/locale';
+import type { EmployeeProfile, AttendanceEvent, AttendanceSite } from '@/lib/types';
 
 export type PeriodMode = 'calendar' | 'payroll' | 'custom';
 
@@ -23,6 +24,65 @@ export interface LateDetail {
   date: string;          // YYYY-MM-DD
   tapInTime: string;     // HH:mm
   lateMinutes: number;
+  scheduledStartTime?: string; // HH:mm — derived as tapInTime minus lateMinutes
+}
+
+export interface HolidayDetail {
+  date: string;
+  type: 'national_holiday' | 'collective_leave' | 'company_holiday';
+  name: string;
+}
+
+export interface AttendanceDetail {
+  date: string;          // YYYY-MM-DD
+  dayName: string;       // e.g., "Senin"
+  tapInTime: string | null;
+  tapOutTime: string | null;
+  status: 'tepat_waktu' | 'terlambat';
+  source: string;        // "Web Absen" | "Manual HRD" | "Sistem"
+  notes: string;
+  lateMinutes?: number;
+  workDurationMinutes?: number;
+}
+
+export interface CalendarAttendanceDetail {
+  date: string;
+  dayName: string;
+  status:
+    | 'Belum Berjalan'
+    | 'Libur Nasional'
+    | 'Cuti Bersama'
+    | 'Libur Perusahaan'
+    | 'Akhir Pekan'
+    | 'Tepat Waktu'
+    | 'Terlambat'
+    | 'Izin'
+    | 'Cuti'
+    | 'Dinas'
+    | 'Dinas + Tepat Waktu'
+    | 'Dinas + Terlambat'
+    | 'Alpha';
+  tapInTime: string | null;
+  tapOutTime: string | null;
+  keterangan: string;
+}
+
+export interface AlphaDetail {
+  date: string;          // YYYY-MM-DD
+  dayName: string;
+  keterangan: string;
+}
+
+export interface LeaveDetail {
+  date: string;
+  type: string;
+  formType?: string;
+  reasonType?: string;
+  keterangan?: string;
+  days?: number;
+  status: string;
+  approvedBy?: string;
+  spdNumber?: string;
 }
 
 export interface PayrollRecapRow {
@@ -39,29 +99,26 @@ export interface PayrollRecapRow {
   hadir: number;
   terlambat: number;
   menitTerlambat: number;
-  lateDetails: LateDetail[];        // per-day breakdown for modal
+  lateDetails: LateDetail[];
+  hadirDetails: AttendanceDetail[];   // per-day hadir with in/out times
+  alphaDetails: AlphaDetail[];        // per-day alpha dates
+  calendarDetails: CalendarAttendanceDetail[];
   pulangAwal: number;
   lupaHapIn: number;
   lupaHapOut: number;
 
   // Leave stats (sakit included in izin)
   izin: number;
+  cuti: number;
   dinas: number;
   alpha: number;
 
   // Work stats
   totalJamKerja: number;
+  totalMenitLembur?: number;
 
-  // Detail izin untuk modal
-  leaveDetails: Array<{
-    date: string;
-    type: string;
-    formType?: string;
-    reasonType?: string;
-    keterangan?: string;
-    days?: number;
-    status: string;
-  }>;
+  // Detail izin/cuti/dinas untuk modal
+  leaveDetails: LeaveDetail[];
 
   // Metadata
   effectiveStart: Date;
@@ -102,15 +159,45 @@ export function calculatePayrollPeriod(
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-export function getWorkingDays(startDate: Date, endDate: Date, holidays: string[] = []): number {
+export function getWorkingDays(startDate: Date, endDate: Date, holidays: Array<string | HolidayDetail> = []): number {
   try {
-    const holidaySet = new Set(holidays);
+    const today = startOfDay(new Date());
+    const activeEnd = isBefore(today, startOfDay(endDate)) ? today : startOfDay(endDate);
+    if (isBefore(activeEnd, startOfDay(startDate))) return 0;
     const allDays = eachDayOfInterval({ start: startOfDay(startDate), end: startOfDay(endDate) });
-    return allDays.filter(d => !isWeekend(d) && !holidaySet.has(format(d, 'yyyy-MM-dd'))).length;
+    return allDays.filter(d => d <= activeEnd && !isWeekend(d)).length;
   } catch {
     return 0;
   }
 }
+
+export const INDONESIA_PUBLIC_HOLIDAYS_2026: HolidayDetail[] = [
+  { date: '2026-01-01', type: 'national_holiday', name: 'Tahun Baru Masehi' },
+  { date: '2026-01-16', type: 'national_holiday', name: 'Isra Mikraj Nabi Muhammad SAW' },
+  { date: '2026-02-16', type: 'collective_leave', name: 'Tahun Baru Imlek 2577 Kongzili' },
+  { date: '2026-02-17', type: 'national_holiday', name: 'Tahun Baru Imlek 2577 Kongzili' },
+  { date: '2026-03-18', type: 'collective_leave', name: 'Hari Suci Nyepi' },
+  { date: '2026-03-19', type: 'national_holiday', name: 'Hari Suci Nyepi' },
+  { date: '2026-03-20', type: 'collective_leave', name: 'Idul Fitri 1447 H' },
+  { date: '2026-03-21', type: 'national_holiday', name: 'Idul Fitri 1447 H' },
+  { date: '2026-03-22', type: 'national_holiday', name: 'Idul Fitri 1447 H' },
+  { date: '2026-03-23', type: 'collective_leave', name: 'Idul Fitri 1447 H' },
+  { date: '2026-03-24', type: 'collective_leave', name: 'Idul Fitri 1447 H' },
+  { date: '2026-04-03', type: 'national_holiday', name: 'Wafat Yesus Kristus' },
+  { date: '2026-04-05', type: 'national_holiday', name: 'Hari Paskah' },
+  { date: '2026-05-01', type: 'national_holiday', name: 'Hari Buruh Internasional' },
+  { date: '2026-05-14', type: 'national_holiday', name: 'Kenaikan Yesus Kristus' },
+  { date: '2026-05-15', type: 'collective_leave', name: 'Kenaikan Yesus Kristus' },
+  { date: '2026-05-27', type: 'national_holiday', name: 'Idul Adha 1447 H' },
+  { date: '2026-05-28', type: 'collective_leave', name: 'Idul Adha 1447 H' },
+  { date: '2026-05-31', type: 'national_holiday', name: 'Hari Raya Waisak' },
+  { date: '2026-06-01', type: 'national_holiday', name: 'Hari Lahir Pancasila' },
+  { date: '2026-06-16', type: 'national_holiday', name: 'Tahun Baru Islam 1448 H' },
+  { date: '2026-08-17', type: 'national_holiday', name: 'Hari Kemerdekaan Republik Indonesia' },
+  { date: '2026-08-25', type: 'national_holiday', name: 'Maulid Nabi Muhammad SAW' },
+  { date: '2026-12-24', type: 'collective_leave', name: 'Natal' },
+  { date: '2026-12-25', type: 'national_holiday', name: 'Hari Raya Natal' },
+];
 
 function isWebAbsenMethod(method: any): boolean {
   if (!method) return false;
@@ -276,8 +363,10 @@ function resolveResignDate(employee: any): Date | null {
 }
 
 function getEventDateStr(event: any): string | null {
+  if (event.dateKey) return event.dateKey;
+  if (event.date && typeof event.date === 'string') return event.date;
   if (event.datetime?.date) return event.datetime.date;
-  const ts = event.tsServer || event.tsClient || event.createdAt;
+  const ts = event.timestamp || event.ts || event.tsServer || event.tsClient || event.createdAt;
   if (!ts) return null;
   try {
     let d: Date;
@@ -291,7 +380,17 @@ function getEventDateStr(event: any): string | null {
 }
 
 function getEventTimeStr(event: any): string {
-  const ts = event.tsServer || event.tsClient || event.createdAt;
+  const directTime =
+    event?.datetime?.time ||
+    event?.time ||
+    event?.tapInTime ||
+    event?.checkInTime ||
+    event?.clockInTime ||
+    event?.jamMasuk;
+  const directMatch = String(directTime || '').trim().match(/^(\d{1,2}):(\d{2})/);
+  if (directMatch) return `${String(Number(directMatch[1])).padStart(2, '0')}:${directMatch[2]}`;
+
+  const ts = event.timestamp || event.ts || event.tsServer || event.tsClient || event.createdAt;
   if (!ts) return '-';
   try {
     let d: Date;
@@ -302,6 +401,425 @@ function getEventTimeStr(event: any): string {
     else return '-';
     return format(d, 'HH:mm');
   } catch { return '-'; }
+}
+
+function getDayName(date: Date): string {
+  return format(date, 'EEEE', { locale: idLocale });
+}
+
+function getEventSource(event: any): string {
+  const raw = event?.source || event?.dataSource || event?.inputSource || event?.createdByRole || '';
+  const normalized = String(raw).toLowerCase();
+  if (normalized.includes('manual') || normalized.includes('hrd')) return 'Manual HRD';
+  if (normalized.includes('system') || normalized.includes('sistem')) return 'Sistem';
+  return 'Web Absen';
+}
+
+function parseTimeToMinutes(time: any): number | null {
+  if (!time) return null;
+  const match = String(time).trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  return hours * 60 + minutes;
+}
+
+function hasValidTapInTime(event: any): boolean {
+  return parseTimeToMinutes(getEventTimeStr(event)) != null;
+}
+
+function minutesToTime(totalMinutes: number): string {
+  const normalized = ((totalMinutes % 1440) + 1440) % 1440;
+  const hours = Math.floor(normalized / 60);
+  const minutes = normalized % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function resolveEmployeeDivisionId(employee: any): string | null {
+  const id = employee.hrdEmploymentInfo?.divisionId || employee.divisionId || employee.divisiId;
+  return typeof id === 'string' && id ? id : null;
+}
+
+function siteHasId(site: any, ids: string[]): boolean {
+  const siteId = String(site?.id || site?.siteId || '').trim();
+  return Boolean(siteId && ids.includes(siteId));
+}
+
+function siteMatchesBrand(site: any, brandId: string | null): boolean {
+  if (!brandId) return false;
+  const brandIds = [
+    ...(Array.isArray(site?.brandIds) ? site.brandIds : []),
+    site?.brandId,
+    site?.brand,
+  ].filter(Boolean).map(String);
+  return brandIds.includes(brandId);
+}
+
+function siteMatchesDivision(site: any, divisionId: string | null): boolean {
+  if (!divisionId) return false;
+  const divisionIds = [
+    ...(Array.isArray(site?.divisionIds) ? site.divisionIds : []),
+    site?.divisionId,
+    site?.divisiId,
+  ].filter(Boolean).map(String);
+  return divisionIds.includes(divisionId);
+}
+
+function resolveAttendanceSite(employee: any, events: any[], attendanceSites: AttendanceSite[]): AttendanceSite | null {
+  const activeSites = (attendanceSites || []).filter((site: any) => site?.isActive !== false);
+  if (!activeSites.length) return null;
+
+  const explicitSiteIds = [
+    employee.attendanceSiteId,
+    employee.siteId,
+    employee.hrdEmploymentInfo?.attendanceSiteId,
+    employee.hrdEmploymentInfo?.siteId,
+    ...(Array.isArray(employee.attendanceSiteIds) ? employee.attendanceSiteIds : []),
+    ...(Array.isArray(employee.hrdEmploymentInfo?.attendanceSiteIds) ? employee.hrdEmploymentInfo.attendanceSiteIds : []),
+  ].filter(Boolean).map(String);
+  const byEmployeeSite = activeSites.find(site => siteHasId(site, explicitSiteIds));
+  if (byEmployeeSite) return byEmployeeSite;
+
+  const eventSiteIds = events.map(event => event?.siteId).filter(Boolean).map(String);
+  const byEventSite = activeSites.find(site => siteHasId(site, eventSiteIds));
+  if (byEventSite) return byEventSite;
+
+  const brandId = resolveBrandId(employee);
+  const divisionId = resolveEmployeeDivisionId(employee);
+  const byBrandAndDivision = activeSites.find(site => siteMatchesBrand(site, brandId) && siteMatchesDivision(site, divisionId));
+  if (byBrandAndDivision) return byBrandAndDivision;
+
+  const byBrand = activeSites.find(site => siteMatchesBrand(site, brandId));
+  if (byBrand) return byBrand;
+
+  return activeSites.find((site: any) => site?.isDefault || site?.default || site?.isPrimary) || activeSites[0] || null;
+}
+
+function resolveAttendancePolicy(site: AttendanceSite | null) {
+  const rawSite = site as any;
+  const startTime =
+    rawSite?.workStartTime ||
+    rawSite?.jamMasuk ||
+    rawSite?.startTime ||
+    rawSite?.shift?.startTime ||
+    '09:00';
+  const endTime =
+    rawSite?.workEndTime ||
+    rawSite?.jamPulang ||
+    rawSite?.endTime ||
+    rawSite?.shift?.endTime ||
+    '17:00';
+  const tolerance = Number(
+    rawSite?.lateToleranceMinutes ??
+    rawSite?.batasTelat ??
+    rawSite?.batasToleransiTelat ??
+    rawSite?.batasToleransiMenit ??
+    rawSite?.shift?.graceLateMinutes ??
+    0
+  );
+  const startMinutes = parseTimeToMinutes(startTime) ?? 9 * 60;
+  const lateToleranceMinutes = Number.isFinite(tolerance) && tolerance > 0 ? tolerance : 0;
+  return {
+    startTime: minutesToTime(startMinutes),
+    endTime: String(endTime || '17:00').slice(0, 5),
+    lateToleranceMinutes,
+    effectiveLateLimitTime: minutesToTime(startMinutes + lateToleranceMinutes),
+    effectiveLateLimitMinutes: startMinutes + lateToleranceMinutes,
+  };
+}
+
+function calculateAttendanceTiming(tapInTime: string | null, policy: ReturnType<typeof resolveAttendancePolicy>) {
+  const tapInMinutes = parseTimeToMinutes(tapInTime);
+  if (tapInMinutes == null) {
+    return {
+      status: 'invalid' as const,
+      lateMinutes: 0,
+      notes: '',
+    };
+  }
+
+  const officialStartMinutes = parseTimeToMinutes(policy.startTime) ?? policy.effectiveLateLimitMinutes;
+  if (tapInMinutes <= officialStartMinutes) {
+    return {
+      status: 'tepat_waktu' as const,
+      lateMinutes: 0,
+      notes: 'Absen masuk tercatat tepat waktu.',
+    };
+  }
+
+  if (tapInMinutes <= policy.effectiveLateLimitMinutes) {
+    return {
+      status: 'tepat_waktu' as const,
+      lateMinutes: 0,
+      notes: 'Masuk dalam batas toleransi.',
+    };
+  }
+
+  const lateMinutes = tapInMinutes - policy.effectiveLateLimitMinutes;
+  return {
+    status: 'terlambat' as const,
+    lateMinutes,
+      notes: `Terlambat ${lateMinutes} menit dari batas toleransi.`,
+  };
+}
+
+function isValidAttendanceTiming(timing: ReturnType<typeof calculateAttendanceTiming> | undefined): boolean {
+  return Boolean(timing && timing.status !== 'invalid');
+}
+
+function getApprovedBy(record: any): string {
+  return record?.approvedByName ||
+    record?.approvedBy ||
+    record?.approvedByDisplayName ||
+    record?.hrdName ||
+    record?.hrdReviewedByName ||
+    record?.hrdApprovedByName ||
+    record?.managerName ||
+    record?.managerApprovedByName ||
+    record?.directorReviewedByName ||
+    record?.reviewedByName ||
+    record?.assignedByName ||
+    '-';
+}
+
+function getLeaveKind(record: any): 'Izin' | 'Cuti' | 'Dinas' {
+  const raw = String(record?.category || record?.kind || record?.formType || record?.type || record?.leaveType || '').toLowerCase();
+  if (raw.includes('cuti') || ['tahunan', 'besar', 'menikah', 'melahirkan'].includes(raw)) return 'Cuti';
+  if (raw.includes('dinas') || raw.includes('business_trip')) return 'Dinas';
+  return 'Izin';
+}
+
+function parseDateValue(raw: any): Date | null {
+  try {
+    if (!raw) return null;
+    const date = raw instanceof Date ? raw : raw?.toDate?.() || new Date(raw);
+    return isNaN(date.getTime()) ? null : date;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeDateRange(record: any): { start: Date; end: Date } | null {
+  const startCandidates = [
+    record.startDate,
+    record.leaveStartDate,
+    record.departureDate,
+    record.missionStartDate,
+    record.date,
+    record.overtimeDate,
+  ];
+  const endCandidates = [
+    record.endDate,
+    record.leaveEndDate,
+    record.returnDate,
+    record.missionEndDate,
+    record.date,
+    record.startDate,
+    record.leaveStartDate,
+    record.departureDate,
+    record.missionStartDate,
+    record.overtimeDate,
+  ];
+  const rawStart = startCandidates.find(Boolean);
+  const rawEnd = endCandidates.find(Boolean) || rawStart;
+  const parsedStart = parseDateValue(rawStart);
+  const parsedEnd = parseDateValue(rawEnd);
+  if (!parsedStart || !parsedEnd) return null;
+  return {
+    start: startOfDay(parsedStart),
+    end: endOfDay(parsedEnd),
+  };
+}
+
+function normalizeComparableId(value: any): string {
+  return value == null ? '' : String(value).trim();
+}
+
+function collectParticipantCandidates(value: any): any[] {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.flatMap(item => collectParticipantCandidates(item));
+  if (typeof value === 'object') {
+    const direct = [
+      value.uid,
+      value.id,
+      value.employeeId,
+      value.employeeUid,
+      value.employeeProfileId,
+      value.requesterUid,
+      value.userId,
+      value.nik,
+      value.employeeNumber,
+      value.nomorIndukKaryawan,
+    ].filter(Boolean);
+    const nested = [
+      value.members,
+      value.participants,
+      value.participantIds,
+      value.assignedEmployeeIds,
+      value.employees,
+      value.travelers,
+    ].flatMap(item => collectParticipantCandidates(item));
+    return [...direct, ...nested];
+  }
+  return [value];
+}
+
+const APPROVED_FINAL_STATUSES = [
+  'approved',
+  'disetujui',
+  'hrd_approved',
+  'approved_hrd',
+  'approved_by_hrd',
+  'completed',
+  'selesai',
+  'accepted',
+  'active',
+  'approved_by_manager',
+  'approved_by_director',
+  'confirmed_by_staff',
+  'validated_by_manager',
+  'validated',
+  'in_progress',
+  'departed',
+  'arrived',
+  'activity_done',
+  'return_started',
+  'closed',
+  'active_leave',
+  'approved_ready_to_depart',
+  'ready_to_depart',
+  'on_duty',
+  'returned',
+  'returned_pending_report',
+  'report_submitted',
+  'final_report_submitted',
+];
+
+function isApprovedStatusValue(status: any): boolean {
+  return APPROVED_FINAL_STATUSES.includes(String(status || '').toLowerCase().trim());
+}
+
+function getRecordApprovalStatus(record: any): string {
+  const statuses = [
+    record.approvalStatus,
+    record.memberStatus,
+    record.managerValidationStatus,
+    record.staffConfirmationStatus,
+    record.finalStatus,
+    record.status,
+  ].map(status => String(status || '').toLowerCase().trim()).filter(Boolean);
+  return statuses.find(isApprovedStatusValue) || String(record.status || record.memberStatus || 'approved');
+}
+
+function isApprovedFinalRecord(record: any): boolean {
+  const statuses = [
+    record.status,
+    record.approvalStatus,
+    record.memberStatus,
+    record.managerValidationStatus,
+    record.staffConfirmationStatus,
+    record.finalStatus,
+  ].map(status => String(status || '').toLowerCase().trim()).filter(Boolean);
+  if (statuses.some(status => /reject|rejected|ditolak|cancel|cancelled|batal|revision|revisi/.test(status))) {
+    return false;
+  }
+  return statuses.some(isApprovedStatusValue);
+}
+
+function isRecordForEmployee(record: any, employeeId: string, normalizedEmployeeNumber: string): boolean {
+  const employeeIdValue = normalizeComparableId(employeeId);
+  const directCandidates = [
+    record.uid,
+    record.id,
+    record.applicantUid,
+    record.requesterUid,
+    record.employeeUid,
+    record.employeeProfileId,
+    record.employeeId,
+    record.userId,
+  ].map(normalizeComparableId).filter(Boolean);
+  if (employeeIdValue && directCandidates.includes(employeeIdValue)) return true;
+
+  const participantCandidates = [
+    record.members,
+    record.participants,
+    record.participantIds,
+    record.assignedEmployeeIds,
+    record.employees,
+    record.travelers,
+  ].flatMap(item => collectParticipantCandidates(item)).map(normalizeComparableId).filter(Boolean);
+  if (employeeIdValue && participantCandidates.includes(employeeIdValue)) return true;
+
+  if (normalizedEmployeeNumber) {
+    const nikCandidates = [
+      record.employeeNumber,
+      record.nomorIndukKaryawan,
+      ...participantCandidates,
+    ].map(normalizeEmployeeNumber).filter(Boolean);
+    if (nikCandidates.includes(normalizedEmployeeNumber)) return true;
+  }
+
+  return false;
+}
+
+function isRecordInEmployeePeriod(record: any, employeeId: string, normalizedEmployeeNumber: string, effectiveStart: Date, effectiveEnd: Date): boolean {
+  if (!isApprovedFinalRecord(record)) return false;
+  if (!isRecordForEmployee(record, employeeId, normalizedEmployeeNumber)) return false;
+
+  const range = normalizeDateRange(record);
+  if (!range) return false;
+  return isWithinInterval(range.start, { start: effectiveStart, end: effectiveEnd }) ||
+    isWithinInterval(range.end, { start: effectiveStart, end: effectiveEnd }) ||
+    (isBefore(range.start, effectiveStart) && isAfter(range.end, effectiveEnd));
+}
+
+function mapApprovedAbsenceDetails(records: any[], employeeId: string, normalizedEmployeeNumber: string, effectiveStart: Date, effectiveEnd: Date): LeaveDetail[] {
+  const details: LeaveDetail[] = [];
+  for (const record of records) {
+    if (!isRecordInEmployeePeriod(record, employeeId, normalizedEmployeeNumber, effectiveStart, effectiveEnd)) continue;
+    const range = normalizeDateRange(record);
+    if (!range) continue;
+
+    const kind = getLeaveKind(record);
+    const days = eachDayOfInterval({ start: range.start, end: range.end })
+      .filter(d => d >= startOfDay(effectiveStart) && d <= endOfDay(effectiveEnd))
+      .filter(d => !isWeekend(d));
+
+    for (const day of days) {
+      details.push({
+        date: format(day, 'yyyy-MM-dd'),
+        type: kind,
+        formType: record.formType || record.type || record.leaveType || kind,
+        reasonType: record.reasonType || '',
+        keterangan: kind === 'Dinas'
+          ? [
+              record.missionName,
+              record.destinationCity || record.destinationRegency || record.destinationProvince || record.destinationAddress,
+              record.projectName,
+              record.instructionNote,
+              record.reason,
+            ].filter(Boolean).join(' - ')
+          : record.keterangan || record.notes || record.reason || record.leaveType || record.formType || '',
+        days: 1,
+        status: getRecordApprovalStatus(record),
+        approvedBy: getApprovedBy(record),
+        spdNumber: record.assignmentNumber || record.spdNumber || record.missionCode || '',
+      });
+    }
+  }
+  return details;
+}
+
+function normalizeHolidayDetails(holidays: Array<string | HolidayDetail>): HolidayDetail[] {
+  return holidays.map(h => {
+    if (typeof h !== 'string') return h;
+    return { date: h, type: 'company_holiday', name: 'Libur perusahaan' };
+  });
+}
+
+function isWorkdayStatus(status: CalendarAttendanceDetail['status']): boolean {
+  return !['Belum Berjalan', 'Libur Nasional', 'Cuti Bersama', 'Libur Perusahaan', 'Akhir Pekan'].includes(status);
 }
 
 function getEventKind(type: string): 'in' | 'out' | null {
@@ -354,7 +872,8 @@ export function generateEmployeePayrollRecap(
   allEvents: AttendanceEvent[],
   approvedPermissions: any[],
   brandMap: Map<string, string>,
-  holidays: string[] = []
+  holidays: Array<string | HolidayDetail> = [],
+  attendanceSites: AttendanceSite[] = []
 ): PayrollRecapRow {
   const employeeId = (employee as any)._uid || (employee as any).uid || (employee as any).id || '';
   const employeeNumber = resolveEmployeeNumber(employee);
@@ -398,14 +917,20 @@ export function generateEmployeePayrollRecap(
       divisionId: (employee as any).divisionId,
       divisionName: resolveDivision(employee),
       hariKerja: 0, hadir: 0, terlambat: 0, menitTerlambat: 0, lateDetails: [],
+      hadirDetails: [], alphaDetails: [], calendarDetails: [],
       pulangAwal: 0, lupaHapIn: 0, lupaHapOut: 0,
-      izin: 0, dinas: 0, alpha: 0, totalJamKerja: 0,
+      izin: 0, cuti: 0, dinas: 0, alpha: 0, totalJamKerja: 0,
       leaveDetails: [], effectiveStart: period.startDate, effectiveEnd: period.endDate,
       isPartial: false, notYetActive: true,
     };
   }
 
-  const hariKerja = getWorkingDays(effectiveStart, effectiveEnd, holidays);
+  const holidayDetails = normalizeHolidayDetails(holidays);
+  const holidayMap = new Map(holidayDetails.map(h => [h.date, h]));
+  const holidayDates = holidayDetails.map(h => h.date);
+  const today = startOfDay(new Date());
+  const todayStr = format(today, 'yyyy-MM-dd');
+  const hariKerja = getWorkingDays(effectiveStart, effectiveEnd, holidayDetails);
 
   // ── Filter events: date range FIRST, then employee match ──
   const myEvents = allEvents.filter(e => {
@@ -431,6 +956,8 @@ export function generateEmployeePayrollRecap(
 
     return false;
   });
+  const attendanceSite = resolveAttendanceSite(employee, myEvents, attendanceSites);
+  const attendancePolicy = resolveAttendancePolicy(attendanceSite);
 
   // ── Build per-day maps ──
   const checkInByDay = new Map<string, any>();
@@ -439,11 +966,9 @@ export function generateEmployeePayrollRecap(
   for (const ev of myEvents) {
     const dateStr = getEventDateStr(ev as any) || '';
     const kind = getEventKind((ev as any).type || '');
-    if (kind === 'in' && !checkInByDay.has(dateStr)) checkInByDay.set(dateStr, ev);
+    if (kind === 'in' && dateStr && hasValidTapInTime(ev) && !checkInByDay.has(dateStr)) checkInByDay.set(dateStr, ev);
     if (kind === 'out' && !checkOutByDay.has(dateStr)) checkOutByDay.set(dateStr, ev);
   }
-
-  const todayStr = format(new Date(), 'yyyy-MM-dd');
 
   // ── Attendance stats ──
   const hadirDays = new Set<string>();
@@ -454,18 +979,24 @@ export function generateEmployeePayrollRecap(
   let lupaHapIn = 0;
   let lupaHapOut = 0;
   let totalMinutes = 0;
+  let totalMenitLembur = 0;
+  const hadirDetails: AttendanceDetail[] = [];
+  const attendanceTimingByDay = new Map<string, ReturnType<typeof calculateAttendanceTiming>>();
 
   for (const [dateStr, ev] of checkInByDay) {
     hadirDays.add(dateStr);
 
-    const late = (ev as any).lateMinutes ?? 0;
-    if (late > 0) {
+    const tapInTime = getEventTimeStr(ev);
+    const timing = calculateAttendanceTiming(tapInTime, attendancePolicy);
+    attendanceTimingByDay.set(dateStr, timing);
+    if (timing.lateMinutes > 0) {
       terlambat++;
-      menitTerlambat += late;
+      menitTerlambat += timing.lateMinutes;
       lateDetails.push({
         date: dateStr,
-        tapInTime: getEventTimeStr(ev),
-        lateMinutes: late,
+        tapInTime,
+        lateMinutes: timing.lateMinutes,
+        scheduledStartTime: attendancePolicy.effectiveLateLimitTime,
       });
     }
 
@@ -475,7 +1006,6 @@ export function generateEmployeePayrollRecap(
   }
 
   for (const [dateStr] of checkOutByDay) {
-    hadirDays.add(dateStr);
     if (!checkInByDay.has(dateStr) && dateStr !== todayStr) lupaHapIn++;
     const ev = checkOutByDay.get(dateStr);
     const early = (ev as any).earlyLeaveMinutes ?? 0;
@@ -484,89 +1014,170 @@ export function generateEmployeePayrollRecap(
 
   for (const [dateStr, inEv] of checkInByDay) {
     const outEv = checkOutByDay.get(dateStr);
+    totalMenitLembur += Number((inEv as any).overtimeMinutes || (outEv as any)?.overtimeMinutes || 0);
     if (!outEv) continue;
     const workDur = (inEv as any).workDurationMinutes || (outEv as any).workDurationMinutes;
     if (workDur) totalMinutes += workDur;
   }
 
+  for (const dateStr of Array.from(hadirDays).sort()) {
+    const inEv = checkInByDay.get(dateStr);
+    const outEv = checkOutByDay.get(dateStr);
+    if (!inEv) continue;
+    const timing = attendanceTimingByDay.get(dateStr) || calculateAttendanceTiming(getEventTimeStr(inEv), attendancePolicy);
+    if (!isValidAttendanceTiming(timing)) continue;
+    const workDur = (inEv as any)?.workDurationMinutes || (outEv as any)?.workDurationMinutes;
+    hadirDetails.push({
+      date: dateStr,
+      dayName: getDayName(new Date(dateStr)),
+      tapInTime: inEv ? getEventTimeStr(inEv) : null,
+      tapOutTime: outEv ? getEventTimeStr(outEv) : null,
+      status: timing.status === 'terlambat' ? 'terlambat' : 'tepat_waktu',
+      source: getEventSource(inEv || outEv),
+      notes: (inEv as any)?.notes || (outEv as any)?.notes || timing.notes,
+      lateMinutes: timing.lateMinutes || undefined,
+      workDurationMinutes: workDur || undefined,
+    });
+  }
+
   const hadir = hadirDays.size;
 
   // ── Approved permissions in period ──
-  const permissionsInPeriod = approvedPermissions.filter(perm => {
-    const permUid = perm.uid || perm.applicantUid || perm.requesterUid || perm.employeeUid;
-    const permEmpNo = perm.employeeNumber || perm.nomorIndukKaryawan;
-    const uidMatch = permUid && permUid === employeeId;
-    const empNoMatch = permEmpNo && normalizeEmployeeNumber(permEmpNo) === normalizedEmployeeNumber;
-    if (!uidMatch && !empNoMatch) return false;
-
-    try {
-      const ps = perm.startDate?.toDate?.() || new Date(perm.startDate);
-      const pe = perm.endDate?.toDate?.() || new Date(perm.endDate);
-      return isWithinInterval(ps, { start: effectiveStart, end: effectiveEnd }) ||
-             isWithinInterval(pe, { start: effectiveStart, end: effectiveEnd }) ||
-             (isBefore(ps, effectiveStart) && isAfter(pe, effectiveEnd));
-    } catch { return false; }
-  });
-
-  let izin = 0;
-  const leaveDetails: any[] = [];
-
-  for (const perm of permissionsInPeriod) {
-    const formType = perm.formType || perm.type || 'izin';
-    const isPermission = [
-      'sakit', 'tidak_masuk', 'datang_terlambat', 'pulang_awal',
-      'keluar_kantor', 'duka', 'akademik', 'administrasi_resmi',
-      'lainnya', 'keperluan_pribadi', 'izin', 'permission', 'sick'
-    ].some(t => String(formType).toLowerCase().includes(t));
-    if (!isPermission) continue;
-
-    try {
-      const ps = startOfDay(perm.startDate?.toDate?.() || new Date(perm.startDate));
-      const pe = endOfDay(perm.endDate?.toDate?.() || new Date(perm.endDate));
-      const permDays = eachDayOfInterval({ start: ps, end: pe })
-        .filter(d => d >= startOfDay(effectiveStart) && d <= endOfDay(effectiveEnd))
-        .filter(d => !isWeekend(d));
-      izin += permDays.length;
-      for (const day of permDays) {
-        leaveDetails.push({
-          date: format(day, 'yyyy-MM-dd'),
-          type: formType,
-          formType: perm.formType,
-          reasonType: perm.reasonType || '',
-          keterangan: perm.keterangan || perm.notes || perm.reason || '',
-          days: 1,
-          status: perm.status || 'approved',
-        });
-      }
-    } catch { /* skip */ }
-  }
-
-  const dinas = permissionsInPeriod.filter(p => {
-    const t = (p.type || p.formType || '').toLowerCase();
-    return t === 'dinas' || t === 'business_trip';
-  }).length;
+  const leaveDetails = mapApprovedAbsenceDetails(
+    approvedPermissions,
+    employeeId,
+    normalizedEmployeeNumber,
+    effectiveStart,
+    effectiveEnd
+  ).sort((a, b) => a.date.localeCompare(b.date));
+  const izin = leaveDetails.filter(d => d.type === 'Izin').length;
+  const cuti = leaveDetails.filter(d => d.type === 'Cuti').length;
+  const dinas = leaveDetails.filter(d => d.type === 'Dinas').length;
 
   // ── Alpha: past working days only ──
   const effectiveWorkingDays = eachDayOfInterval({
     start: startOfDay(effectiveStart),
     end: startOfDay(effectiveEnd),
-  }).filter(d => !isWeekend(d) && !holidays.includes(format(d, 'yyyy-MM-dd')));
+  }).filter(d => d <= today && !isWeekend(d) && !holidayDates.includes(format(d, 'yyyy-MM-dd')));
 
   let alpha = 0;
+  const alphaDetails: AlphaDetail[] = [];
   for (const day of effectiveWorkingDays) {
     const dateStr = format(day, 'yyyy-MM-dd');
-    if (dateStr >= todayStr) continue;
+    if (dateStr > todayStr) continue;
     if (hadirDays.has(dateStr)) continue;
-    const hasPermission = permissionsInPeriod.some(perm => {
-      try {
-        const ps = startOfDay(perm.startDate?.toDate?.() || new Date(perm.startDate));
-        const pe = endOfDay(perm.endDate?.toDate?.() || new Date(perm.endDate));
-        return day >= ps && day <= pe;
-      } catch { return false; }
-    });
+    const hasPermission = leaveDetails.some(detail => detail.date === dateStr);
     if (hasPermission) continue;
     alpha++;
+    alphaDetails.push({
+      date: dateStr,
+      dayName: getDayName(day),
+      keterangan: 'Tidak ada data absen dan tidak ada izin/cuti/dinas approved.',
+    });
   }
+
+  const leaveByDay = new Map<string, LeaveDetail>();
+  const cutiByDay = new Map<string, LeaveDetail>();
+  const izinByDay = new Map<string, LeaveDetail>();
+  const dinasByDay = new Map<string, LeaveDetail>();
+  for (const detail of leaveDetails) {
+    if (!leaveByDay.has(detail.date)) leaveByDay.set(detail.date, detail);
+    if (detail.type === 'Cuti' && !cutiByDay.has(detail.date)) cutiByDay.set(detail.date, detail);
+    if (detail.type === 'Izin' && !izinByDay.has(detail.date)) izinByDay.set(detail.date, detail);
+    if (detail.type === 'Dinas' && !dinasByDay.has(detail.date)) dinasByDay.set(detail.date, detail);
+  }
+  const alphaByDay = new Set(alphaDetails.map(d => d.date));
+  const calendarDetails: CalendarAttendanceDetail[] = eachDayOfInterval({
+    start: startOfDay(effectiveStart),
+    end: startOfDay(effectiveEnd),
+  }).map(day => {
+    const dateStr = format(day, 'yyyy-MM-dd');
+    const inEv = checkInByDay.get(dateStr);
+    const outEv = checkOutByDay.get(dateStr);
+    const cuti = cutiByDay.get(dateStr);
+    const izin = izinByDay.get(dateStr);
+    const dinas = dinasByDay.get(dateStr);
+    const holiday = holidayMap.get(dateStr);
+    const hasAttendance = hadirDays.has(dateStr);
+    const timing = inEv ? attendanceTimingByDay.get(dateStr) : undefined;
+    const isLate = timing?.status === 'terlambat';
+    let status: CalendarAttendanceDetail['status'] = 'Alpha';
+    let keterangan = '';
+
+    if (dateStr > todayStr) {
+      status = 'Belum Berjalan';
+      keterangan = 'Tanggal belum berjalan dan belum masuk perhitungan payroll.';
+    } else if (holiday?.type === 'national_holiday') {
+      status = 'Libur Nasional';
+      keterangan = `${holiday.name}.`;
+    } else if (holiday?.type === 'collective_leave') {
+      status = 'Cuti Bersama';
+      keterangan = `Cuti Bersama ${holiday.name}.`;
+    } else if (holiday?.type === 'company_holiday') {
+      status = 'Libur Perusahaan';
+      keterangan = `${holiday.name}.`;
+    } else if (isWeekend(day)) {
+      status = 'Akhir Pekan';
+      keterangan = 'Akhir pekan.';
+    } else if (cuti) {
+      status = 'Cuti';
+      keterangan = cuti.keterangan || 'Cuti approved.';
+    } else if (izin) {
+      status = 'Izin';
+      keterangan = izin.keterangan || 'Izin approved.';
+    } else if (dinas && hasAttendance) {
+      status = isLate ? 'Dinas + Terlambat' : 'Dinas + Tepat Waktu';
+      keterangan = isLate
+        ? `${timing?.notes || 'Terlambat dari batas toleransi.'} Sedang menjalankan perjalanan dinas approved.`
+        : 'Sedang menjalankan perjalanan dinas approved.';
+    } else if (dinas) {
+      status = 'Dinas';
+      keterangan = 'Sedang menjalankan perjalanan dinas approved.';
+    } else if (alphaByDay.has(dateStr)) {
+      status = 'Alpha';
+      keterangan = 'Tidak ada data absen dan tidak ada izin/cuti/dinas approved.';
+    } else if (hasAttendance) {
+      status = isLate ? 'Terlambat' : 'Tepat Waktu';
+      keterangan = timing?.notes || 'Absen tercatat.';
+    } else {
+      status = 'Alpha';
+      keterangan = 'Tidak ada data absen dan tidak ada izin/cuti/dinas approved.';
+    }
+
+    return {
+      date: dateStr,
+      dayName: getDayName(day),
+      status,
+      tapInTime: dateStr > todayStr ? null : inEv ? getEventTimeStr(inEv) : null,
+      tapOutTime: dateStr > todayStr ? null : outEv ? getEventTimeStr(outEv) : null,
+      keterangan,
+    };
+  });
+
+  const countedCalendarDetails = calendarDetails.filter(d => isWorkdayStatus(d.status));
+  const countedHadirDates = new Set(
+    countedCalendarDetails
+      .filter(d => d.status === 'Tepat Waktu' || d.status === 'Terlambat' || d.status === 'Dinas + Tepat Waktu' || d.status === 'Dinas + Terlambat')
+      .map(d => d.date)
+  );
+  const countedLateDates = new Set(
+    countedCalendarDetails
+      .filter(d => d.status === 'Terlambat' || d.status === 'Dinas + Terlambat')
+      .map(d => d.date)
+  );
+  const finalLateDetails = lateDetails
+    .filter(d => countedLateDates.has(d.date))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const finalHadirDetails = hadirDetails.filter(d => countedHadirDates.has(d.date));
+  const finalAlphaDetails = calendarDetails
+    .filter(d => d.status === 'Alpha')
+    .map(d => ({
+      date: d.date,
+      dayName: d.dayName,
+      keterangan: d.keterangan,
+    }));
+  const finalMenitTerlambat = finalLateDetails.reduce((sum, detail) => sum + detail.lateMinutes, 0);
+  const finalTotalMinutes = finalHadirDetails.reduce((sum, detail) => sum + (detail.workDurationMinutes || 0), 0);
 
   return {
     employeeId,
@@ -577,17 +1188,22 @@ export function generateEmployeePayrollRecap(
     divisionId: (employee as any).divisionId,
     divisionName: resolveDivision(employee),
     hariKerja,
-    hadir,
-    terlambat,
-    menitTerlambat,
-    lateDetails: lateDetails.sort((a, b) => a.date.localeCompare(b.date)),
+    hadir: countedCalendarDetails.filter(d => d.status === 'Tepat Waktu' || d.status === 'Terlambat' || d.status === 'Dinas + Tepat Waktu' || d.status === 'Dinas + Terlambat').length,
+    terlambat: finalLateDetails.length,
+    menitTerlambat: finalMenitTerlambat,
+    lateDetails: finalLateDetails,
+    hadirDetails: finalHadirDetails,
+    alphaDetails: finalAlphaDetails,
+    calendarDetails,
     pulangAwal,
     lupaHapIn,
     lupaHapOut,
-    izin,
-    dinas,
-    alpha,
-    totalJamKerja: Math.floor(totalMinutes / 60),
+    izin: countedCalendarDetails.filter(d => d.status === 'Izin').length,
+    cuti: countedCalendarDetails.filter(d => d.status === 'Cuti').length,
+    dinas: countedCalendarDetails.filter(d => d.status === 'Dinas' || d.status === 'Dinas + Tepat Waktu' || d.status === 'Dinas + Terlambat').length,
+    alpha: finalAlphaDetails.length,
+    totalJamKerja: Math.floor(finalTotalMinutes / 60),
+    totalMenitLembur,
     leaveDetails,
     effectiveStart,
     effectiveEnd,
@@ -604,7 +1220,8 @@ export function generatePayrollRecap(
   attendanceEvents: AttendanceEvent[],
   approvedPermissions: any[],
   brands: any[],
-  holidays: string[] = []
+  holidays: Array<string | HolidayDetail> = [],
+  attendanceSites: AttendanceSite[] = []
 ): PayrollRecapRow[] {
   const brandMap = new Map(brands.map((b: any) => [b.id, b.name]));
 
@@ -623,7 +1240,7 @@ export function generatePayrollRecap(
   const deduped = deduplicateByNik(webAbsenEmployees);
 
   return deduped
-    .map(emp => generateEmployeePayrollRecap(emp, period, attendanceEvents, approvedPermissions, brandMap, holidays))
+    .map(emp => generateEmployeePayrollRecap(emp, period, attendanceEvents, approvedPermissions, brandMap, holidays, attendanceSites))
     .filter(row => !row.notYetActive)
     .sort((a, b) => a.fullName.localeCompare(b.fullName, 'id'));
 }

@@ -875,6 +875,15 @@ export default function ApplicationDetailPage() {
   const displayStatus = useMemo(() => {
     if (!application) return "draft";
 
+    // Old data: status="rejected" set by internal HRD decision (tidak_lanjut).
+    // Show "interview" so the progress stepper and badge don't display "Ditolak".
+    if (
+      application.status === "rejected" &&
+      application.postInterviewDecision?.status === "tidak_lanjut"
+    ) {
+      return "interview" as typeof application.status;
+    }
+
     const isHrdEvaluated =
       application.postInterviewDecision != null ||
       application.recruitmentInternalDecision != null;
@@ -884,11 +893,30 @@ export default function ApplicationDetailPage() {
       const hasPastInterview = application.interviews?.some(
         (iv) => iv.status === "scheduled" && iv.startAt.toDate() < now,
       );
-
       if (hasPastInterview) return "waiting_evaluation";
     }
 
     return application.status;
+  }, [application]);
+
+  // HRD-only decision overlay badge — replaces the raw candidateStatus secondary badge.
+  const adminDecisionBadge = useMemo(() => {
+    if (!application) return null;
+    const pasca = application.postInterviewDecision?.status;
+    const pra = application.recruitmentInternalDecision?.status;
+    if (pasca === "tidak_lanjut")
+      return { text: "Tidak Dilanjutkan", cls: "bg-red-100 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800" };
+    if (pasca === "pending")
+      return { text: "Butuh Diskusi Lanjutan", cls: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800" };
+    if (pasca === "lanjut")
+      return { text: "Lanjut ke Offering", cls: "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800" };
+    if (pra === "tidak_dilanjutkan_saat_ini")
+      return { text: "Tidak Dilanjutkan", cls: "bg-red-100 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800" };
+    if (pra === "pending_internal")
+      return { text: "Pending Internal", cls: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800" };
+    if (pra === "lanjut_ke_tahap_selanjutnya")
+      return { text: "Lanjut Stage", cls: "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800" };
+    return null;
   }, [application]);
 
   const showOfferingTab = useMemo(() => {
@@ -1069,14 +1097,22 @@ export default function ApplicationDetailPage() {
                         Offer: {application.offerStatus.replaceAll("_", " ")}
                       </Badge>
                     )}
-                    {application.candidateStatus && (
+                    {adminDecisionBadge ? (
+                      <Badge
+                        variant="outline"
+                        className={cn("uppercase text-[10px] tracking-wider px-2 py-1 border", adminDecisionBadge.cls)}
+                      >
+                        {adminDecisionBadge.text}
+                      </Badge>
+                    ) : application.candidateStatus &&
+                      !["menunggu", "under_review", "dalam_evaluasi", "evaluasi_setelah_wawancara"].includes(application.candidateStatus) ? (
                       <Badge
                         variant="secondary"
                         className="uppercase text-[10px] tracking-wider px-2 py-1"
                       >
                         {application.candidateStatus.replaceAll("_", " ")}
                       </Badge>
-                    )}
+                    ) : null}
                     {application.submittedAt && (
                       <p className="text-sm text-slate-700">
                         Applied on{" "}

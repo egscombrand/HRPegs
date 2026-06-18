@@ -1019,6 +1019,14 @@ export type JobApplication = {
   jobType: "fulltime" | "internship";
   candidateStatus?: CandidateStatus;
   finalDecisionLocked?: boolean;
+  internalDecisionLog?: Array<{
+    type: string;
+    status: string;
+    note: string;
+    decidedBy: string;
+    decidedByName: string;
+    decidedAt: Timestamp;
+  }>;
   location: string;
   status: JobApplicationStatus;
   personalityTestAssignedAt?: Timestamp;
@@ -1176,6 +1184,7 @@ export interface RecruitmentInternalDecision {
 // What the candidate sees — never exposes HRD-internal states
 export type CandidateVisibleStatus =
   | "dalam_evaluasi"
+  | "evaluasi_setelah_wawancara"   // post-interview neutral hold — shown regardless of internal decision
   | "lanjut_tahap_berikutnya"
   | "wawancara_dijadwalkan"
   | "penawaran_diterima"
@@ -1230,7 +1239,10 @@ export function getCandidateDisplayStatus(application: {
   if (application.status === "interview") {
     return { text: "Tahap Wawancara", color: "bg-indigo-600" };
   }
-  // Explicit candidateVisibleStatus set by HRD (only when not yet in interview stage)
+  // Explicit candidateVisibleStatus set by HRD
+  if (application.candidateVisibleStatus === "evaluasi_setelah_wawancara") {
+    return { text: "Dalam Evaluasi", color: "bg-indigo-600" };
+  }
   if (application.candidateVisibleStatus === "lanjut_tahap_berikutnya") {
     return { text: "Lolos ke Tahap Selanjutnya", color: "bg-emerald-600" };
   }
