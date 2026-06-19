@@ -2009,30 +2009,116 @@ function ApplicationCard({
     if (hasCompletedTest || application.personalityTestCompleted) {
       // Show "awaiting review" — the test result will be applied automatically
       return (
-        <Card className="flex flex-col border-teal-200">
+        <Card className="flex flex-col border-teal-200 dark:border-teal-800">
           <CardHeader>
             <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
               <div>
                 <CardTitle className="text-xl">{application.jobPosition}</CardTitle>
-                <CardDescription>Lamaran sedang dalam proses evaluasi.</CardDescription>
+                <CardDescription>{application.brandName}</CardDescription>
               </div>
               <Badge className="w-fit bg-teal-600 text-white">Dalam Evaluasi</Badge>
             </div>
           </CardHeader>
-          <CardContent className="flex-grow">
+          <CardContent className="flex-grow space-y-4">
             <div className="p-4 rounded-lg border border-teal-200 bg-teal-50 dark:border-teal-800 dark:bg-teal-900/20">
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="h-5 w-5 text-teal-600 shrink-0 mt-0.5" />
-                <div>
-                  <h3 className="font-semibold text-teal-800 dark:text-teal-200 mb-1">
+                <div className="space-y-1">
+                  <h3 className="font-semibold text-teal-800 dark:text-teal-200">
                     Tes Kepribadian: Selesai
                   </h3>
                   <p className="text-sm text-teal-700 dark:text-teal-300 leading-relaxed">
-                    Lamaran Anda telah diterima. Hasil tes kepribadian yang sudah Anda
-                    selesaikan akan digunakan dalam proses evaluasi posisi ini.
+                    Lamaran Anda sedang dalam proses evaluasi. Hasil tes kepribadian
+                    yang sudah Anda selesaikan akan digunakan dalam proses evaluasi
+                    posisi ini.
                   </p>
                 </div>
               </div>
+            </div>
+
+            {/* 5-stage timeline: desktop horizontal / mobile vertical */}
+            {(() => {
+              type TState = "done" | "active" | "pending";
+              const tStages: { label: string; sublabel: string; state: TState }[] = [
+                { label: "Lamaran & Tes Kepribadian", sublabel: "Selesai", state: "done" },
+                { label: "Evaluasi HRD", sublabel: "Sedang Berjalan", state: "active" },
+                { label: "Wawancara", sublabel: "Menunggu", state: "pending" },
+                { label: "Offering", sublabel: "Menunggu", state: "pending" },
+                { label: "Keputusan Akhir", sublabel: "Menunggu", state: "pending" },
+              ];
+              const dot = (state: TState) => cn(
+                "flex items-center justify-center rounded-full shrink-0 font-bold h-7 w-7 text-xs",
+                state === "done" && "bg-teal-500 text-white",
+                state === "active" && "bg-white dark:bg-slate-900 border-2 border-teal-500 text-teal-600 dark:text-teal-400",
+                state === "pending" && "bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-300 dark:border-slate-600",
+              );
+              const lbl = (state: TState) => cn(
+                "font-semibold text-[11px] sm:text-xs leading-tight",
+                state === "done" && "text-teal-700 dark:text-teal-400",
+                state === "active" && "text-slate-900 dark:text-white",
+                state === "pending" && "text-slate-400 dark:text-slate-600",
+              );
+              const sub = (state: TState) => cn(
+                "text-[10px] mt-0.5",
+                state === "done" && "text-teal-600/80 dark:text-teal-500/80",
+                state === "active" && "text-teal-600 dark:text-teal-400 font-semibold",
+                state === "pending" && "text-slate-400 dark:text-slate-600",
+              );
+              const conn = (state: TState) => cn(
+                "hidden sm:block h-0.5 flex-1 rounded-full shrink-0",
+                state === "done" ? "bg-teal-400 dark:bg-teal-600" : "bg-slate-200 dark:bg-slate-700",
+              );
+              const mconn = (state: TState) => cn(
+                "sm:hidden w-0.5 h-3 rounded-full ml-3",
+                state === "done" ? "bg-teal-400 dark:bg-teal-600" : "bg-slate-200 dark:bg-slate-700",
+              );
+              return (
+                <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-4">
+                    Tahapan Seleksi
+                  </p>
+                  {/* Desktop */}
+                  <div className="hidden sm:flex items-center gap-0">
+                    {tStages.map((s, i) => (
+                      <React.Fragment key={i}>
+                        <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
+                          <div className={dot(s.state)}>
+                            {s.state === "done" ? <Check className="h-3.5 w-3.5" /> : i + 1}
+                          </div>
+                          <span className={cn(lbl(s.state), "text-center px-0.5")}>{s.label}</span>
+                          <span className={cn(sub(s.state), "text-center")}>{s.sublabel}</span>
+                        </div>
+                        {i < tStages.length - 1 && <div className={conn(s.state)} />}
+                      </React.Fragment>
+                    ))}
+                  </div>
+                  {/* Mobile */}
+                  <ol className="flex flex-col sm:hidden">
+                    {tStages.map((s, i) => (
+                      <li key={i}>
+                        <div className="flex items-start gap-3">
+                          <div className={dot(s.state)}>
+                            {s.state === "done" ? <Check className="h-3.5 w-3.5" /> : i + 1}
+                          </div>
+                          <div className="pt-0.5 pb-1">
+                            <p className={lbl(s.state)}>{s.label}</p>
+                            <p className={sub(s.state)}>{s.sublabel}</p>
+                          </div>
+                        </div>
+                        {i < tStages.length - 1 && <div className={mconn(s.state)} />}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              );
+            })()}
+
+            <div className="flex gap-2 rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30 p-3">
+              <Info className="h-4 w-4 shrink-0 text-blue-500 mt-0.5" />
+              <p className="text-xs text-blue-800 dark:text-blue-300 leading-relaxed">
+                Pembaruan status seleksi akan ditampilkan melalui portal ini. Anda tidak
+                perlu mengikuti tes kepribadian kembali.
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -2112,16 +2198,21 @@ function ApplicationCard({
       type StageState = "done" | "active" | "pending";
       const stages: { label: string; sublabel: string; state: StageState }[] = [
         { label: "Lamaran & Tes Kepribadian", sublabel: "Selesai", state: "done" },
-        { label: "Evaluasi Tim Rekrutmen", sublabel: "Selesai", state: "done" },
+        { label: "Evaluasi HRD", sublabel: "Selesai", state: "done" },
         {
           label: "Wawancara",
-          sublabel: active === "done" ? "Selesai" : "Sedang Ditinjau",
+          sublabel: active === "done" ? "Selesai" : active === "scheduled" ? "Terjadwal" : "Menunggu Jadwal",
           state: active === "done" ? "done" : "active",
         },
         {
+          label: "Offering",
+          sublabel: "Menunggu",
+          state: "pending" as StageState,
+        },
+        {
           label: "Keputusan Akhir",
-          sublabel: active === "done" ? "Menunggu Keputusan Akhir" : "Menunggu",
-          state: active === "done" ? "active" : "pending",
+          sublabel: "Menunggu",
+          state: "pending" as StageState,
         },
       ];
 
@@ -2609,20 +2700,22 @@ function ApplicationCard({
     );
   }
 
-  // 4-stage recruitment timeline (Lamaran & Tes Kepribadian are one combined first stage)
+  // 5-stage recruitment timeline visible to candidates
   const TIMELINE_STAGES = [
-    { key: "start",    label: "Lamaran & Tes Kepribadian", icon: FileText },
-    { key: "eval",     label: "Evaluasi HRD",              icon: Search  },
-    { key: "interview",label: "Wawancara",                 icon: Users   },
-    { key: "decision", label: "Keputusan Akhir",           icon: Award   },
+    { key: "start",     label: "Lamaran & Tes Kepribadian", icon: FileText },
+    { key: "eval",      label: "Evaluasi HRD",              icon: Search  },
+    { key: "interview", label: "Wawancara",                 icon: Users   },
+    { key: "offering",  label: "Offering",                  icon: FileSignature },
+    { key: "decision",  label: "Keputusan Akhir",           icon: Award   },
   ] as const;
 
   const stageIndex = (status: string): number => {
     if (["submitted", "tes_kepribadian"].includes(status)) return 0;
     if (["screening", "verification", "document_submission"].includes(status)) return 1;
     if (status === "interview") return 2;
-    // offered / hired → Keputusan Akhir active
-    return 3;
+    if (status === "offered") return 3;
+    // hired → Keputusan Akhir active
+    return 4;
   };
   // HRD internal negative decisions: freeze timeline at interview stage (stage 2 active).
   // Never advance to "Keputusan Akhir" just because status flipped to "rejected" internally.
@@ -3039,7 +3132,7 @@ export default function ApplicationsPage() {
     return query(
       collection(firestore, "assessment_sessions"),
       where("candidateUid", "==", uid),
-      where("status", "==", "submitted"),
+      where("status", "in", ["submitted", "completed"]),
     );
   }, [uid, firestore]);
   const { data: submittedSessions, isLoading: sessionsLoading } =
@@ -3050,18 +3143,30 @@ export default function ApplicationsPage() {
     () => (uid ? doc(firestore, "candidate_personality_tests", uid) : null),
     [uid, firestore],
   );
-  const { data: candidateTestDoc } = useDoc<{ status: string }>(candidateTestDocRef);
+  const { data: candidateTestDoc, isLoading: candidateTestLoading } = useDoc<{
+    status?: string;
+    isCompleted?: boolean;
+    completedAt?: any;
+    personalityTestCompleted?: boolean;
+  }>(candidateTestDocRef);
 
-  const hasCompletedTest = useMemo(
-    () =>
-      // Primary: candidate-level test record
-      (candidateTestDoc?.status === "completed") ||
-      // Fallback: any submitted assessment session for this candidate
-      (submittedSessions?.length ?? 0) > 0 ||
-      // Fallback: any application where test was marked done
-      (applications || []).some((app) => app.personalityTestCompleted === true),
-    [candidateTestDoc, submittedSessions, applications],
-  );
+  const hasCompletedTest = useMemo(() => {
+    // Primary: candidate-level test record — check all possible completion signals
+    if (candidateTestDoc) {
+      if (
+        candidateTestDoc.status === "completed" ||
+        candidateTestDoc.status === "selesai" ||
+        candidateTestDoc.isCompleted === true ||
+        candidateTestDoc.personalityTestCompleted === true ||
+        candidateTestDoc.completedAt != null
+      ) return true;
+    }
+    // Fallback: any submitted assessment session for this candidate
+    if ((submittedSessions?.length ?? 0) > 0) return true;
+    // Fallback: any application where test was marked done
+    if ((applications || []).some((app) => app.personalityTestCompleted === true)) return true;
+    return false;
+  }, [candidateTestDoc, submittedSessions, applications]);
 
   const sortedApplications = useMemo(() => {
     if (!applications) return [];
@@ -3073,7 +3178,7 @@ export default function ApplicationsPage() {
   }, [applications]);
 
   const isLoading =
-    authLoading || applicationsLoading || sessionsLoading || jobsLoading;
+    authLoading || applicationsLoading || sessionsLoading || jobsLoading || candidateTestLoading;
 
   if (error) {
     return (

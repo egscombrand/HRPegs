@@ -26,6 +26,7 @@ import {
   buildOfferingHtml,
 } from "@/lib/recruitment/pdf-generator";
 import type {
+  CandidatePersonalityTest,
   JobApplication,
   Profile,
   Job,
@@ -66,6 +67,7 @@ import { ApplicationNotes } from "./ApplicationNotes";
 import { OfferEditor, type OfferFormData } from "./OfferEditor";
 import { Button } from "../ui/button";
 import { Loader2 } from "lucide-react";
+import { getApplicationDisplayStage, getApplicationFilterStage } from "@/lib/recruitment/application-stage";
 
 function ApplicationDetailSkeleton() {
   return <Skeleton className="h-[500px] w-full" />;
@@ -101,6 +103,14 @@ export default function ApplicationDetailPage() {
   );
   const { data: profile, isLoading: isLoadingProfile } =
     useDoc<Profile>(profileRef);
+
+  const candidateTestRef = useMemoFirebase(
+    () =>
+      application ? doc(firestore, "candidate_personality_tests", application.candidateUid) : null,
+    [firestore, application],
+  );
+  const { data: candidatePersonalityTest } =
+    useDoc<CandidatePersonalityTest>(candidateTestRef);
 
   const jobRef = useMemoFirebase(
     () => (application ? doc(firestore, "jobs", application.jobId) : null),
@@ -344,6 +354,12 @@ export default function ApplicationDetailPage() {
   ]);
 
   const isLoading = isLoadingTotal;
+  const displayStage = application
+    ? getApplicationDisplayStage(application, candidatePersonalityTest)
+    : null;
+  const filterStage = application
+    ? getApplicationFilterStage(application, candidatePersonalityTest)
+    : null;
 
   if (!hasAccess) {
     return (
@@ -405,7 +421,7 @@ export default function ApplicationDetailPage() {
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <ApplicationStatusBadge
-                      status={application.status}
+                      status={displayStage?.displayStage || application.status}
                       className="text-base px-4 py-1"
                     />
                     {application.submittedAt && (
@@ -425,8 +441,20 @@ export default function ApplicationDetailPage() {
                   Applied for: {application.jobPosition}
                 </h3>
                 <ApplicationProgressStepper
-                  currentStatus={application.status}
+                  currentStatus={filterStage || application.status}
                 />
+                <div className="grid gap-3 sm:grid-cols-2 text-sm">
+                  <div className="rounded-lg border p-3">
+                    <p className="text-muted-foreground">Tes Kepribadian</p>
+                    <p className="font-semibold">
+                      {displayStage?.isPersonalityTestCompleted ? "Selesai" : "Menunggu"}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-muted-foreground">Status Saat Ini</p>
+                    <p className="font-semibold">{displayStage?.displayStageLabel || statusDisplayLabels[application.status]}</p>
+                  </div>
+                </div>
                 {application.status === "rejected" && (
                   <div className="p-4 rounded-md border border-destructive/50 bg-destructive/10 text-destructive flex items-center gap-3">
                     <XCircle className="h-5 w-5" />

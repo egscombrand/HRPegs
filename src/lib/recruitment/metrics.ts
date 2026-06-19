@@ -2,6 +2,7 @@
 import { subDays, differenceInDays, startOfDay, format, isToday, isAfter, isBefore } from 'date-fns';
 import type { JobApplication, Job } from '@/lib/types';
 import { statusDisplayLabels } from '@/components/recruitment/ApplicationStatusBadge';
+import { getApplicationFilterStage } from '@/lib/recruitment/application-stage';
 
 export type FilterState = {
   dateRange: { from?: Date | null; to?: Date | null };
@@ -31,18 +32,18 @@ export const calculateKpis = (applications: JobApplication[], filters: FilterSta
     return appliedDate && appliedDate >= rangeStart && appliedDate <= rangeEnd;
   });
 
-  const activeCandidates = applications.filter(app => !['hired', 'rejected', 'draft'].includes(app.status));
+  const activeCandidates = applications.filter(app => !['hired', 'rejected', 'draft'].includes(getApplicationFilterStage(app)));
   const candidatesNewThisWeek = applications.filter(app => {
     const appliedDate = app.submittedAt?.toDate();
     return appliedDate && appliedDate >= sevenDaysAgo;
   });
 
   const hiredInDateRange = applications.filter(app =>
-    app.status === 'hired' && app.updatedAt.toDate() >= rangeStart && app.updatedAt.toDate() <= rangeEnd
+    getApplicationFilterStage(app) === 'hired' && app.updatedAt.toDate() >= rangeStart && app.updatedAt.toDate() <= rangeEnd
   );
 
   const rejectedInDateRange = applications.filter(app =>
-    app.status === 'rejected' && app.updatedAt.toDate() >= rangeStart && app.updatedAt.toDate() <= rangeEnd
+    getApplicationFilterStage(app) === 'rejected' && app.updatedAt.toDate() >= rangeStart && app.updatedAt.toDate() <= rangeEnd
   );
 
   // Time to Hire calculation
@@ -65,13 +66,13 @@ export const calculateKpis = (applications: JobApplication[], filters: FilterSta
 
   // Offers Pending - status 'offered' atau offerStatus sent/viewed
   const offersPending = activeCandidates.filter(app =>
-    app.status === 'offered' || (app as any).offerStatus?.includes('sent') || (app as any).offerStatus?.includes('viewed')
+    getApplicationFilterStage(app) === 'offered' || (app as any).offerStatus?.includes('sent') || (app as any).offerStatus?.includes('viewed')
   ).length;
 
   // Offer Acceptance Rate
-  const offeredCandidates = applications.filter(app => app.status === 'offered' || (app as any).offerStatus);
+  const offeredCandidates = applications.filter(app => getApplicationFilterStage(app) === 'offered' || (app as any).offerStatus);
   const acceptedOffers = applications.filter(app =>
-    app.status === 'hired' && ((app as any).offerStatus === 'accepted' || app.status === 'hired')
+    getApplicationFilterStage(app) === 'hired' && ((app as any).offerStatus === 'accepted' || getApplicationFilterStage(app) === 'hired')
   );
   const offerAcceptanceRate = offeredCandidates.length > 0
     ? (acceptedOffers.length / offeredCandidates.length) * 100
@@ -85,7 +86,7 @@ export const calculateKpis = (applications: JobApplication[], filters: FilterSta
   }).length;
 
   // Average Time to First Response - dari submitted ke stage pertama
-  const appsWithSubmitted = applications.filter(app => app.submittedAt && app.status !== 'submitted' && app.status !== 'draft');
+  const appsWithSubmitted = applications.filter(app => app.submittedAt && getApplicationFilterStage(app) !== 'submitted' && getApplicationFilterStage(app) !== 'draft');
   const avgTimeToFirstResponse = appsWithSubmitted.length > 0
     ? Math.round(
         appsWithSubmitted.reduce((sum, app) => {
@@ -99,10 +100,10 @@ export const calculateKpis = (applications: JobApplication[], filters: FilterSta
     newApplicants: appsInDateRange.length,
     activeCandidates: activeCandidates.length,
     candidatesNewThisWeek: candidatesNewThisWeek.length,
-    inInterview: activeCandidates.filter(app => app.status === 'interview').length,
-    inOffered: activeCandidates.filter(app => app.status === 'offered').length,
-    inScreening: activeCandidates.filter(app => app.status === 'verification').length,
-    assessmentPending: activeCandidates.filter(app => app.status === 'tes_kepribadian').length,
+    inInterview: activeCandidates.filter(app => getApplicationFilterStage(app) === 'interview').length,
+    inOffered: activeCandidates.filter(app => getApplicationFilterStage(app) === 'offered').length,
+    inScreening: activeCandidates.filter(app => ['screening', 'verification'].includes(getApplicationFilterStage(app))).length,
+    assessmentPending: activeCandidates.filter(app => getApplicationFilterStage(app) === 'tes_kepribadian').length,
     avgTimeToHire: medianTimeToHire,
     interviewsToday,
     offersPending,
@@ -117,7 +118,7 @@ export const calculateKpis = (applications: JobApplication[], filters: FilterSta
 export const getFunnelData = (applications: JobApplication[]) => {
   const stageOrder: JobApplication['status'][] = ['submitted', 'tes_kepribadian', 'verification', 'document_submission', 'interview', 'hired'];
   
-  const stageCounts = countBy(applications, app => app.status);
+  const stageCounts = countBy(applications, app => getApplicationFilterStage(app));
 
   let cumulativeCount = applications.filter(app => app.status !== 'draft').length;
   if(cumulativeCount === 0) return [];
@@ -186,11 +187,11 @@ export const getJobPerformance = (applications: JobApplication[], jobs?: Job[]) 
       const jobApps = applications.filter(app => app.jobId === jobId);
       const job = jobMap[jobId];
 
-      const stageBreakdown = countBy(jobApps, app => app.status);
-      const hired = jobApps.filter(app => app.status === 'hired').length;
-      const interviewed = jobApps.filter(app => app.status === 'interview').length;
-      const offered = jobApps.filter(app => app.status === 'offered').length;
-      const activeApps = jobApps.filter(app => !['hired', 'rejected', 'draft'].includes(app.status)).length;
+      const stageBreakdown = countBy(jobApps, app => getApplicationFilterStage(app));
+      const hired = jobApps.filter(app => getApplicationFilterStage(app) === 'hired').length;
+      const interviewed = jobApps.filter(app => getApplicationFilterStage(app) === 'interview').length;
+      const offered = jobApps.filter(app => getApplicationFilterStage(app) === 'offered').length;
+      const activeApps = jobApps.filter(app => !['hired', 'rejected', 'draft'].includes(getApplicationFilterStage(app))).length;
 
       const conversionRate = totalApps > 0 ? (hired / totalApps) * 100 : 0;
 

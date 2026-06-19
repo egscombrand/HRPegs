@@ -2,11 +2,12 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { JobApplicationStatus } from "@/lib/types";
-import { ORDERED_RECRUITMENT_STAGES } from "@/lib/types";
 
-export const statusDisplayLabels: Record<JobApplicationStatus | 'waiting_evaluation', string> = {
+export const statusDisplayLabels: Record<JobApplicationStatus | 'waiting_evaluation' | 'evaluasi_hrd' | 'under_review', string> = {
     draft: 'Draf',
-    screening: 'Screening',
+    screening: 'Evaluasi HRD',
+    evaluasi_hrd: 'Evaluasi HRD',
+    under_review: 'Evaluasi HRD',
     interview: 'Wawancara',
     offered: 'Penawaran Kerja',
     hired: 'Diterima Kerja',
@@ -20,7 +21,7 @@ export const statusDisplayLabels: Record<JobApplicationStatus | 'waiting_evaluat
 };
 
 interface ApplicationStatusBadgeProps {
-  status: JobApplicationStatus | 'waiting_evaluation';
+  status: JobApplicationStatus | 'waiting_evaluation' | 'evaluasi_hrd' | 'under_review';
   className?: string;
 }
 
@@ -28,6 +29,8 @@ export function ApplicationStatusBadge({ status, className }: ApplicationStatusB
   const statusConfig = {
     draft: { label: statusDisplayLabels.draft, variant: 'secondary' as const },
     screening: { label: statusDisplayLabels.screening, variant: 'default' as const, className: 'bg-cyan-600 hover:bg-cyan-700' },
+    evaluasi_hrd: { label: statusDisplayLabels.evaluasi_hrd, variant: 'default' as const, className: 'bg-cyan-600 hover:bg-cyan-700' },
+    under_review: { label: statusDisplayLabels.under_review, variant: 'default' as const, className: 'bg-cyan-600 hover:bg-cyan-700' },
     interview: { label: statusDisplayLabels.interview, variant: 'default' as const, className: 'bg-orange-500 hover:bg-orange-600' },
     offered: { label: statusDisplayLabels.offered, variant: 'default' as const, className: 'bg-pink-600 hover:bg-pink-700' },
     hired: { label: statusDisplayLabels.hired, variant: 'default' as const, className: 'bg-green-600 hover:bg-green-700' },

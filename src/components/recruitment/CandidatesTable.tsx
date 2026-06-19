@@ -10,6 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { format } from 'date-fns';
 import { ApplicationStatusBadge } from './ApplicationStatusBadge';
 import Link from 'next/link';
+import { getApplicationDisplayStage } from '@/lib/recruitment/application-stage';
 
 export function CandidatesTable({ applications }: { applications: JobApplication[] }) {
     return (
@@ -40,7 +41,7 @@ export function CandidatesTable({ applications }: { applications: JobApplication
                             </div>
                         </TableCell>
                         <TableCell className="text-sm">{app.jobPosition}</TableCell>
-                        <TableCell><ApplicationStatusBadge status={app.status} /></TableCell>
+                        <TableCell><ApplicationStatusBadge status={getApplicationDisplayStage(app).displayStage} /></TableCell>
                         <TableCell>{app.updatedAt?.toDate ? format(app.updatedAt.toDate(), 'dd MMM yyyy') : '-'}</TableCell>
                         <TableCell className="text-right">
                              <Button asChild variant="outline" size="sm">

@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { Skeleton } from '../ui/skeleton';
 import { Loader2 } from 'lucide-react';
 import { ApplicationStatusBadge } from './ApplicationStatusBadge';
+import { getApplicationDisplayStage, getApplicationFilterStage } from '@/lib/recruitment/application-stage';
 
 interface JobQuickViewPanelProps {
   job: Job & { brandName?: string };
@@ -51,9 +52,9 @@ export function JobQuickViewPanel({ job, assignedUsers }: JobQuickViewPanelProps
       return { total: 0, screening: 0, interview: 0, offer: 0 };
     }
     
-    const screening = applications.filter(a => a.status === 'screening').length;
-    const interview = applications.filter(a => a.status === 'interview').length;
-    const offer = applications.filter(a => a.status === 'offered').length;
+    const screening = applications.filter(a => getApplicationFilterStage(a) === 'screening').length;
+    const interview = applications.filter(a => getApplicationFilterStage(a) === 'interview').length;
+    const offer = applications.filter(a => getApplicationFilterStage(a) === 'offered').length;
     
     return {
       total: applications.length,
@@ -115,7 +116,7 @@ export function JobQuickViewPanel({ job, assignedUsers }: JobQuickViewPanelProps
                             <div className="flex-1 text-sm">
                                 <p className="font-medium truncate">{app.candidateName}</p>
                             </div>
-                            <ApplicationStatusBadge status={app.status} className="text-[10px]" />
+                            <ApplicationStatusBadge status={getApplicationDisplayStage(app).displayStage} className="text-[10px]" />
                         </div>
                     ))}
                     {latestApplicants.length > 3 && (

@@ -1030,10 +1030,13 @@ export type JobApplication = {
   location: string;
   status: JobApplicationStatus;
   personalityTestAssignedAt?: Timestamp;
-  // Candidate-level personality test tracking (Tugas 4: 1 test per candidate)
-  personalityTestCompleted?: boolean;   // true = test was already done before this application
-  personalityTestRequired?: boolean;    // false = test skipped (pre-tested candidate)
-  personalityTestResultId?: string;     // assessment_sessions/{id} of the completed test
+  // Candidate-level personality test tracking (1 test per candidate)
+  personalityTestCompleted?: boolean;        // true = test was already done before this application
+  personalityTestRequired?: boolean;         // false = test skipped (pre-tested candidate)
+  personalityTestResultId?: string;          // assessment_sessions/{id} of the completed test
+  personalityTestStatus?: string;            // "completed" | "pending"
+  personalityTestSource?: string;            // "global_candidate_test" = reused from prior test
+  personalityTestCompletedAt?: Timestamp;    // when the test was completed
   createdAt: Timestamp;
   updatedAt: Timestamp;
   submittedAt?: Timestamp;

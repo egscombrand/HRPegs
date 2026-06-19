@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ApplicationStatusBadge } from './ApplicationStatusBadge';
 import type { JobApplication } from '@/lib/types';
+import { getApplicationDisplayStage } from '@/lib/recruitment/application-stage';
 
 interface MultiApplicationAlertProps {
   currentApplicationId: string;
@@ -66,7 +67,7 @@ export function MultiApplicationAlert({
                 {app.submittedAt ? ` · ${format(app.submittedAt.toDate(), 'dd MMM yyyy', { locale: idLocale })}` : ''}
               </p>
             </div>
-            <ApplicationStatusBadge status={app.status} className="text-[10px] shrink-0" />
+            <ApplicationStatusBadge status={getApplicationDisplayStage(app).displayStage} className="text-[10px] shrink-0" />
             <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs text-indigo-600 hover:text-indigo-700 shrink-0">
               <Link href={`/admin/recruitment/applications/${app.id}`}>
                 Lihat

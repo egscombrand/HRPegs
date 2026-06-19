@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect } from 'react';
 import { useAuth } from '@/providers/auth-provider';
-import type { JobApplication, Job, UserProfile, Brand } from '@/lib/types';
+import type { CandidatePersonalityTest, JobApplication, Job, UserProfile, Brand } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import {
   Eye, Search, X, Users, CheckCircle2, Clock, AlertTriangle, TrendingUp,
@@ -21,7 +21,7 @@ import { useToast } from '@/hooks/use-toast';
 import { ORDERED_RECRUITMENT_STAGES } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { setDocumentNonBlocking, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { doc, serverTimestamp, Timestamp, query, collection, where, writeBatch, getDocs } from 'firebase/firestore';
+import { doc, documentId, serverTimestamp, Timestamp, query, collection, where, writeBatch, getDocs } from 'firebase/firestore';
 import type { ScheduleInterviewData } from './ScheduleInterviewDialog';
 import { ScheduleInterviewDialog } from './ScheduleInterviewDialog';
 import { EditInterviewTemplateDialog } from './EditInterviewTemplateDialog';
@@ -34,6 +34,11 @@ import {
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { cn, getInitials } from '@/lib/utils';
+import {
+  getApplicationDisplayStage,
+  getApplicationFilterStage,
+  shouldNormalizeCompletedPersonalityApplication,
+} from '@/lib/recruitment/application-stage';
 
 type SelectionState = { selectedIds: Set<string> };
 
@@ -122,6 +127,7 @@ export function ApplicantsPageClient({ applications, job, onJobUpdate, allBrands
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
   const [isSingleScheduleOpen, setIsSingleScheduleOpen] = useState(false);
   const [activeApplication, setActiveApplication] = useState<JobApplication | null>(null);
+  const [personalityTestMap, setPersonalityTestMap] = useState<Map<string, CandidatePersonalityTest>>(new Map());
   // Map: candidateUid → all OTHER applications (not in this job)
   const [multiAppMap, setMultiAppMap] = useState<Map<string, Pick<JobApplication, 'id' | 'jobPosition' | 'brandName' | 'status'>[]>>(new Map());
 
@@ -163,6 +169,31 @@ export function ApplicantsPageClient({ applications, job, onJobUpdate, allBrands
     })();
   }, [applications, firestore, isPrivilegedRecruiter, job?.id]);
 
+  useEffect(() => {
+    const uids = [...new Set(applications.map(a => a.candidateUid).filter(Boolean))];
+    if (uids.length === 0) {
+      setPersonalityTestMap(new Map());
+      return;
+    }
+
+    const CHUNK = 30;
+    const chunks: string[][] = [];
+    for (let i = 0; i < uids.length; i += CHUNK) chunks.push(uids.slice(i, i + CHUNK));
+
+    (async () => {
+      const map = new Map<string, CandidatePersonalityTest>();
+      await Promise.all(
+        chunks.map(async chunk => {
+          const snap = await getDocs(
+            query(collection(firestore, 'candidate_personality_tests'), where(documentId(), 'in', chunk))
+          );
+          snap.forEach(d => map.set(d.id, { id: d.id, ...d.data() } as unknown as CandidatePersonalityTest));
+        })
+      );
+      setPersonalityTestMap(map);
+    })().catch(console.error);
+  }, [applications, firestore]);
+
   const { data: usersToFilter } = useCollection<UserProfile>(
     useMemoFirebase(() => {
       if (!userProfile || !isPrivilegedRecruiter) return null;
@@ -202,15 +233,19 @@ export function ApplicantsPageClient({ applications, job, onJobUpdate, allBrands
     return scheduled.sort((a, b) => b.startAt.toMillis() - a.startAt.toMillis())[0] || null;
   };
 
+  const getPersonalityTest = (app: JobApplication) => personalityTestMap.get(app.candidateUid);
+  const effectiveStatus = (app: JobApplication): JobApplication['status'] =>
+    getApplicationFilterStage(app, getPersonalityTest(app));
+
   const filteredApplications = useMemo(() => {
     let result = applications;
-    if (stageFilter !== 'all') result = result.filter(a => a.status === stageFilter);
+    if (stageFilter !== 'all') result = result.filter(a => effectiveStatus(a) === stageFilter);
     if (searchTerm.trim()) {
       const q = searchTerm.toLowerCase();
       result = result.filter(a => a.candidateName.toLowerCase().includes(q));
     }
     return result;
-  }, [applications, stageFilter, searchTerm]);
+  }, [applications, stageFilter, searchTerm, personalityTestMap]);
 
   const sortedApplications = useMemo(() => {
     return [...filteredApplications].sort((a, b) =>
@@ -218,21 +253,49 @@ export function ApplicantsPageClient({ applications, job, onJobUpdate, allBrands
     );
   }, [filteredApplications]);
 
+  // Backfill legacy data: one completed global personality test means future/current apps skip the test stage.
+  useEffect(() => {
+    if (!isPrivilegedRecruiter || applications.length === 0) return;
+    const stale = applications.filter(
+      a => a.id && shouldNormalizeCompletedPersonalityApplication(a, getPersonalityTest(a))
+    );
+    if (stale.length === 0) return;
+    const batch = writeBatch(firestore);
+    stale.forEach(a => {
+      batch.update(doc(firestore, 'applications', a.id!), {
+        status: 'under_review',
+        stage: 'evaluasi_hrd',
+        personalityTestCompleted: true,
+        personalityTestStatus: 'completed',
+        candidateVisibleStatus: 'dalam_evaluasi',
+        candidateVisibleStage: 'evaluasi_hrd',
+        updatedAt: serverTimestamp(),
+      });
+    });
+    batch.commit().catch(console.error);
+  }, [applications, firestore, isPrivilegedRecruiter, personalityTestMap]);
+
   const stageCounts = useMemo(() => {
     const counts = new Map<string, number>();
     ORDERED_RECRUITMENT_STAGES.forEach(s => counts.set(s, 0));
-    applications.forEach(a => counts.set(a.status, (counts.get(a.status) || 0) + 1));
+    applications.forEach(a => {
+      const s = effectiveStatus(a);
+      counts.set(s, (counts.get(s) || 0) + 1);
+    });
     return counts;
-  }, [applications]);
+  }, [applications, personalityTestMap]);
 
   const summary = useMemo(() => {
-    const newCount = applications.filter(a => a.status === 'applied' || a.status === 'submitted').length;
+    const evalCount = applications.filter(a => {
+      const s = effectiveStatus(a);
+      return s === 'submitted' || s === 'screening' || s === 'verification';
+    }).length;
     const interviewCount = applications.filter(a => a.status === 'interview').length;
     const offeredCount = applications.filter(a => a.status === 'offered').length;
     const hiredCount = applications.filter(a => a.status === 'hired').length;
     const rejectedCount = applications.filter(a => a.status === 'rejected').length;
-    return { newCount, interviewCount, offeredCount, hiredCount, rejectedCount };
-  }, [applications]);
+    return { newCount: evalCount, interviewCount, offeredCount, hiredCount, rejectedCount };
+  }, [applications, personalityTestMap]);
 
   useEffect(() => {
     setSelection({ selectedIds: new Set() });
@@ -383,8 +446,8 @@ export function ApplicantsPageClient({ applications, job, onJobUpdate, allBrands
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
         <KpiCard label="Total" value={applications.length} icon={Users}
           color="border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400" />
-        <KpiCard label="Baru" value={summary.newCount} icon={TrendingUp}
-          color="border-blue-200 dark:border-blue-900 text-blue-700 dark:text-blue-400" />
+        <KpiCard label="Evaluasi" value={summary.newCount} icon={TrendingUp}
+          color="border-blue-200 dark:border-blue-900 text-blue-700 dark:text-blue-400" sub="Dalam Evaluasi HRD" />
         <KpiCard label="Interview" value={summary.interviewCount} icon={Clock}
           color="border-purple-200 dark:border-purple-900 text-purple-700 dark:text-purple-400" />
         <KpiCard label="Offering" value={summary.offeredCount} icon={BarChart3}
@@ -540,7 +603,9 @@ export function ApplicantsPageClient({ applications, job, onJobUpdate, allBrands
               {sortedApplications.length > 0 ? (
                 sortedApplications.map(app => {
                   const interview = getMostRelevantInterview(app);
-                  const assignedUsers = app.allPanelistIds?.map(id => userMap.get(id)).filter((u): u is UserProfile => !!u) || [];
+                  const assignedUsers = (app.allPanelistIds || [])
+                    .map(id => userMap.get(id))
+                    .filter((u): u is NonNullable<ReturnType<typeof userMap.get>> => Boolean(u));
                   return (
                     <tr key={app.id} className={cn(
                       'border-b border-slate-100 dark:border-slate-800 transition-colors',
@@ -561,7 +626,7 @@ export function ApplicantsPageClient({ applications, job, onJobUpdate, allBrands
                         </div>
                       </td>
                       <td className="px-5 py-4 align-middle">
-                        <ApplicationStatusBadge status={app.status} />
+                        <ApplicationStatusBadge status={getApplicationDisplayStage(app, getPersonalityTest(app)).displayStage} />
                       </td>
                       <td className="px-5 py-4 align-middle text-sm">
                         {interview ? (

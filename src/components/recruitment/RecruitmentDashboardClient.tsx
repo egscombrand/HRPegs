@@ -16,6 +16,7 @@ import { collection, query, where } from 'firebase/firestore';
 import type { JobApplication, Job, UserProfile, Brand } from '@/lib/types';
 import { Skeleton } from '../ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
+import { getApplicationFilterStage } from '@/lib/recruitment/application-stage';
 
 export type FilterState = {
   dateRange: { from?: Date | null; to?: Date | null };
@@ -84,7 +85,7 @@ export function RecruitmentDashboardClient() {
             if (filters.dateRange.from && appliedDate && appliedDate < filters.dateRange.from) return false;
             if (filters.dateRange.to && appliedDate && appliedDate > filters.dateRange.to) return false;
             if (filters.jobIds.length > 0 && !filters.jobIds.includes(app.jobId)) return false;
-            if (filters.stages.length > 0 && !filters.stages.includes(app.status)) return false;
+            if (filters.stages.length > 0 && !filters.stages.includes(getApplicationFilterStage(app))) return false;
             if (filters.brandId && app.brandId !== filters.brandId) return false;
             // TODO: Implement recruiter filter once assignedRecruiterId is consistently populated
             return true;
@@ -220,7 +221,7 @@ export function RecruitmentDashboardClient() {
                 </TabsContent>
 
                 <TabsContent value="analytics" className="mt-0">
-                    <AnalyticsCharts applications={filteredApplications} filters={filters} jobs={jobs} />
+                    <AnalyticsCharts applications={filteredApplications} filters={filters} jobs={jobs || undefined} />
                 </TabsContent>
             </div>
         </Tabs>

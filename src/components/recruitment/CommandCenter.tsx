@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import { ArrowRight, AlertCircle, Calendar, Clock, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import { ApplicationStatusBadge } from './ApplicationStatusBadge';
+import { getApplicationDisplayStage, getApplicationFilterStage } from '@/lib/recruitment/application-stage';
 
 type NeedsActionItem = {
   app: JobApplication;
@@ -26,16 +27,17 @@ export function CommandCenter({ applications, jobs }: { applications: JobApplica
     const needsActionItems: NeedsActionItem[] = applications
       .map(app => {
           const daysWaiting = app.updatedAt ? differenceInDays(now, app.updatedAt.toDate()) : 0;
+          const stage = getApplicationFilterStage(app);
           let reason = '';
           let actionLabel = 'Review';
 
-          if (app.status === 'verification') {
+          if (stage === 'verification') {
               reason = 'Belum diverifikasi';
               actionLabel = 'Verifikasi';
-          } else if (app.status === 'tes_kepribadian' && daysWaiting > 3) {
+          } else if (stage === 'tes_kepribadian' && daysWaiting > 3) {
               reason = 'Assessment menunggu';
               actionLabel = 'Review';
-          } else if (app.status === 'interview') {
+          } else if (stage === 'interview') {
               const hasScheduledInterview = app.interviews?.some(iv => iv.status === 'scheduled');
               if (!hasScheduledInterview) {
                   reason = 'Interview belum dijadwalkan';
@@ -43,10 +45,10 @@ export function CommandCenter({ applications, jobs }: { applications: JobApplica
               } else {
                   reason = '';
               }
-          } else if (app.status === 'offered') {
+          } else if (stage === 'offered') {
               reason = 'Offering menunggu respon';
               actionLabel = 'Lihat Detail';
-          } else if (daysWaiting > 7 && !['hired', 'rejected', 'draft'].includes(app.status)) {
+          } else if (daysWaiting > 7 && !['hired', 'rejected', 'draft'].includes(stage)) {
               reason = `Terlalu lama di stage (${daysWaiting} hari)`;
               actionLabel = 'Review';
           }
@@ -112,7 +114,7 @@ export function CommandCenter({ applications, jobs }: { applications: JobApplica
                                         </TableCell>
                                         <TableCell className="text-xs text-muted-foreground">{item.app.jobPosition}</TableCell>
                                         <TableCell>
-                                            <ApplicationStatusBadge status={item.app.status} />
+                                            <ApplicationStatusBadge status={getApplicationDisplayStage(item.app).displayStage} />
                                         </TableCell>
                                         <TableCell className={cn('text-sm font-medium', item.daysWaiting > 5 && 'text-red-600')}>
                                             {item.daysWaiting} hari

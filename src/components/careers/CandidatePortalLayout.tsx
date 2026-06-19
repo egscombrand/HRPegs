@@ -49,12 +49,6 @@ import type {
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "../ui/ThemeToggle";
 import { Separator } from "../ui/separator";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { ORDERED_RECRUITMENT_STAGES } from "@/lib/types";
 import {
@@ -281,64 +275,9 @@ export function CandidatePortalLayout({ children }: { children: ReactNode }) {
     return roleConfig;
   }, [userProfile, navSettings, isLoadingSettings]);
 
-  const getGatingInfo = (menuLabel: string) => {
-    if (!highestStatus) {
-      // Case where user has account but never applied
-      const allowedBeforeFirstApp = [
-        "Dashboard",
-        "Profil Pelamar",
-        "Daftar Lowongan",
-        "Lamaran Saya",
-      ];
-      if (allowedBeforeFirstApp.includes(menuLabel)) {
-        return { locked: false, reason: "" };
-      }
-      if (menuLabel === "Tes Kepribadian" && !userProfile?.isProfileComplete) {
-        return {
-          locked: true,
-          reason: "Lengkapi profil Anda untuk membuka tes kepribadian.",
-        };
-      }
-      return {
-        locked: true,
-        reason: "Lamar pekerjaan pertama Anda untuk memulai tahap ini.",
-      };
-    }
-
-    const highestStatusIndex =
-      ORDERED_RECRUITMENT_STAGES.indexOf(highestStatus);
-
-    switch (menuLabel) {
-      case "Pengumpulan Dokumen":
-        const docStageIndex = ORDERED_RECRUITMENT_STAGES.indexOf(
-          "document_submission",
-        );
-        return highestStatusIndex >= docStageIndex
-          ? { locked: false, reason: "" }
-          : {
-              locked: true,
-              reason:
-                "Anda akan diundang untuk mengunggah dokumen setelah lolos tahap verifikasi.",
-            };
-      case "Jadwal Wawancara":
-        const interviewStageIndex =
-          ORDERED_RECRUITMENT_STAGES.indexOf("interview");
-        return highestStatusIndex >= interviewStageIndex
-          ? { locked: false, reason: "" }
-          : {
-              locked: true, 
-              reason: "Jadwal akan muncul di sini setelah diatur oleh HRD.",
-            };
-      default:
-        return { locked: false, reason: "" };
-    }
-  };
-
   if (!userProfile) {
     return null; // Should be handled by the parent layout's guard
   }
-
-  const isTestInProgress = !!activeTestSession;
 
   return (
     <SidebarProvider defaultOpen>
@@ -370,21 +309,6 @@ export function CandidatePortalLayout({ children }: { children: ReactNode }) {
                   </h2>
                 )}
                 {group.items.map((item) => {
-                  const { locked: isGated, reason: gateReason } = getGatingInfo(
-                    item.label,
-                  );
-
-                  let locked = isGated;
-                  let reason = gateReason;
-
-                  if (
-                    isTestInProgress &&
-                    !item.href.includes("/assessment/personality")
-                  ) {
-                    locked = true;
-                    reason = "Selesaikan tes Anda yang sedang berjalan.";
-                  }
-
                   const isActive =
                     pathname === item.href ||
                     (item.href !== "/careers/portal" &&
@@ -419,44 +343,24 @@ export function CandidatePortalLayout({ children }: { children: ReactNode }) {
                     );
                   }
 
-                  const button = (
-                    <SidebarMenuButton
-                      asChild
-                      tooltip={item.label}
-                      isActive={isActive}
-                      disabled={locked}
-                      className={cn(
-                        "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground font-medium",
-                        "justify-start",
-                        locked && "cursor-not-allowed opacity-60",
-                      )}
-                    >
-                      <Link href={locked ? "#" : item.href}>
-                        {item.icon}
-                        <span className="group-data-[state=collapsed]:hidden">
-                          {item.label}
-                        </span>
-                        <div className="ml-auto group-data-[state=collapsed]:hidden">
-                          {badgeContent}
-                        </div>
-                      </Link>
-                    </SidebarMenuButton>
-                  );
-
                   return (
                     <SidebarMenuItem key={item.label}>
-                      {locked ? (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>{button}</TooltipTrigger>
-                            <TooltipContent side="right">
-                              <p>{reason}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      ) : (
-                        button
-                      )}
+                      <SidebarMenuButton
+                        asChild
+                        tooltip={item.label}
+                        isActive={isActive}
+                        className="text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground font-medium justify-start"
+                      >
+                        <Link href={item.href}>
+                          {item.icon}
+                          <span className="group-data-[state=collapsed]:hidden">
+                            {item.label}
+                          </span>
+                          <div className="ml-auto group-data-[state=collapsed]:hidden">
+                            {badgeContent}
+                          </div>
+                        </Link>
+                      </SidebarMenuButton>
                     </SidebarMenuItem>
                   );
                 })}

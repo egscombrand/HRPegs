@@ -16,6 +16,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { doc, serverTimestamp } from 'firebase/firestore';
 import { useFirestore, updateDocumentNonBlocking } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
+import { getApplicationFilterStage } from '@/lib/recruitment/application-stage';
 
 // Define the order of columns in the Kanban board
 const KANBAN_STAGES: JobApplication['status'][] = [
@@ -101,8 +102,9 @@ export function CandidatesKanban({ applications: initialApplications }: { applic
         const grouped: ApplicationGroup = {} as ApplicationGroup;
         KANBAN_STAGES.forEach(stage => { grouped[stage] = [] });
         initialApplications.forEach(app => {
-            if (grouped[app.status] && KANBAN_STAGES.includes(app.status)) {
-                grouped[app.status].push(app);
+            const stage = getApplicationFilterStage(app);
+            if (grouped[stage] && KANBAN_STAGES.includes(stage)) {
+                grouped[stage].push(app);
             }
         });
         return grouped;
@@ -112,8 +114,9 @@ export function CandidatesKanban({ applications: initialApplications }: { applic
         const grouped: ApplicationGroup = {} as ApplicationGroup;
         KANBAN_STAGES.forEach(stage => { grouped[stage] = [] });
         initialApplications.forEach(app => {
-            if (grouped[app.status] && KANBAN_STAGES.includes(app.status)) {
-                grouped[app.status].push(app);
+            const stage = getApplicationFilterStage(app);
+            if (grouped[stage] && KANBAN_STAGES.includes(stage)) {
+                grouped[stage].push(app);
             }
         });
         setApplications(grouped);
@@ -231,8 +234,9 @@ export function CandidatesKanban({ applications: initialApplications }: { applic
                     const grouped: ApplicationGroup = {} as ApplicationGroup;
                     KANBAN_STAGES.forEach(stage => { grouped[stage] = [] });
                     initialApplications.forEach(app => {
-                        if (grouped[app.status] && KANBAN_STAGES.includes(app.status)) {
-                            grouped[app.status].push(app);
+                        const stage = getApplicationFilterStage(app);
+                        if (grouped[stage] && KANBAN_STAGES.includes(stage)) {
+                            grouped[stage].push(app);
                         }
                     });
                     return grouped;

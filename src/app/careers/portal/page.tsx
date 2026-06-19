@@ -12,18 +12,19 @@ import {
   AlertCircle, Video, XCircle
 } from 'lucide-react';
 import React, { useMemo } from 'react';
-import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, query, where } from 'firebase/firestore';
+import { useCollection, useDoc, useFirestore, useMemoFirebase } from '@/firebase';
+import { collection, doc, query, where } from 'firebase/firestore';
 import type { JobApplication, AssessmentSession, Job } from '@/lib/types';
-import { ORDERED_RECRUITMENT_STAGES } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { format, isPast, differenceInDays } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
+import { getApplicationDisplayStage, getApplicationFilterStage } from '@/lib/recruitment/application-stage';
 
+// Unified status labels — same source of truth as Lamaran Saya
 const STATUS_LABEL: Record<string, string> = {
   draft: 'Draf',
   submitted: 'Lamaran Dikirim',
-  tes_kepribadian: 'Tes Kepribadian',
+  tes_kepribadian: 'Tes Kepribadian',  // overridden by effectiveAppStatus when test done
   screening: 'Dalam Evaluasi',
   verification: 'Dalam Evaluasi',
   document_submission: 'Dalam Evaluasi',
@@ -45,13 +46,35 @@ const STATUS_COLOR: Record<string, string> = {
   rejected: 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400',
 };
 
-// 4-stage candidate-facing timeline (matches Lamaran Saya page)
+// 5-stage candidate-facing timeline — matches Lamaran Saya page exactly
 const TIMELINE_STAGES = [
   { key: 'start',     label: 'Lamaran & Tes Kepribadian' },
   { key: 'eval',      label: 'Evaluasi HRD'              },
   { key: 'interview', label: 'Wawancara'                 },
+  { key: 'offering',  label: 'Offering'                  },
   { key: 'decision',  label: 'Keputusan Akhir'           },
 ];
+
+// Returns the display status for an application, correcting for candidates who
+// already completed the personality test but whose application still has
+// status "tes_kepribadian" (stale data from before the backfill ran).
+function effectiveAppStatus(
+  app: JobApplication,
+  testCompleted: boolean,
+): string {
+  return getApplicationFilterStage(app, testCompleted ? { status: 'completed' } : null);
+}
+
+// Maps an effective status to the 5-stage timeline index (0–4).
+// Returns -1 for rejected / unknown.
+function statusToTimelineIndex(status: string): number {
+  if (['submitted', 'tes_kepribadian'].includes(status)) return 0;
+  if (['screening', 'verification', 'document_submission'].includes(status)) return 1;
+  if (status === 'interview') return 2;
+  if (status === 'offered') return 3;
+  if (status === 'hired') return 4;
+  return -1;
+}
 
 export default function CandidateDashboardPage() {
   const { userProfile } = useAuth();
@@ -65,9 +88,25 @@ export default function CandidateDashboardPage() {
 
   const sessionsQuery = useMemoFirebase(() => {
     if (!userProfile?.uid) return null;
-    return query(collection(firestore, 'assessment_sessions'), where('candidateUid', '==', userProfile.uid));
+    return query(
+      collection(firestore, 'assessment_sessions'),
+      where('candidateUid', '==', userProfile.uid),
+      where('status', 'in', ['submitted', 'completed']),
+    );
   }, [userProfile?.uid, firestore]);
   const { data: assessmentSessions } = useCollection<AssessmentSession>(sessionsQuery);
+
+  // Candidate-level personality test document (1 per candidate, written by /api/assessment/submit)
+  const candidateTestRef = useMemoFirebase(() => {
+    if (!userProfile?.uid) return null;
+    return doc(firestore, 'candidate_personality_tests', userProfile.uid);
+  }, [userProfile?.uid, firestore]);
+  const { data: candidateTestDoc } = useDoc<{
+    status?: string;
+    isCompleted?: boolean;
+    completedAt?: any;
+    personalityTestCompleted?: boolean;
+  }>(candidateTestRef);
 
   const jobsQuery = useMemoFirebase(
     () => query(collection(firestore, 'jobs'), where('publishStatus', 'in', ['published', 'reopened'])),
@@ -75,7 +114,22 @@ export default function CandidateDashboardPage() {
   );
   const { data: allJobs } = useCollection<Job>(jobsQuery);
 
-  const hasFinishedTest = assessmentSessions?.some(s => s.status === 'submitted') || false;
+  // Unified test-completion check — same multi-source logic as Lamaran Saya page
+  const hasFinishedTest = useMemo(() => {
+    if (candidateTestDoc) {
+      if (
+        candidateTestDoc.status === 'completed' ||
+        candidateTestDoc.status === 'selesai' ||
+        candidateTestDoc.isCompleted === true ||
+        candidateTestDoc.personalityTestCompleted === true ||
+        candidateTestDoc.completedAt != null
+      ) return true;
+    }
+    if ((assessmentSessions?.length ?? 0) > 0) return true;
+    if ((applications || []).some(a => a.personalityTestCompleted === true)) return true;
+    return false;
+  }, [candidateTestDoc, assessmentSessions, applications]);
+
   const isProfileComplete = !!userProfile?.isProfileComplete;
 
   const stats = useMemo(() => {
@@ -101,11 +155,12 @@ export default function CandidateDashboardPage() {
     const active = applications.filter(a => a.status !== 'rejected');
     if (!active.length) return null;
     return active.reduce((best, app) => {
-      const i = ORDERED_RECRUITMENT_STAGES.indexOf(app.status);
-      const bestI = ORDERED_RECRUITMENT_STAGES.indexOf(best.status);
+      const order = ['draft', 'submitted', 'tes_kepribadian', 'screening', 'verification', 'document_submission', 'interview', 'offered', 'hired'];
+      const i = order.indexOf(getApplicationFilterStage(app, candidateTestDoc));
+      const bestI = order.indexOf(getApplicationFilterStage(best, candidateTestDoc));
       return i > bestI ? app : best;
     });
-  }, [applications]);
+  }, [applications, candidateTestDoc]);
 
   const upcomingInterviews = useMemo(() => {
     if (!applications) return [];
@@ -144,18 +199,12 @@ export default function CandidateDashboardPage() {
   const firstName = userProfile?.fullName?.split(' ')[0] || 'Kandidat';
   const isRejected = highestStatusApp?.status === 'rejected';
 
-  // Map application status → 4-stage timeline index (0-3), -1 = rejected/none
+  // Map application status → 5-stage timeline index (0-4), -1 = rejected/none
+  // Uses effectiveAppStatus so tes_kepribadian+done → screening → index 1
   const timelineIndex = useMemo(() => {
     if (!highestStatusApp || isRejected) return -1;
-    const s = highestStatusApp.status;
-    if (['submitted', 'tes_kepribadian'].includes(s)) return 0;
-    // Once test is done and still in processing stages → stage 0 complete, stage 1 active
-    if (['screening', 'verification', 'document_submission'].includes(s)) {
-      return hasFinishedTest ? 1 : 0;
-    }
-    if (s === 'interview') return 2;
-    if (['offered', 'hired'].includes(s)) return 3;
-    return 0;
+    const effective = effectiveAppStatus(highestStatusApp, hasFinishedTest);
+    return Math.max(statusToTimelineIndex(effective), 0);
   }, [highestStatusApp, isRejected, hasFinishedTest]);
 
   return (
@@ -234,9 +283,15 @@ export default function CandidateDashboardPage() {
                         <p className="font-semibold text-sm text-slate-900 dark:text-white truncate">
                           {app.jobPosition}
                         </p>
-                        <Badge className={cn('shrink-0 text-xs border-0', STATUS_COLOR[app.status])}>
-                          {STATUS_LABEL[app.status] || app.status}
-                        </Badge>
+                        {(() => {
+                          const display = getApplicationDisplayStage(app, candidateTestDoc);
+                          const es = display.displayStage === 'evaluasi_hrd' ? 'screening' : display.displayStage;
+                          return (
+                            <Badge className={cn('shrink-0 text-xs border-0', STATUS_COLOR[es] || STATUS_COLOR[app.status])}>
+                              {display.candidateVisibleStatus || STATUS_LABEL[es] || STATUS_LABEL[app.status] || app.status}
+                            </Badge>
+                          );
+                        })()}
                       </div>
                       <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
                         <span className="flex items-center gap-1">
@@ -470,7 +525,7 @@ export default function CandidateDashboardPage() {
                 {
                   label: 'Tes Kepribadian',
                   status: hasFinishedTest ? 'Selesai' :
-                    assessmentSessions?.some(s => s.status === 'draft') ? 'Sedang Dikerjakan' : 'Belum Dikerjakan',
+                    (candidateTestDoc != null && !hasFinishedTest) ? 'Sedang Dikerjakan' : 'Belum Dikerjakan',
                   done: hasFinishedTest,
                   href: '/careers/portal/assessment/personality',
                 },

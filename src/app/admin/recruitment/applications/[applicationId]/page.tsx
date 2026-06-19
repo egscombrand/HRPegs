@@ -34,6 +34,7 @@ import type {
   Brand,
   UserProfile,
   AssessmentSession,
+  CandidatePersonalityTest,
   Offering,
 } from "@/lib/types";
 import { useRoleGuard } from "@/hooks/useRoleGuard";
@@ -119,6 +120,7 @@ import {
   CandidateStepContent,
 } from "@/components/recruitment/CandidateStepView";
 import { MultiApplicationAlert } from "@/components/recruitment/MultiApplicationAlert";
+import { getApplicationDisplayStage, getApplicationFilterStage } from "@/lib/recruitment/application-stage";
 
 function ApplicationDetailSkeleton() {
   return <Skeleton className="h-[500px] w-full" />;
@@ -288,6 +290,16 @@ export default function ApplicationDetailPage() {
   );
   const { data: profile, isLoading: isLoadingProfile } =
     useDoc<Profile>(profileRef);
+
+  const candidateTestRef = useMemoFirebase(
+    () =>
+      application
+        ? doc(firestore, "candidate_personality_tests", application.candidateUid)
+        : null,
+    [firestore, application],
+  );
+  const { data: candidatePersonalityTest } =
+    useDoc<CandidatePersonalityTest>(candidateTestRef);
 
   const jobRef = useMemoFirebase(
     () => (application ? doc(firestore, "jobs", application.jobId) : null),
@@ -896,8 +908,13 @@ export default function ApplicationDetailPage() {
       if (hasPastInterview) return "waiting_evaluation";
     }
 
-    return application.status;
-  }, [application]);
+    return getApplicationFilterStage(application, candidatePersonalityTest);
+  }, [application, candidatePersonalityTest]);
+
+  const displayStage = useMemo(
+    () => application ? getApplicationDisplayStage(application, candidatePersonalityTest) : null,
+    [application, candidatePersonalityTest],
+  );
 
   // HRD-only decision overlay badge — replaces the raw candidateStatus secondary badge.
   const adminDecisionBadge = useMemo(() => {
@@ -1086,7 +1103,7 @@ export default function ApplicationDetailPage() {
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <ApplicationStatusBadge
-                      status={displayStatus}
+                      status={displayStage?.displayStage || displayStatus}
                       className="text-base px-4 py-1"
                     />
                     {application.offerStatus && (
@@ -1130,7 +1147,7 @@ export default function ApplicationDetailPage() {
                     >
                       <BrainCircuit className="h-3 w-3" />
                       <span>
-                        Psikotest: {assessmentInfo.text}{" "}
+                        Psikotest: {displayStage?.isPersonalityTestCompleted ? "Selesai" : assessmentInfo.text}{" "}
                         {assessmentInfo.result && `(${assessmentInfo.result})`}
                       </span>
                     </div>
@@ -1148,6 +1165,19 @@ export default function ApplicationDetailPage() {
             )}
 
             <ApplicationProgressStepper currentStatus={displayStatus} />
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <InfoRow
+                icon={<BrainCircuit className="h-4 w-4" />}
+                label="Tes Kepribadian"
+                value={displayStage?.isPersonalityTestCompleted ? "Selesai" : "Menunggu"}
+              />
+              <InfoRow
+                icon={<ShieldCheck className="h-4 w-4" />}
+                label="Status Saat Ini"
+                value={displayStage?.displayStageLabel || statusDisplayLabels[displayStatus as keyof typeof statusDisplayLabels]}
+              />
+            </div>
 
             {/* Interview schedule summary card — visible to all internal users (panelists included) */}
             {application.status === "interview" && (() => {

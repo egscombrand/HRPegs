@@ -183,9 +183,22 @@ export default function JobApplyPage() {
         return;
       }
 
-      // 5. Construct and submit application data
+      // 5. Check candidate-level personality test status
+      const candidateTestSnap = await getDoc(
+        doc(firestore, "candidate_personality_tests", userProfile.uid),
+      );
+      const testData = candidateTestSnap.exists() ? candidateTestSnap.data() : null;
+      const hasCompletedPersonalityTest =
+        testData?.status === "completed" ||
+        testData?.status === "selesai" ||
+        testData?.isCompleted === true ||
+        testData?.personalityTestCompleted === true ||
+        testData?.completedAt != null;
+      const existingTestSessionId = testData?.sessionId ?? undefined;
+
+      // 6. Construct and submit application data
       const applicationRef = doc(firestore, "applications", applicationId);
-      const initialStatus = "tes_kepribadian";
+      const initialStatus = hasCompletedPersonalityTest ? "screening" : "tes_kepribadian";
 
       const applicationData: Omit<JobApplication, "id"> = {
         candidateUid: userProfile.uid,
@@ -199,6 +212,14 @@ export default function JobApplyPage() {
         jobType: job.statusJob,
         location: job.location,
         status: initialStatus,
+        personalityTestRequired: !hasCompletedPersonalityTest,
+        personalityTestCompleted: hasCompletedPersonalityTest,
+        ...(hasCompletedPersonalityTest && {
+          personalityTestStatus: "completed",
+          personalityTestSource: "global_candidate_test",
+          ...(existingTestSessionId && { personalityTestResultId: existingTestSessionId }),
+          ...(testData?.completedAt && { personalityTestCompletedAt: testData.completedAt }),
+        }),
         jobApplyDeadline: job.applyDeadline || null,
         createdAt: serverTimestamp() as any,
         updatedAt: serverTimestamp() as any,
@@ -217,15 +238,23 @@ export default function JobApplyPage() {
         merge: false,
       });
 
-      toast({
-        title: "Lamaran Terkirim!",
-        description:
-          "Lamaran berhasil dikirim! Langkah selanjutnya adalah tes kepribadian. Anda akan kami arahkan sekarang.",
-      });
-
-      router.push(
-        `/careers/portal/assessment/personality?applicationId=${applicationId}`,
-      );
+      if (hasCompletedPersonalityTest) {
+        toast({
+          title: "Lamaran Terkirim!",
+          description:
+            "Lamaran berhasil dikirim. Hasil tes kepribadian Anda sebelumnya akan digunakan dalam evaluasi.",
+        });
+        router.push("/careers/portal/applications");
+      } else {
+        toast({
+          title: "Lamaran Terkirim!",
+          description:
+            "Langkah selanjutnya adalah tes kepribadian. Anda akan kami arahkan sekarang.",
+        });
+        router.push(
+          `/careers/portal/assessment/personality?applicationId=${applicationId}`,
+        );
+      }
     } catch (error: any) {
       console.error("Application submission error:", error);
       toast({
