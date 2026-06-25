@@ -72,6 +72,27 @@ const InfoRow = ({
   </div>
 );
 
+const workLocationLabels: Record<string, string> = {
+  kantor: "Kantor",
+  rumah_wfh: "Rumah / WFH",
+  luar_kantor: "Luar Kantor",
+  site_klien: "Site / Lokasi Klien",
+  lainnya: "Lainnya",
+  remote: "Rumah / WFH",
+  site: "Site / Lokasi Klien",
+};
+
+const getWorkLocationDisplay = (submission: OvertimeSubmission) => {
+  const rawLocation =
+    (submission as any).workLocation || submission.location || "kantor";
+  const label =
+    workLocationLabels[rawLocation] ||
+    submission.workLocationLabel ||
+    rawLocation;
+  const detail = (submission as any).workLocationDetail?.trim?.();
+  return rawLocation === "lainnya" && detail ? `${label} - ${detail}` : label;
+};
+
 export function ReviewOvertimeDialog({
   open,
   onOpenChange,
@@ -192,16 +213,7 @@ export function ReviewOvertimeDialog({
   const getApprovalStatusLabel = (status: string) =>
     approvalStatusLabels[status] || status || "-";
 
-  const workLocationLabel =
-    submission.workLocationLabel ||
-    submission.workLocation ||
-    (submission.location === "kantor"
-      ? "Kantor"
-      : submission.location === "remote"
-        ? "Remote"
-        : submission.location === "site"
-          ? "Site"
-          : submission.location || "-");
+  const workLocationLabel = getWorkLocationDisplay(submission);
 
   const overtimeTypeLabel =
     submission.overtimeTypeLabel ||
@@ -371,14 +383,7 @@ export function ReviewOvertimeDialog({
           const payrollMonth = overtimeDate
             ? format(overtimeDate, "yyyy-MM")
             : format(new Date(), "yyyy-MM");
-          const workMode =
-            submission.location === "kantor"
-              ? "Kantor"
-              : submission.location === "remote"
-                ? "WFH"
-                : submission.location === "site"
-                  ? "Dinas"
-                  : "Kantor";
+          const workMode = workLocationLabel;
 
           const taskSummary = tasks
             .map((t: any) => t.description)
@@ -1269,6 +1274,56 @@ export function ReviewOvertimeDialog({
                             </p>
                           )}
                         </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Realtime Timer Breakdown */}
+                  {(submission as any).inputMode === 'realtime' &&
+                    (submission as any).totalGrossDurationMinutes != null && (
+                    <Card className="rounded-3xl border border-teal-200 bg-teal-50 shadow-sm">
+                      <CardHeader className="px-5 py-4 border-b border-teal-100">
+                        <CardTitle className="text-base text-teal-800 flex items-center gap-2">
+                          <Info className="h-4 w-4 text-teal-600" />
+                          Rincian Durasi Realtime
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3 px-5 py-4 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Durasi Kotor</span>
+                          <span className="font-medium">{formatMinutesToHuman((submission as any).totalGrossDurationMinutes ?? 0)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">
+                            Total Jeda ({((submission as any).pauseLogs?.length ?? 0)} sesi)
+                          </span>
+                          <span className="font-medium text-amber-600">{formatMinutesToHuman((submission as any).totalPausedDurationMinutes ?? 0)}</span>
+                        </div>
+                        <div className="flex justify-between border-t border-teal-200 pt-2">
+                          <span className="font-bold text-teal-800">Durasi Bersih (yang diajukan)</span>
+                          <span className="font-bold text-teal-700">{formatMinutesToHuman((submission as any).totalNetDurationMinutes ?? 0)}</span>
+                        </div>
+                        {((submission as any).pauseLogs?.length ?? 0) > 0 && (
+                          <details className="mt-2">
+                            <summary className="cursor-pointer text-xs text-teal-700 font-semibold">Lihat rincian jeda</summary>
+                            <div className="mt-2 rounded-lg border border-teal-200 overflow-hidden text-xs">
+                              {(submission as any).pauseLogs.map((log: any, i: number) => {
+                                const startStr = log.startedAt?.toDate ?
+                                  `${String(log.startedAt.toDate().getHours()).padStart(2,'0')}:${String(log.startedAt.toDate().getMinutes()).padStart(2,'0')}` : '?';
+                                const endStr = log.endedAt?.toDate ?
+                                  `${String(log.endedAt.toDate().getHours()).padStart(2,'0')}:${String(log.endedAt.toDate().getMinutes()).padStart(2,'0')}` : '?';
+                                return (
+                                  <div key={i} className="flex items-center gap-3 px-3 py-2 border-b last:border-0 bg-white">
+                                    <span className="text-muted-foreground w-4">{i + 1}</span>
+                                    <span className="font-medium text-slate-700">{log.reason}</span>
+                                    <span className="text-muted-foreground">{startStr} – {endStr}</span>
+                                    {log.note && <span className="italic text-muted-foreground">{log.note}</span>}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </details>
+                        )}
                       </CardContent>
                     </Card>
                   )}

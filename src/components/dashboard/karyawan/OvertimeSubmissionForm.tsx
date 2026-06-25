@@ -53,6 +53,9 @@ import {
   StopCircle,
   ChevronRight,
   RotateCcw,
+  Timer,
+  CheckCircle2,
+  PenLine,
 } from "lucide-react";
 import { useAuth } from "@/providers/auth-provider";
 import {
@@ -73,6 +76,7 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { OvertimeStatusBadge } from "./OvertimeStatusBadge";
+import { RealtimeOvertimeTimer } from "./RealtimeOvertimeTimer";
 import type {
   OvertimeSubmission,
   UserProfile,
@@ -105,6 +109,39 @@ const taskSchema = z.object({
     .min(1, "Estimasi harus lebih dari 0 menit."),
 });
 
+const workLocationOptions = [
+  { value: "kantor", label: "Kantor" },
+  { value: "rumah_wfh", label: "Rumah / WFH" },
+  { value: "luar_kantor", label: "Luar Kantor" },
+  { value: "site_klien", label: "Site / Lokasi Klien" },
+  { value: "lainnya", label: "Lainnya" },
+] as const;
+
+type WorkLocationValue = (typeof workLocationOptions)[number]["value"];
+
+const normalizeWorkLocation = (value?: string | null): WorkLocationValue => {
+  if (value === "remote") return "rumah_wfh";
+  if (value === "site") return "site_klien";
+  if (workLocationOptions.some((option) => option.value === value)) {
+    return value as WorkLocationValue;
+  }
+  return "kantor";
+};
+
+const getWorkLocationLabel = (
+  value?: string | null,
+  detail?: string | null,
+) => {
+  const normalized = normalizeWorkLocation(value);
+  const label =
+    workLocationOptions.find((option) => option.value === normalized)?.label ||
+    "Kantor";
+  const cleanDetail = detail?.trim();
+  return normalized === "lainnya" && cleanDetail
+    ? `${label} - ${cleanDetail}`
+    : label;
+};
+
 const submissionSchema = z
   .object({
     date: z.date({ required_error: "Tanggal lembur harus diisi." }),
@@ -121,9 +158,10 @@ const submissionSchema = z
     reason: z
       .string()
       .min(10, { message: "Alasan lembur harus diisi (minimal 10 karakter)." }),
-    location: z.enum(["kantor", "remote", "site"], {
+    location: z.enum(["kantor", "rumah_wfh", "luar_kantor", "site_klien", "lainnya"], {
       required_error: "Lokasi harus dipilih.",
     }),
+    workLocationDetail: z.string().optional().default(""),
     overtimeCoordinatorUid: z
       .string({ required_error: "Koordinator/Pengawas lembur harus dipilih." })
       .min(1, "Koordinator/Pengawas lembur harus dipilih."),
@@ -131,6 +169,13 @@ const submissionSchema = z
     employeeNotes: z.string().optional(),
     attachments: z.array(z.string()).optional().default([]),
   })
+  .refine(
+    (data) => data.location !== "lainnya" || !!data.workLocationDetail?.trim(),
+    {
+      message: "Detail lokasi kerja harus diisi jika memilih Lainnya.",
+      path: ["workLocationDetail"],
+    },
+  )
   .refine(
     (data) => {
       // Validate that end time is after start time
@@ -196,6 +241,7 @@ interface OvertimeSubmissionFormProps {
   onSuccess: () => void;
   formMode: "view" | "edit";
   onRequestEdit?: () => void;
+  existingRealtimeDrafts?: OvertimeSubmission[];
 }
 
 const InfoRow = ({
@@ -319,16 +365,10 @@ const OvertimeSubmissionDetailView = ({
   );
   const totalDuration = submission.totalDurationMinutes || 0;
   const remainingDuration = totalDuration - totalEstimated;
-  const locationLabel =
-    submission.workLocationLabel ||
-    submission.workLocation ||
-    (submission.location === "kantor"
-      ? "Kantor"
-      : submission.location === "remote"
-        ? "Remote"
-        : submission.location === "site"
-          ? "Site/Lokasi Klien"
-          : submission.location || "-");
+  const locationLabel = getWorkLocationLabel(
+    submission.workLocation || submission.location,
+    (submission as any).workLocationDetail,
+  );
   const overtimeTypeLabel =
     submission.overtimeType === "hari_kerja"
       ? "Hari Kerja"
@@ -1166,15 +1206,31 @@ export function OvertimeSubmissionForm({
   onSuccess,
   formMode,
   onRequestEdit,
+  existingRealtimeDrafts = [],
 }: OvertimeSubmissionFormProps) {
+  const { userProfile } = useAuth();
+  const firestore = useFirestore();
+  const { toast } = useToast();
+  const draftStorageKey = useMemo(
+    () =>
+      userProfile?.uid
+        ? `overtime-realtime-draft:${userProfile.uid}`
+        : "overtime-realtime-draft",
+    [userProfile?.uid],
+  );
   const [isSaving, setIsSaving] = useState(false);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [uploadingAttachments, setUploadingAttachments] = useState(false);
   const [startTimeAdjustmentReason, setStartTimeAdjustmentReason] = useState("");
   const formCreatedAtRef = useRef<string>(""); // "HH:MM" saat form dibuka, set sekali
-  const { userProfile } = useAuth();
-  const firestore = useFirestore();
-  const { toast } = useToast();
+
+  // inputMode: null = not yet chosen (only when creating new), 'manual' or 'realtime'
+  const [inputMode, setInputMode] = useState<'manual' | 'realtime' | null>(null);
+  const [pendingMode, setPendingMode] = useState<'manual' | 'realtime' | null>(null);
+  const [realtimeDraftDoc, setRealtimeDraftDoc] = useState<OvertimeSubmission | null>(null);
+  const [isCreatingRealtimeDraft, setIsCreatingRealtimeDraft] = useState(false);
+  const [showResumeDialog, setShowResumeDialog] = useState(false);
+  const [hasLocalRealtimeDraft, setHasLocalRealtimeDraft] = useState(false);
 
   const normalizedUserRole = userProfile?.role?.toLowerCase() || "";
   const normalizedStructuralLevel = (
@@ -1320,6 +1376,36 @@ export function OvertimeSubmissionForm({
     control: form.control,
     name: "tasks",
   });
+
+  const persistRealtimeDraft = useCallback(() => {
+    if (typeof window === "undefined") return;
+    if (submission) return;
+    if (inputMode !== "realtime") return;
+    const values = form.getValues();
+    const payload = {
+      date: values.date?.toISOString?.() || new Date().toISOString(),
+      startTime: values.startTime || "",
+      endTime: values.endTime || "",
+      overtimeType: values.overtimeType || "hari_kerja",
+      tasks: values.tasks || [],
+      reason: values.reason || "",
+      location: normalizeWorkLocation(values.location),
+      workLocationDetail: values.workLocationDetail || "",
+      overtimeCoordinatorUid: values.overtimeCoordinatorUid || "",
+      overtimeInstructionNote: values.overtimeInstructionNote || "",
+      employeeNotes: values.employeeNotes || "",
+      attachments: values.attachments || [],
+      updatedAt: new Date().toISOString(),
+    };
+    window.localStorage.setItem(draftStorageKey, JSON.stringify(payload));
+    setHasLocalRealtimeDraft(true);
+  }, [draftStorageKey, form, inputMode, submission]);
+
+  const clearRealtimeDraft = useCallback(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.removeItem(draftStorageKey);
+    setHasLocalRealtimeDraft(false);
+  }, [draftStorageKey]);
 
   const { watch, setValue } = form;
   const startTimeStr = watch("startTime");
@@ -1664,6 +1750,7 @@ export function OvertimeSubmissionForm({
   const overtimeCoordinatorUid = watch("overtimeCoordinatorUid");
   const overtimeType = watch("overtimeType");
   const location = watch("location");
+  const workLocationDetail = watch("workLocationDetail");
   const reasonValue = watch("reason");
   const dateValue = watch("date");
   const startTime = watch("startTime");
@@ -1700,6 +1787,9 @@ export function OvertimeSubmissionForm({
     if (!location) {
       reasons.push("Lokasi kerja belum dipilih");
     }
+    if (location === "lainnya" && !workLocationDetail?.trim()) {
+      reasons.push("Detail lokasi kerja belum diisi");
+    }
     if (!Array.isArray(tasks) || tasks.length === 0 || !hasTaskDescriptions) {
       reasons.push("Rincian pekerjaan belum diisi");
     }
@@ -1722,6 +1812,7 @@ export function OvertimeSubmissionForm({
     isDateValid,
     isTimeRangeValid,
     location,
+    workLocationDetail,
     overtimeCoordinatorUid,
     overtimeType,
     reasonValue,
@@ -1755,6 +1846,59 @@ export function OvertimeSubmissionForm({
     });
   };
 
+  // Reset inputMode when dialog opens/closes
+  useEffect(() => {
+    if (!open) {
+      setInputMode(null);
+      setPendingMode(null);
+      setRealtimeDraftDoc(null);
+      setShowResumeDialog(false);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || submission) return;
+    if (typeof window === "undefined") return;
+    const raw = window.localStorage.getItem(draftStorageKey);
+    if (!raw) {
+      setHasLocalRealtimeDraft(false);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      setHasLocalRealtimeDraft(true);
+      if (parsed?.date || parsed?.startTime || parsed?.reason) {
+        form.reset({
+          date: parsed.date ? new Date(parsed.date) : new Date(),
+          startTime: parsed.startTime || "",
+          endTime: parsed.endTime || "",
+          overtimeType: parsed.overtimeType || "hari_kerja",
+          tasks: Array.isArray(parsed.tasks) && parsed.tasks.length > 0
+            ? parsed.tasks
+            : [{ description: "", estimatedMinutes: 60 }],
+          reason: parsed.reason || "",
+          location: normalizeWorkLocation(parsed.location),
+          workLocationDetail: parsed.workLocationDetail || "",
+          employeeNotes: parsed.employeeNotes || "",
+          attachments: parsed.attachments || [],
+          overtimeCoordinatorUid: parsed.overtimeCoordinatorUid || "",
+          overtimeInstructionNote: parsed.overtimeInstructionNote || "",
+        });
+      }
+    } catch {
+      setHasLocalRealtimeDraft(false);
+    }
+  }, [open, submission, draftStorageKey, form]);
+
+  useEffect(() => {
+    if (!open || submission || inputMode !== "realtime") return;
+    const subscription = form.watch(() => {
+      persistRealtimeDraft();
+    });
+    persistRealtimeDraft();
+    return () => subscription.unsubscribe();
+  }, [open, submission, inputMode, form, persistRealtimeDraft]);
+
   useEffect(() => {
     if (open) {
       if (submission) {
@@ -1774,7 +1918,8 @@ export function OvertimeSubmissionForm({
             estimatedMinutes: t.estimatedMinutes,
           })) || [{ description: "", estimatedMinutes: 60 }],
           reason: submission.reason,
-          location: submission.location,
+          location: normalizeWorkLocation(submission.location),
+          workLocationDetail: (submission as any).workLocationDetail || "",
           employeeNotes: submission.employeeNotes || "",
           attachments: (submission.attachments || []).map((a: any) =>
             typeof a === "string" ? a : (a.fileUrl || a.url || a.driveFileId || "")
@@ -1798,6 +1943,7 @@ export function OvertimeSubmissionForm({
           tasks: [{ description: "", estimatedMinutes: 60 }],
           reason: "",
           location: "kantor",
+          workLocationDetail: "",
           employeeNotes: "",
           attachments: [],
           overtimeCoordinatorUid: "",
@@ -1852,6 +1998,78 @@ export function OvertimeSubmissionForm({
       throw new Error("Gagal mengupload lampiran");
     } finally {
       setUploadingAttachments(false);
+    }
+  };
+
+  const handleCreateRealtimeDraft = async () => {
+    if (!userProfile) return;
+    setIsCreatingRealtimeDraft(true);
+    try {
+      const hrd = employeeProfile?.hrdEmploymentInfo;
+      const newDocRef = doc(collection(firestore, "overtime_submissions"));
+      const brandId = hrd?.brandId || employeeProfile?.brandId || userProfile?.brandId;
+      const brandName = staffBrandName || "";
+      const divisionName = displayInfo.division || "";
+      let restoredDraft: any = null;
+      if (typeof window !== "undefined") {
+        try {
+          const raw = window.localStorage.getItem(draftStorageKey);
+          restoredDraft = raw ? JSON.parse(raw) : null;
+        } catch {}
+      }
+      const draftPayload: any = {
+        employeeUid: userProfile.uid,
+        employeeName: userProfile.fullName || "",
+        brandId: Array.isArray(brandId) ? brandId[0] : brandId ?? "",
+        brandName,
+        divisionName,
+        workRole: hrd?.workRole || displayInfo.positionTitle,
+        inputMode: "realtime",
+        timerStatus: "draft",
+        status: "draft",
+        approvalStatus: "draft",
+        overtimeDate: restoredDraft?.date ? Timestamp.fromDate(new Date(restoredDraft.date)) : null,
+        startTime: restoredDraft?.startTime || "",
+        endTime: restoredDraft?.endTime || "",
+        totalDurationMinutes: 0,
+        reason: restoredDraft?.reason || "",
+        overtimeType: restoredDraft?.overtimeType || "hari_kerja",
+        location: normalizeWorkLocation(restoredDraft?.location),
+        workLocation: normalizeWorkLocation(restoredDraft?.location),
+        workLocationDetail: restoredDraft?.workLocationDetail || "",
+        overtimeTypeLabel:
+          restoredDraft?.overtimeType === "hari_libur"
+            ? "Hari Libur"
+            : restoredDraft?.overtimeType === "urgent"
+              ? "Urgent"
+              : "Hari Kerja",
+        workLocationLabel: getWorkLocationLabel(
+          restoredDraft?.location,
+          restoredDraft?.workLocationDetail,
+        ),
+        tasks: restoredDraft?.tasks || [{ description: "", estimatedMinutes: 60 }],
+        taskDetails: restoredDraft?.tasks || [{ description: "", estimatedMinutes: 60 }],
+        overtimeCoordinatorUid: restoredDraft?.overtimeCoordinatorUid || "",
+        overtimeInstructionNote: restoredDraft?.overtimeInstructionNote || "",
+        employeeNotes: restoredDraft?.employeeNotes || "",
+        pauseLogs: [],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      await setDocumentNonBlocking(newDocRef, draftPayload, { merge: false });
+      const nowTs = Timestamp.now();
+      setRealtimeDraftDoc({
+        id: newDocRef.id,
+        ...draftPayload,
+        createdAt: nowTs,
+        updatedAt: nowTs,
+      } as OvertimeSubmission);
+      setInputMode("realtime");
+      setHasLocalRealtimeDraft(true);
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Gagal membuat draft realtime", description: e.message });
+    } finally {
+      setIsCreatingRealtimeDraft(false);
     }
   };
 
@@ -1989,13 +2207,14 @@ export function OvertimeSubmissionForm({
             : values.overtimeType === "hari_libur"
               ? "Hari Libur"
               : "Urgent",
-        workLocation: values.location,
-        workLocationLabel:
-          values.location === "kantor"
-            ? "Kantor"
-            : values.location === "remote"
-              ? "Remote"
-              : "Site/Lokasi Klien",
+        location: normalizeWorkLocation(values.location),
+        workLocation: normalizeWorkLocation(values.location),
+        workLocationDetail:
+          values.location === "lainnya" ? values.workLocationDetail?.trim() || "" : "",
+        workLocationLabel: getWorkLocationLabel(
+          values.location,
+          values.workLocationDetail,
+        ),
 
         // Task details
         taskDetails: values.tasks,
@@ -2118,16 +2337,10 @@ export function OvertimeSubmissionForm({
   const viewOvertimeDate = parseSafeDate(
     (submission as any)?.overtimeDate ?? submission?.date,
   );
-  const locationLabel =
-    submission?.workLocationLabel ||
-    submission?.workLocation ||
-    (submission?.location === "kantor"
-      ? "Kantor"
-      : submission?.location === "remote"
-        ? "Remote"
-        : submission?.location === "site"
-          ? "Site/Lokasi Klien"
-          : submission?.location || "-");
+  const locationLabel = getWorkLocationLabel(
+    submission?.workLocation || submission?.location,
+    (submission as any)?.workLocationDetail,
+  );
   const overtimeTypeLabel =
     submission?.overtimeType === "hari_kerja"
       ? "Hari Kerja"
@@ -2243,6 +2456,301 @@ export function OvertimeSubmissionForm({
           onClose={() => onOpenChange(false)}
         />
       </Dialog>
+    );
+  }
+
+  // If existing submission with realtime inputMode and timer still active
+  const isRealtimeActive = submission &&
+    (submission as any).inputMode === "realtime" &&
+    ["draft", "timer_running", "timer_paused", "timer_finished_pending_submit"].includes(
+      (submission as any).approvalStatus || submission.status || "draft"
+    );
+
+  const realtimeModalHeader = (
+    <DialogHeader className="shrink-0 border-b px-7 py-5">
+      <div className="flex items-center gap-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-teal-100 dark:bg-teal-900/40">
+          <Timer className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+        </div>
+        <div>
+          <DialogTitle className="text-[17px] font-semibold">Timer Lembur Realtime</DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground mt-0.5">
+            Catat lembur saat sedang berlangsung. Data belum menjadi pengajuan sampai timer selesai dan Anda menekan Kirim Pengajuan.
+          </DialogDescription>
+        </div>
+      </div>
+    </DialogHeader>
+  );
+
+  if (isRealtimeActive && submission) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="w-[95vw] max-w-[1100px] max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0 rounded-[20px]">
+          {realtimeModalHeader}
+          <div className="flex-1 overflow-y-auto px-7 py-6">
+            <RealtimeOvertimeTimer
+              submission={submission}
+              onSubmitted={() => { onSuccess(); onOpenChange(false); }}
+              onCancelled={() => { onSuccess(); onOpenChange(false); }}
+              eligibleCoordinators={eligibleCoordinators}
+              resolvedDivisionManager={resolvedDivisionManager}
+              employeeDisplayInfo={displayInfo}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  // If creating new and user chose realtime mode
+  if (!submission && inputMode === "realtime" && realtimeDraftDoc) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="w-[95vw] max-w-[1100px] max-h-[90vh] overflow-hidden flex flex-col p-0 gap-0 rounded-[20px]">
+          {realtimeModalHeader}
+          <div className="flex-1 overflow-y-auto px-7 py-6">
+            <RealtimeOvertimeTimer
+              submission={realtimeDraftDoc}
+              onSubmitted={() => { onSuccess(); onOpenChange(false); }}
+              onCancelled={() => { onSuccess(); onOpenChange(false); }}
+              eligibleCoordinators={eligibleCoordinators}
+              resolvedDivisionManager={resolvedDivisionManager}
+              employeeDisplayInfo={displayInfo}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  // Mode selection screen — only for new submissions
+  if (!submission && inputMode === null && canSubmitOvertime) {
+    const handleLanjutkan = async () => {
+      if (!pendingMode) return;
+      if (pendingMode === "manual") {
+        setInputMode("manual");
+      } else {
+        // Check for existing unfinished realtime drafts
+        if (existingRealtimeDrafts.length > 0) {
+          setShowResumeDialog(true);
+        } else {
+          await handleCreateRealtimeDraft();
+        }
+      }
+    };
+
+    const handleResumeDraft = () => {
+      const draft = existingRealtimeDrafts[0];
+      setRealtimeDraftDoc(draft);
+      setInputMode("realtime");
+      setShowResumeDialog(false);
+    };
+
+    const modeCards: Array<{
+      id: "manual" | "realtime";
+      icon: React.ReactNode;
+      title: string;
+      badge: string;
+      badgeStyle: string;
+      description: string;
+      points: string[];
+    }> = [
+      {
+        id: "manual",
+        icon: <PenLine className="h-5 w-5" />,
+        title: "Manual",
+        badge: "Input setelah selesai",
+        badgeStyle: "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300",
+        description: "Untuk lembur yang sudah selesai dilakukan.",
+        points: [
+          "Isi tanggal dan jam secara manual",
+          "Cocok untuk lembur yang sudah selesai",
+          "Masuk preview sebelum dikirim",
+        ],
+      },
+      {
+        id: "realtime",
+        icon: <Timer className="h-5 w-5" />,
+        title: "Realtime Timer",
+        badge: "Belum langsung diajukan",
+        badgeStyle: "bg-amber-50 text-amber-600 border border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-700/40",
+        description: "Untuk mencatat lembur yang sedang berlangsung.",
+        points: [
+          "Isi rencana pekerjaan dulu",
+          "Timer mulai setelah konfirmasi",
+          "Bisa pause dan lanjut",
+          "Kirim setelah preview akhir",
+        ],
+      },
+    ];
+
+    return (
+      <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="w-[95vw] max-w-[880px] max-h-[90vh] overflow-hidden flex flex-col p-0 rounded-[20px] shadow-2xl gap-0">
+          {/* Header */}
+          <DialogHeader className="shrink-0 border-b border-border/60 px-8 py-5">
+            <div className="flex items-center gap-3.5">
+              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-teal-100 dark:bg-teal-900/40">
+                <Timer className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+              </div>
+              <div className="min-w-0">
+                <DialogTitle className="text-[17px] font-semibold leading-tight">
+                  Pilih Mode Pengajuan Lembur
+                </DialogTitle>
+                <DialogDescription className="text-sm text-muted-foreground mt-0.5">
+                  Pilih cara mencatat lembur sesuai kondisi pekerjaan Anda saat ini.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto px-8 py-7 space-y-6">
+            {/* Card grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {modeCards.map((card) => {
+                const isActive = pendingMode === card.id;
+                return (
+                  <button
+                    key={card.id}
+                    type="button"
+                    onClick={() => setPendingMode(card.id)}
+                    className={`relative flex flex-col rounded-2xl border-2 p-6 text-left transition-all duration-150 ${
+                      isActive
+                        ? "border-teal-500 bg-teal-50/70 dark:bg-teal-900/15 shadow-sm"
+                        : "border-slate-200 dark:border-slate-700 bg-background hover:border-teal-300 hover:bg-slate-50/60 dark:hover:bg-slate-800/30"
+                    }`}
+                  >
+                    {/* Active check */}
+                    <span className={`absolute top-4 right-4 transition-opacity duration-100 ${isActive ? "opacity-100" : "opacity-0"}`}>
+                      <CheckCircle2 className="h-5 w-5 text-teal-500" />
+                    </span>
+
+                    {/* Icon + Title row */}
+                    <div className="flex items-center gap-3 mb-1">
+                      <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl transition-colors ${
+                        isActive ? "bg-teal-500 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-500"
+                      }`}>
+                        {card.icon}
+                      </div>
+                      <span className="text-[15px] font-bold tracking-tight">{card.title}</span>
+                    </div>
+
+                    {/* Badge */}
+                    <div className="mb-3 pl-[48px]">
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
+                        isActive ? "bg-teal-100 text-teal-700 dark:bg-teal-800/50 dark:text-teal-300" : card.badgeStyle
+                      }`}>
+                        {card.badge}
+                      </span>
+                    </div>
+
+                    {/* Description */}
+                    <p className="text-[13px] text-muted-foreground leading-relaxed mb-4">
+                      {card.description}
+                    </p>
+
+                    {/* Divider */}
+                    <div className={`mb-4 border-t ${isActive ? "border-teal-200 dark:border-teal-700/50" : "border-slate-100 dark:border-slate-700/50"}`} />
+
+                    {/* Points */}
+                    <ul className="space-y-2.5">
+                      {card.points.map((point) => (
+                        <li key={point} className="flex items-start gap-2.5">
+                          <span className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                            isActive
+                              ? "bg-teal-500 text-white"
+                              : "bg-slate-200 text-slate-400 dark:bg-slate-700 dark:text-slate-400"
+                          }`}>
+                            ✓
+                          </span>
+                          <span className="text-[13px] text-muted-foreground leading-snug">{point}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Info box */}
+            <div className="flex gap-3 rounded-[14px] border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-700/30 px-5 py-4">
+              <Info className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-px" />
+              <div className="min-w-0">
+                <p className="text-[12px] font-semibold text-amber-800 dark:text-amber-300 mb-1">Catatan penting</p>
+                <p className="text-[12px] text-amber-700 dark:text-amber-400 leading-relaxed">
+                  <strong>Realtime Timer</strong> hanya mencatat durasi lembur. Pengajuan baru dikirim setelah timer selesai, preview ditinjau, dan tombol <strong>Kirim Pengajuan</strong> ditekan.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="shrink-0 border-t border-border/60 px-8 py-4 flex items-center justify-between bg-background">
+            <Button
+              variant="ghost"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => onOpenChange(false)}
+            >
+              Batal
+            </Button>
+            <Button
+              onClick={handleLanjutkan}
+              disabled={!pendingMode || isCreatingRealtimeDraft}
+              className="h-11 bg-teal-600 hover:bg-teal-700 disabled:bg-slate-200 disabled:text-slate-400 text-white gap-2 px-8 text-[14px] font-semibold shadow-sm"
+            >
+              {isCreatingRealtimeDraft ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Menyiapkan...
+                </>
+              ) : (
+                <>
+                  Lanjutkan
+                  <ChevronRight className="h-4 w-4" />
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Resume draft dialog */}
+      <Dialog open={showResumeDialog} onOpenChange={setShowResumeDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Draft Realtime Belum Selesai</DialogTitle>
+            <DialogDescription>
+              Anda memiliki {existingRealtimeDrafts.length} draft lembur realtime yang belum selesai. Lanjutkan draft tersebut atau buat sesi baru?
+            </DialogDescription>
+          </DialogHeader>
+          {existingRealtimeDrafts.length > 0 && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm space-y-1">
+              {existingRealtimeDrafts.slice(0, 3).map((d) => {
+                const ts = (d as any).createdAt?.toDate?.();
+                const timerStatus = (d as any).timerStatus ?? 'draft';
+                const statusLabel = timerStatus === 'running' ? '⏱ Sedang Berjalan' : timerStatus === 'paused' ? '⏸ Dijeda' : timerStatus === 'finished_pending_submit' ? '✅ Selesai, Belum Diajukan' : '📝 Draft Persiapan';
+                return (
+                  <div key={d.id} className="flex justify-between items-center text-xs">
+                    <span className="font-medium">{statusLabel}</span>
+                    <span className="text-muted-foreground">{ts ? format(ts, 'dd MMM yyyy HH:mm', { locale: idLocale }) : '-'}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={async () => { setShowResumeDialog(false); await handleCreateRealtimeDraft(); }}>
+              Buat Sesi Baru
+            </Button>
+            <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleResumeDraft}>
+              Lanjutkan Draft
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      </>
     );
   }
 
@@ -2713,17 +3221,36 @@ export function OvertimeSubmissionForm({
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="kantor">Kantor</SelectItem>
-                          <SelectItem value="remote">Remote</SelectItem>
-                          <SelectItem value="site">
-                            Site/Lokasi Klien
-                          </SelectItem>
+                          {workLocationOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+                {location === "lainnya" && (
+                  <FormField
+                    control={form.control}
+                    name="workLocationDetail"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Detail Lokasi Kerja</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Contoh: perjalanan dinas, event, gudang, lokasi project, dll."
+                            {...field}
+                            readOnly={isReadOnly}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
               </section>
 
               <section className="md:col-span-2 lg:col-span-3 space-y-6">

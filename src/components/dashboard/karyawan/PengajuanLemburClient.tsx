@@ -88,8 +88,23 @@ const overtimeTypeLabels: Record<string, string> = {
 
 const workLocationLabels: Record<string, string> = {
   kantor: "Kantor",
-  remote: "Remote",
-  site: "Site/Lokasi Klien",
+  rumah_wfh: "Rumah / WFH",
+  luar_kantor: "Luar Kantor",
+  site_klien: "Site / Lokasi Klien",
+  lainnya: "Lainnya",
+  remote: "Rumah / WFH",
+  site: "Site / Lokasi Klien",
+};
+
+const getWorkLocationDisplay = (submission: OvertimeSubmission) => {
+  const rawLocation =
+    (submission as any).workLocation || submission.location || "kantor";
+  const label =
+    workLocationLabels[rawLocation] ||
+    (submission as any).workLocationLabel ||
+    rawLocation;
+  const detail = (submission as any).workLocationDetail?.trim?.();
+  return rawLocation === "lainnya" && detail ? `${label} - ${detail}` : label;
 };
 
 const getSubmissionStatus = (submission: OvertimeSubmission) =>
@@ -476,12 +491,7 @@ const LatestSubmissionCard = ({
     status === "pending_supervisor" || status === "pending_manager"
       ? (submission as any).directSupervisorName || supervisorName
       : waitingFor;
-  const workLocationLabel =
-    (submission as any).workLocationLabel ||
-    (submission.location
-      ? workLocationLabels[submission.location]
-      : undefined) ||
-    submission.location;
+  const workLocationLabel = getWorkLocationDisplay(submission);
   const overtimeTypeLabel =
     (submission as any).overtimeTypeLabel ||
     (submission.overtimeType
@@ -757,7 +767,7 @@ export function PengajuanLemburClient() {
       else if (isRevisionStatus(status)) kpis.revision++;
       else if (isRejectedStatus(status)) kpis.rejected++;
       else if (isApprovedStatus(status)) kpis.approved++;
-      else if (status === "draft") kpis.draft++;
+      else if (status === "draft" || status === "timer_running" || status === "timer_paused" || status === "timer_finished_pending_submit") kpis.draft++;
     });
     return kpis;
   }, [submissions]);
@@ -777,6 +787,30 @@ export function PengajuanLemburClient() {
         0;
       return bTime - aTime;
     });
+  }, [submissions]);
+
+  const existingRealtimeDrafts = useMemo(() => {
+    if (!submissions) return [];
+    return submissions
+      .filter((s) => {
+        const inputMode = (s as any).inputMode;
+        const status = getSubmissionStatus(s);
+        return (
+          inputMode === "realtime" &&
+          ["draft", "timer_running", "timer_paused", "timer_finished_pending_submit"].includes(status)
+        );
+      })
+      .sort((a, b) => {
+        const aTime =
+          (a as any).updatedAt?.toMillis?.() ||
+          (a as any).createdAt?.toMillis?.() ||
+          0;
+        const bTime =
+          (b as any).updatedAt?.toMillis?.() ||
+          (b as any).createdAt?.toMillis?.() ||
+          0;
+        return bTime - aTime;
+      });
   }, [submissions]);
 
   const handleCreate = () => {
@@ -953,11 +987,7 @@ export function PengajuanLemburClient() {
                     const status = getSubmissionStatus(s);
                     const overtimeDate =
                       (s as any).overtimeDate?.toDate?.() ?? s.date?.toDate?.();
-                    const locationLabel =
-                      (s as any).workLocationLabel ||
-                      (s.location ? workLocationLabels[s.location] : "") ||
-                      s.location ||
-                      "-";
+                    const locationLabel = getWorkLocationDisplay(s);
 
                     return (
                       <TableRow
@@ -972,10 +1002,15 @@ export function PengajuanLemburClient() {
                             : "-"}
                         </TableCell>
                         <TableCell className="px-3 py-3 align-top">
-                          <div className="text-sm">{s.startTime}</div>
+                          <div className="text-sm">{s.startTime || '-'}</div>
                           <div className="text-xs text-muted-foreground">
-                            {s.endTime}
+                            {s.endTime || '-'}
                           </div>
+                          {(s as any).inputMode === 'realtime' && (
+                            <span className="mt-1 inline-block rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-semibold text-teal-700">
+                              Realtime
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell className="px-3 py-3 align-top">
                           {s.totalDurationMinutes} menit
@@ -1028,6 +1063,7 @@ export function PengajuanLemburClient() {
         formMode={formMode}
         onSuccess={mutate}
         onRequestEdit={() => setFormMode("edit")}
+        existingRealtimeDrafts={existingRealtimeDrafts}
       />
 
       <DeleteConfirmationDialog

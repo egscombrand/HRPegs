@@ -45,6 +45,27 @@ interface OvertimeApprovalClientProps {
   mode: "manager" | "hrd";
 }
 
+const workLocationLabels: Record<string, string> = {
+  kantor: "Kantor",
+  rumah_wfh: "Rumah / WFH",
+  luar_kantor: "Luar Kantor",
+  site_klien: "Site / Lokasi Klien",
+  lainnya: "Lainnya",
+  remote: "Rumah / WFH",
+  site: "Site / Lokasi Klien",
+};
+
+const getWorkLocationDisplay = (submission: OvertimeSubmission) => {
+  const rawLocation =
+    (submission as any).workLocation || submission.location || "kantor";
+  const label =
+    workLocationLabels[rawLocation] ||
+    submission.workLocationLabel ||
+    rawLocation;
+  const detail = (submission as any).workLocationDetail?.trim?.();
+  return rawLocation === "lainnya" && detail ? `${label} - ${detail}` : label;
+};
+
 export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
   const { userProfile } = useAuth();
   const firestore = useFirestore();
@@ -1331,14 +1352,8 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
                                                 {item.startTime} -{" "}
                                                 {item.endTime}
                                               </TableCell>
-                                              <TableCell className="py-2 text-xs text-slate-700 capitalize">
-                                                {item.location === "kantor"
-                                                  ? "💻 Kantor"
-                                                  : item.location === "remote"
-                                                    ? "🏡 WFH"
-                                                    : item.location === "site"
-                                                      ? "🚗 Dinas"
-                                                      : item.location || "-"}
+                                              <TableCell className="py-2 text-xs text-slate-700">
+                                                {getWorkLocationDisplay(item)}
                                               </TableCell>
                                               <TableCell
                                                 className="py-2 text-xs text-slate-500 truncate max-w-[200px]"
@@ -1565,10 +1580,7 @@ export function OvertimeApprovalClient({ mode }: OvertimeApprovalClientProps) {
                                 )}
                             </TableCell>
                             <TableCell className="px-3 py-3 align-top">
-                              {s.workLocationLabel ||
-                                s.workLocation ||
-                                s.location ||
-                                "-"}
+                              {getWorkLocationDisplay(s)}
                             </TableCell>
                             <TableCell className="px-3 py-3 align-top">
                               <p className="text-sm truncate">{summaryTask}</p>

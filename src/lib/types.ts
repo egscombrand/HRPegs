@@ -2054,6 +2054,9 @@ export type DailyReport = {
 };
 
 export const OVERTIME_SUBMISSION_STATUSES = [
+  "timer_running",
+  "timer_paused",
+  "timer_finished_pending_submit",
   "draft",
   "pending_coordinator",
   "pending_supervisor",
@@ -2126,9 +2129,10 @@ export type OvertimeSubmission = {
     actualMinutes?: number | null;
   }[];
   reason: string;
-  location?: "kantor" | "remote" | "site";
+  location?: "kantor" | "rumah_wfh" | "luar_kantor" | "site_klien" | "lainnya" | "remote" | "site";
   workLocation?: string;
   workLocationLabel?: string;
+  workLocationDetail?: string | null;
   employeeNotes?: string | null;
   // Attachments may be legacy string URLs or richer objects from upload APIs
   attachments?: Array<
@@ -2226,6 +2230,21 @@ export type OvertimeSubmission = {
   processedByName?: string | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+
+  // Realtime timer fields
+  inputMode?: 'manual' | 'realtime';
+  timerStatus?: 'draft' | 'running' | 'paused' | 'finished_pending_submit';
+  timerStartedAt?: Timestamp | null;
+  timerFinishedAt?: Timestamp | null;
+  totalGrossDurationMinutes?: number | null;
+  totalPausedDurationMinutes?: number | null;
+  totalNetDurationMinutes?: number | null;
+  pauseLogs?: {
+    startedAt: Timestamp;
+    endedAt?: Timestamp | null;
+    reason: string;
+    note?: string;
+  }[];
 };
 
 export const PERMISSION_REQUEST_STATUSES = [
