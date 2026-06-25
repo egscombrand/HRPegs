@@ -68,19 +68,14 @@ service cloud.firestore {
     }
 
     function isManagement() {
-      if (!isSignedIn()) return false;
       let user = getCurrentUserData();
-      let role = user.role;
-      let structuralLevel = user.structuralLevel;
-      let structuralPosition = user.structuralPosition;
-      let position = user.position;
-      let jobTitle = user.jobTitle;
-
-      return role in ['super-admin', 'hrd', 'management', 'manager', 'director', 'direktur'] ||
-             structuralLevel in ['director', 'management'] ||
-             structuralPosition in ['director', 'management', 'division_manager'] ||
-             position in ['Director Of Operational Environesia', 'Director Of Business Development Environesia', 'Director'] ||
-             jobTitle in ['Director Of Operational Environesia', 'Director Of Business Development Environesia', 'Director'];
+      return isSignedIn() && (
+        user.role in ['super-admin', 'hrd', 'management', 'manager', 'director', 'direktur'] ||
+        user.structuralLevel in ['director', 'management'] ||
+        user.structuralPosition in ['director', 'management', 'division_manager'] ||
+        user.position in ['Director Of Operational Environesia', 'Director Of Business Development Environesia', 'Director'] ||
+        user.jobTitle in ['Director Of Operational Environesia', 'Director Of Business Development Environesia', 'Director']
+      );
     }
     
     /**
@@ -361,11 +356,9 @@ service cloud.firestore {
             let changedKeys = request.resource.data.diff(resource.data).affectedKeys();
             let allowedKeys = ['status', 'stage', 'stageEnteredAt', 'candidateStatus', 'decisionAt', 'updatedAt', 'personalityTestAssignedAt', 'personalityTestCompleted', 'personalityTestRequired', 'personalityTestStatus', 'personalityTestResultId', 'personalityTestSource', 'personalityTestCompletedAt', 'hrdEvaluationDecision', 'hrdEvaluationDecisionLabel', 'hrdEvaluationDecisionAt', 'hrdEvaluationDecisionBy', 'hrdEvaluationDecisionByName', 'hrdEvaluationDecisionNote', 'cvVerified', 'ijazahVerified', 'timeline', 'interviews', 'allPanelistIds', 'offerStatus', 'offeredSalary', 'probationDurationMonths', 'contractStartDate', 'contractDurationMonths', 'contractEndDate', 'offerNotes', 'offerDescription', 'workDays', 'internalAccessEnabled', 'internalReviewSummary', 'candidateVisibleStatus', 'candidateVisibleMessage', 'candidateVisibleStage', 'candidateVisibleTimeline', 'recruitmentDecisionAt', 'recruitmentDecisionBy', 'recruitmentDecisionByName', 'interviewCompleted', 'interviewCompletedAt', 'interviewCompletionSource', 'postInterviewEvaluation', 'postInterviewDecision', 'internalDecisionLog', 'masterTemplateId', 'offerLetterNumber'];
             let hrdOnlyKeys = ['internalReviewConfig', 'recruitmentInternalDecision'];
-            
-            if (changedKeys.hasAny(hrdOnlyKeys)) {
-                return isHrd() || isSuperAdmin();
-            }
-            return isInternal() && changedKeys.hasOnly(allowedKeys.concat(hrdOnlyKeys));
+            return changedKeys.hasOnly(allowedKeys.concat(hrdOnlyKeys)) &&
+                   (!changedKeys.hasAny(hrdOnlyKeys) && isInternal() ||
+                    changedKeys.hasAny(hrdOnlyKeys) && (isHrd() || isSuperAdmin()));
         }
         function isRequestingReschedule() {
           let isOwner = request.auth.uid == resource.data.candidateUid;

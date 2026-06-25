@@ -12,6 +12,21 @@ export const statusDisplay: Record<
     label: "Draft",
     className: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
   },
+  timer_running: {
+    label: "Sedang Berjalan",
+    className:
+      "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 border border-emerald-500/10",
+  },
+  timer_paused: {
+    label: "Dijeda",
+    className:
+      "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-500/10",
+  },
+  timer_finished_pending_submit: {
+    label: "Siap Diajukan",
+    className:
+      "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-500/10",
+  },
   pending_coordinator: {
     label: "Menunggu Review Koordinator",
     className:

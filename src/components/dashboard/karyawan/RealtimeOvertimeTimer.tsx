@@ -247,13 +247,26 @@ export function RealtimeOvertimeTimer({
         endedAt?: Timestamp | null;
         reason: string;
         note?: string;
+        durationSeconds?: number;
+        durationMinutes?: number;
       }>) ?? []),
     [(live as any).pauseLogs],
   );
 
+  const activePauseStartedAt =
+    ((live as any).pauseStartedAt as Timestamp | null | undefined) ?? null;
+  const activePauseReason = (live as any).currentPauseReason as string | undefined;
+  const activePauseNote = (live as any).currentPauseNote as string | undefined;
+
   const completedPausedMs = useMemo(
     () =>
       pauseLogs.reduce((sum, log) => {
+        if (typeof log.durationSeconds === 'number') {
+          return sum + Math.max(0, log.durationSeconds * 1000);
+        }
+        if (typeof log.durationMinutes === 'number') {
+          return sum + Math.max(0, log.durationMinutes * 60000);
+        }
         if (log.endedAt)
           return (
             sum + (log.endedAt.toDate().getTime() - log.startedAt.toDate().getTime())
@@ -271,7 +284,7 @@ export function RealtimeOvertimeTimer({
   }, [(live as any).timerStartedAt]);
 
   useEffect(() => {
-    if (timerStatus === 'running') {
+    if (timerStatus === 'running' || timerStatus === 'paused') {
       setGrossElapsedSec(computeGross());
       grossIntervalRef.current = setInterval(
         () => setGrossElapsedSec(computeGross()),
@@ -293,10 +306,11 @@ export function RealtimeOvertimeTimer({
   // ── Current pause elapsed counter ──
   const currentPauseStartMs = useMemo(() => {
     if (timerStatus !== 'paused') return null;
+    if (activePauseStartedAt) return activePauseStartedAt.toDate().getTime();
     const last = pauseLogs[pauseLogs.length - 1];
     if (last && !last.endedAt) return last.startedAt.toDate().getTime();
     return null;
-  }, [timerStatus, pauseLogs]);
+  }, [timerStatus, activePauseStartedAt, pauseLogs]);
 
   useEffect(() => {
     if (currentPauseStartMs === null) {
@@ -317,9 +331,9 @@ export function RealtimeOvertimeTimer({
   }, [currentPauseStartMs]);
 
   const completedPausedSec = Math.floor(completedPausedMs / 1000);
-  const netElapsedSec = Math.max(0, grossElapsedSec - completedPausedSec);
   const totalPausedSec =
     completedPausedSec + (timerStatus === 'paused' ? pauseElapsedSec : 0);
+  const netElapsedSec = Math.max(0, grossElapsedSec - totalPausedSec);
 
   // ── HANDLERS ──
 
@@ -433,16 +447,14 @@ export function RealtimeOvertimeTimer({
     }
     setIsSavingPause(true);
     try {
+      const pauseStartedAt = Timestamp.now();
       await updateDoc(docRef!, {
         timerStatus: 'paused',
         status: 'timer_paused',
         approvalStatus: 'timer_paused',
-        pauseLogs: arrayUnion({
-          startedAt: Timestamp.now(),
-          endedAt: null,
-          reason: pauseReason,
-          note: pauseNote.trim() || null,
-        }),
+        pauseStartedAt,
+        currentPauseReason: pauseReason,
+        currentPauseNote: pauseNote.trim() || null,
         updatedAt: serverTimestamp(),
       });
       setShowPauseDialog(false);
@@ -460,16 +472,40 @@ export function RealtimeOvertimeTimer({
   const handleResume = async () => {
     setIsSavingResume(true);
     try {
-      const logs = [...pauseLogs];
-      if (logs.length > 0) {
-        const last = logs[logs.length - 1];
-        logs[logs.length - 1] = { ...last, endedAt: Timestamp.now() };
-      }
+      const endedAt = Timestamp.now();
+      const startedAt =
+        activePauseStartedAt ||
+        pauseLogs
+          .slice()
+          .reverse()
+          .find((log) => log.startedAt && !log.endedAt)?.startedAt ||
+        endedAt;
+      const durationSeconds = Math.max(
+        0,
+        Math.floor(
+          (endedAt.toDate().getTime() - startedAt.toDate().getTime()) / 1000,
+        ),
+      );
+      const completedLogs = pauseLogs.filter((log) => log.endedAt);
+      const logs = [
+        ...completedLogs,
+        {
+          startedAt,
+          endedAt,
+          reason: activePauseReason || pauseReason || 'Jeda',
+          note: activePauseNote || null,
+          durationSeconds,
+          durationMinutes: Math.round(durationSeconds / 60),
+        },
+      ];
       await updateDoc(docRef!, {
         timerStatus: 'running',
         status: 'timer_running',
         approvalStatus: 'timer_running',
         pauseLogs: logs,
+        pauseStartedAt: null,
+        currentPauseReason: null,
+        currentPauseNote: null,
         updatedAt: serverTimestamp(),
       });
     } catch (e: any) {
@@ -491,8 +527,29 @@ export function RealtimeOvertimeTimer({
       const startMs = started?.toDate().getTime() ?? Date.now();
       const grossMs = now.toDate().getTime() - startMs;
       const grossMinutes = Math.round(grossMs / 60000);
-      const pausedMinutes = Math.round(completedPausedMs / 60000);
+      const activePauseMs =
+        timerStatus === 'paused' && activePauseStartedAt
+          ? Math.max(
+              0,
+              now.toDate().getTime() - activePauseStartedAt.toDate().getTime(),
+            )
+          : 0;
+      const pausedMinutes = Math.round((completedPausedMs + activePauseMs) / 60000);
       const netMinutes = Math.max(0, grossMinutes - pausedMinutes);
+      const logsForFinish =
+        timerStatus === 'paused' && activePauseStartedAt
+          ? [
+              ...pauseLogs.filter((log) => log.endedAt),
+              {
+                startedAt: activePauseStartedAt,
+                endedAt: now,
+                reason: activePauseReason || 'Jeda',
+                note: activePauseNote || null,
+                durationSeconds: Math.max(0, Math.floor(activePauseMs / 1000)),
+                durationMinutes: Math.round(activePauseMs / 60000),
+              },
+            ]
+          : pauseLogs;
 
       await updateDoc(docRef!, {
         timerStatus: 'finished_pending_submit',
@@ -502,6 +559,10 @@ export function RealtimeOvertimeTimer({
         totalGrossDurationMinutes: grossMinutes,
         totalPausedDurationMinutes: pausedMinutes,
         totalNetDurationMinutes: netMinutes,
+        pauseLogs: logsForFinish,
+        pauseStartedAt: null,
+        currentPauseReason: null,
+        currentPauseNote: null,
         updatedAt: serverTimestamp(),
       });
     } catch (e: any) {

@@ -2239,11 +2239,16 @@ export type OvertimeSubmission = {
   totalGrossDurationMinutes?: number | null;
   totalPausedDurationMinutes?: number | null;
   totalNetDurationMinutes?: number | null;
+  pauseStartedAt?: Timestamp | null;
+  currentPauseReason?: string | null;
+  currentPauseNote?: string | null;
   pauseLogs?: {
     startedAt: Timestamp;
     endedAt?: Timestamp | null;
     reason: string;
     note?: string;
+    durationSeconds?: number | null;
+    durationMinutes?: number | null;
   }[];
 };
 

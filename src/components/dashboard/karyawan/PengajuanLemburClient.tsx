@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   useCollection,
   useFirestore,
@@ -40,6 +40,9 @@ import {
   Building,
   Calendar,
   Info,
+  Pause,
+  Play,
+  Square,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
@@ -60,6 +63,7 @@ import { useToast } from "@/hooks/use-toast";
 import { KpiCard } from "@/components/recruitment/KpiCard";
 import { OvertimeStatusBadge } from "./OvertimeStatusBadge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 
 const approvalStatusLabel: Record<string, string> = {
   draft: "Draft",
@@ -110,6 +114,150 @@ const getWorkLocationDisplay = (submission: OvertimeSubmission) => {
 const getSubmissionStatus = (submission: OvertimeSubmission) =>
   (submission as any).approvalStatus || submission.status || "draft";
 
+const realtimeLifecycleLabels: Record<string, string> = {
+  draft: "Draft Persiapan",
+  timer_running: "Sedang Berjalan",
+  timer_paused: "Dijeda",
+  timer_finished_pending_submit: "Siap Diajukan",
+};
+
+const getRealtimeLifecycleStatus = (submission: OvertimeSubmission) => {
+  const status = getSubmissionStatus(submission);
+  if ((submission as any).inputMode !== "realtime") return null;
+  if (status === "draft") return "draft";
+  if (status === "timer_running") return "timer_running";
+  if (status === "timer_paused") return "timer_paused";
+  if (status === "timer_finished_pending_submit") {
+    return "timer_finished_pending_submit";
+  }
+  return null;
+};
+
+const isRealtimeLifecycleStatus = (submission: OvertimeSubmission) =>
+  getRealtimeLifecycleStatus(submission) != null;
+
+const isRealtimeActiveStatus = (submission: OvertimeSubmission) => {
+  const lifecycle = getRealtimeLifecycleStatus(submission);
+  return lifecycle === "timer_running" || lifecycle === "timer_paused";
+};
+
+const isRealtimeReadyToSubmit = (submission: OvertimeSubmission) =>
+  getRealtimeLifecycleStatus(submission) === "timer_finished_pending_submit";
+
+const toDateSafe = (value: any): Date | null => {
+  if (!value) return null;
+  if (typeof value.toDate === "function") return value.toDate();
+  if (value instanceof Date) return value;
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
+};
+
+const formatClock = (value: any) => {
+  const date = toDateSafe(value);
+  return date ? format(date, "HH:mm", { locale: idLocale }) : "-";
+};
+
+const formatDateTime = (value: any) => {
+  const date = toDateSafe(value);
+  return date ? format(date, "dd MMM yyyy, HH:mm", { locale: idLocale }) : "-";
+};
+
+const formatDurationFromMinutes = (minutes?: number | null) => {
+  const safeMinutes = Math.max(0, Math.round(minutes || 0));
+  const hours = Math.floor(safeMinutes / 60);
+  const mins = safeMinutes % 60;
+  if (hours <= 0) return `${mins} menit`;
+  if (mins === 0) return `${hours} jam`;
+  return `${hours} jam ${mins} menit`;
+};
+
+const formatElapsedSeconds = (seconds: number) => {
+  const safeSeconds = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const secs = safeSeconds % 60;
+  return [hours, minutes, secs]
+    .map((part) => part.toString().padStart(2, "0"))
+    .join(":");
+};
+
+const getPauseLogs = (submission: OvertimeSubmission) =>
+  (((submission as any).pauseLogs || []) as Array<{
+    pauseStart?: any;
+    pauseEnd?: any;
+    startedAt?: any;
+    endedAt?: any;
+    durationMs?: number;
+    durationSeconds?: number;
+    durationMinutes?: number;
+    reason?: string;
+    note?: string | null;
+  }>);
+
+const getCompletedPausedSeconds = (submission: OvertimeSubmission) =>
+  getPauseLogs(submission).reduce((sum, log) => {
+    if (typeof log.durationMs === "number") {
+      return sum + Math.max(0, Math.floor(log.durationMs / 1000));
+    }
+    if (typeof log.durationSeconds === "number") {
+      return sum + Math.max(0, Math.floor(log.durationSeconds));
+    }
+    if (typeof log.durationMinutes === "number") {
+      return sum + Math.max(0, Math.floor(log.durationMinutes * 60));
+    }
+    const start = toDateSafe(log.pauseStart || log.startedAt);
+    const end = toDateSafe(log.pauseEnd || log.endedAt);
+    if (!start || !end) return sum;
+    return sum + Math.max(0, Math.floor((end.getTime() - start.getTime()) / 1000));
+  }, 0);
+
+const getCurrentPauseSeconds = (submission: OvertimeSubmission, nowMs: number) => {
+  if (getRealtimeLifecycleStatus(submission) !== "timer_paused") return 0;
+  const activePauseStartedAt = toDateSafe((submission as any).pauseStartedAt);
+  if (activePauseStartedAt) {
+    return Math.max(0, Math.floor((nowMs - activePauseStartedAt.getTime()) / 1000));
+  }
+  const lastPause = [...getPauseLogs(submission)]
+    .reverse()
+    .find(
+      (log) =>
+        (log.pauseStart || log.startedAt) && !(log.pauseEnd || log.endedAt),
+    );
+  const pauseStart = toDateSafe(lastPause?.pauseStart || lastPause?.startedAt);
+  if (!pauseStart) return 0;
+  return Math.max(0, Math.floor((nowMs - pauseStart.getTime()) / 1000));
+};
+
+const getLiveGrossSeconds = (submission: OvertimeSubmission, nowMs: number) => {
+  const started = toDateSafe((submission as any).timerStartedAt);
+  if (!started) return Math.max(0, (submission.totalDurationMinutes || 0) * 60);
+  const finished = toDateSafe((submission as any).timerFinishedAt);
+  const endMs = finished?.getTime() || nowMs;
+  return Math.max(0, Math.floor((endMs - started.getTime()) / 1000));
+};
+
+const getLiveNetSeconds = (submission: OvertimeSubmission, nowMs: number) => {
+  const pausedSeconds =
+    getCompletedPausedSeconds(submission) + getCurrentPauseSeconds(submission, nowMs);
+  return Math.max(0, getLiveGrossSeconds(submission, nowMs) - pausedSeconds);
+};
+
+const getRealtimeBadgeClass = (status: string | null) => {
+  if (status === "timer_running") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+  if (status === "timer_paused") {
+    return "border-amber-200 bg-amber-50 text-amber-700";
+  }
+  if (status === "timer_finished_pending_submit") {
+    return "border-blue-200 bg-blue-50 text-blue-700";
+  }
+  return "border-slate-200 bg-slate-50 text-slate-700";
+};
+
 const isRevisionStatus = (status: string) =>
   status === "needs_revision" || status.startsWith("revision");
 
@@ -118,6 +266,76 @@ const getTimelineSteps = (
   supervisorName: string,
   submission: OvertimeSubmission,
 ) => {
+  const realtimeLifecycle = getRealtimeLifecycleStatus(submission);
+  if (realtimeLifecycle) {
+    const states = {
+      draft: {
+        title: "Draft Persiapan",
+        statusLabel: "Aktif",
+        state: "active",
+        description: "Timer belum dimulai.",
+      },
+      timer_running: {
+        title: "Timer Berjalan",
+        statusLabel: "Sedang Berjalan",
+        state: "active",
+        description: "Timer lembur sedang mencatat durasi kerja.",
+      },
+      timer_paused: {
+        title: "Sedang Dijeda",
+        statusLabel: "Dijeda",
+        state: "revision",
+        description: "Timer lembur sedang dijeda sementara.",
+      },
+      timer_finished_pending_submit: {
+        title: "Siap Diajukan",
+        statusLabel: "Siap Diajukan",
+        state: "active",
+        description: "Timer selesai. Tinjau preview sebelum mengirim pengajuan.",
+      },
+    } as const;
+    const activeIndex =
+      realtimeLifecycle === "draft"
+        ? 0
+        : realtimeLifecycle === "timer_running"
+          ? 1
+          : realtimeLifecycle === "timer_paused"
+            ? 2
+            : 4;
+    const realtimeSteps = [
+      {
+        title: "Draft Persiapan",
+        description: "Timer belum dimulai.",
+      },
+      {
+        title: "Timer Berjalan",
+        description: "Timer lembur sedang mencatat durasi kerja.",
+      },
+      {
+        title: "Dijeda",
+        description: "Opsional jika timer perlu dihentikan sementara.",
+      },
+      {
+        title: "Selesai Timer",
+        description: "Timer selesai mencatat durasi lembur.",
+      },
+      {
+        title: "Preview & Kirim",
+        description: "Tinjau preview lalu kirim sebagai pengajuan.",
+      },
+    ];
+
+    return realtimeSteps.map((step, index) => {
+      if (index === activeIndex) return states[realtimeLifecycle];
+      return {
+        title: step.title,
+        statusLabel: index < activeIndex ? "Selesai" : "Menunggu",
+        state: index < activeIndex ? "completed" : "pending",
+        description: step.description,
+      };
+    });
+  }
+
   const coordinatorDisplay =
     (submission as any).overtimeCoordinatorName || "pengawas/koordinator";
   const supervisorDisplay =
@@ -368,6 +586,33 @@ const isRejectedStatus = (status: string) =>
   status === "rejected" || status.startsWith("rejected");
 
 const getStatusMeta = (status: string) => {
+  if (status === "timer_running") {
+    return {
+      waitingFor: "Anda",
+      nextStep: "Timer sedang mencatat durasi lembur. Pause atau selesaikan timer saat pekerjaan selesai.",
+      alertVariant: "default" as const,
+      activeStep: 0,
+    };
+  }
+
+  if (status === "timer_paused") {
+    return {
+      waitingFor: "Anda",
+      nextStep: "Timer sedang dijeda. Durasi bersih berhenti sampai timer dilanjutkan.",
+      alertVariant: "warning" as const,
+      activeStep: 0,
+    };
+  }
+
+  if (status === "timer_finished_pending_submit") {
+    return {
+      waitingFor: "Anda",
+      nextStep: "Timer selesai. Tinjau preview lalu kirim pengajuan untuk approval.",
+      alertVariant: "warning" as const,
+      activeStep: 0,
+    };
+  }
+
   if (status === "draft") {
     return {
       waitingFor: "Anda",
@@ -483,6 +728,7 @@ const LatestSubmissionCard = ({
   let alertVariant: "default" | "destructive" | "warning" = "default";
 
   const status = getSubmissionStatus(submission);
+  const realtimeLifecycle = getRealtimeLifecycleStatus(submission);
   const statusMeta = getStatusMeta(status);
   waitingFor = statusMeta.waitingFor;
   nextStep = statusMeta.nextStep;
@@ -523,7 +769,13 @@ const LatestSubmissionCard = ({
                   : "baru saja"}
             </CardDescription>
           </div>
-          <OvertimeStatusBadge status={status} />
+          {realtimeLifecycle ? (
+            <Badge className={getRealtimeBadgeClass(realtimeLifecycle)}>
+              {realtimeLifecycleLabels[realtimeLifecycle]}
+            </Badge>
+          ) : (
+            <OvertimeStatusBadge status={status} />
+          )}
         </div>
       </CardHeader>
       <CardContent className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -655,6 +907,134 @@ const LatestSubmissionCard = ({
   );
 };
 
+const RealtimeActiveCard = ({
+  submission,
+  nowMs,
+  onOpen,
+}: {
+  submission: OvertimeSubmission;
+  nowMs: number;
+  onOpen: (submission: OvertimeSubmission) => void;
+}) => {
+  const lifecycle = getRealtimeLifecycleStatus(submission);
+  const statusLabel = realtimeLifecycleLabels[lifecycle || ""] || "Realtime";
+  const isPaused = lifecycle === "timer_paused";
+  const pausedSeconds =
+    getCompletedPausedSeconds(submission) + getCurrentPauseSeconds(submission, nowMs);
+  const overtimeTypeLabel =
+    (submission as any).overtimeTypeLabel ||
+    (submission.overtimeType ? overtimeTypeLabels[submission.overtimeType] : "-");
+  const taskSummary =
+    submission.reason ||
+    (submission.tasks || (submission as any).taskDetails || [])
+      .map((task: any) => task.description)
+      .filter(Boolean)
+    .join(", ") ||
+    "Belum ada ringkasan pekerjaan.";
+  const currentPauseReason =
+    (submission as any).currentPauseReason ||
+    [...getPauseLogs(submission)]
+      .reverse()
+      .find((log) => (log.pauseStart || log.startedAt) && !(log.pauseEnd || log.endedAt))
+      ?.reason;
+
+  return (
+    <Card className="overflow-hidden border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-sky-50 shadow-sm">
+      <CardHeader className="border-b border-emerald-100">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <CardTitle className="text-xl">
+                {isPaused ? "Lembur Sedang Dijeda" : "Lembur Sedang Berjalan"}
+              </CardTitle>
+              <Badge className={getRealtimeBadgeClass(lifecycle)}>
+                {statusLabel}
+              </Badge>
+            </div>
+            <CardDescription>
+              {isPaused
+                ? "Timer lembur sedang dijeda. Durasi lembur bersih berhenti sementara sampai Anda melanjutkan timer."
+                : "Timer realtime tetap berjalan meskipun modal ditutup. Buka timer untuk menjeda atau menyelesaikan sesi."}
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => onOpen(submission)}>
+              <Clock className="mr-2 h-4 w-4" />
+              Buka Timer
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => onOpen(submission)}>
+              {isPaused ? (
+                <>
+                  <Play className="mr-2 h-4 w-4" />
+                  Lanjutkan Timer
+                </>
+              ) : (
+                <>
+                  <Pause className="mr-2 h-4 w-4" />
+                  Pause
+                </>
+              )}
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => onOpen(submission)}>
+              <Square className="mr-2 h-4 w-4" />
+              Selesaikan
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-2xl border border-emerald-100 bg-white p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Durasi Bersih
+          </p>
+          <p className="mt-2 font-mono text-4xl font-bold text-emerald-700">
+            {formatElapsedSeconds(getLiveNetSeconds(submission, nowMs))}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Mulai {formatClock((submission as any).timerStartedAt)}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border bg-white p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            {isPaused ? "Jeda Saat Ini" : "Total Jeda"}
+          </p>
+          <p className="mt-2 text-2xl font-semibold">
+            {formatElapsedSeconds(
+              isPaused ? getCurrentPauseSeconds(submission, nowMs) : pausedSeconds,
+            )}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Total jeda: {formatElapsedSeconds(pausedSeconds)}
+          </p>
+          {isPaused && currentPauseReason && (
+            <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+              Alasan jeda: {currentPauseReason}
+            </p>
+          )}
+        </div>
+        <div className="space-y-3 rounded-2xl border border-border bg-white p-4">
+          <div>
+            <p className="text-xs text-muted-foreground">Lokasi Kerja</p>
+            <p className="font-semibold">{getWorkLocationDisplay(submission)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Tipe Lembur</p>
+            <p className="font-semibold">{overtimeTypeLabel}</p>
+          </div>
+        </div>
+        <div className="rounded-2xl border border-border bg-white p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Ringkasan Pekerjaan
+          </p>
+          <p className="mt-2 line-clamp-4 text-sm leading-6 text-slate-700">
+            {taskSummary}
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
 export function PengajuanLemburClient() {
   const { userProfile } = useAuth();
   const firestore = useFirestore();
@@ -688,6 +1068,12 @@ export function PengajuanLemburClient() {
   const [isCancellationDialogOpen, setIsCancellationDialogOpen] =
     useState(false);
   const [cancellationReason, setCancellationReason] = useState("");
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   const submissionsQuery = useMemoFirebase(() => {
     if (!userProfile?.uid) return null;
@@ -755,6 +1141,9 @@ export function PengajuanLemburClient() {
   const summary = useMemo(() => {
     const kpis = {
       draft: 0,
+      timerActive: 0,
+      timerPaused: 0,
+      readyToSubmit: 0,
       pending: 0,
       approved: 0,
       revision: 0,
@@ -763,11 +1152,24 @@ export function PengajuanLemburClient() {
     if (!submissions) return kpis;
     submissions.forEach((s) => {
       const status = getSubmissionStatus(s);
+      const lifecycle = getRealtimeLifecycleStatus(s);
+      if (lifecycle === "timer_running") {
+        kpis.timerActive++;
+        return;
+      }
+      if (lifecycle === "timer_paused") {
+        kpis.timerPaused++;
+        return;
+      }
+      if (lifecycle === "timer_finished_pending_submit") {
+        kpis.readyToSubmit++;
+        return;
+      }
       if (isPendingStatus(status)) kpis.pending++;
       else if (isRevisionStatus(status)) kpis.revision++;
       else if (isRejectedStatus(status)) kpis.rejected++;
       else if (isApprovedStatus(status)) kpis.approved++;
-      else if (status === "draft" || status === "timer_running" || status === "timer_paused" || status === "timer_finished_pending_submit") kpis.draft++;
+      else if (status === "draft") kpis.draft++;
     });
     return kpis;
   }, [submissions]);
@@ -811,6 +1213,23 @@ export function PengajuanLemburClient() {
           0;
         return bTime - aTime;
       });
+  }, [submissions]);
+
+  const activeRealtimeSubmission = useMemo(() => {
+    if (!submissions) return null;
+    return [...submissions]
+      .filter(isRealtimeActiveStatus)
+      .sort((a, b) => {
+        const aTime =
+          (a as any).timerStartedAt?.toMillis?.() ||
+          (a as any).updatedAt?.toMillis?.() ||
+          0;
+        const bTime =
+          (b as any).timerStartedAt?.toMillis?.() ||
+          (b as any).updatedAt?.toMillis?.() ||
+          0;
+        return bTime - aTime;
+      })[0] || null;
   }, [submissions]);
 
   const handleCreate = () => {
@@ -934,8 +1353,15 @@ export function PengajuanLemburClient() {
           onActionClick={handleAction}
         />
 
-        <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
-          <KpiCard title="Draft" value={summary.draft} />
+        <div className="grid gap-4 md:grid-cols-4 xl:grid-cols-8">
+          <KpiCard title="Draft Persiapan" value={summary.draft} />
+          <KpiCard title="Timer Aktif" value={summary.timerActive} />
+          <KpiCard
+            title="Dijeda"
+            value={summary.timerPaused}
+            deltaType="inverse"
+          />
+          <KpiCard title="Siap Diajukan" value={summary.readyToSubmit} />
           <KpiCard title="Menunggu Persetujuan" value={summary.pending} />
           <KpiCard
             title="Perlu Revisi"
@@ -949,6 +1375,14 @@ export function PengajuanLemburClient() {
             deltaType="inverse"
           />
         </div>
+
+        {activeRealtimeSubmission && (
+          <RealtimeActiveCard
+            submission={activeRealtimeSubmission}
+            nowMs={nowMs}
+            onOpen={(submission) => handleAction("edit", submission)}
+          />
+        )}
 
         <Card>
           <CardHeader>
@@ -985,14 +1419,41 @@ export function PengajuanLemburClient() {
                 <TableBody>
                   {sortedSubmissions.map((s) => {
                     const status = getSubmissionStatus(s);
+                    const lifecycle = getRealtimeLifecycleStatus(s);
+                    const isActiveRealtime = isRealtimeActiveStatus(s);
+                    const isReadyRealtime = isRealtimeReadyToSubmit(s);
                     const overtimeDate =
                       (s as any).overtimeDate?.toDate?.() ?? s.date?.toDate?.();
                     const locationLabel = getWorkLocationDisplay(s);
+                    const rowStatusLabel =
+                      realtimeLifecycleLabels[lifecycle || ""] ||
+                      approvalStatusLabel[status] ||
+                      status;
+                    const actionLabel =
+                      lifecycle === "timer_paused"
+                        ? "Lanjutkan Timer"
+                        : lifecycle === "timer_running"
+                          ? "Buka Timer"
+                          : lifecycle === "timer_finished_pending_submit"
+                            ? "Preview & Kirim"
+                            : status === "draft"
+                              ? "Lihat Draf"
+                              : status === "rejected"
+                                ? "Lihat Alasan"
+                                : "Lihat Detail";
 
                     return (
                       <TableRow
                         key={s.id}
-                        className="border-b transition-colors hover:bg-muted"
+                        className={`border-b transition-colors hover:bg-muted ${
+                          isActiveRealtime
+                            ? "bg-emerald-50/70 hover:bg-emerald-50"
+                            : isReadyRealtime
+                              ? "bg-blue-50/60 hover:bg-blue-50"
+                              : lifecycle === "draft"
+                                ? "bg-slate-50/60 hover:bg-slate-100/70"
+                                : ""
+                        }`}
                       >
                         <TableCell className="px-3 py-3 align-top">
                           {overtimeDate
@@ -1006,14 +1467,38 @@ export function PengajuanLemburClient() {
                           <div className="text-xs text-muted-foreground">
                             {s.endTime || '-'}
                           </div>
-                          {(s as any).inputMode === 'realtime' && (
-                            <span className="mt-1 inline-block rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-semibold text-teal-700">
+                          {(s as any).inputMode === "realtime" && (
+                            <span
+                              className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                isActiveRealtime
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : isReadyRealtime
+                                    ? "bg-blue-100 text-blue-700"
+                                    : "bg-slate-100 text-slate-700"
+                              }`}
+                            >
                               Realtime
                             </span>
                           )}
                         </TableCell>
                         <TableCell className="px-3 py-3 align-top">
-                          {s.totalDurationMinutes} menit
+                          {isActiveRealtime ? (
+                            <div>
+                              <p className="font-mono font-semibold text-emerald-700">
+                                {formatElapsedSeconds(getLiveNetSeconds(s, nowMs))}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {lifecycle === "timer_paused"
+                                  ? `Total jeda: ${formatElapsedSeconds(
+                                      getCompletedPausedSeconds(s) +
+                                        getCurrentPauseSeconds(s, nowMs),
+                                    )}`
+                                  : "Timer Aktif"}
+                              </p>
+                            </div>
+                          ) : (
+                            formatDurationFromMinutes(s.totalDurationMinutes)
+                          )}
                         </TableCell>
                         <TableCell className="px-3 py-3 align-top">
                           {locationLabel}
@@ -1022,22 +1507,26 @@ export function PengajuanLemburClient() {
                           {s.reason || "Tidak ada ringkasan pekerjaan."}
                         </TableCell>
                         <TableCell className="px-3 py-3 align-top">
-                          <OvertimeStatusBadge
-                            status={status as any}
-                            payrollStatus={s.payrollStatus}
-                          />
+                          {lifecycle ? (
+                            <Badge className={getRealtimeBadgeClass(lifecycle)}>
+                              {rowStatusLabel}
+                            </Badge>
+                          ) : (
+                            <OvertimeStatusBadge
+                              status={status as any}
+                              payrollStatus={s.payrollStatus}
+                            />
+                          )}
                         </TableCell>
                         <TableCell className="px-3 py-3 align-top text-right">
                           <Button
                             size="sm"
-                            variant="secondary"
-                            onClick={() => handleAction("view", s)}
+                            variant={lifecycle ? "default" : "secondary"}
+                            onClick={() =>
+                              handleAction(lifecycle ? "edit" : "view", s)
+                            }
                           >
-                            {status === "draft"
-                              ? "Lihat Draf"
-                              : status === "rejected"
-                                ? "Lihat Alasan"
-                                : "Lihat Detail"}
+                            {actionLabel}
                           </Button>
                         </TableCell>
                       </TableRow>

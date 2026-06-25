@@ -142,6 +142,38 @@ const getWorkLocationLabel = (
     : label;
 };
 
+const realtimeStatusLabels: Record<string, string> = {
+  draft: "Draft Persiapan",
+  timer_running: "Sedang Berjalan",
+  timer_paused: "Dijeda",
+  timer_finished_pending_submit: "Siap Diajukan",
+};
+
+const parseDateLike = (value: any): Date | null => {
+  if (!value) return null;
+  if (typeof value.toDate === "function") return value.toDate();
+  if (value instanceof Date) return value;
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
+};
+
+const formatDateTimeLabel = (value: any) => {
+  const date = parseDateLike(value);
+  return date ? format(date, "dd MMM yyyy, HH:mm", { locale: idLocale }) : "-";
+};
+
+const formatDurationLabel = (minutes?: number | null) => {
+  const safeMinutes = Math.max(0, Math.round(minutes || 0));
+  const hours = Math.floor(safeMinutes / 60);
+  const mins = safeMinutes % 60;
+  if (hours <= 0) return `${mins} menit`;
+  if (mins === 0) return `${hours} jam`;
+  return `${hours} jam ${mins} menit`;
+};
+
 const submissionSchema = z
   .object({
     date: z.date({ required_error: "Tanggal lembur harus diisi." }),
@@ -322,6 +354,47 @@ const OvertimeSubmissionDetailView = ({
 
   const currentStatus =
     (submission as any)?.approvalStatus || submission.status || "draft";
+  const timerStatus =
+    (submission as any)?.timerStatus ||
+    (currentStatus === "timer_running"
+      ? "running"
+      : currentStatus === "timer_paused"
+        ? "paused"
+        : currentStatus === "timer_finished_pending_submit"
+          ? "finished_pending_submit"
+          : (submission as any)?.inputMode === "realtime"
+            ? "submitted"
+            : null);
+  const realtimeStatusLabel =
+    currentStatus === "timer_running"
+      ? realtimeStatusLabels.timer_running
+      : currentStatus === "timer_paused"
+        ? realtimeStatusLabels.timer_paused
+        : currentStatus === "timer_finished_pending_submit"
+          ? realtimeStatusLabels.timer_finished_pending_submit
+          : timerStatus === "draft"
+            ? realtimeStatusLabels.draft
+            : timerStatus === "running"
+              ? realtimeStatusLabels.timer_running
+              : timerStatus === "paused"
+                ? realtimeStatusLabels.timer_paused
+                : timerStatus === "finished_pending_submit"
+                  ? realtimeStatusLabels.timer_finished_pending_submit
+                  : (submission as any)?.inputMode === "realtime"
+                    ? "Sudah Diajukan"
+                    : "-";
+  const timerStartedAt = (submission as any)?.timerStartedAt;
+  const timerFinishedAt = (submission as any)?.timerFinishedAt;
+  const totalPausedMinutes = (submission as any)?.totalPausedDurationMinutes ?? 0;
+  const grossDurationMinutes =
+    (submission as any)?.grossDurationMinutes ??
+    (submission as any)?.actualDurationMinutes ??
+    submission.totalDurationMinutes ??
+    0;
+  const netDurationMinutes =
+    (submission as any)?.netDurationMinutes ??
+    submission.totalDurationMinutes ??
+    Math.max(0, grossDurationMinutes - totalPausedMinutes);
   const submittedAt = parseSafeDate(
     (submission as any)?.submittedAt ?? submission.createdAt,
   );
@@ -555,11 +628,79 @@ const OvertimeSubmissionDetailView = ({
     return "Menunggu";
   };
 
-  const timeline = [
+  const realtimeLifecycleStatus =
+    (submission as any).inputMode === "realtime" &&
+    ["draft", "timer_running", "timer_paused", "timer_finished_pending_submit"].includes(
+      currentStatus,
+    )
+      ? currentStatus
+      : null;
+  const realtimeTimeline =
+    realtimeLifecycleStatus != null
+      ? [
+          {
+            title: "Draft Persiapan",
+            state: realtimeLifecycleStatus === "draft" ? "Sedang Berjalan" : "Selesai",
+            date: null,
+            detail: undefined as string | undefined,
+            description: "Timer belum dimulai.",
+            icon: <PenLine className="h-4 w-4" />,
+          },
+          {
+            title: "Timer Berjalan",
+            state:
+              realtimeLifecycleStatus === "timer_running"
+                ? "Sedang Berjalan"
+                : ["timer_paused", "timer_finished_pending_submit"].includes(
+                      realtimeLifecycleStatus,
+                    )
+                  ? "Selesai"
+                  : "Menunggu",
+            date: parseDateLike((submission as any).timerStartedAt),
+            description: "Timer lembur sedang mencatat durasi kerja.",
+            icon: <Timer className="h-4 w-4" />,
+          },
+          {
+            title: "Dijeda",
+            state:
+              realtimeLifecycleStatus === "timer_paused"
+                ? "Sedang Berjalan"
+                : realtimeLifecycleStatus === "timer_finished_pending_submit"
+                  ? "Selesai"
+                  : "Menunggu",
+            date: parseDateLike((submission as any).pauseStartedAt),
+            description: "Timer lembur sedang dijeda sementara jika diperlukan.",
+            icon: <RotateCcw className="h-4 w-4" />,
+          },
+          {
+            title: "Selesai Timer",
+            state:
+              realtimeLifecycleStatus === "timer_finished_pending_submit"
+                ? "Selesai"
+                : "Menunggu",
+            date: parseDateLike((submission as any).timerFinishedAt),
+            description: "Timer selesai. Tinjau preview sebelum mengirim pengajuan.",
+            icon: <StopCircle className="h-4 w-4" />,
+          },
+          {
+            title: "Preview & Kirim",
+            state:
+              realtimeLifecycleStatus === "timer_finished_pending_submit"
+                ? "Sedang Berjalan"
+                : "Menunggu",
+            date: null,
+            description: "Pengajuan baru masuk approval setelah tombol Kirim Pengajuan ditekan.",
+            icon: <Send className="h-4 w-4" />,
+          },
+        ]
+      : null;
+
+  const approvalTimeline = [
     {
       title: "Pengajuan Dikirim",
       state: submittedAt ? "Selesai" : "Menunggu",
       date: submittedAt,
+      detail: undefined as string | undefined,
       description:
         submittedAt != null
           ? "Pengajuan telah dikirim dan menunggu proses selanjutnya."
@@ -636,6 +777,7 @@ const OvertimeSubmissionDetailView = ({
       title: "Selesai",
       state: getStageStatus("complete"),
       date: finalAt,
+      detail: undefined as string | undefined,
       description:
         currentStatus === "approved" || currentStatus === "approved_hrd"
           ? "Pengajuan telah disetujui dan selesai."
@@ -647,6 +789,7 @@ const OvertimeSubmissionDetailView = ({
       icon: <CheckCircle className="h-4 w-4" />,
     },
   ];
+  const timeline = realtimeTimeline || approvalTimeline;
 
   return (
     <DialogContent className="w-[90vw] max-w-[1100px] max-h-[90vh] overflow-hidden flex flex-col">
@@ -749,6 +892,40 @@ const OvertimeSubmissionDetailView = ({
                     value: `${totalDuration} menit`,
                     icon: <CheckCircle className="h-4 w-4 text-slate-500" />,
                   },
+                  ...((submission as any).inputMode === "realtime"
+                    ? [
+                        {
+                          label: "Status realtime saat ini",
+                          value: realtimeStatusLabel,
+                          icon: <Timer className="h-4 w-4 text-slate-500" />,
+                        },
+                        {
+                          label: "Jam mulai realtime",
+                          value: formatDateTimeLabel(timerStartedAt),
+                          icon: <PlayCircle className="h-4 w-4 text-slate-500" />,
+                        },
+                        {
+                          label: "Jam selesai realtime",
+                          value: formatDateTimeLabel(timerFinishedAt),
+                          icon: <StopCircle className="h-4 w-4 text-slate-500" />,
+                        },
+                        {
+                          label: "Durasi berjalan",
+                          value: formatDurationLabel(grossDurationMinutes),
+                          icon: <Clock className="h-4 w-4 text-slate-500" />,
+                        },
+                        {
+                          label: "Total jeda",
+                          value: formatDurationLabel(totalPausedMinutes),
+                          icon: <RotateCcw className="h-4 w-4 text-slate-500" />,
+                        },
+                        {
+                          label: "Durasi bersih",
+                          value: formatDurationLabel(netDurationMinutes),
+                          icon: <CheckCircle2 className="h-4 w-4 text-slate-500" />,
+                        },
+                      ]
+                    : []),
                   {
                     label: "Lokasi kerja",
                     value: locationLabel,
@@ -758,6 +935,28 @@ const OvertimeSubmissionDetailView = ({
                     label: "Tipe lembur",
                     value: overtimeTypeLabel,
                     icon: <Zap className="h-4 w-4 text-slate-500" />,
+                  },
+                  {
+                    label: "Status approval",
+                    value:
+                      currentStatus === "timer_running"
+                        ? "Belum diajukan - timer berjalan"
+                        : currentStatus === "timer_paused"
+                          ? "Belum diajukan - timer dijeda"
+                          : currentStatus === "timer_finished_pending_submit"
+                            ? "Belum diajukan - siap dikirim"
+                            : currentStatus === "draft"
+                              ? "Draft Persiapan"
+                              : currentStatus === "approved" ||
+                                  currentStatus === "approved_hrd"
+                                ? "Disetujui"
+                                : currentStatus.startsWith("rejected")
+                                  ? "Ditolak"
+                                  : currentStatus.startsWith("pending") ||
+                                      currentStatus === "approved_by_manager"
+                                    ? "Menunggu Persetujuan"
+                                    : currentStatus,
+                    icon: <Info className="h-4 w-4 text-slate-500" />,
                   },
                   ...(submission.approvedMinutesFinal !== undefined &&
                   submission.approvedMinutesFinal !== null

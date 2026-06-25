@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "studio-9262077557-bc9c9"
-  }
+    "default": "studio-9262077557-bc9c9",
+    "staging": "hrp-environesia-production"
+  },
+  "targets": {},
+  "etags": {}
 }

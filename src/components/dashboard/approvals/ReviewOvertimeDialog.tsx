@@ -93,6 +93,23 @@ const getWorkLocationDisplay = (submission: OvertimeSubmission) => {
   return rawLocation === "lainnya" && detail ? `${label} - ${detail}` : label;
 };
 
+const SummaryTile = ({
+  label,
+  value,
+}: {
+  label: string;
+  value?: string | number | null;
+}) => (
+  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      {label}
+    </p>
+    <p className="mt-1 text-sm font-bold leading-5 text-slate-900">
+      {value || "-"}
+    </p>
+  </div>
+);
+
 export function ReviewOvertimeDialog({
   open,
   onOpenChange,
@@ -224,6 +241,91 @@ export function ReviewOvertimeDialog({
         : submission.overtimeType === "urgent"
           ? "Urgent"
           : submission.overtimeType || "-");
+
+  const getTimelineBadgeClass = (state: string) => {
+    if (state === "Selesai") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    if (state === "Ditolak") return "border-red-200 bg-red-50 text-red-700";
+    if (state === "Revisi") return "border-orange-200 bg-orange-50 text-orange-700";
+    return "border-amber-200 bg-amber-50 text-amber-700";
+  };
+
+  const approvalTimelineSteps = [
+    {
+      title: "Pengajuan Dibuat",
+      reviewer: submission.employeeName || submission.fullName || "Karyawan",
+      state: "Selesai",
+    },
+    {
+      title: "Review Koordinator/Pengawas",
+      reviewer: (submission as any).overtimeCoordinatorName || "Koordinator/Pengawas",
+      state:
+        resolvedStatus === "pending_coordinator"
+          ? "Menunggu"
+          : resolvedStatus.includes("rejected") &&
+              (submission as any).rejected_by_coordinator
+            ? "Ditolak"
+            : resolvedStatus.includes("revision") &&
+                resolvedStatus.includes("coordinator")
+              ? "Revisi"
+              : submission.coordinatorApprovedAt ||
+                  resolvedStatus === "pending_supervisor" ||
+                  resolvedStatus === "pending_manager" ||
+                  resolvedStatus === "pending_hrd" ||
+                  resolvedStatus === "approved_by_manager" ||
+                  resolvedStatus === "approved" ||
+                  resolvedStatus === "approved_hrd"
+                ? "Selesai"
+                : "Menunggu",
+    },
+    {
+      title: "Review Manager Divisi",
+      reviewer:
+        submission.supervisorApprovedByName ||
+        submission.directSupervisorName ||
+        "Manager Divisi",
+      state:
+        resolvedStatus === "pending_supervisor" ||
+        resolvedStatus === "pending_manager"
+          ? "Menunggu"
+          : resolvedStatus === "revision_manager"
+            ? "Revisi"
+            : resolvedStatus === "rejected_manager"
+              ? "Ditolak"
+              : submission.supervisorApprovedAt ||
+                  resolvedStatus === "pending_hrd" ||
+                  resolvedStatus === "approved_by_manager" ||
+                  resolvedStatus === "approved" ||
+                  resolvedStatus === "approved_hrd"
+                ? "Selesai"
+                : "Menunggu",
+    },
+    {
+      title: "Review HRD",
+      reviewer: "Final approval",
+      state:
+        resolvedStatus === "pending_hrd" || resolvedStatus === "approved_by_manager"
+          ? "Menunggu"
+          : resolvedStatus === "revision_hrd"
+            ? "Revisi"
+            : resolvedStatus === "rejected_hrd"
+              ? "Ditolak"
+              : resolvedStatus === "approved" || resolvedStatus === "approved_hrd"
+                ? "Selesai"
+                : "Menunggu",
+    },
+    {
+      title: "Selesai",
+      reviewer: getApprovalStatusLabel(resolvedStatus),
+      state:
+        resolvedStatus === "approved" || resolvedStatus === "approved_hrd"
+          ? "Selesai"
+          : resolvedStatus.includes("rejected")
+            ? "Ditolak"
+            : resolvedStatus.includes("revision")
+              ? "Revisi"
+              : "Menunggu",
+    },
+  ];
 
   const handleDecision = async (
     decision: "approve" | "reject" | "revise",
@@ -882,14 +984,14 @@ export function ReviewOvertimeDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="w-[90vw] max-w-[1100px] h-[90vh] max-h-[90vh] p-0 overflow-hidden flex flex-col">
-          <DialogHeader className="shrink-0 border-b px-6 py-5">
+        <DialogContent className="w-[94vw] max-w-[1200px] h-[92vh] max-h-[92vh] overflow-hidden rounded-[28px] border border-slate-200 bg-white p-0 shadow-2xl flex flex-col">
+          <DialogHeader className="shrink-0 border-b border-slate-200 bg-gradient-to-br from-white via-emerald-50/50 to-white px-7 py-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <DialogTitle className="text-xl">
+                <DialogTitle className="text-2xl font-bold tracking-tight text-slate-950">
                   {submission.employeeName || submission.fullName}
                 </DialogTitle>
-                <DialogDescription className="text-sm text-muted-foreground">
+                <DialogDescription className="mt-1 text-sm text-slate-600">
                   {mode === "manager"
                     ? isCoordinatorReview
                       ? "Tinjau detail pengajuan untuk membuat keputusan persetujuan sebagai Koordinator."
@@ -897,137 +999,79 @@ export function ReviewOvertimeDialog({
                     : "Tinjau detail pengajuan dan bukti approval sebelum memutuskan."}
                 </DialogDescription>
               </div>
-              <OvertimeApprovalStatusBadge
-                status={resolvedStatus as any}
-                mode={mode}
-                divisionName={submission.divisionName || submission.division}
-              />
+              <div className="flex flex-col items-start gap-2 sm:items-end">
+                {canAct && (
+                  <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700">
+                    Menunggu Review Anda
+                  </span>
+                )}
+                <OvertimeApprovalStatusBadge
+                  status={resolvedStatus as any}
+                  mode={mode}
+                  divisionName={submission.divisionName || submission.division}
+                />
+              </div>
             </div>
           </DialogHeader>
 
-          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 pb-32">
+          <div className="flex-1 min-h-0 overflow-y-auto bg-slate-50/70 px-7 py-6 pb-32">
             <div className="space-y-6">
-              <div className="rounded-3xl border border-border bg-muted/30 p-6 shadow-sm space-y-4">
-                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 border-b border-border pb-2">
-                  Detail Informasi Pengaju & Pengajuan Lembur
-                </h3>
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                  <div className="space-y-3">
-                    <div className="text-xs text-muted-foreground uppercase font-semibold">
-                      Profil Karyawan
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-[10px] text-muted-foreground uppercase">
-                        Nama Lengkap
-                      </p>
-                      <p className="text-sm font-medium text-white">
-                        {submission.employeeName || submission.fullName || "-"}
-                      </p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-[10px] text-muted-foreground uppercase">
-                        Jabatan / Peran
-                      </p>
-                      <p className="text-sm font-medium text-white">
-                        {submission.workRole || submission.positionTitle || "-"}
-                      </p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-[10px] text-muted-foreground uppercase">
-                        Brand / Divisi
-                      </p>
-                      <p className="text-sm font-medium text-white">
-                        {submission.brandName || "-"} /{" "}
-                        {submission.divisionName || submission.division || "-"}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="text-xs text-muted-foreground uppercase font-semibold">
-                      Waktu & Lokasi Lembur
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-[10px] text-muted-foreground uppercase">
-                        Tanggal Lembur
-                      </p>
-                      <p className="text-sm font-medium text-white">
-                        {overtimeDate
-                          ? format(overtimeDate, "eeee, dd MMMM yyyy", {
-                              locale: idLocale,
-                            })
-                          : "-"}
-                      </p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-[10px] text-muted-foreground uppercase">
-                        Jam Kerja Lembur
-                      </p>
-                      <p className="text-sm font-medium text-white">
-                        {submission.startTime} - {submission.endTime}
-                      </p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-[10px] text-muted-foreground uppercase">
-                        Lokasi Lembur
-                      </p>
-                      <p className="text-sm font-medium text-white">
-                        {workLocationLabel}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="text-xs text-muted-foreground uppercase font-semibold">
-                      Persetujuan Atasan & Alasan
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-[10px] text-muted-foreground uppercase">
-                        {resolvedStatus === "pending_coordinator"
-                          ? "Koordinator Reviewer"
-                          : "Manager Divisi Yang Menyetujui"}
-                      </p>
-                      <p className="text-sm font-medium text-emerald-400">
-                        {resolvedStatus === "pending_coordinator"
-                          ? (submission as any).overtimeCoordinatorName || "Koordinator"
-                          : submission.supervisorApprovedByName ||
-                            submission.directSupervisorName ||
-                            "Manager Divisi"}
-                      </p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-[10px] text-muted-foreground uppercase">
-                        Alasan Pengajuan Lembur
-                      </p>
-                      <p className="text-xs font-medium text-slate-300 leading-relaxed italic">
-                        "{submission.reason || "Tidak ada alasan tambahan."}"
-                      </p>
-                    </div>
-                  </div>
-                </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <SummaryTile
+                  label="Pengaju"
+                  value={submission.employeeName || submission.fullName}
+                />
+                <SummaryTile
+                  label="Brand / Divisi"
+                  value={`${submission.brandName || "-"} / ${
+                    submission.divisionName || submission.division || "-"
+                  }`}
+                />
+                <SummaryTile
+                  label="Jabatan"
+                  value={submission.workRole || submission.positionTitle}
+                />
+                <SummaryTile
+                  label="Tanggal Lembur"
+                  value={
+                    overtimeDate
+                      ? format(overtimeDate, "dd MMMM yyyy", { locale: idLocale })
+                      : "-"
+                  }
+                />
+                <SummaryTile label="Tipe Lembur" value={overtimeTypeLabel} />
+                <SummaryTile label="Lokasi Kerja" value={workLocationLabel} />
+                <SummaryTile
+                  label="Koordinator/Pengawas"
+                  value={(submission as any).overtimeCoordinatorName || "Koordinator"}
+                />
+                <SummaryTile
+                  label="Status Saat Ini"
+                  value={getApprovalStatusLabel(resolvedStatus)}
+                />
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-                <Card className="rounded-3xl border border-border bg-muted shadow-sm">
-                  <CardHeader className="px-5 py-4">
-                    <CardTitle className="text-base">
+              <div className="grid gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.9fr)]">
+                <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+                  <CardHeader className="border-b border-slate-100 px-6 py-5">
+                    <CardTitle className="text-lg text-slate-950">
                       Detail Pekerjaan
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-6 px-5 pb-5 pt-0">
+                  <CardContent className="space-y-6 px-6 py-5">
                     {tasks.length > 0 ? (
                       <>
-                        <div className="overflow-x-auto rounded-lg border border-border bg-background">
+                        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
                           <Table className="text-sm">
                             <TableHeader>
-                              <TableRow className="bg-muted hover:bg-muted">
-                                <TableHead className="px-3 py-2 text-left text-xs text-muted-foreground uppercase tracking-wide w-8">
+                              <TableRow className="bg-slate-50 hover:bg-slate-50">
+                                <TableHead className="px-4 py-3 text-left text-xs uppercase tracking-wide text-slate-500 w-10">
                                   No
                                 </TableHead>
-                                <TableHead className="px-3 py-2 text-left text-xs text-muted-foreground uppercase tracking-wide">
+                                <TableHead className="px-4 py-3 text-left text-xs uppercase tracking-wide text-slate-500">
                                   Uraian Tugas
                                 </TableHead>
-                                <TableHead className="px-3 py-2 text-right text-xs text-muted-foreground uppercase tracking-wide w-32">
+                                <TableHead className="px-4 py-3 text-right text-xs uppercase tracking-wide text-slate-500 w-32">
                                   Estimasi
                                 </TableHead>
                               </TableRow>
@@ -1036,27 +1080,27 @@ export function ReviewOvertimeDialog({
                               {tasks.map((task, index) => (
                                 <TableRow
                                   key={index}
-                                  className="border-b last:border-0"
+                                  className="border-b border-slate-100 last:border-0"
                                 >
-                                  <TableCell className="px-3 py-2 text-xs text-muted-foreground">
+                                  <TableCell className="px-4 py-3 text-xs text-slate-500">
                                     {index + 1}
                                   </TableCell>
-                                  <TableCell className="px-3 py-2 text-sm">
+                                  <TableCell className="px-4 py-3 text-sm leading-6 text-slate-700">
                                     {task.description || "-"}
                                   </TableCell>
-                                  <TableCell className="px-3 py-2 text-right text-sm font-medium">
+                                  <TableCell className="px-4 py-3 text-right text-sm font-semibold text-slate-900">
                                     {task.estimatedMinutes || 0} menit
                                   </TableCell>
                                 </TableRow>
                               ))}
-                              <TableRow className="bg-muted/50 font-semibold">
+                              <TableRow className="bg-emerald-50/70 font-semibold hover:bg-emerald-50/70">
                                 <TableCell
                                   colSpan={2}
-                                  className="px-3 py-2 text-right text-sm"
+                                  className="px-4 py-3 text-right text-sm text-emerald-800"
                                 >
                                   Total Estimasi:
                                 </TableCell>
-                                <TableCell className="px-3 py-2 text-right text-sm font-semibold">
+                                <TableCell className="px-4 py-3 text-right text-sm font-bold text-emerald-800">
                                   {totalEstimatedMinutes} menit
                                 </TableCell>
                               </TableRow>
@@ -1065,19 +1109,19 @@ export function ReviewOvertimeDialog({
                         </div>
 
                         <div className="pt-2">
-                          <div className="flex items-center justify-between rounded-lg border border-border bg-background p-3">
+                          <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-5 sm:flex-row sm:items-center sm:justify-between">
                             <div>
-                              <p className="text-xs text-muted-foreground uppercase">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                                 Total Durasi Aktual
                               </p>
-                              <p className="font-semibold text-base">
-                                {submission.totalDurationMinutes} menit
+                              <p className="mt-1 text-3xl font-bold text-slate-950">
+                                {formatMinutesToHuman(submission.totalDurationMinutes || 0)}
                               </p>
                             </div>
                             {totalEstimatedMinutes !==
                               (submission.totalDurationMinutes || 0) && (
-                              <Alert className="border-amber-200 bg-amber-50 w-auto dark:border-amber-900 dark:bg-amber-950">
-                                <AlertDescription className="text-xs text-amber-800 dark:text-amber-200">
+                              <Alert className="w-auto border-amber-200 bg-amber-50 px-3 py-2">
+                                <AlertDescription className="text-xs font-semibold text-amber-800">
                                   ⚠️ Selisih:{" "}
                                   {Math.abs(
                                     totalEstimatedMinutes -
@@ -1096,21 +1140,21 @@ export function ReviewOvertimeDialog({
                       </p>
                     )}
 
-                    <div>
-                      <p className="text-xs uppercase text-muted-foreground">
-                        Alasan
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                      <p className="text-sm font-bold text-slate-950">
+                        Alasan Lembur
                       </p>
-                      <p className="mt-2 text-sm leading-6">
+                      <p className="mt-3 text-sm leading-7 text-slate-700">
                         {submission.reason || "Tidak ada alasan tambahan."}
                       </p>
                     </div>
 
                     {submission.employeeNotes && (
-                      <div>
-                        <p className="text-xs uppercase text-muted-foreground">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                        <p className="text-sm font-bold text-slate-950">
                           Catatan Karyawan
                         </p>
-                        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                        <p className="mt-3 text-sm leading-7 text-slate-600">
                           {submission.employeeNotes}
                         </p>
                       </div>
@@ -1125,7 +1169,7 @@ export function ReviewOvertimeDialog({
                           {submission.attachments.map((attachment, index) => (
                             <span
                               key={index}
-                              className="rounded-full bg-muted px-3 py-1 text-xs"
+                              className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs text-slate-600"
                             >
                               {attachment}
                             </span>
@@ -1159,10 +1203,10 @@ export function ReviewOvertimeDialog({
                   )}
 
                   {mode === "hrd" && canAct && (
-                    <Card className="rounded-3xl border border-emerald-500/30 bg-emerald-950/20 shadow-md">
-                      <CardHeader className="px-5 py-4 border-b border-emerald-500/10">
-                        <CardTitle className="text-base text-emerald-400 font-bold flex items-center gap-2">
-                          <CheckCircle className="h-5 w-5 text-emerald-400" />
+                    <Card className="rounded-3xl border border-emerald-200 bg-white shadow-sm">
+                      <CardHeader className="px-5 py-4 border-b border-emerald-100">
+                        <CardTitle className="text-base text-emerald-700 font-bold flex items-center gap-2">
+                          <CheckCircle className="h-5 w-5 text-emerald-600" />
                           Keputusan & Penyesuaian HRD
                         </CardTitle>
                       </CardHeader>
@@ -1170,7 +1214,7 @@ export function ReviewOvertimeDialog({
                         {/* Over-limit decision selector */}
                         {isOverLimit && (
                           <div className="space-y-2">
-                            <Label className="text-xs uppercase tracking-wide text-amber-400 font-bold flex items-center gap-1.5">
+                            <Label className="text-xs uppercase tracking-wide text-amber-700 font-bold flex items-center gap-1.5">
                               <Info className="h-3.5 w-3.5" />
                               Jenis Persetujuan Lembur (Wajib)
                             </Label>
@@ -1178,7 +1222,7 @@ export function ReviewOvertimeDialog({
                               value={overLimitDecision}
                               onValueChange={(v) => setOverLimitDecision(v as any)}
                             >
-                              <SelectTrigger className="bg-slate-900 border-slate-700 text-white">
+                              <SelectTrigger className="bg-white border-slate-200">
                                 <SelectValue placeholder="Pilih jenis persetujuan..." />
                               </SelectTrigger>
                               <SelectContent>
@@ -1195,12 +1239,12 @@ export function ReviewOvertimeDialog({
                         )}
 
                         <div className="space-y-2">
-                          <Label className="text-xs uppercase tracking-wide text-emerald-300 font-bold">
+                          <Label className="text-xs uppercase tracking-wide text-emerald-700 font-bold">
                             Durasi Final HRD untuk Payroll
                           </Label>
                           <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-1">
-                              <span className="text-[10px] text-slate-400">
+                              <span className="text-[10px] text-slate-500">
                                 Jam
                               </span>
                               <Input
@@ -1212,11 +1256,11 @@ export function ReviewOvertimeDialog({
                                     Math.max(0, parseInt(e.target.value) || 0),
                                   )
                                 }
-                                className="bg-slate-900 border-slate-700 focus:border-emerald-500 text-white"
+                                className="focus:border-emerald-500"
                               />
                             </div>
                             <div className="space-y-1">
-                              <span className="text-[10px] text-slate-400">
+                              <span className="text-[10px] text-slate-500">
                                 Menit
                               </span>
                               <Input
@@ -1235,13 +1279,13 @@ export function ReviewOvertimeDialog({
                                     ),
                                   )
                                 }
-                                className="bg-slate-900 border-slate-700 focus:border-emerald-500 text-white"
+                                className="focus:border-emerald-500"
                               />
                             </div>
                           </div>
-                          <p className="text-xs text-slate-400 italic">
+                          <p className="text-xs text-slate-500 italic">
                             Konversi:{" "}
-                            <span className="font-semibold text-emerald-400">
+                            <span className="font-semibold text-emerald-700">
                               {formatMinutesToHuman(approvedMinutesFinal)}
                             </span>{" "}
                             ({approvedMinutesFinal} menit)
@@ -1249,10 +1293,10 @@ export function ReviewOvertimeDialog({
                         </div>
 
                         <div className="space-y-2">
-                          <Label className="text-xs uppercase tracking-wide text-slate-300 font-bold flex justify-between">
+                          <Label className="text-xs uppercase tracking-wide text-slate-600 font-bold flex justify-between">
                             <span>Catatan HRD</span>
                             {isDurationChanged && (
-                              <span className="text-[10px] text-amber-400 font-normal">
+                              <span className="text-[10px] text-amber-600 font-normal">
                                 Wajib diisi *
                               </span>
                             )}
@@ -1261,7 +1305,7 @@ export function ReviewOvertimeDialog({
                             value={hrdNotes}
                             onChange={(e) => setHrdNotes(e.target.value)}
                             placeholder="Berikan catatan persetujuan, penolakan, atau alasan perubahan durasi..."
-                            className="w-full min-h-[90px] rounded-lg border border-slate-700 bg-slate-900 p-3 text-sm text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                            className="w-full min-h-[90px] rounded-lg border border-slate-200 bg-white p-3 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                           />
                           {isDurationChanged && !hrdNotes.trim() && (
                             <p className="text-[10px] text-amber-500 italic">
@@ -1281,32 +1325,36 @@ export function ReviewOvertimeDialog({
                   {/* Realtime Timer Breakdown */}
                   {(submission as any).inputMode === 'realtime' &&
                     (submission as any).totalGrossDurationMinutes != null && (
-                    <Card className="rounded-3xl border border-teal-200 bg-teal-50 shadow-sm">
+                    <Card className="rounded-3xl border border-teal-200 bg-gradient-to-br from-teal-50 via-white to-emerald-50 shadow-sm">
                       <CardHeader className="px-5 py-4 border-b border-teal-100">
                         <CardTitle className="text-base text-teal-800 flex items-center gap-2">
                           <Info className="h-4 w-4 text-teal-600" />
                           Rincian Durasi Realtime
                         </CardTitle>
                       </CardHeader>
-                      <CardContent className="space-y-3 px-5 py-4 text-sm">
-                        <div className="flex justify-between">
+                      <CardContent className="space-y-4 px-5 py-4 text-sm">
+                        <div className="rounded-2xl border border-teal-200 bg-white p-4">
+                          <p className="text-xs font-bold uppercase tracking-wide text-teal-700">
+                            Durasi Bersih (yang diajukan)
+                          </p>
+                          <p className="mt-1 text-3xl font-bold text-teal-700">
+                            {formatMinutesToHuman((submission as any).totalNetDurationMinutes ?? 0)}
+                          </p>
+                        </div>
+                        <div className="flex justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3">
                           <span className="text-muted-foreground">Durasi Kotor</span>
                           <span className="font-medium">{formatMinutesToHuman((submission as any).totalGrossDurationMinutes ?? 0)}</span>
                         </div>
-                        <div className="flex justify-between">
+                        <div className="flex justify-between rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
                           <span className="text-muted-foreground">
                             Total Jeda ({((submission as any).pauseLogs?.length ?? 0)} sesi)
                           </span>
                           <span className="font-medium text-amber-600">{formatMinutesToHuman((submission as any).totalPausedDurationMinutes ?? 0)}</span>
                         </div>
-                        <div className="flex justify-between border-t border-teal-200 pt-2">
-                          <span className="font-bold text-teal-800">Durasi Bersih (yang diajukan)</span>
-                          <span className="font-bold text-teal-700">{formatMinutesToHuman((submission as any).totalNetDurationMinutes ?? 0)}</span>
-                        </div>
                         {((submission as any).pauseLogs?.length ?? 0) > 0 && (
-                          <details className="mt-2">
-                            <summary className="cursor-pointer text-xs text-teal-700 font-semibold">Lihat rincian jeda</summary>
-                            <div className="mt-2 rounded-lg border border-teal-200 overflow-hidden text-xs">
+                          <details className="mt-2 rounded-2xl border border-teal-200 bg-white p-3">
+                            <summary className="cursor-pointer text-xs font-bold text-teal-700">Lihat rincian jeda</summary>
+                            <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 text-xs">
                               {(submission as any).pauseLogs.map((log: any, i: number) => {
                                 const startStr = log.startedAt?.toDate ?
                                   `${String(log.startedAt.toDate().getHours()).padStart(2,'0')}:${String(log.startedAt.toDate().getMinutes()).padStart(2,'0')}` : '?';
@@ -1328,13 +1376,13 @@ export function ReviewOvertimeDialog({
                     </Card>
                   )}
 
-                  <Card className="rounded-3xl border border-border bg-muted shadow-sm">
-                    <CardHeader className="px-5 py-4">
-                      <CardTitle className="text-base">
+                  <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+                    <CardHeader className="border-b border-slate-100 px-5 py-4">
+                      <CardTitle className="text-base text-slate-950">
                         Validasi Durasi Kerja
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-4 px-5 pb-5 pt-0">
+                    <CardContent className="space-y-4 px-5 py-4">
                       <InfoRow
                         label="Durasi Pengajuan"
                         value={formatMinutesToHuman(
@@ -1365,19 +1413,17 @@ export function ReviewOvertimeDialog({
                         )}
 
                       {approvedMinutesFinal > totalEstimatedMinutes && (
-                        <Alert className="border-amber-500 bg-amber-500/10 w-full mt-2">
-                          <AlertTitle className="text-xs font-bold text-amber-500">
-                            Peringatan Selisih Durasi
+                        <Alert className="mt-2 w-full border-amber-200 bg-amber-50">
+                          <AlertTitle className="text-xs font-bold text-amber-800">
+                            Selisih durasi cukup besar
                           </AlertTitle>
-                          <AlertDescription className="text-xs text-amber-600 dark:text-amber-400">
-                            Durasi pengajuan lebih tinggi dari estimasi
-                            pekerjaan. HRD dapat menyesuaikan durasi final untuk
-                            payroll.
+                          <AlertDescription className="text-xs leading-5 text-amber-700">
+                            Mohon tinjau apakah durasi aktual sesuai dengan rincian tugas.
                           </AlertDescription>
                         </Alert>
                       )}
 
-                      <div className="rounded-xl border border-border bg-background p-3 text-xs">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs">
                         {totalEstimatedMinutes !==
                         (submission.totalDurationMinutes || 0) ? (
                           <p className="text-amber-700 dark:text-amber-200">
@@ -1461,13 +1507,49 @@ export function ReviewOvertimeDialog({
                     </Card>
                   )}
 
-                  <Card className="rounded-3xl border border-border bg-muted shadow-sm">
-                    <CardHeader className="px-5 py-4">
-                      <CardTitle className="text-base">
+                  <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+                    <CardHeader className="border-b border-slate-100 px-5 py-4">
+                      <CardTitle className="text-base text-slate-950">
                         Timeline Persetujuan
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-4 px-5 pb-5 pt-0">
+                    <CardContent className="space-y-4 px-5 py-4">
+                      <div className="space-y-3">
+                        {approvalTimelineSteps.map((step, index) => (
+                          <div
+                            key={step.title}
+                            className={`rounded-2xl border p-4 ${
+                              step.state === "Menunggu" && canAct
+                                ? "border-amber-200 bg-amber-50/70"
+                                : "border-slate-200 bg-white"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex gap-3">
+                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">
+                                  {index + 1}
+                                </div>
+                                <div>
+                                  <p className="text-sm font-bold text-slate-900">
+                                    {step.title}
+                                  </p>
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    {step.reviewer}
+                                  </p>
+                                </div>
+                              </div>
+                              <span
+                                className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold ${getTimelineBadgeClass(
+                                  step.state,
+                                )}`}
+                              >
+                                {step.state}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <Separator className="my-2 bg-slate-200" />
                       <div className="flex items-center justify-between gap-4">
                         <span className="text-sm text-muted-foreground">
                           Status Saat Ini
@@ -1505,10 +1587,10 @@ export function ReviewOvertimeDialog({
                             )}
                           />
                           {submission.coordinatorApprovedByProxy && (
-                            <div className="bg-slate-905/40 rounded-2xl p-3 border border-border/30 mt-1 space-y-1.5 text-xs text-left">
+                            <div className="mt-1 space-y-1.5 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-left text-xs">
                               <div className="flex justify-between">
                                 <span className="text-muted-foreground">Metode Konfirmasi:</span>
-                                <span className="font-semibold text-emerald-400 capitalize">
+                                <span className="font-semibold text-emerald-700 capitalize">
                                   {submission.coordinatorProxyMethod === "lisan" && "🗣️ Lisan / Tatap Muka"}
                                   {submission.coordinatorProxyMethod === "whatsapp" && "💬 WhatsApp / Chat"}
                                   {submission.coordinatorProxyMethod === "telepon" && "📞 Telepon"}
@@ -1518,14 +1600,14 @@ export function ReviewOvertimeDialog({
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-muted-foreground">Dicatat Oleh:</span>
-                                <span className="font-medium text-slate-200">
+                                <span className="font-medium text-slate-700">
                                   {submission.coordinatorProxyApprovedByName || "Atasan / HRD"}
                                 </span>
                               </div>
                               {submission.coordinatorProxyNote && (
                                 <div className="pt-1 border-t border-border/20 mt-1">
                                   <span className="text-muted-foreground block mb-0.5">Catatan Konfirmasi:</span>
-                                  <p className="italic text-slate-300 leading-relaxed bg-slate-950/60 p-2 rounded-lg">
+                                  <p className="rounded-lg bg-white p-2 italic leading-relaxed text-slate-600">
                                     "{submission.coordinatorProxyNote}"
                                   </p>
                                 </div>
@@ -1646,8 +1728,12 @@ export function ReviewOvertimeDialog({
             </div>
           </div>
 
-          <DialogFooter className="shrink-0 border-t bg-[#111827] px-6 py-4 flex justify-end gap-3">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <DialogFooter className="shrink-0 border-t border-slate-200 bg-white/95 px-7 py-4 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] backdrop-blur flex flex-col gap-3 sm:flex-row sm:justify-end">
+            <Button
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              className="h-11 rounded-xl border-slate-300 px-5"
+            >
               Tutup
             </Button>
             {canRecordProxyApproval && (
@@ -1655,7 +1741,7 @@ export function ReviewOvertimeDialog({
                 variant="secondary"
                 onClick={() => setShowProxyDialog(true)}
                 disabled={isSaving}
-                className="bg-amber-600 hover:bg-amber-700 text-white border-none"
+                className="h-11 rounded-xl border border-amber-200 bg-amber-50 px-5 font-semibold text-amber-700 hover:bg-amber-100"
               >
                 Catat Konfirmasi Koordinator
               </Button>
@@ -1663,9 +1749,10 @@ export function ReviewOvertimeDialog({
             {canAct && (
               <>
                 <Button
-                  variant="secondary"
+                  variant="outline"
                   onClick={() => setShowRevisionDialog(true)}
                   disabled={isSaving}
+                  className="h-11 rounded-xl border-amber-300 px-5 font-semibold text-amber-700 hover:bg-amber-50"
                 >
                   Minta Revisi
                 </Button>
@@ -1673,10 +1760,15 @@ export function ReviewOvertimeDialog({
                   variant="destructive"
                   onClick={() => setShowRejectDialog(true)}
                   disabled={isSaving}
+                  className="h-11 rounded-xl px-5 font-semibold"
                 >
                   Tolak
                 </Button>
-                <Button onClick={handleApprove} disabled={isSaving}>
+                <Button
+                  onClick={handleApprove}
+                  disabled={isSaving}
+                  className="h-11 rounded-xl bg-emerald-600 px-6 font-semibold text-white hover:bg-emerald-700"
+                >
                   {isSaving ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : (
@@ -1692,14 +1784,14 @@ export function ReviewOvertimeDialog({
 
       {/* Approval Confirmation Dialog */}
       <Dialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>
-        <DialogContent className="w-[min(90vw,500px)] max-w-[500px] rounded-3xl border border-border bg-slate-950 text-slate-50 p-6 shadow-2xl">
+        <DialogContent className="w-[min(90vw,500px)] max-w-[500px] rounded-3xl border border-slate-200 bg-white p-6 text-slate-950 shadow-2xl">
           <DialogHeader>
             <DialogTitle>
               {mode === "hrd"
                 ? "Setujui Lembur Secara Final?"
                 : "Setujui Pengajuan Lembur?"}
             </DialogTitle>
-            <DialogDescription className="text-slate-400">
+            <DialogDescription className="text-slate-600">
               {mode === "hrd"
                 ? "Pengajuan lembur ini akan disetujui secara final dan datanya dimasukkan ke rekap payroll bulanan."
                 : isCoordinatorReview
@@ -1709,23 +1801,23 @@ export function ReviewOvertimeDialog({
                   : "Pengajuan ini akan disetujui dan diteruskan ke HRD untuk review final."}
             </DialogDescription>
             {mode === "hrd" && (
-              <div className="mt-4 p-4 rounded-2xl border border-slate-800 bg-slate-900/60 text-xs space-y-2 text-slate-300">
+              <div className="mt-4 p-4 rounded-2xl border border-emerald-200 bg-emerald-50 text-xs space-y-2">
                 <div className="flex justify-between">
-                  <span>Karyawan:</span>
-                  <span className="font-bold text-white">
+                  <span className="text-slate-600">Karyawan:</span>
+                  <span className="font-bold text-slate-900">
                     {submission.employeeName || submission.fullName}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Durasi Final HRD:</span>
-                  <span className="font-bold text-emerald-400">
+                  <span className="text-slate-600">Durasi Final HRD:</span>
+                  <span className="font-bold text-emerald-700">
                     {formatMinutesToHuman(approvedMinutesFinal)}
                   </span>
                 </div>
                 {hrdNotes.trim() && (
                   <div className="space-y-1">
-                    <span>Catatan HRD:</span>
-                    <p className="italic text-slate-400">"{hrdNotes}"</p>
+                    <span className="text-slate-600">Catatan HRD:</span>
+                    <p className="italic text-slate-700">"{hrdNotes}"</p>
                   </div>
                 )}
               </div>
@@ -1763,7 +1855,7 @@ export function ReviewOvertimeDialog({
 
       {/* Revision Dialog */}
       <Dialog open={showRevisionDialog} onOpenChange={setShowRevisionDialog}>
-        <DialogContent className="w-[min(90vw,640px)] max-w-[640px] rounded-3xl border border-border bg-slate-950 text-slate-50 p-6 shadow-2xl">
+        <DialogContent className="w-[min(90vw,640px)] max-w-[640px] rounded-3xl border border-slate-200 bg-white p-6 text-slate-950 shadow-2xl">
           <DialogHeader>
             <DialogTitle>Minta Revisi Pengajuan</DialogTitle>
             <DialogDescription className="text-slate-400">
@@ -1772,25 +1864,25 @@ export function ReviewOvertimeDialog({
             </DialogDescription>
           </DialogHeader>
           {/* Summary Section */}
-          <div className="rounded-lg border border-border bg-muted p-3 text-sm space-y-2">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm space-y-2">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Karyawan:</span>
-              <span className="font-medium">
+              <span className="text-slate-500">Karyawan:</span>
+              <span className="font-semibold text-slate-900">
                 {submission.employeeName || submission.fullName}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Tanggal Lembur:</span>
-              <span className="font-medium">
+              <span className="text-slate-500">Tanggal Lembur:</span>
+              <span className="font-semibold text-slate-900">
                 {overtimeDate
                   ? format(overtimeDate, "dd MMM yyyy", { locale: idLocale })
                   : "-"}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Durasi:</span>
-              <span className="font-medium">
-                {submission.totalDurationMinutes} menit
+              <span className="text-slate-500">Durasi:</span>
+              <span className="font-semibold text-slate-900">
+                {formatMinutesToHuman(submission.totalDurationMinutes || 0)}
               </span>
             </div>
           </div>
@@ -1831,7 +1923,7 @@ export function ReviewOvertimeDialog({
 
       {/* Reject Dialog */}
       <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
-        <DialogContent className="w-[min(90vw,640px)] max-w-[640px] rounded-3xl border border-border bg-slate-950 text-slate-50 p-6 shadow-2xl">
+        <DialogContent className="w-[min(90vw,640px)] max-w-[640px] rounded-3xl border border-slate-200 bg-white p-6 text-slate-950 shadow-2xl">
           <DialogHeader>
             <DialogTitle>Tolak Pengajuan Lembur</DialogTitle>
             <DialogDescription className="text-slate-400">
@@ -1839,36 +1931,36 @@ export function ReviewOvertimeDialog({
             </DialogDescription>
           </DialogHeader>
           {/* Summary Section */}
-          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-4 text-sm text-slate-300 space-y-3">
+          <div className="rounded-xl border border-red-100 bg-red-50 p-4 text-sm space-y-2">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Karyawan</span>
-              <span className="font-medium text-slate-100">
+              <span className="text-slate-500">Karyawan</span>
+              <span className="font-semibold text-slate-900">
                 {submission.employeeName || submission.fullName}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Tanggal Lembur</span>
-              <span className="font-medium text-slate-100">
+              <span className="text-slate-500">Tanggal Lembur</span>
+              <span className="font-semibold text-slate-900">
                 {overtimeDate
                   ? format(overtimeDate, "dd MMM yyyy", { locale: idLocale })
                   : "-"}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Durasi</span>
-              <span className="font-medium text-slate-100">
-                {submission.totalDurationMinutes} menit
+              <span className="text-slate-500">Durasi</span>
+              <span className="font-semibold text-slate-900">
+                {formatMinutesToHuman(submission.totalDurationMinutes || 0)}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Lokasi</span>
-              <span className="font-medium text-slate-100">
+              <span className="text-slate-500">Lokasi</span>
+              <span className="font-semibold text-slate-900">
                 {workLocationLabel}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Tipe</span>
-              <span className="font-medium text-slate-100">
+              <span className="text-slate-500">Tipe</span>
+              <span className="font-semibold text-slate-900">
                 {overtimeTypeLabel}
               </span>
             </div>
@@ -1911,7 +2003,7 @@ export function ReviewOvertimeDialog({
 
       {/* Proxy/Assisted Approval Confirmation Dialog */}
       <Dialog open={showProxyDialog} onOpenChange={setShowProxyDialog}>
-        <DialogContent className="w-[min(90vw,640px)] max-w-[640px] rounded-3xl border border-border bg-slate-950 text-slate-50 p-6 shadow-2xl">
+        <DialogContent className="w-[min(90vw,640px)] max-w-[640px] rounded-3xl border border-slate-200 bg-white p-6 text-slate-950 shadow-2xl">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <span className="text-amber-500">✍️</span> Catat Konfirmasi Manual Koordinator
@@ -1922,10 +2014,10 @@ export function ReviewOvertimeDialog({
           </DialogHeader>
 
           {/* Summary Section */}
-          <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-4 text-sm text-slate-350 space-y-2.5">
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 space-y-2.5">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Karyawan:</span>
-              <span className="font-semibold text-white">
+              <span className="font-semibold text-slate-950">
                 {submission.employeeName || submission.fullName}
               </span>
             </div>
@@ -1937,7 +2029,7 @@ export function ReviewOvertimeDialog({
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Tanggal Lembur:</span>
-              <span className="font-medium text-white">
+              <span className="font-medium text-slate-950">
                 {overtimeDate
                   ? format(overtimeDate, "dd MMMM yyyy", { locale: idLocale })
                   : "-"}
@@ -1945,7 +2037,7 @@ export function ReviewOvertimeDialog({
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Durasi Lembur:</span>
-              <span className="font-medium text-white">
+              <span className="font-medium text-slate-950">
                 {submission.totalDurationMinutes} menit ({formatMinutesToHuman(submission.totalDurationMinutes || 0)})
               </span>
             </div>
@@ -1953,14 +2045,14 @@ export function ReviewOvertimeDialog({
 
           <div className="space-y-4 py-3">
             <div className="grid gap-2">
-              <Label htmlFor="proxy-method" className="text-sm font-semibold text-slate-200">
+              <Label htmlFor="proxy-method" className="text-sm font-semibold text-slate-700">
                 Metode Konfirmasi <span className="text-amber-500">*</span>
               </Label>
               <Select value={proxyMethod} onValueChange={setProxyMethod}>
-                <SelectTrigger id="proxy-method" className="w-full bg-slate-900 border-slate-700 focus:border-amber-500 text-white">
+                <SelectTrigger id="proxy-method" className="w-full border-slate-200 bg-white text-slate-950 focus:border-amber-500">
                   <SelectValue placeholder="Pilih metode konfirmasi" />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-900 border-slate-700 text-white">
+                <SelectContent>
                   <SelectItem value="lisan">🗣️ Lisan / Tatap Muka</SelectItem>
                   <SelectItem value="whatsapp">💬 WhatsApp / Chat</SelectItem>
                   <SelectItem value="telepon">📞 Telepon / Panggilan Suara</SelectItem>
@@ -1970,7 +2062,7 @@ export function ReviewOvertimeDialog({
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="proxy-note" className="text-sm font-semibold text-slate-200">
+              <Label htmlFor="proxy-note" className="text-sm font-semibold text-slate-700">
                 Catatan Konfirmasi Manual <span className="text-amber-500">*</span>
               </Label>
               <textarea
@@ -1978,13 +2070,13 @@ export function ReviewOvertimeDialog({
                 placeholder="Contoh: Disetujui lisan oleh Pak Ariyan saat koordinasi lapangan. Dokumen fisik menyusul."
                 value={proxyNote}
                 onChange={(e) => setProxyNote(e.target.value)}
-                className="min-h-[120px] w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-500 focus-visible:border-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
+                className="min-h-[120px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-950 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber-500 focus-visible:border-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
                 required
               />
             </div>
           </div>
 
-          <DialogFooter className="mt-4 flex justify-end gap-3 border-t border-slate-800 pt-4">
+          <DialogFooter className="mt-4 flex justify-end gap-3 border-t border-slate-200 pt-4">
             <Button
               variant="outline"
               onClick={() => {
@@ -1992,7 +2084,7 @@ export function ReviewOvertimeDialog({
                 setProxyNote("");
               }}
               disabled={isSaving}
-              className="border-slate-700 text-slate-300 hover:bg-slate-900 hover:text-white"
+              className="border-slate-300 text-slate-700 hover:bg-slate-50"
             >
               Batal
             </Button>
@@ -2014,3 +2106,4 @@ export function ReviewOvertimeDialog({
     </>
   );
 }
+

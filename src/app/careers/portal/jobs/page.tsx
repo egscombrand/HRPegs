@@ -536,8 +536,7 @@ export default function CandidateJobsPage() {
               {isLoading ? 'Mencari...' : `${sortedJobs.length} lowongan`}
             </p>
             <Button
-              variant="outline"
-              size="sm"
+              variant="outline"              size="sm"
               className="h-8 gap-1.5 text-xs"
               onClick={() => setFilterOpen(!filterOpen)}
             >
